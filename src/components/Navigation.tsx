@@ -161,7 +161,7 @@ const Navigation: React.FC = () => {
             {/* Center Logo */}
             <div style={styles.centerLogoMobile}>
               <img
-                src="/mediamaple-logo-white.png"
+                src="/Asset 10@4x.png"
                 alt="MediaMaple Logo"
                 style={styles.logoImageMobile}
               />
@@ -266,7 +266,7 @@ const Navigation: React.FC = () => {
 
             <div style={styles.centerLogo}>
               <img
-                src="/mediamaple-logo-white.png"
+                src="/Asset 10@4x.png"
                 alt="MediaMaple Logo"
                 style={styles.logoImage}
               />
