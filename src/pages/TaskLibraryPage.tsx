@@ -505,7 +505,10 @@ const TaskTemplateModal: React.FC<TaskTemplateModalProps> = ({ template, onClose
         </div>
 
         <form onSubmit={handleSubmit} style={styles.modalForm}>
-          <div style={styles.formRow}>
+          {/* Basic Information Section */}
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Basic Information</h3>
+
             <div style={styles.formGroup}>
               <label style={styles.label}>Template Title *</label>
               <input
@@ -517,93 +520,96 @@ const TaskTemplateModal: React.FC<TaskTemplateModalProps> = ({ template, onClose
                 style={styles.input}
               />
             </div>
-          </div>
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Description *</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Describe what this task template is for..."
-              required
-              rows={3}
-              style={{...styles.input, ...styles.textarea}}
-            />
-          </div>
-
-          <div style={styles.formRow}>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Category *</label>
-              <input
-                type="text"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                placeholder="e.g., Opening Duties, Cleaning"
+              <label style={styles.label}>Description *</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Describe what this task template is for..."
                 required
-                style={styles.input}
+                rows={3}
+                style={{...styles.input, ...styles.textarea}}
               />
             </div>
 
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Department *</label>
-              <select
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                required
-                style={styles.input}
-              >
-                <option value="Admin">Admin</option>
-                <option value="Maintenance">Maintenance</option>
-                <option value="Operations">Operations</option>
-                <option value="Customer Service">Customer Service</option>
-              </select>
-            </div>
-          </div>
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Category *</label>
+                <input
+                  type="text"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  placeholder="e.g., Opening Duties, Cleaning"
+                  required
+                  style={styles.input}
+                />
+              </div>
 
-          <div style={styles.formRow}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Estimated Duration (minutes) *</label>
-              <input
-                type="number"
-                value={formData.estimatedDuration}
-                onChange={(e) => setFormData({ ...formData, estimatedDuration: parseInt(e.target.value) })}
-                min="1"
-                required
-                style={styles.input}
-              />
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Department *</label>
+                <select
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  required
+                  style={styles.input}
+                >
+                  <option value="Admin">Admin</option>
+                  <option value="Maintenance">Maintenance</option>
+                  <option value="Operations">Operations</option>
+                  <option value="Customer Service">Customer Service</option>
+                </select>
+              </div>
             </div>
 
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Priority *</label>
-              <select
-                value={formData.priority}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
-                required
-                style={styles.input}
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Estimated Duration (minutes) *</label>
+                <input
+                  type="number"
+                  value={formData.estimatedDuration}
+                  onChange={(e) => setFormData({ ...formData, estimatedDuration: parseInt(e.target.value) })}
+                  min="1"
+                  required
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Priority *</label>
+                <select
+                  value={formData.priority}
+                  onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
+                  required
+                  style={styles.input}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
             </div>
           </div>
 
           {/* Recurrence Section */}
-          <div style={styles.formGroup}>
-            <label style={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={formData.isRecurring}
-                onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked })}
-                style={styles.checkbox}
-              />
-              Recurring Task
-            </label>
-          </div>
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Recurrence Settings</h3>
 
-          {formData.isRecurring && (
-            <div style={styles.recurrenceSection}>
+            <div style={styles.formGroup}>
+              <label style={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={formData.isRecurring}
+                  onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked })}
+                  style={styles.checkbox}
+                />
+                <span>This is a Recurring Task</span>
+              </label>
+            </div>
+
+            {formData.isRecurring && (
+              <div style={styles.recurrenceInner}>
               <div style={styles.formGroup}>
                 <label style={styles.label}>Frequency</label>
                 <select
@@ -641,12 +647,13 @@ const TaskTemplateModal: React.FC<TaskTemplateModalProps> = ({ template, onClose
                 </div>
               )}
             </div>
-          )}
+            )}
+          </div>
 
-          {/* Attached SOPs */}
+          {/* Attached SOPs Section */}
           {availableSOPs.length > 0 && (
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Attach SOPs (Optional)</label>
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>Attach SOPs (Optional)</h3>
               <div style={styles.sopsList}>
                 {availableSOPs.map(sop => (
                   <label key={sop.id} style={styles.checkboxLabel}>
@@ -664,8 +671,8 @@ const TaskTemplateModal: React.FC<TaskTemplateModalProps> = ({ template, onClose
           )}
 
           {/* Steps Section */}
-          <div style={styles.stepsSection}>
-            <label style={styles.label}>Task Steps *</label>
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Task Steps</h3>
 
             {formData.steps.map((step, index) => (
               <div key={step.id} style={styles.stepItem}>
@@ -1305,14 +1312,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     gridTemplateColumns: '1fr 1fr',
     gap: theme.spacing.lg,
   },
+  section: {
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '24px',
+    marginBottom: '20px',
+  },
+  sectionTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: theme.colors.txt.primary,
+    marginBottom: '20px',
+    margin: '0 0 20px 0',
+  },
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: theme.spacing.sm,
+    marginBottom: '16px',
   },
   label: {
     fontSize: '14px',
-    fontWeight: 500,
+    fontWeight: 600,
     color: theme.colors.txt.primary,
   },
   input: {
@@ -1347,6 +1369,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: theme.spacing.lg,
     borderRadius: theme.borderRadius.md,
     border: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  recurrenceInner: {
+    marginTop: '16px',
   },
   daysContainer: {
     display: 'flex',
@@ -1383,6 +1408,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     gap: theme.spacing.md,
+    marginBottom: 0,
   },
   stepItem: {
     display: 'flex',

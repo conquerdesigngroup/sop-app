@@ -563,100 +563,108 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} style={{...styles.modalForm, ...(isMobile && styles.modalFormMobile)}}>
-          {/* Task Basic Info */}
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Task Title *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Daily Opening Checklist"
-              required
-              style={{...styles.input, ...(isMobile && styles.inputMobile)}}
-            />
-          </div>
+          {/* Basic Information Section */}
+          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
+            <h3 style={styles.sectionTitle}>Basic Information</h3>
 
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brief description of the task..."
-              rows={3}
-              style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
-            />
-          </div>
-
-          {/* Department and Category */}
-          <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Department *</label>
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                required
-                style={{...styles.select, ...(isMobile && styles.selectMobile)}}
-              >
-                <option value="">-- Select Department --</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Category *</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                required
-                style={{...styles.select, ...(isMobile && styles.selectMobile)}}
-              >
-                <option value="">-- Select Category --</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Priority and Duration */}
-          <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Priority *</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                required
-                style={{...styles.select, ...(isMobile && styles.selectMobile)}}
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Est. Duration (min) *</label>
+              <label style={styles.label}>Task Title *</label>
               <input
-                type="number"
-                value={estimatedDuration}
-                onChange={(e) => setEstimatedDuration(Number(e.target.value))}
-                min={1}
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g., Daily Opening Checklist"
                 required
                 style={{...styles.input, ...(isMobile && styles.inputMobile)}}
               />
             </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brief description of the task..."
+                rows={3}
+                style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
+              />
+            </div>
+
+            {/* Department and Category */}
+            <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Department *</label>
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  required
+                  style={{...styles.select, ...(isMobile && styles.selectMobile)}}
+                >
+                  <option value="">-- Select Department --</option>
+                  {departments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Category *</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  required
+                  style={{...styles.select, ...(isMobile && styles.selectMobile)}}
+                >
+                  <option value="">-- Select Category --</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Priority and Duration */}
+            <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Priority *</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  required
+                  style={{...styles.select, ...(isMobile && styles.selectMobile)}}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Est. Duration (min) *</label>
+                <input
+                  type="number"
+                  value={estimatedDuration}
+                  onChange={(e) => setEstimatedDuration(Number(e.target.value))}
+                  min={1}
+                  required
+                  style={{...styles.input, ...(isMobile && styles.inputMobile)}}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Checklist Items Builder */}
-          <div style={styles.formGroup}>
+          {/* Checklist Items Section */}
+          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
             <div style={styles.checklistHeader}>
-              <label style={styles.label}>Checklist Items *</label>
+              <h3 style={styles.sectionTitle}>Checklist Items</h3>
               <button
                 type="button"
                 onClick={handleAddChecklistItem}
                 style={styles.addItemButton}
               >
-                + Add Item
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add Item
               </button>
             </div>
 
@@ -730,33 +738,37 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
             </div>
           </div>
 
-          {/* Schedule Date & Time */}
-          <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Scheduled Date *</label>
-              <input
-                type="date"
-                value={scheduledDate}
-                onChange={(e) => setScheduledDate(e.target.value)}
-                required
-                style={{...styles.input, ...(isMobile && styles.inputMobile)}}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Due Time (Optional)</label>
-              <input
-                type="time"
-                value={dueTime}
-                onChange={(e) => setDueTime(e.target.value)}
-                style={{...styles.input, ...(isMobile && styles.inputMobile)}}
-              />
+          {/* Schedule Section */}
+          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
+            <h3 style={styles.sectionTitle}>Schedule</h3>
+
+            <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Scheduled Date *</label>
+                <input
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  required
+                  style={{...styles.input, ...(isMobile && styles.inputMobile)}}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Due Time (Optional)</label>
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  style={{...styles.input, ...(isMobile && styles.inputMobile)}}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Assign to Team Members */}
-          <div style={styles.formGroup}>
+          {/* Assign to Team Members Section */}
+          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
             <div style={styles.assignHeaderRow}>
-              <label style={styles.label}>Assign to Team Members *</label>
+              <h3 style={styles.sectionTitle}>Assign to Team Members</h3>
               <div style={styles.assignActions}>
                 <button type="button" onClick={handleSelectAll} style={styles.selectAllButton}>
                   Select All
@@ -808,13 +820,13 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                 ))
               )}
             </div>
-          </div>
 
-          {assignedTo.length > 0 && (
-            <div style={styles.selectedCount}>
-              Selected: {assignedTo.length} team member{assignedTo.length !== 1 ? 's' : ''}
-            </div>
-          )}
+            {assignedTo.length > 0 && (
+              <div style={styles.selectedCount}>
+                Selected: {assignedTo.length} team member{assignedTo.length !== 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
 
           {/* Form Actions */}
           <div style={{...styles.modalActions, ...(isMobile && styles.modalActionsMobile)}}>
@@ -1436,14 +1448,33 @@ const styles: { [key: string]: React.CSSProperties } = {
     gridTemplateColumns: '1fr 1fr',
     gap: theme.spacing.lg,
   },
+  section: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '24px',
+    marginBottom: '24px',
+  },
+  sectionMobile: {
+    padding: '16px',
+    marginBottom: '16px',
+  },
+  sectionTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    marginBottom: '20px',
+    margin: 0,
+  },
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: theme.spacing.sm,
+    marginBottom: '16px',
   },
   label: {
     fontSize: '14px',
-    fontWeight: 500,
+    fontWeight: 600,
     color: theme.colors.txt.primary,
   },
   input: {
@@ -1651,15 +1682,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   addItemButton: {
-    padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 16px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: theme.colors.background,
     border: 'none',
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '13px',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
     fontWeight: 600,
     cursor: 'pointer',
     transition: 'all 0.2s',
