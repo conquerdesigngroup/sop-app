@@ -1875,12 +1875,13 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   modalOverlayMobile: {
     padding: '0',
+    top: '60px', // Add space for the navigation header
   },
   modalMobile: {
     maxWidth: '100%',
     width: '100%',
-    height: '100vh',
-    maxHeight: '100vh',
+    height: 'calc(100vh - 60px)', // Adjust height to account for nav header
+    maxHeight: 'calc(100vh - 60px)',
     borderRadius: '0',
     margin: '0',
   },

@@ -248,7 +248,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0',
     minHeight: '100vh',
     position: 'fixed',
-    top: 0,
+    top: '60px', // Add space for the navigation header
     left: 0,
     right: 0,
     bottom: 0,

@@ -838,7 +838,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   modalOverlayMobile: {
     position: 'fixed',
-    top: 0,
+    top: '60px', // Add space for the navigation header
     left: 0,
     right: 0,
     bottom: 0,
@@ -863,7 +863,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     width: '100%',
     maxWidth: '100%',
-    maxHeight: '95vh',
+    maxHeight: 'calc(100vh - 60px)', // Adjust height to account for nav header
     overflow: 'auto',
     border: `1px solid ${theme.colors.bdr.primary}`,
   },
