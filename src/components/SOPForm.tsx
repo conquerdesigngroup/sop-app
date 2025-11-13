@@ -4,6 +4,7 @@ import { theme } from '../theme';
 import { SOP, SOPStep, SOPStatus } from '../types';
 import IconSelector, { IconName } from './IconSelector';
 import ImageUpload from './ImageUpload';
+import { useResponsive } from '../hooks/useResponsive';
 
 interface SOPFormProps {
   sop?: SOP | null;
@@ -12,6 +13,7 @@ interface SOPFormProps {
 
 const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
   const { addSOP, updateSOP, saveAsTemplate, sops } = useSOPs();
+  const { isMobile, isMobileOrTablet } = useResponsive();
 
   // Get unique categories from existing SOPs
   const existingCategories = Array.from(new Set(sops.map(s => s.category))).sort();
@@ -146,9 +148,18 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>
+    <div style={{
+      ...styles.container,
+      ...(isMobile && styles.containerMobile),
+    }}>
+      <div style={{
+        ...styles.header,
+        ...(isMobile && styles.headerMobile),
+      }}>
+        <h1 style={{
+          ...styles.title,
+          ...(isMobile && styles.titleMobile),
+        }}>
           {sop ? 'Edit SOP' : 'Create New SOP'}
         </h1>
         <button onClick={onClose} style={styles.closeButton}>
@@ -160,7 +171,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
       </div>
 
       <form onSubmit={handleSubmit} style={styles.form}>
-        <div style={styles.section}>
+        <div style={{
+          ...styles.section,
+          ...(isMobile && styles.sectionMobile),
+        }}>
           <h3 style={styles.sectionTitle}>Basic Information</h3>
 
           <div style={styles.inputGroup}>
@@ -172,7 +186,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., 3-Camera Recital Setup"
-              style={styles.input}
+              style={{
+                ...styles.input,
+                ...(isMobile && styles.inputMobile),
+              }}
               required
             />
           </div>
@@ -185,7 +202,11 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Brief overview of this procedure..."
-              style={{ ...styles.input, ...styles.textarea }}
+              style={{
+                ...styles.input,
+                ...styles.textarea,
+                ...(isMobile && styles.inputMobile),
+              }}
               rows={3}
               required
             />
@@ -208,7 +229,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                       setDepartment(value);
                     }
                   }}
-                  style={styles.input}
+                  style={{
+                    ...styles.input,
+                    ...(isMobile && styles.inputMobile),
+                  }}
                   required
                 >
                   <option value="">-- Select a department --</option>
@@ -225,7 +249,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
                   placeholder="e.g., Admin, Staff, Management"
-                  style={styles.input}
+                  style={{
+                    ...styles.input,
+                    ...(isMobile && styles.inputMobile),
+                  }}
                   required
                 />
                 {existingDepartments.length > 0 && (
@@ -261,7 +288,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                       setCategory(value);
                     }
                   }}
-                  style={styles.input}
+                  style={{
+                    ...styles.input,
+                    ...(isMobile && styles.inputMobile),
+                  }}
                   required
                 >
                   <option value="">-- Select a category --</option>
@@ -278,7 +308,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   placeholder="e.g., Camera Setup, Audio Setup, Lighting"
-                  style={styles.input}
+                  style={{
+                    ...styles.input,
+                    ...(isMobile && styles.inputMobile),
+                  }}
                   required
                 />
                 {existingCategories.length > 0 && (
@@ -312,14 +345,20 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
 
           <div style={styles.inputGroup}>
             <label style={styles.label}>Tags (Optional)</label>
-            <div style={styles.tagInputContainer}>
+            <div style={{
+              ...styles.tagInputContainer,
+              ...(isMobile && styles.tagInputContainerMobile),
+            }}>
               <input
                 type="text"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                 placeholder="Add a tag and press Enter"
-                style={styles.input}
+                style={{
+                  ...styles.input,
+                  ...(isMobile && styles.inputMobile),
+                }}
               />
               <button type="button" onClick={addTag} style={styles.addTagButton}>
                 Add Tag
@@ -340,8 +379,14 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
           </div>
         </div>
 
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
+        <div style={{
+          ...styles.section,
+          ...(isMobile && styles.sectionMobile),
+        }}>
+          <div style={{
+            ...styles.sectionHeader,
+            ...(isMobile && styles.sectionHeaderMobile),
+          }}>
             <h3 style={styles.sectionTitle}>Procedure Steps</h3>
             <button type="button" onClick={addStep} style={styles.addStepButton}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -353,7 +398,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
           </div>
 
           {steps.map((step, index) => (
-            <div key={step.id} style={styles.stepCard}>
+            <div key={step.id} style={{
+              ...styles.stepCard,
+              ...(isMobile && styles.stepCardMobile),
+            }}>
               <div style={styles.stepHeader}>
                 <div style={styles.stepNumber}>Step {index + 1}</div>
                 <div style={styles.stepControls}>
@@ -405,7 +453,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                   value={step.title}
                   onChange={(e) => updateStep(index, 'title', e.target.value)}
                   placeholder="e.g., Position camera on tripod"
-                  style={styles.input}
+                  style={{
+                    ...styles.input,
+                    ...(isMobile && styles.inputMobile),
+                  }}
                   required
                 />
               </div>
@@ -418,7 +469,11 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                   value={step.description}
                   onChange={(e) => updateStep(index, 'description', e.target.value)}
                   placeholder="Detailed instructions for this step..."
-                  style={{ ...styles.input, ...styles.textarea }}
+                  style={{
+                    ...styles.input,
+                    ...styles.textarea,
+                    ...(isMobile && styles.inputMobile),
+                  }}
                   rows={4}
                   required
                 />
@@ -435,21 +490,37 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
           ))}
         </div>
 
-        <div style={styles.footer}>
-          <button type="button" onClick={onClose} style={styles.cancelButton}>
+        <div style={{
+          ...styles.footer,
+          ...(isMobile && styles.footerMobile),
+        }}>
+          <button type="button" onClick={onClose} style={{
+            ...styles.cancelButton,
+            ...(isMobile && styles.buttonMobile),
+          }}>
             Cancel
           </button>
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{
+            display: 'flex',
+            gap: '12px',
+            ...(isMobile && { flexDirection: 'column', width: '100%', gap: '8px' }),
+          }}>
             {sop && !sop.isTemplate && (
               <button
                 type="button"
                 onClick={handleSaveAsTemplate}
-                style={styles.templateButton}
+                style={{
+                  ...styles.templateButton,
+                  ...(isMobile && styles.buttonMobile),
+                }}
               >
                 Save as Template
               </button>
             )}
-            <button type="submit" style={styles.submitButton}>
+            <button type="submit" style={{
+              ...styles.submitButton,
+              ...(isMobile && styles.buttonMobile),
+            }}>
               {sop?.isTemplate ? 'Update Template' : sop ? 'Save Changes' : 'Save SOP'}
             </button>
           </div>
@@ -465,17 +536,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '900px',
     margin: '0 auto',
   },
+  containerMobile: {
+    padding: '16px',
+    maxWidth: '100%',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '32px',
   },
+  headerMobile: {
+    marginBottom: '20px',
+  },
   title: {
     fontSize: '32px',
     fontWeight: '800',
     color: theme.colors.textPrimary,
     margin: 0,
+  },
+  titleMobile: {
+    fontSize: '24px',
   },
   closeButton: {
     padding: '8px',
@@ -500,11 +581,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     padding: '24px',
   },
+  sectionMobile: {
+    padding: '16px',
+  },
   sectionHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '20px',
+  },
+  sectionHeaderMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '12px',
   },
   sectionTitle: {
     fontSize: '20px',
@@ -543,6 +632,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     outline: 'none',
     transition: 'border-color 0.2s',
   },
+  inputMobile: {
+    fontSize: '16px', // Prevents iOS zoom
+  },
   textarea: {
     resize: 'vertical',
     fontFamily: 'inherit',
@@ -563,6 +655,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   tagInputContainer: {
     display: 'flex',
     gap: '8px',
+  },
+  tagInputContainerMobile: {
+    flexDirection: 'column',
   },
   addTagButton: {
     padding: '12px 20px',
@@ -621,6 +716,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '20px',
     marginBottom: '16px',
   },
+  stepCardMobile: {
+    padding: '16px',
+  },
   stepHeader: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -670,6 +768,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '16px',
     justifyContent: 'flex-end',
   },
+  footerMobile: {
+    flexDirection: 'column',
+    gap: '12px',
+  },
   cancelButton: {
     padding: '14px 28px',
     fontSize: '15px',
@@ -713,6 +815,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  buttonMobile: {
+    width: '100%',
+    padding: '16px 24px',
+    fontSize: '16px', // Touch-friendly and prevents iOS zoom
   },
 };
 

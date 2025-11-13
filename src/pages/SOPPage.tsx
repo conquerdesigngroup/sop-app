@@ -6,12 +6,14 @@ import { SOP, SOPStatus } from '../types';
 import SOPForm from '../components/SOPForm';
 import SOPViewer from '../components/SOPViewer';
 import { equipmentIcons, IconName } from '../components/IconSelector';
+import { useResponsive } from '../hooks/useResponsive';
 
 type FilterView = 'all' | 'published' | 'draft' | 'archived';
 
 const SOPPage: React.FC = () => {
   const { sops, deleteSOP, updateSOPStatus, createFromTemplate } = useSOPs();
   const location = useLocation();
+  const { isMobileOrTablet } = useResponsive();
   const [showForm, setShowForm] = useState(false);
   const [editingSOP, setEditingSOP] = useState<SOP | null>(null);
   const [viewingSOP, setViewingSOP] = useState<SOP | null>(null);
@@ -168,20 +170,20 @@ const SOPPage: React.FC = () => {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
+      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
-          <h1 style={styles.title}>
+          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>
             <svg
-              width="32"
-              height="32"
+              width={isMobileOrTablet ? "24" : "32"}
+              height={isMobileOrTablet ? "24" : "32"}
               viewBox="0 0 24 24"
               fill="none"
               stroke={theme.colors.primary}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginRight: '12px' }}
+              style={{ marginRight: isMobileOrTablet ? '8px' : '12px' }}
             >
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
@@ -197,7 +199,7 @@ const SOPPage: React.FC = () => {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          style={styles.addButton}
+          style={isMobileOrTablet ? styles.addButtonMobile : styles.addButton}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -208,11 +210,11 @@ const SOPPage: React.FC = () => {
       </div>
 
       {/* Department Tabs */}
-      <div style={styles.departmentTabs}>
+      <div style={isMobileOrTablet ? styles.departmentTabsMobile : styles.departmentTabs}>
         <button
           onClick={() => setSelectedDepartment('all')}
           style={{
-            ...styles.departmentTab,
+            ...(isMobileOrTablet ? styles.departmentTabMobile : styles.departmentTab),
             ...(selectedDepartment === 'all' ? styles.departmentTabActive : {}),
           }}
         >
@@ -223,7 +225,7 @@ const SOPPage: React.FC = () => {
             key={dept}
             onClick={() => setSelectedDepartment(dept)}
             style={{
-              ...styles.departmentTab,
+              ...(isMobileOrTablet ? styles.departmentTabMobile : styles.departmentTab),
               ...(selectedDepartment === dept ? styles.departmentTabActive : {}),
             }}
           >
@@ -233,11 +235,11 @@ const SOPPage: React.FC = () => {
       </div>
 
       {/* Filter Tabs */}
-      <div style={styles.filterTabs}>
+      <div style={isMobileOrTablet ? styles.filterTabsMobile : styles.filterTabs}>
         <button
           onClick={() => setFilterView('all')}
           style={{
-            ...styles.filterTab,
+            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
             ...(filterView === 'all' ? styles.filterTabActive : {}),
           }}
         >
@@ -247,7 +249,7 @@ const SOPPage: React.FC = () => {
         <button
           onClick={() => setFilterView('published')}
           style={{
-            ...styles.filterTab,
+            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
             ...(filterView === 'published' ? styles.filterTabActive : {}),
           }}
         >
@@ -257,7 +259,7 @@ const SOPPage: React.FC = () => {
         <button
           onClick={() => setFilterView('draft')}
           style={{
-            ...styles.filterTab,
+            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
             ...(filterView === 'draft' ? styles.filterTabActive : {}),
           }}
         >
@@ -267,7 +269,7 @@ const SOPPage: React.FC = () => {
         <button
           onClick={() => setFilterView('archived')}
           style={{
-            ...styles.filterTab,
+            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
             ...(filterView === 'archived' ? styles.filterTabActive : {}),
           }}
         >
@@ -276,41 +278,41 @@ const SOPPage: React.FC = () => {
         </button>
       </div>
 
-      <div style={styles.controls}>
-        <div style={styles.searchContainer}>
+      <div style={isMobileOrTablet ? styles.controlsMobile : styles.controls}>
+        <div style={isMobileOrTablet ? styles.searchContainerMobile : styles.searchContainer}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" style={styles.searchIcon}>
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
           <input
             type="text"
-            placeholder="Search SOPs by title, description, or tags..."
+            placeholder={isMobileOrTablet ? "Search SOPs..." : "Search SOPs by title, description, or tags..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={styles.searchInput}
+            style={isMobileOrTablet ? styles.searchInputMobile : styles.searchInput}
           />
         </div>
 
-        <div style={styles.expandControls}>
-          <button onClick={expandAll} style={styles.expandButton}>
+        <div style={isMobileOrTablet ? styles.expandControlsMobile : styles.expandControls}>
+          <button onClick={expandAll} style={isMobileOrTablet ? styles.expandButtonMobile : styles.expandButton}>
             Expand All
           </button>
-          <button onClick={collapseAll} style={styles.expandButton}>
+          <button onClick={collapseAll} style={isMobileOrTablet ? styles.expandButtonMobile : styles.expandButton}>
             Collapse All
           </button>
         </div>
       </div>
 
-      <div style={styles.stats}>
-        <div style={styles.statCard}>
+      <div style={isMobileOrTablet ? styles.statsMobile : styles.stats}>
+        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
           <div style={styles.statNumber}>{sops.length}</div>
           <div style={styles.statLabel}>Total SOPs</div>
         </div>
-        <div style={styles.statCard}>
+        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
           <div style={styles.statNumber}>{categories.length}</div>
           <div style={styles.statLabel}>Categories</div>
         </div>
-        <div style={styles.statCard}>
+        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
           <div style={styles.statNumber}>{filteredSOPs.length}</div>
           <div style={styles.statLabel}>Showing</div>
         </div>
@@ -377,9 +379,9 @@ const SOPPage: React.FC = () => {
               </button>
 
               {expandedCategories.has(category) && (
-                <div style={styles.sopGrid}>
+                <div style={isMobileOrTablet ? styles.sopGridMobile : styles.sopGrid}>
                   {sopsByCategory[category].map(sop => (
-            <div key={sop.id} style={styles.sopCard}>
+            <div key={sop.id} style={isMobileOrTablet ? styles.sopCardMobile : styles.sopCard}>
               <div style={styles.sopHeader}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={styles.sopCategory}>{sop.category}</div>
@@ -417,8 +419,8 @@ const SOPPage: React.FC = () => {
                 </div>
               )}
 
-              <div style={styles.sopActions}>
-                <button onClick={() => handleView(sop)} style={styles.viewButton}>
+              <div style={isMobileOrTablet ? styles.sopActionsMobile : styles.sopActions}>
+                <button onClick={() => handleView(sop)} style={isMobileOrTablet ? styles.viewButtonMobile : styles.viewButton}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <circle cx="12" cy="12" r="3" />
@@ -429,19 +431,19 @@ const SOPPage: React.FC = () => {
                 {/* Template: Show "Use Template" + Delete */}
                 {sop.isTemplate && (
                   <>
-                    <button onClick={() => handleUseTemplate(sop.id)} style={styles.templateButton}>
+                    <button onClick={() => handleUseTemplate(sop.id)} style={isMobileOrTablet ? styles.templateButtonMobile : styles.templateButton}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
                         <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
                       </svg>
-                      Use Template
+                      {!isMobileOrTablet && 'Use Template'}
                     </button>
-                    <button onClick={() => handleDelete(sop.id)} style={styles.deleteButton}>
+                    <button onClick={() => handleDelete(sop.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                       </svg>
-                      Delete
+                      {!isMobileOrTablet && 'Delete'}
                     </button>
                   </>
                 )}
@@ -449,20 +451,20 @@ const SOPPage: React.FC = () => {
                 {/* Regular SOP: Show Edit + Delete */}
                 {!sop.isTemplate && (
                   <>
-                    <button onClick={() => handleEdit(sop)} style={styles.editButton}>
+                    <button onClick={() => handleEdit(sop)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                       </svg>
-                      Edit
+                      {!isMobileOrTablet && 'Edit'}
                     </button>
 
-                    <button onClick={() => handleDelete(sop.id)} style={styles.deleteButton}>
+                    <button onClick={() => handleDelete(sop.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                       </svg>
-                      Delete
+                      {!isMobileOrTablet && 'Delete'}
                     </button>
                   </>
                 )}
@@ -485,6 +487,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1400px',
     margin: '0 auto',
   },
+  containerMobile: {
+    padding: '16px',
+    maxWidth: '100%',
+    margin: '0 auto',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -492,8 +499,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '32px',
     gap: '24px',
   },
+  headerMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    marginBottom: '24px',
+  },
   title: {
     fontSize: '36px',
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginBottom: '8px',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  titleMobile: {
+    fontSize: '24px',
     fontWeight: '800',
     color: theme.colors.textPrimary,
     marginBottom: '8px',
@@ -520,16 +541,43 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     whiteSpace: 'nowrap',
   },
+  addButtonMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '14px 24px',
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.background,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '15px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+    width: '100%',
+  },
   controls: {
     display: 'flex',
     gap: '16px',
     marginBottom: '24px',
     flexWrap: 'wrap',
   },
+  controlsMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '16px',
+  },
   searchContainer: {
     position: 'relative',
     flex: 1,
     minWidth: '300px',
+  },
+  searchContainerMobile: {
+    position: 'relative',
+    width: '100%',
   },
   searchIcon: {
     position: 'absolute',
@@ -547,9 +595,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.textPrimary,
     outline: 'none',
   },
+  searchInputMobile: {
+    width: '100%',
+    padding: '12px 16px 12px 48px',
+    fontSize: '15px',
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.textPrimary,
+    outline: 'none',
+    minHeight: '44px',
+  },
   expandControls: {
     display: 'flex',
     gap: '8px',
+  },
+  expandControlsMobile: {
+    display: 'flex',
+    gap: '8px',
+    width: '100%',
   },
   expandButton: {
     padding: '14px 20px',
@@ -563,15 +627,41 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     whiteSpace: 'nowrap',
   },
+  expandButtonMobile: {
+    flex: 1,
+    padding: '12px 16px',
+    fontSize: '14px',
+    fontWeight: '600',
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+  },
   stats: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
     gap: '20px',
     marginBottom: '32px',
   },
+  statsMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '12px',
+    marginBottom: '16px',
+  },
   statCard: {
     backgroundColor: theme.colors.cardBackground,
     padding: '24px',
+    borderRadius: theme.borderRadius.lg,
+    border: `2px solid ${theme.colors.border}`,
+    textAlign: 'center',
+  },
+  statCardMobile: {
+    backgroundColor: theme.colors.cardBackground,
+    padding: '16px 12px',
     borderRadius: theme.borderRadius.lg,
     border: `2px solid ${theme.colors.border}`,
     textAlign: 'center',
@@ -640,6 +730,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '24px',
     padding: '0 24px 24px 24px',
   },
+  sopGridMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    padding: '0 16px 16px 16px',
+  },
   sopCard: {
     backgroundColor: theme.colors.background,
     border: `2px solid ${theme.colors.border}`,
@@ -649,6 +745,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '16px',
     transition: 'all 0.2s',
+  },
+  sopCardMobile: {
+    backgroundColor: theme.colors.background,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    transition: 'all 0.2s',
+    width: '100%',
   },
   sopHeader: {
     display: 'flex',
@@ -714,6 +821,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
     marginTop: 'auto',
   },
+  sopActionsMobile: {
+    display: 'flex',
+    gap: '8px',
+    marginTop: 'auto',
+    flexWrap: 'wrap',
+  },
   viewButton: {
     flex: 1,
     display: 'flex',
@@ -729,6 +842,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  viewButtonMobile: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 16px',
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.background,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
   },
   editButton: {
     flex: 1,
@@ -746,6 +876,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
+  editButtonMobile: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 16px',
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+  },
   deleteButton: {
     display: 'flex',
     alignItems: 'center',
@@ -757,6 +904,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  deleteButtonMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '12px 14px',
+    backgroundColor: 'transparent',
+    color: theme.colors.error,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+    minWidth: '44px',
   },
   emptyState: {
     textAlign: 'center',
@@ -793,6 +954,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottom: `2px solid ${theme.colors.border}`,
     marginBottom: '24px',
   },
+  filterTabsMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px',
+    padding: '0 0 16px 0',
+    borderBottom: `2px solid ${theme.colors.border}`,
+    marginBottom: '16px',
+  },
   filterTab: {
     display: 'flex',
     alignItems: 'center',
@@ -806,6 +975,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  filterTabMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px 16px',
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
   },
   filterTabActive: {
     backgroundColor: theme.colors.primary,
@@ -865,6 +1050,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
+  templateButtonMobile: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 16px',
+    backgroundColor: '#3B82F6',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+  },
   publishButton: {
     padding: '10px 16px',
     backgroundColor: '#10B981',
@@ -917,6 +1119,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottom: `3px solid ${theme.colors.primary}`,
     marginBottom: '24px',
   },
+  departmentTabsMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '0 0 16px 0',
+    borderBottom: `3px solid ${theme.colors.primary}`,
+    marginBottom: '16px',
+  },
   departmentTab: {
     padding: '16px 32px',
     backgroundColor: 'transparent',
@@ -931,6 +1141,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.5px',
     whiteSpace: 'nowrap',
     overflow: 'visible',
+  },
+  departmentTabMobile: {
+    padding: '14px 20px',
+    backgroundColor: 'transparent',
+    color: theme.colors.textPrimary,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    fontSize: '14px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    minHeight: '44px',
+    width: '100%',
   },
   departmentTabActive: {
     backgroundColor: theme.colors.primary,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useResponsive } from '../hooks/useResponsive';
 import { theme } from '../theme';
 
 const Login: React.FC = () => {
@@ -10,6 +11,7 @@ const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { isMobile, isMobileOrTablet } = useResponsive();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,21 +44,51 @@ const Login: React.FC = () => {
     setError('');
   };
 
+  // Dynamic styles based on screen size
+  const getStyles = () => {
+    const baseStyles = styles;
+
+    if (isMobile) {
+      return {
+        ...baseStyles,
+        container: { ...baseStyles.container, ...styles.containerMobile },
+        loginCard: { ...baseStyles.loginCard, ...styles.loginCardMobile },
+        logo: { ...baseStyles.logo, ...styles.logoMobile },
+        title: { ...baseStyles.title, ...styles.titleMobile },
+        subtitle: { ...baseStyles.subtitle, ...styles.subtitleMobile },
+        input: { ...baseStyles.input, ...styles.inputMobile },
+        submitButton: { ...baseStyles.submitButton, ...styles.buttonMobile },
+        demoButton: { ...baseStyles.demoButton, ...styles.buttonMobile },
+        demoSection: { ...baseStyles.demoSection, ...styles.demoSectionMobile },
+        demoButtons: { ...baseStyles.demoButtons, ...styles.demoButtonsMobile },
+      };
+    } else if (isMobileOrTablet) {
+      return {
+        ...baseStyles,
+        loginCard: { ...baseStyles.loginCard, ...styles.loginCardTablet },
+      };
+    }
+
+    return baseStyles;
+  };
+
+  const responsiveStyles = getStyles();
+
   return (
-    <div style={styles.container}>
-      <div style={styles.loginCard}>
+    <div style={responsiveStyles.container}>
+      <div style={responsiveStyles.loginCard}>
         {/* Logo */}
         <div style={styles.logoContainer}>
           <img
             src="/mediamaple-logo-white.png"
             alt="MediaMaple"
-            style={styles.logo}
+            style={responsiveStyles.logo}
           />
         </div>
 
         {/* Title */}
-        <h1 style={styles.title}>Welcome Back</h1>
-        <p style={styles.subtitle}>Sign in to your account</p>
+        <h1 style={responsiveStyles.title}>Welcome Back</h1>
+        <p style={responsiveStyles.subtitle}>Sign in to your account</p>
 
         {/* Error Message */}
         {error && (
@@ -76,7 +108,7 @@ const Login: React.FC = () => {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
-              style={styles.input}
+              style={responsiveStyles.input}
               disabled={isLoading}
             />
           </div>
@@ -89,14 +121,14 @@ const Login: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              style={styles.input}
+              style={responsiveStyles.input}
               disabled={isLoading}
             />
           </div>
 
           <button
             type="submit"
-            style={isLoading ? { ...styles.submitButton, ...styles.submitButtonDisabled } : styles.submitButton}
+            style={isLoading ? { ...responsiveStyles.submitButton, ...styles.submitButtonDisabled } : responsiveStyles.submitButton}
             disabled={isLoading}
           >
             {isLoading ? 'Signing in...' : 'Sign In'}
@@ -104,20 +136,22 @@ const Login: React.FC = () => {
         </form>
 
         {/* Demo Credentials */}
-        <div style={styles.demoSection}>
+        <div style={responsiveStyles.demoSection}>
           <p style={styles.demoTitle}>Quick Login (Demo)</p>
-          <div style={styles.demoButtons}>
+          <div style={responsiveStyles.demoButtons}>
             <button
               onClick={fillAdminCredentials}
-              style={styles.demoButton}
+              style={responsiveStyles.demoButton}
               disabled={isLoading}
+              className="demo-button"
             >
               Admin Login
             </button>
             <button
               onClick={fillTeamCredentials}
-              style={styles.demoButton}
+              style={responsiveStyles.demoButton}
               disabled={isLoading}
+              className="demo-button"
             >
               Team Login
             </button>
@@ -145,6 +179,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: `linear-gradient(135deg, ${theme.colors.bg.tertiary} 0%, ${theme.colors.bg.primary} 100%)`,
     padding: theme.spacing.md,
   },
+  containerMobile: {
+    padding: theme.spacing.sm,
+    justifyContent: 'flex-start',
+    paddingTop: theme.spacing.lg,
+  },
   loginCard: {
     backgroundColor: theme.colors.bg.secondary,
     borderRadius: theme.borderRadius.xl,
@@ -153,6 +192,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '440px',
     boxShadow: theme.shadows.xl,
     border: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  loginCardMobile: {
+    padding: theme.spacing.lg,
+    borderRadius: theme.borderRadius.lg,
+    maxWidth: '100%',
+  },
+  loginCardTablet: {
+    padding: theme.spacing.xl,
   },
   logoContainer: {
     display: 'flex',
@@ -163,6 +210,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '50px',
     width: 'auto',
   },
+  logoMobile: {
+    height: '40px',
+  },
   title: {
     fontSize: '28px',
     fontWeight: 600,
@@ -170,11 +220,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: theme.spacing.xs,
     textAlign: 'center',
   },
+  titleMobile: {
+    fontSize: '24px',
+  },
   subtitle: {
     fontSize: '15px',
     color: theme.colors.txt.secondary,
     marginBottom: theme.spacing.xl,
     textAlign: 'center',
+  },
+  subtitleMobile: {
+    fontSize: '14px',
+    marginBottom: theme.spacing.lg,
   },
   errorBox: {
     backgroundColor: 'rgba(239, 35, 60, 0.1)',
@@ -218,6 +275,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     outline: 'none',
     boxSizing: 'border-box',
   },
+  inputMobile: {
+    fontSize: '16px', // Prevents iOS zoom on focus
+    padding: `${theme.spacing.md} ${theme.spacing.sm}`,
+  },
   submitButton: {
     width: '100%',
     padding: `${theme.spacing.md} ${theme.spacing.lg}`,
@@ -231,6 +292,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
     marginTop: theme.spacing.sm,
   },
+  buttonMobile: {
+    minHeight: '44px', // Touch-friendly minimum size
+    fontSize: '16px',
+    padding: `${theme.spacing.md} ${theme.spacing.md}`,
+  },
   submitButtonDisabled: {
     opacity: 0.6,
     cursor: 'not-allowed',
@@ -239,6 +305,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: theme.spacing.xl,
     paddingTop: theme.spacing.xl,
     borderTop: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  demoSectionMobile: {
+    marginTop: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
   },
   demoTitle: {
     fontSize: '13px',
@@ -250,6 +320,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: theme.spacing.sm,
+  },
+  demoButtonsMobile: {
+    gridTemplateColumns: '1fr',
+    gap: theme.spacing.xs,
   },
   demoButton: {
     padding: `${theme.spacing.sm} ${theme.spacing.md}`,

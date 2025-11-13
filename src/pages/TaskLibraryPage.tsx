@@ -4,11 +4,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { TaskTemplate, TaskTemplateStep } from '../types';
 import { theme } from '../theme';
+import { useResponsive } from '../hooks/useResponsive';
 
 const TaskLibraryPage: React.FC = () => {
   const { taskTemplates, addTaskTemplate, updateTaskTemplate, deleteTaskTemplate, createJobTaskFromTemplate } = useTask();
   const { currentUser } = useAuth();
   const { sops } = useSOPs();
+  const { isMobile, isMobileOrTablet } = useResponsive();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TaskTemplate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,10 +91,10 @@ const TaskLibraryPage: React.FC = () => {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={{...styles.container, ...(isMobile ? styles.containerMobile : {})}}>
+      <div style={{...styles.header, ...(isMobile ? styles.headerMobile : {})}}>
         <div>
-          <h1 style={styles.title}>
+          <h1 style={{...styles.title, ...(isMobile ? styles.titleMobile : {})}}>
             <svg
               width="32"
               height="32"
@@ -109,9 +111,9 @@ const TaskLibraryPage: React.FC = () => {
             </svg>
             Task Library
           </h1>
-          <p style={styles.subtitle}>Create and manage reusable task templates</p>
+          <p style={{...styles.subtitle, ...(isMobile ? styles.subtitleMobile : {})}}>Create and manage reusable task templates</p>
         </div>
-        <button style={styles.createButton} onClick={handleCreateTemplate}>
+        <button style={{...styles.createButton, ...(isMobile ? styles.createButtonMobile : {})}} onClick={handleCreateTemplate}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -121,11 +123,12 @@ const TaskLibraryPage: React.FC = () => {
       </div>
 
       {/* Department Tabs */}
-      <div style={styles.departmentTabs}>
+      <div style={{...styles.departmentTabs, ...(isMobile ? styles.departmentTabsMobile : {})}}>
         <button
           onClick={() => setSelectedDepartment('all')}
           style={{
             ...styles.departmentTab,
+            ...(isMobile ? styles.departmentTabMobile : {}),
             ...(selectedDepartment === 'all' ? styles.departmentTabActive : {}),
           }}
         >
@@ -137,6 +140,7 @@ const TaskLibraryPage: React.FC = () => {
             onClick={() => setSelectedDepartment(dept)}
             style={{
               ...styles.departmentTab,
+              ...(isMobile ? styles.departmentTabMobile : {}),
               ...(selectedDepartment === dept ? styles.departmentTabActive : {}),
             }}
           >
@@ -146,8 +150,8 @@ const TaskLibraryPage: React.FC = () => {
       </div>
 
       {/* Search and Controls */}
-      <div style={styles.controls}>
-        <div style={styles.searchContainer}>
+      <div style={{...styles.controls, ...(isMobile ? styles.controlsMobile : {})}}>
+        <div style={{...styles.searchContainer, ...(isMobile ? styles.searchContainerMobile : {})}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="2" style={styles.searchIcon}>
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
@@ -157,22 +161,22 @@ const TaskLibraryPage: React.FC = () => {
             placeholder="Search templates by title or description..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={styles.searchInput}
+            style={{...styles.searchInput, ...(isMobile ? styles.searchInputMobile : {})}}
           />
         </div>
 
-        <div style={styles.expandControls}>
-          <button onClick={expandAll} style={styles.expandButton}>
+        <div style={{...styles.expandControls, ...(isMobile ? styles.expandControlsMobile : {})}}>
+          <button onClick={expandAll} style={{...styles.expandButton, ...(isMobile ? styles.expandButtonMobile : {})}}>
             Expand All
           </button>
-          <button onClick={collapseAll} style={styles.expandButton}>
+          <button onClick={collapseAll} style={{...styles.expandButton, ...(isMobile ? styles.expandButtonMobile : {})}}>
             Collapse All
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div style={styles.stats}>
+      <div style={{...styles.stats, ...(isMobile ? styles.statsMobile : {})}}>
         <div style={styles.statCard}>
           <div style={styles.statNumber}>{taskTemplates.length}</div>
           <div style={styles.statLabel}>Total Templates</div>
@@ -239,7 +243,7 @@ const TaskLibraryPage: React.FC = () => {
               </button>
 
               {expandedCategories.has(category) && (
-                <div style={styles.templatesGrid}>
+                <div style={{...styles.templatesGrid, ...(isMobile ? styles.templatesGridMobile : {})}}>
                   {templatesByCategory[category].map(template => (
                     <TaskTemplateCard
                       key={template.id}
@@ -247,6 +251,7 @@ const TaskLibraryPage: React.FC = () => {
                       onEdit={() => handleEditTemplate(template)}
                       onDelete={() => handleDeleteTemplate(template.id)}
                       onUseTemplate={() => handleUseTemplate(template)}
+                      isMobile={isMobile}
                     />
                   ))}
                 </div>
@@ -295,9 +300,10 @@ interface TaskTemplateCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onUseTemplate: () => void;
+  isMobile: boolean;
 }
 
-const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({ template, onEdit, onDelete, onUseTemplate }) => {
+const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({ template, onEdit, onDelete, onUseTemplate, isMobile }) => {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'urgent': return theme.colors.status.error;
@@ -308,9 +314,9 @@ const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({ template, onEdit, o
   };
 
   return (
-    <div style={styles.card}>
-      <div style={styles.cardHeader}>
-        <div style={styles.cardBadges}>
+    <div style={{...styles.card, ...(isMobile ? styles.cardMobile : {})}}>
+      <div style={{...styles.cardHeader, ...(isMobile ? styles.cardHeaderMobile : {})}}>
+        <div style={{...styles.cardBadges, ...(isMobile ? styles.cardBadgesMobile : {})}}>
           <span style={{...styles.badge, backgroundColor: 'rgba(239, 35, 60, 0.15)', color: theme.colors.primary}}>
             {template.department}
           </span>
@@ -361,22 +367,22 @@ const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({ template, onEdit, o
         </div>
       )}
 
-      <div style={styles.cardActions}>
-        <button style={styles.actionButtonUse} onClick={onUseTemplate}>
+      <div style={{...styles.cardActions, ...(isMobile ? styles.cardActionsMobile : {})}}>
+        <button style={{...styles.actionButtonUse, ...(isMobile ? styles.actionButtonUseMobile : {})}} onClick={onUseTemplate}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 11l3 3L22 4" />
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
           </svg>
           Use Template
         </button>
-        <button style={styles.actionButtonEdit} onClick={onEdit}>
+        <button style={{...styles.actionButtonEdit, ...(isMobile ? styles.actionButtonEditMobile : {})}} onClick={onEdit}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
           Edit
         </button>
-        <button style={styles.actionButtonDelete} onClick={onDelete}>
+        <button style={{...styles.actionButtonDelete, ...(isMobile ? styles.actionButtonDeleteMobile : {})}} onClick={onDelete}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -1679,6 +1685,109 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: theme.spacing.sm,
     transition: 'all 0.2s',
+  },
+  // Mobile-specific styles
+  containerMobile: {
+    padding: '16px',
+  },
+  headerMobile: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '16px',
+    marginBottom: '24px',
+  },
+  titleMobile: {
+    fontSize: '24px',
+    marginBottom: '4px',
+  },
+  subtitleMobile: {
+    fontSize: '14px',
+  },
+  createButtonMobile: {
+    width: '100%',
+    justifyContent: 'center',
+    padding: '16px 24px',
+    minHeight: '44px',
+  },
+  departmentTabsMobile: {
+    gap: '8px',
+    padding: '0 0 16px 0',
+    marginBottom: '16px',
+  },
+  departmentTabMobile: {
+    padding: '12px 20px',
+    fontSize: '14px',
+    minHeight: '44px',
+    flex: '1 1 calc(50% - 4px)',
+    textAlign: 'center',
+  },
+  controlsMobile: {
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '16px',
+  },
+  searchContainerMobile: {
+    minWidth: 'auto',
+    width: '100%',
+  },
+  searchInputMobile: {
+    padding: '12px 16px 12px 48px',
+    fontSize: '16px',
+  },
+  expandControlsMobile: {
+    width: '100%',
+    justifyContent: 'stretch',
+  },
+  expandButtonMobile: {
+    flex: 1,
+    minHeight: '44px',
+    padding: '12px 16px',
+  },
+  statsMobile: {
+    gridTemplateColumns: '1fr',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  templatesGridMobile: {
+    gridTemplateColumns: '1fr',
+    gap: '16px',
+    padding: '0 16px 16px 16px',
+  },
+  cardMobile: {
+    padding: '16px',
+  },
+  cardHeaderMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '8px',
+  },
+  cardBadgesMobile: {
+    width: '100%',
+    justifyContent: 'flex-start',
+  },
+  cardActionsMobile: {
+    flexDirection: 'column',
+    gap: '8px',
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+  },
+  actionButtonUseMobile: {
+    width: '100%',
+    flex: 'none',
+    minHeight: '44px',
+    padding: '12px 16px',
+  },
+  actionButtonEditMobile: {
+    width: '100%',
+    flex: 'none',
+    minHeight: '44px',
+    padding: '12px 16px',
+  },
+  actionButtonDeleteMobile: {
+    width: '100%',
+    flex: 'none',
+    minHeight: '44px',
+    padding: '12px 16px',
   },
 };
 

@@ -64,6 +64,25 @@ export const theme = {
     wide: '1440px',
   },
 
+  // Responsive spacing - use these for adaptive layouts
+  responsiveSpacing: {
+    containerPadding: {
+      mobile: '16px',
+      tablet: '24px',
+      desktop: '40px',
+    },
+    sectionGap: {
+      mobile: '16px',
+      tablet: '20px',
+      desktop: '24px',
+    },
+    cardGap: {
+      mobile: '12px',
+      tablet: '16px',
+      desktop: '20px',
+    },
+  },
+
   spacing: {
     xs: '4px',
     sm: '8px',
@@ -90,3 +109,42 @@ export const theme = {
 };
 
 export type Theme = typeof theme;
+
+// Responsive utility functions
+export const responsive = {
+  // Media query helpers
+  mobile: `@media (max-width: ${theme.breakpoints.mobile})`,
+  tablet: `@media (min-width: ${theme.breakpoints.mobile}) and (max-width: ${theme.breakpoints.tablet})`,
+  desktop: `@media (min-width: ${theme.breakpoints.tablet})`,
+  wide: `@media (min-width: ${theme.breakpoints.wide})`,
+
+  // Mobile-first approach
+  upToTablet: `@media (max-width: ${theme.breakpoints.tablet})`,
+  upToDesktop: `@media (max-width: ${theme.breakpoints.desktop})`,
+
+  // Touch device detection
+  touch: '@media (hover: none) and (pointer: coarse)',
+
+  // Helper to check if mobile
+  isMobile: () => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < parseInt(theme.breakpoints.tablet);
+  },
+
+  // Helper to check if tablet
+  isTablet: () => {
+    if (typeof window === 'undefined') return false;
+    const width = window.innerWidth;
+    return width >= parseInt(theme.breakpoints.tablet) && width < parseInt(theme.breakpoints.desktop);
+  },
+
+  // Helper to get current breakpoint
+  getCurrentBreakpoint: (): 'mobile' | 'tablet' | 'desktop' | 'wide' => {
+    if (typeof window === 'undefined') return 'desktop';
+    const width = window.innerWidth;
+    if (width < parseInt(theme.breakpoints.mobile)) return 'mobile';
+    if (width < parseInt(theme.breakpoints.tablet)) return 'tablet';
+    if (width < parseInt(theme.breakpoints.desktop)) return 'desktop';
+    return 'wide';
+  },
+};

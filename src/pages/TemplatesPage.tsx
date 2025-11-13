@@ -5,9 +5,11 @@ import { SOP } from '../types';
 import SOPForm from '../components/SOPForm';
 import SOPViewer from '../components/SOPViewer';
 import { equipmentIcons, IconName } from '../components/IconSelector';
+import { useResponsive } from '../hooks/useResponsive';
 
 const TemplatesPage: React.FC = () => {
   const { sops, deleteSOP, createFromTemplate } = useSOPs();
+  const { isMobileOrTablet } = useResponsive();
   const [showForm, setShowForm] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<SOP | null>(null);
   const [viewingTemplate, setViewingTemplate] = useState<SOP | null>(null);
@@ -96,15 +98,15 @@ const TemplatesPage: React.FC = () => {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
+      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
-          <h1 style={styles.title}>Templates</h1>
+          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Templates</h1>
           <p style={styles.subtitle}>
             Reusable SOP templates for your organization
           </p>
         </div>
-        <button onClick={handleCreateNew} style={styles.createButton}>
+        <button onClick={handleCreateNew} style={isMobileOrTablet ? styles.createButtonMobile : styles.createButton}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -113,7 +115,7 @@ const TemplatesPage: React.FC = () => {
         </button>
       </div>
 
-      <div style={styles.controls}>
+      <div style={isMobileOrTablet ? styles.controlsMobile : styles.controls}>
         <div style={styles.searchContainer}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" style={styles.searchIcon}>
             <circle cx="11" cy="11" r="8" />
@@ -130,12 +132,12 @@ const TemplatesPage: React.FC = () => {
       </div>
 
       {departments.length > 0 && (
-        <div style={styles.departmentTabs}>
+        <div style={isMobileOrTablet ? styles.departmentTabsMobile : styles.departmentTabs}>
           <button
             onClick={() => setSelectedDepartment('all')}
             style={{
-              ...styles.departmentTab,
-              ...(selectedDepartment === 'all' ? styles.departmentTabActive : {}),
+              ...(isMobileOrTablet ? styles.departmentTabMobile : styles.departmentTab),
+              ...(selectedDepartment === 'all' ? (isMobileOrTablet ? styles.departmentTabActiveMobile : styles.departmentTabActive) : {}),
             }}
           >
             All Departments
@@ -145,8 +147,8 @@ const TemplatesPage: React.FC = () => {
               key={dept}
               onClick={() => setSelectedDepartment(dept)}
               style={{
-                ...styles.departmentTab,
-                ...(selectedDepartment === dept ? styles.departmentTabActive : {}),
+                ...(isMobileOrTablet ? styles.departmentTabMobile : styles.departmentTab),
+                ...(selectedDepartment === dept ? (isMobileOrTablet ? styles.departmentTabActiveMobile : styles.departmentTabActive) : {}),
               }}
             >
               {dept}
@@ -170,30 +172,30 @@ const TemplatesPage: React.FC = () => {
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
           </svg>
           <p style={styles.emptyText}>No templates found</p>
-          <button onClick={handleCreateNew} style={styles.emptyButton}>
+          <button onClick={handleCreateNew} style={isMobileOrTablet ? styles.emptyButtonMobile : styles.emptyButton}>
             Create Your First Template
           </button>
         </div>
       ) : (
         <div style={styles.content}>
           {categories.map(category => (
-            <div key={category} style={styles.categorySection}>
-              <h2 style={styles.categoryTitle}>{category}</h2>
-              <div style={styles.templateGrid}>
+            <div key={category} style={isMobileOrTablet ? styles.categorySectionMobile : styles.categorySection}>
+              <h2 style={isMobileOrTablet ? styles.categoryTitleMobile : styles.categoryTitle}>{category}</h2>
+              <div style={isMobileOrTablet ? styles.templateGridMobile : styles.templateGrid}>
                 {templatesByCategory[category].map(template => (
-                  <div key={template.id} style={styles.templateCard}>
+                  <div key={template.id} style={isMobileOrTablet ? styles.templateCardMobile : styles.templateCard}>
                     <div style={styles.templateHeader}>
-                      <div style={styles.templateDepartment}>{template.department}</div>
+                      <div style={isMobileOrTablet ? styles.templateDepartmentMobile : styles.templateDepartment}>{template.department}</div>
                       <span style={styles.templateBadge}>Template</span>
                     </div>
-                    <div style={styles.templateCategory}>{template.category}</div>
+                    <div style={isMobileOrTablet ? styles.templateCategoryMobile : styles.templateCategory}>{template.category}</div>
 
                     <div style={styles.templateTitleContainer}>
                       <div style={styles.templateIcon}>{getIcon(template.icon)}</div>
-                      <h3 style={styles.templateTitle}>{template.title}</h3>
+                      <h3 style={isMobileOrTablet ? styles.templateTitleMobile : styles.templateTitle}>{template.title}</h3>
                     </div>
 
-                    <p style={styles.templateDescription}>{template.description}</p>
+                    <p style={isMobileOrTablet ? styles.templateDescriptionMobile : styles.templateDescription}>{template.description}</p>
 
                     {template.tags && template.tags.length > 0 && (
                       <div style={styles.templateTags}>
@@ -207,7 +209,7 @@ const TemplatesPage: React.FC = () => {
                     )}
 
                     <div style={styles.templateActions}>
-                      <button onClick={() => handleView(template)} style={styles.viewButton}>
+                      <button onClick={() => handleView(template)} style={isMobileOrTablet ? styles.viewButtonMobile : styles.viewButton}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                           <circle cx="12" cy="12" r="3" />
@@ -215,7 +217,7 @@ const TemplatesPage: React.FC = () => {
                         View
                       </button>
 
-                      <button onClick={() => handleUseTemplate(template.id)} style={styles.useButton}>
+                      <button onClick={() => handleUseTemplate(template.id)} style={isMobileOrTablet ? styles.useButtonMobile : styles.useButton}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
                           <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
@@ -223,7 +225,7 @@ const TemplatesPage: React.FC = () => {
                         Use Template
                       </button>
 
-                      <button onClick={() => handleEdit(template)} style={styles.editButton}>
+                      <button onClick={() => handleEdit(template)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -231,7 +233,7 @@ const TemplatesPage: React.FC = () => {
                         Edit
                       </button>
 
-                      <button onClick={() => handleDelete(template.id)} style={styles.deleteButton}>
+                      <button onClick={() => handleDelete(template.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="3 6 5 6 21 6" />
                           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -256,6 +258,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1400px',
     margin: '0 auto',
   },
+  containerMobile: {
+    padding: '16px',
+    maxWidth: '100%',
+    margin: '0 auto',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -263,8 +270,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '32px',
     gap: '24px',
   },
+  headerMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    marginBottom: '24px',
+  },
   title: {
     fontSize: '36px',
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginBottom: '8px',
+  },
+  titleMobile: {
+    fontSize: '28px',
     fontWeight: '800',
     color: theme.colors.textPrimary,
     marginBottom: '8px',
@@ -289,8 +308,28 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     whiteSpace: 'nowrap',
   },
+  createButtonMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '14px 24px',
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.background,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '15px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    width: '100%',
+    minHeight: '44px',
+  },
   controls: {
     marginBottom: '24px',
+  },
+  controlsMobile: {
+    marginBottom: '16px',
   },
   searchContainer: {
     position: 'relative',
@@ -303,6 +342,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '0 0 24px 0',
     borderBottom: `3px solid ${theme.colors.primary}`,
     marginBottom: '32px',
+  },
+  departmentTabsMobile: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    padding: '0 0 16px 0',
+    borderBottom: `2px solid ${theme.colors.primary}`,
+    marginBottom: '16px',
   },
   departmentTab: {
     padding: '16px 32px',
@@ -319,12 +366,33 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
     overflow: 'visible',
   } as React.CSSProperties,
+  departmentTabMobile: {
+    padding: '12px 16px',
+    backgroundColor: 'transparent',
+    color: theme.colors.textPrimary,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    fontSize: '13px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    whiteSpace: 'nowrap',
+    minHeight: '44px',
+  } as React.CSSProperties,
   departmentTabActive: {
     backgroundColor: theme.colors.primary,
     color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
     transform: 'translateY(-2px)',
     boxShadow: '0 4px 12px rgba(239, 35, 60, 0.4)',
+  },
+  departmentTabActiveMobile: {
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    border: `2px solid ${theme.colors.primary}`,
+    boxShadow: '0 2px 8px rgba(239, 35, 60, 0.3)',
   },
   searchIcon: {
     position: 'absolute',
@@ -365,6 +433,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '600',
     cursor: 'pointer',
   },
+  emptyButtonMobile: {
+    padding: '14px 24px',
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.background,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    minHeight: '44px',
+  },
   content: {
     display: 'flex',
     flexDirection: 'column',
@@ -376,16 +455,33 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     padding: '24px',
   },
+  categorySectionMobile: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '16px',
+  },
   categoryTitle: {
     fontSize: '20px',
     fontWeight: '700',
     color: theme.colors.textPrimary,
     marginBottom: '20px',
   },
+  categoryTitleMobile: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    marginBottom: '16px',
+  },
   templateGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
     gap: '20px',
+  },
+  templateGridMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
   },
   templateCard: {
     backgroundColor: theme.colors.background,
@@ -393,6 +489,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     padding: '20px',
     transition: 'all 0.2s',
+  },
+  templateCardMobile: {
+    backgroundColor: theme.colors.background,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    padding: '16px',
+    transition: 'all 0.2s',
+    width: '100%',
   },
   templateHeader: {
     display: 'flex',
@@ -407,6 +511,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
   },
+  templateDepartmentMobile: {
+    fontSize: '11px',
+    fontWeight: '700',
+    color: theme.colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
   templateCategory: {
     fontSize: '11px',
     fontWeight: '600',
@@ -414,6 +525,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
     marginBottom: '12px',
+  },
+  templateCategoryMobile: {
+    fontSize: '10px',
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: '10px',
   },
   templateBadge: {
     fontSize: '10px',
@@ -442,11 +561,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.textPrimary,
     margin: 0,
   },
+  templateTitleMobile: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    margin: 0,
+  },
   templateDescription: {
     fontSize: '14px',
     color: theme.colors.textSecondary,
     marginBottom: '16px',
     lineHeight: '1.6',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  },
+  templateDescriptionMobile: {
+    fontSize: '13px',
+    color: theme.colors.textSecondary,
+    marginBottom: '12px',
+    lineHeight: '1.5',
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
@@ -487,6 +622,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
+  viewButtonMobile: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 16px',
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.background,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+  },
   useButton: {
     flex: 1,
     display: 'flex',
@@ -503,6 +655,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
+  useButtonMobile: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 16px',
+    backgroundColor: '#3B82F6',
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+  },
   editButton: {
     display: 'flex',
     alignItems: 'center',
@@ -518,6 +687,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
+  editButtonMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px',
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+  },
   deleteButton: {
     display: 'flex',
     alignItems: 'center',
@@ -529,6 +714,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  deleteButtonMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '12px',
+    backgroundColor: 'transparent',
+    color: theme.colors.error,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
   },
 };
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
+import { useResponsive } from '../hooks/useResponsive';
 import { JobTask, TaskTemplate, TaskStep, TaskPriority } from '../types';
 import { theme } from '../theme';
 
@@ -9,6 +10,7 @@ const JobTasksPage: React.FC = () => {
   const { jobTasks, taskTemplates, createJobTaskFromTemplate, addJobTask, updateJobTask, deleteJobTask } = useTask();
   const { currentUser, users } = useAuth();
   const { sops } = useSOPs();
+  const { isMobile } = useResponsive();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
@@ -61,34 +63,34 @@ const JobTasksPage: React.FC = () => {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={{...styles.container, ...(isMobile && styles.containerMobile)}}>
+      <div style={{...styles.header, ...(isMobile && styles.headerMobile)}}>
         <div>
-          <h1 style={styles.title}>
+          <h1 style={{...styles.title, ...(isMobile && styles.titleMobile)}}>
             <svg
-              width="32"
-              height="32"
+              width={isMobile ? "24" : "32"}
+              height={isMobile ? "24" : "32"}
               viewBox="0 0 24 24"
               fill="none"
               stroke={theme.colors.primary}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginRight: '12px' }}
+              style={{ marginRight: isMobile ? '8px' : '12px' }}
             >
               <path d="M9 11l3 3L22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
             Job Tasks
           </h1>
-          <p style={styles.subtitle}>Create and assign tasks to team members</p>
+          <p style={{...styles.subtitle, ...(isMobile && styles.subtitleMobile)}}>Create and assign tasks to team members</p>
         </div>
-        <button style={styles.createButton} onClick={() => setShowCreateModal(true)}>
+        <button style={{...styles.createButton, ...(isMobile && styles.createButtonMobile)}} onClick={() => setShowCreateModal(true)}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          Create Job Task
+          {!isMobile && 'Create Job Task'}
         </button>
       </div>
 
@@ -112,7 +114,7 @@ const JobTasksPage: React.FC = () => {
       )}
 
       {/* Filters */}
-      <div style={styles.filtersContainer}>
+      <div style={{...styles.filtersContainer, ...(isMobile && styles.filtersContainerMobile)}}>
         <div style={styles.searchContainer}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={styles.searchIcon}>
             <circle cx="11" cy="11" r="8" />
@@ -123,14 +125,14 @@ const JobTasksPage: React.FC = () => {
             placeholder="Search tasks..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={styles.searchInput}
+            style={{...styles.searchInput, ...(isMobile && styles.inputMobile)}}
           />
         </div>
 
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          style={styles.filterSelect}
+          style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
         >
           <option value="all">All Statuses</option>
           <option value="pending">Pending</option>
@@ -142,7 +144,7 @@ const JobTasksPage: React.FC = () => {
         <select
           value={filterDepartment}
           onChange={(e) => setFilterDepartment(e.target.value)}
-          style={styles.filterSelect}
+          style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
         >
           <option value="all">All Departments</option>
           {departments.map(dept => (
@@ -168,6 +170,7 @@ const JobTasksPage: React.FC = () => {
               key={task.id}
               task={task}
               users={users}
+              isMobile={isMobile}
               onDelete={() => handleDeleteTask(task.id)}
               onClick={() => handleTaskClick(task)}
             />
@@ -181,6 +184,7 @@ const JobTasksPage: React.FC = () => {
           task={selectedTask}
           users={users}
           sops={sops}
+          isMobile={isMobile}
           onClose={handleCloseTaskDetail}
           onUpdate={(updatedTask: Partial<JobTask>) => {
             updateJobTask(selectedTask.id, updatedTask);
@@ -194,6 +198,7 @@ const JobTasksPage: React.FC = () => {
         <CreateJobTaskModal
           template={selectedTemplate}
           onClose={handleCloseModal}
+          isMobile={isMobile}
           onCreate={(taskData) => {
             // Convert checklist items to TaskStep format
             const taskSteps: TaskStep[] = taskData.checklistItems.map((item, index) => ({
@@ -241,11 +246,12 @@ const JobTasksPage: React.FC = () => {
 interface JobTaskCardProps {
   task: JobTask;
   users: any[];
+  isMobile: boolean;
   onDelete: () => void;
   onClick: () => void;
 }
 
-const JobTaskCard: React.FC<JobTaskCardProps> = ({ task, users, onDelete, onClick }) => {
+const JobTaskCard: React.FC<JobTaskCardProps> = ({ task, users, isMobile, onDelete, onClick }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return theme.colors.status.success;
@@ -393,6 +399,7 @@ interface ChecklistItem {
 interface CreateJobTaskModalProps {
   template: TaskTemplate | null;
   onClose: () => void;
+  isMobile: boolean;
   onCreate: (taskData: {
     title: string;
     description: string;
@@ -414,6 +421,7 @@ interface CreateJobTaskModalProps {
 const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
   template,
   onClose,
+  isMobile,
   onCreate,
   taskTemplates,
   users,
@@ -542,11 +550,11 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
   }, []);
 
   return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <h2 style={styles.modalTitle}>Create Job Task</h2>
-          <button style={styles.closeButton} onClick={onClose}>
+    <div style={{...styles.modalOverlay, ...(isMobile && styles.modalOverlayMobile)}} onClick={onClose}>
+      <div style={{...styles.modal, ...(isMobile && styles.modalMobile)}} onClick={(e) => e.stopPropagation()}>
+        <div style={{...styles.modalHeader, ...(isMobile && styles.modalHeaderMobile)}}>
+          <h2 style={{...styles.modalTitle, ...(isMobile && styles.modalTitleMobile)}}>Create Job Task</h2>
+          <button style={{...styles.closeButton, ...(isMobile && styles.closeButtonMobile)}} onClick={onClose}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -554,7 +562,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={styles.modalForm}>
+        <form onSubmit={handleSubmit} style={{...styles.modalForm, ...(isMobile && styles.modalFormMobile)}}>
           {/* Task Basic Info */}
           <div style={styles.formGroup}>
             <label style={styles.label}>Task Title *</label>
@@ -564,7 +572,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Daily Opening Checklist"
               required
-              style={styles.input}
+              style={{...styles.input, ...(isMobile && styles.inputMobile)}}
             />
           </div>
 
@@ -575,19 +583,19 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Brief description of the task..."
               rows={3}
-              style={styles.textarea}
+              style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
             />
           </div>
 
           {/* Department and Category */}
-          <div style={styles.formRow}>
+          <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
             <div style={styles.formGroup}>
               <label style={styles.label}>Department *</label>
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 required
-                style={styles.select}
+                style={{...styles.select, ...(isMobile && styles.selectMobile)}}
               >
                 <option value="">-- Select Department --</option>
                 {departments.map(dept => (
@@ -601,7 +609,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 required
-                style={styles.select}
+                style={{...styles.select, ...(isMobile && styles.selectMobile)}}
               >
                 <option value="">-- Select Category --</option>
                 {categories.map(cat => (
@@ -612,14 +620,14 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
           </div>
 
           {/* Priority and Duration */}
-          <div style={styles.formRow}>
+          <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
             <div style={styles.formGroup}>
               <label style={styles.label}>Priority *</label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
                 required
-                style={styles.select}
+                style={{...styles.select, ...(isMobile && styles.selectMobile)}}
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -634,7 +642,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                 onChange={(e) => setEstimatedDuration(Number(e.target.value))}
                 min={1}
                 required
-                style={styles.input}
+                style={{...styles.input, ...(isMobile && styles.inputMobile)}}
               />
             </div>
           </div>
@@ -676,7 +684,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                       onChange={(e) => handleUpdateChecklistItem(item.id, 'title', e.target.value)}
                       placeholder="Item title (e.g., Unlock main entrance)"
                       required
-                      style={styles.input}
+                      style={{...styles.input, ...(isMobile && styles.inputMobile)}}
                     />
                   </div>
 
@@ -686,7 +694,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                       onChange={(e) => handleUpdateChecklistItem(item.id, 'description', e.target.value)}
                       placeholder="Item description (optional)"
                       rows={2}
-                      style={styles.textarea}
+                      style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
                     />
                   </div>
 
@@ -723,7 +731,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
           </div>
 
           {/* Schedule Date & Time */}
-          <div style={styles.formRow}>
+          <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
             <div style={styles.formGroup}>
               <label style={styles.label}>Scheduled Date *</label>
               <input
@@ -731,7 +739,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
                 required
-                style={styles.input}
+                style={{...styles.input, ...(isMobile && styles.inputMobile)}}
               />
             </div>
             <div style={styles.formGroup}>
@@ -740,7 +748,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                 type="time"
                 value={dueTime}
                 onChange={(e) => setDueTime(e.target.value)}
-                style={styles.input}
+                style={{...styles.input, ...(isMobile && styles.inputMobile)}}
               />
             </div>
           </div>
@@ -809,11 +817,11 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
           )}
 
           {/* Form Actions */}
-          <div style={styles.modalActions}>
-            <button type="button" onClick={onClose} style={styles.cancelButton}>
+          <div style={{...styles.modalActions, ...(isMobile && styles.modalActionsMobile)}}>
+            <button type="button" onClick={onClose} style={{...styles.cancelButton, ...(isMobile && styles.buttonMobile)}}>
               Cancel
             </button>
-            <button type="submit" style={styles.saveButton}>
+            <button type="submit" style={{...styles.saveButton, ...(isMobile && styles.buttonMobile)}}>
               Create Job Task
             </button>
           </div>
@@ -828,11 +836,12 @@ interface JobTaskDetailModalProps {
   task: JobTask;
   users: any[];
   sops: any[];
+  isMobile: boolean;
   onClose: () => void;
   onUpdate: (task: Partial<JobTask>) => void;
 }
 
-const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, sops, onClose, onUpdate }) => {
+const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, sops, isMobile, onClose, onUpdate }) => {
   const [editedTask, setEditedTask] = useState<JobTask>({ ...task });
   const [isEditing, setIsEditing] = useState(false);
 
@@ -881,16 +890,16 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
   const assignedUsers = users.filter(u => task.assignedTo.includes(u.id));
 
   return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={{...styles.modal, maxWidth: '900px'}} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
+    <div style={{...styles.modalOverlay, ...(isMobile && styles.modalOverlayMobile)}} onClick={onClose}>
+      <div style={{...styles.modal, maxWidth: isMobile ? '100%' : '900px', ...(isMobile && styles.modalMobile)}} onClick={(e) => e.stopPropagation()}>
+        <div style={{...styles.modalHeader, ...(isMobile && styles.modalHeaderMobile)}}>
           <div>
-            <h2 style={styles.modalTitle}>{editedTask.title}</h2>
-            <p style={{fontSize: '14px', color: theme.colors.txt.secondary, marginTop: '4px'}}>
+            <h2 style={{...styles.modalTitle, ...(isMobile && styles.modalTitleMobile)}}>{editedTask.title}</h2>
+            <p style={{fontSize: isMobile ? '13px' : '14px', color: theme.colors.txt.secondary, marginTop: '4px'}}>
               {editedTask.description}
             </p>
           </div>
-          <button style={styles.closeButton} onClick={onClose}>
+          <button style={{...styles.closeButton, ...(isMobile && styles.closeButtonMobile)}} onClick={onClose}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -898,7 +907,7 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
           </button>
         </div>
 
-        <div style={styles.modalForm}>
+        <div style={{...styles.modalForm, ...(isMobile && styles.modalFormMobile)}}>
           {/* Task Meta Info */}
           <div style={styles.taskDetailMeta}>
             <div style={styles.taskDetailMetaItem}>
@@ -1046,11 +1055,11 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
           )}
 
           {/* Action Buttons */}
-          <div style={styles.modalActions}>
-            <button onClick={onClose} style={styles.cancelButton}>
+          <div style={{...styles.modalActions, ...(isMobile && styles.modalActionsMobile)}}>
+            <button onClick={onClose} style={{...styles.cancelButton, ...(isMobile && styles.buttonMobile)}}>
               Close
             </button>
-            <button onClick={handleSave} style={styles.saveButton}>
+            <button onClick={handleSave} style={{...styles.saveButton, ...(isMobile && styles.buttonMobile)}}>
               Save Changes
             </button>
           </div>
@@ -1822,6 +1831,85 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     color: theme.colors.txt.secondary,
     lineHeight: '1.5',
+  },
+  // Mobile-specific styles
+  containerMobile: {
+    padding: '16px',
+  },
+  headerMobile: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '16px',
+  },
+  titleMobile: {
+    fontSize: '24px',
+  },
+  subtitleMobile: {
+    fontSize: '14px',
+  },
+  createButtonMobile: {
+    width: '100%',
+    justifyContent: 'center',
+    minHeight: '44px',
+    fontSize: '16px',
+    padding: '12px 20px',
+  },
+  filtersContainerMobile: {
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  inputMobile: {
+    fontSize: '16px',
+    minHeight: '44px',
+    padding: '12px 14px',
+  },
+  selectMobile: {
+    fontSize: '16px',
+    minHeight: '44px',
+    padding: '12px 14px',
+    width: '100%',
+  },
+  textareaMobile: {
+    fontSize: '16px',
+    padding: '12px 14px',
+  },
+  modalOverlayMobile: {
+    padding: '0',
+  },
+  modalMobile: {
+    maxWidth: '100%',
+    width: '100%',
+    height: '100vh',
+    maxHeight: '100vh',
+    borderRadius: '0',
+    margin: '0',
+  },
+  modalHeaderMobile: {
+    padding: '16px',
+  },
+  modalTitleMobile: {
+    fontSize: '20px',
+  },
+  closeButtonMobile: {
+    minWidth: '44px',
+    minHeight: '44px',
+  },
+  modalFormMobile: {
+    padding: '16px',
+  },
+  formRowMobile: {
+    gridTemplateColumns: '1fr',
+    gap: '16px',
+  },
+  modalActionsMobile: {
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  buttonMobile: {
+    width: '100%',
+    minHeight: '44px',
+    fontSize: '16px',
+    padding: '12px 20px',
   },
 };
 

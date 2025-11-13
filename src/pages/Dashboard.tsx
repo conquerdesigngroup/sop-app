@@ -4,6 +4,7 @@ import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { theme } from '../theme';
+import { useResponsive } from '../hooks/useResponsive';
 
 const Dashboard: React.FC = () => {
   const { sops } = useSOPs();
@@ -29,6 +30,7 @@ const TeamMemberDashboard: React.FC<{
   setCurrentMonth: (date: Date) => void;
   navigate: any;
 }> = ({ currentUser, jobTasks, currentMonth, setCurrentMonth, navigate }) => {
+  const { isMobileOrTablet } = useResponsive();
   const myTasks = jobTasks.filter(task => task.assignedTo.includes(currentUser.id));
 
   // Task stats
@@ -96,10 +98,10 @@ const TeamMemberDashboard: React.FC<{
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
+      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
-          <h1 style={styles.title}>My Dashboard</h1>
+          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>My Dashboard</h1>
           <p style={styles.subtitle}>
             Welcome back, {currentUser.firstName}! Here's your task overview.
           </p>
@@ -117,8 +119,8 @@ const TeamMemberDashboard: React.FC<{
       </div>
 
       {/* Stats Grid */}
-      <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
+      <div style={isMobileOrTablet ? styles.statsGridMobile : styles.statsGrid}>
+        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -172,7 +174,7 @@ const TeamMemberDashboard: React.FC<{
       </div>
 
       {/* Calendar Section */}
-      <div style={styles.section}>
+      <div style={isMobileOrTablet ? styles.sectionMobile : styles.section}>
         <div style={styles.calendarHeader}>
           <h2 style={styles.sectionTitle}>{monthNames[month]} {year}</h2>
           <div style={styles.calendarNav}>
@@ -244,7 +246,7 @@ const TeamMemberDashboard: React.FC<{
       </div>
 
       {/* Today's Tasks & Upcoming */}
-      <div style={styles.contentGrid}>
+      <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
         <div style={styles.section}>
           <h2 style={styles.sectionTitle}>Today's Tasks ({todayTasks.length})</h2>
           {todayTasks.length === 0 ? (
@@ -339,6 +341,7 @@ const TeamMemberDashboard: React.FC<{
 
 // Admin Dashboard Component (existing dashboard)
 const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, navigate }) => {
+  const { isMobileOrTablet } = useResponsive();
 
   // Calculate stats
   const totalSOPs = sops.length;
@@ -368,10 +371,10 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
   })).sort((a, b) => b.count - a.count);
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
+      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
-          <h1 style={styles.title}>Dashboard</h1>
+          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Dashboard</h1>
           <p style={styles.subtitle}>
             Overview of your Standard Operating Procedures
           </p>
@@ -616,6 +619,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1400px',
     margin: '0 auto',
   },
+  containerMobile: {
+    padding: '16px',
+    maxWidth: '100%',
+    margin: '0 auto',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -623,8 +631,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '32px',
     gap: '24px',
   },
+  headerMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    marginBottom: '24px',
+  },
   title: {
     fontSize: '36px',
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginBottom: '8px',
+  },
+  titleMobile: {
+    fontSize: '28px',
     fontWeight: '800',
     color: theme.colors.textPrimary,
     marginBottom: '8px',
@@ -655,6 +675,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '20px',
     marginBottom: '40px',
   },
+  statsGridMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '12px',
+    marginBottom: '24px',
+  },
   statCard: {
     backgroundColor: theme.colors.cardBackground,
     border: `2px solid ${theme.colors.border}`,
@@ -664,6 +690,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '20px',
     transition: 'all 0.2s',
+  },
+  statCardMobile: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+    transition: 'all 0.2s',
+    textAlign: 'center',
   },
   statIcon: {
     display: 'flex',
@@ -692,12 +730,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '24px',
     marginBottom: '40px',
   },
+  contentGridMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    marginBottom: '24px',
+  },
   section: {
     backgroundColor: theme.colors.cardBackground,
     border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.lg,
     padding: '24px',
     marginBottom: '24px',
+  },
+  sectionMobile: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '16px',
+    marginBottom: '16px',
   },
   sectionTitle: {
     fontSize: '20px',
@@ -959,7 +1010,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'relative',
     cursor: 'pointer',
     transition: 'all 0.2s',
-  },
+  } as React.CSSProperties,
   calendarDayToday: {
     border: `2px solid ${theme.colors.primary}`,
     backgroundColor: theme.colors.bg.secondary,

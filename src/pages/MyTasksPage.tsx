@@ -4,11 +4,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { JobTask, TaskStep } from '../types';
 import { theme } from '../theme';
+import { useResponsive } from '../hooks/useResponsive';
 
 const MyTasksPage: React.FC = () => {
   const { jobTasks, updateJobTask } = useTask();
   const { currentUser } = useAuth();
   const { sops } = useSOPs();
+  const { isMobileOrTablet } = useResponsive();
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
@@ -100,20 +102,20 @@ const MyTasksPage: React.FC = () => {
   }).length;
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
+      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
-          <h1 style={styles.title}>
+          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>
             <svg
-              width="32"
-              height="32"
+              width={isMobileOrTablet ? "24" : "32"}
+              height={isMobileOrTablet ? "24" : "32"}
               viewBox="0 0 24 24"
               fill="none"
               stroke={theme.colors.primary}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginRight: '12px' }}
+              style={{ marginRight: isMobileOrTablet ? '8px' : '12px' }}
             >
               <path d="M9 11l3 3L22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
@@ -127,11 +129,11 @@ const MyTasksPage: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div style={styles.filtersContainer}>
+      <div style={isMobileOrTablet ? styles.filtersContainerMobile : styles.filtersContainer}>
         <select
           value={filterDate}
           onChange={(e) => setFilterDate(e.target.value)}
-          style={styles.filterSelect}
+          style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
         >
           <option value="all">All Dates</option>
           <option value="today">Today</option>
@@ -142,7 +144,7 @@ const MyTasksPage: React.FC = () => {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          style={styles.filterSelect}
+          style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
         >
           <option value="all">All Statuses</option>
           <option value="pending">Pending</option>
@@ -170,6 +172,7 @@ const MyTasksPage: React.FC = () => {
               task={task}
               onClick={() => handleTaskClick(task)}
               onStepToggle={(stepId) => handleStepToggle(task, stepId)}
+              isMobileOrTablet={isMobileOrTablet}
             />
           ))
         )}
@@ -182,6 +185,7 @@ const MyTasksPage: React.FC = () => {
           sops={sops}
           onClose={handleCloseDetail}
           onStepToggle={(stepId) => handleStepToggle(selectedTask, stepId)}
+          isMobileOrTablet={isMobileOrTablet}
         />
       )}
     </div>
@@ -193,9 +197,10 @@ interface MyTaskCardProps {
   task: JobTask;
   onClick: () => void;
   onStepToggle: (stepId: string) => void;
+  isMobileOrTablet: boolean;
 }
 
-const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle }) => {
+const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle, isMobileOrTablet }) => {
   const [expanded, setExpanded] = useState(false);
 
   const getStatusColor = (status: string) => {
@@ -233,14 +238,14 @@ const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle }) 
   };
 
   return (
-    <div style={styles.taskCard}>
+    <div style={isMobileOrTablet ? styles.taskCardMobile : styles.taskCard}>
       <div style={styles.taskCardHeader} onClick={onClick}>
         <div style={styles.taskCardHeaderLeft}>
-          <h3 style={styles.taskCardTitle}>{task.title}</h3>
+          <h3 style={isMobileOrTablet ? styles.taskCardTitleMobile : styles.taskCardTitle}>{task.title}</h3>
           <p style={styles.taskCardDescription}>{task.description}</p>
         </div>
         <button
-          style={styles.expandButton}
+          style={isMobileOrTablet ? styles.expandButtonMobile : styles.expandButton}
           onClick={(e) => {
             e.stopPropagation();
             setExpanded(!expanded);
@@ -283,12 +288,12 @@ const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle }) 
       </div>
 
       {/* Progress Bar */}
-      <div style={styles.progressSection}>
+      <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
         <div style={styles.progressHeader}>
           <span style={styles.progressText}>Progress: {task.progressPercentage}%</span>
           <span style={styles.progressSteps}>{task.completedSteps.length} / {task.steps.length} steps</span>
         </div>
-        <div style={styles.progressBar}>
+        <div style={isMobileOrTablet ? styles.progressBarMobile : styles.progressBar}>
           <div style={{...styles.progressFill, width: `${task.progressPercentage}%`}} />
         </div>
       </div>
@@ -298,7 +303,7 @@ const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle }) 
         <div style={styles.stepsSection}>
           <h4 style={styles.stepsSectionTitle}>Task Steps</h4>
           {task.steps.map((step, index) => (
-            <label key={step.id} style={styles.stepCheckbox}>
+            <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxMobile : styles.stepCheckbox}>
               <input
                 type="checkbox"
                 checked={step.isCompleted}
@@ -306,7 +311,7 @@ const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle }) 
                   e.stopPropagation();
                   onStepToggle(step.id);
                 }}
-                style={styles.checkbox}
+                style={isMobileOrTablet ? styles.checkboxMobile : styles.checkbox}
               />
               <div style={styles.stepContent}>
                 <span style={{...styles.stepTitle, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
@@ -366,9 +371,10 @@ interface TaskDetailModalProps {
   sops: any[];
   onClose: () => void;
   onStepToggle: (stepId: string) => void;
+  isMobileOrTablet: boolean;
 }
 
-const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, onStepToggle }) => {
+const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, onStepToggle, isMobileOrTablet }) => {
   const attachedSOPs = sops.filter(sop => task.sopIds.includes(sop.id));
 
   const formatDate = (dateString: string) => {
@@ -377,10 +383,10 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
   };
 
   return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <h2 style={styles.modalTitle}>{task.title}</h2>
+    <div style={isMobileOrTablet ? styles.modalOverlayMobile : styles.modalOverlay} onClick={onClose}>
+      <div style={isMobileOrTablet ? styles.modalMobile : styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={isMobileOrTablet ? styles.modalHeaderMobile : styles.modalHeader}>
+          <h2 style={isMobileOrTablet ? styles.modalTitleMobile : styles.modalTitle}>{task.title}</h2>
           <button style={styles.closeButton} onClick={onClose}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -389,7 +395,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
           </button>
         </div>
 
-        <div style={styles.modalContent}>
+        <div style={isMobileOrTablet ? styles.modalContentMobile : styles.modalContent}>
           {/* Task Description */}
           <div style={styles.modalSection}>
             <p style={styles.taskDetailDescription}>{task.description}</p>
@@ -423,12 +429,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
           {/* Progress */}
           <div style={styles.modalSection}>
             <h3 style={styles.sectionTitle}>Progress</h3>
-            <div style={styles.progressSection}>
+            <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
               <div style={styles.progressHeader}>
                 <span style={styles.progressText}>{task.progressPercentage}%</span>
                 <span style={styles.progressSteps}>{task.completedSteps.length} / {task.steps.length} steps completed</span>
               </div>
-              <div style={styles.progressBar}>
+              <div style={isMobileOrTablet ? styles.progressBarMobile : styles.progressBar}>
                 <div style={{...styles.progressFill, width: `${task.progressPercentage}%`}} />
               </div>
             </div>
@@ -439,12 +445,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
             <h3 style={styles.sectionTitle}>Steps</h3>
             <div style={styles.stepsList}>
               {task.steps.map((step, index) => (
-                <label key={step.id} style={styles.stepCheckboxLarge}>
+                <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxLargeMobile : styles.stepCheckboxLarge}>
                   <input
                     type="checkbox"
                     checked={step.isCompleted}
                     onChange={() => onStepToggle(step.id)}
-                    style={styles.checkboxLarge}
+                    style={isMobileOrTablet ? styles.checkboxLargeMobile : styles.checkboxLarge}
                   />
                   <div style={styles.stepContentLarge}>
                     <span style={{...styles.stepTitleLarge, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
@@ -505,11 +511,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1400px',
     margin: '0 auto',
   },
+  containerMobile: {
+    padding: '16px',
+    maxWidth: '100%',
+    margin: '0 auto',
+  },
   header: {
     marginBottom: '32px',
   },
+  headerMobile: {
+    marginBottom: '24px',
+  },
   title: {
     fontSize: '36px',
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginBottom: '8px',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  titleMobile: {
+    fontSize: '24px',
     fontWeight: '800',
     color: theme.colors.textPrimary,
     marginBottom: '8px',
@@ -526,6 +548,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: theme.spacing.md,
     marginBottom: theme.spacing.xl,
   },
+  filtersContainerMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+  },
   filterSelect: {
     padding: `${theme.spacing.md} ${theme.spacing.lg}`,
     backgroundColor: theme.colors.bg.secondary,
@@ -535,6 +563,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '15px',
     cursor: 'pointer',
     outline: 'none',
+  },
+  filterSelectMobile: {
+    padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.primary,
+    fontSize: '15px',
+    cursor: 'pointer',
+    outline: 'none',
+    width: '100%',
   },
   tasksList: {
     display: 'flex',
@@ -568,6 +607,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     cursor: 'pointer',
   },
+  taskCardMobile: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '16px',
+    transition: 'all 0.2s',
+    cursor: 'pointer',
+    width: '100%',
+  },
   taskCardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -579,6 +627,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   taskCardTitle: {
     fontSize: '18px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    marginBottom: theme.spacing.xs,
+  },
+  taskCardTitleMobile: {
+    fontSize: '16px',
     fontWeight: 600,
     color: theme.colors.txt.primary,
     marginBottom: theme.spacing.xs,
@@ -598,6 +652,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: '44px',
+    minHeight: '44px',
+  },
+  expandButtonMobile: {
+    padding: theme.spacing.xs,
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.txt.primary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '44px',
+    minHeight: '44px',
   },
   taskCardMeta: {
     display: 'flex',
@@ -635,6 +704,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   progressSection: {
     marginBottom: theme.spacing.lg,
   },
+  progressSectionMobile: {
+    marginBottom: theme.spacing.md,
+  },
   progressHeader: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -652,6 +724,13 @@ const styles: { [key: string]: React.CSSProperties } = {
   progressBar: {
     width: '100%',
     height: '8px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.full,
+    overflow: 'hidden',
+  },
+  progressBarMobile: {
+    width: '100%',
+    height: '10px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.full,
     overflow: 'hidden',
@@ -682,12 +761,31 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     transition: 'background-color 0.2s',
   },
+  stepCheckboxMobile: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
+    cursor: 'pointer',
+    borderRadius: theme.borderRadius.md,
+    transition: 'background-color 0.2s',
+  },
   checkbox: {
     width: '18px',
     height: '18px',
     marginTop: '2px',
     cursor: 'pointer',
     flexShrink: 0,
+  },
+  checkboxMobile: {
+    width: '22px',
+    height: '22px',
+    marginTop: '2px',
+    cursor: 'pointer',
+    flexShrink: 0,
+    minWidth: '22px',
+    minHeight: '22px',
   },
   stepContent: {
     display: 'flex',
@@ -738,12 +836,34 @@ const styles: { [key: string]: React.CSSProperties } = {
     zIndex: 1000,
     padding: theme.spacing.lg,
   },
+  modalOverlayMobile: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: theme.spacing.sm,
+  },
   modal: {
     backgroundColor: theme.colors.bg.secondary,
     borderRadius: theme.borderRadius.lg,
     width: '100%',
     maxWidth: '800px',
     maxHeight: '90vh',
+    overflow: 'auto',
+    border: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  modalMobile: {
+    backgroundColor: theme.colors.bg.secondary,
+    borderRadius: theme.borderRadius.lg,
+    width: '100%',
+    maxWidth: '100%',
+    maxHeight: '95vh',
     overflow: 'auto',
     border: `1px solid ${theme.colors.bdr.primary}`,
   },
@@ -758,8 +878,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.secondary,
     zIndex: 10,
   },
+  modalHeaderMobile: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: theme.spacing.md,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    position: 'sticky',
+    top: 0,
+    backgroundColor: theme.colors.bg.secondary,
+    zIndex: 10,
+  },
   modalTitle: {
     fontSize: '24px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  modalTitleMobile: {
+    fontSize: '18px',
     fontWeight: 600,
     color: theme.colors.txt.primary,
   },
@@ -772,9 +908,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: '44px',
+    minHeight: '44px',
   },
   modalContent: {
     padding: theme.spacing.xl,
+  },
+  modalContentMobile: {
+    padding: theme.spacing.md,
   },
   modalSection: {
     marginBottom: theme.spacing.xl,
@@ -827,12 +968,32 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     border: `1px solid ${theme.colors.bdr.primary}`,
   },
+  stepCheckboxLargeMobile: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    border: `1px solid ${theme.colors.bdr.primary}`,
+  },
   checkboxLarge: {
     width: '20px',
     height: '20px',
     marginTop: '2px',
     cursor: 'pointer',
     flexShrink: 0,
+  },
+  checkboxLargeMobile: {
+    width: '24px',
+    height: '24px',
+    marginTop: '2px',
+    cursor: 'pointer',
+    flexShrink: 0,
+    minWidth: '24px',
+    minHeight: '24px',
   },
   stepContentLarge: {
     display: 'flex',
