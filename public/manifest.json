@@ -1,7 +1,7 @@
 {
   "short_name": "SOP App",
   "name": "Standard Operating Procedures App",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Task management and SOP tracking application for teams",
   "icons": [
     {
