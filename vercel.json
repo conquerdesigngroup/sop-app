@@ -23,6 +23,12 @@
       }
     },
     {
+      "src": "/(.*\\.(png|jpg|jpeg|gif|svg|ico))",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate"
+      }
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }
