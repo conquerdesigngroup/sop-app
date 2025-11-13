@@ -111,14 +111,14 @@ const TaskLibraryPage: React.FC = () => {
             </svg>
             Task Library
           </h1>
-          <p style={{...styles.subtitle, ...(isMobile ? styles.subtitleMobile : {})}}>Create and manage reusable task templates</p>
+          <p style={{...styles.subtitle, ...(isMobile ? styles.subtitleMobile : {})}}>Create and manage reusable tasks that can be added to jobs</p>
         </div>
         <button style={{...styles.createButton, ...(isMobile ? styles.createButtonMobile : {})}} onClick={handleCreateTemplate}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          Create Template
+          Create Task
         </button>
       </div>
 
@@ -1305,7 +1305,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: theme.spacing.xl,
     display: 'flex',
     flexDirection: 'column',
-    gap: theme.spacing.lg,
+    gap: '0',
+    backgroundColor: theme.colors.bg.secondary,
   },
   formRow: {
     display: 'grid',
@@ -1313,8 +1314,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: theme.spacing.lg,
   },
   section: {
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `2px solid ${theme.colors.bdr.primary}`,
+    backgroundColor: theme.colors.background,
+    border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.lg,
     padding: '24px',
     marginBottom: '20px',

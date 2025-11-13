@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SOPProvider } from './contexts/SOPContext';
 import { TaskProvider } from './contexts/TaskContext';
+import { JobProvider } from './contexts/JobContext';
 import { ToastProvider } from './contexts/ToastContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navigation from './components/Navigation';
@@ -10,8 +11,6 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import SOPPage from './pages/SOPPage';
-import TemplatesPage from './pages/TemplatesPage';
-import TaskLibraryPage from './pages/TaskLibraryPage';
 import JobTasksPage from './pages/JobTasksPage';
 import MyTasksPage from './pages/MyTasksPage';
 import TeamManagementPage from './pages/TeamManagementPage';
@@ -73,22 +72,6 @@ const AppContent: React.FC = () => {
           }
         />
         <Route
-          path="/templates"
-          element={
-            <ProtectedRoute adminOnly>
-              <TemplatesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/task-library"
-          element={
-            <ProtectedRoute adminOnly>
-              <TaskLibraryPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/job-tasks"
           element={
             <ProtectedRoute adminOnly>
@@ -125,9 +108,11 @@ function App() {
         <AuthProvider>
           <SOPProvider>
             <TaskProvider>
-              <Router>
-                <AppContent />
-              </Router>
+              <JobProvider>
+                <Router>
+                  <AppContent />
+                </Router>
+              </JobProvider>
             </TaskProvider>
           </SOPProvider>
         </AuthProvider>

@@ -90,9 +90,9 @@ export interface TaskTemplate {
   recurrencePattern?: RecurrencePattern;
 }
 
-// Job Task Types (Assigned Tasks)
+// Task Types (Individual Tasks)
 
-export type TaskStatus = 'pending' | 'in-progress' | 'completed' | 'overdue' | 'skipped';
+export type TaskStatus = 'pending' | 'in-progress' | 'completed' | 'overdue' | 'skipped' | 'draft';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface TaskStep {
@@ -115,6 +115,7 @@ export interface TaskComment {
   createdAt: string;
 }
 
+// JobTask - Current implementation (will be refactored to Task + Job)
 export interface JobTask {
   id: string;
   templateId?: string; // Reference to TaskTemplate (if created from template)
@@ -148,6 +149,87 @@ export interface JobTask {
   completedBy?: string;
   completionNotes?: string;
   completionPhotos?: string[];
+
+  // Comments
+  comments: TaskComment[];
+
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Task - Individual task that can be part of a Job or standalone
+export interface Task {
+  id: string;
+  templateId?: string; // Reference to TaskTemplate (if created from template)
+  title: string;
+  description: string;
+  department: string;
+  category: string;
+
+  // Scheduling (only for standalone tasks)
+  scheduledDate?: string; // ISO date
+  dueTime?: string; // e.g., "14:00"
+  estimatedDuration: number; // minutes
+
+  // Status
+  status: TaskStatus;
+  priority: TaskPriority;
+
+  // Progress
+  steps: TaskStep[];
+  completedSteps: string[]; // Array of step IDs
+  progressPercentage: number;
+
+  // SOPs attached to this task
+  sopIds: string[];
+
+  // Completion
+  startedAt?: string;
+  completedAt?: string;
+  completedBy?: string;
+  completionNotes?: string;
+  completionPhotos?: string[];
+
+  // Comments
+  comments: TaskComment[];
+
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// Job Types (Container for multiple tasks)
+
+export type JobStatus = 'pending' | 'in-progress' | 'completed' | 'overdue' | 'draft';
+
+export interface Job {
+  id: string;
+  title: string;
+  description: string;
+  assignedTo: string[]; // User IDs (can assign to multiple people)
+  assignedBy: string; // Admin User ID
+  department: string;
+
+  // Scheduling
+  scheduledDate: string; // ISO date
+  dueTime?: string; // e.g., "14:00"
+
+  // Status
+  status: JobStatus;
+  priority: TaskPriority;
+
+  // Tasks in this job
+  tasks: Task[]; // Array of tasks that make up this job
+
+  // Progress tracking
+  completedTasksCount: number;
+  totalTasksCount: number;
+  progressPercentage: number;
+
+  // Completion
+  startedAt?: string;
+  completedAt?: string;
+  completedBy?: string;
+  completionNotes?: string;
 
   // Comments
   comments: TaskComment[];

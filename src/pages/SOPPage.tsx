@@ -9,11 +9,13 @@ import { equipmentIcons, IconName } from '../components/IconSelector';
 import { useResponsive } from '../hooks/useResponsive';
 
 type FilterView = 'all' | 'published' | 'draft' | 'archived';
+type ViewMode = 'sops' | 'templates';
 
 const SOPPage: React.FC = () => {
   const { sops, deleteSOP, updateSOPStatus, createFromTemplate } = useSOPs();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
+  const [viewMode, setViewMode] = useState<ViewMode>('sops');
   const [showForm, setShowForm] = useState(false);
   const [editingSOP, setEditingSOP] = useState<SOP | null>(null);
   const [viewingSOP, setViewingSOP] = useState<SOP | null>(null);
@@ -31,13 +33,17 @@ const SOPPage: React.FC = () => {
     }
   }, [location]);
 
-  // Only show non-template SOPs
+  // Split SOPs into templates and non-templates
+  const templates = sops.filter(sop => sop.isTemplate);
   const nonTemplateSOPs = sops.filter(sop => !sop.isTemplate);
 
-  // Get unique departments
-  const departments = Array.from(new Set(nonTemplateSOPs.map(sop => sop.department))).sort();
+  // Get the current list based on view mode
+  const currentList = viewMode === 'templates' ? templates : nonTemplateSOPs;
 
-  // Calculate filter counts (exclude templates)
+  // Get unique departments from current list
+  const departments = Array.from(new Set(currentList.map(sop => sop.department))).sort();
+
+  // Calculate filter counts (for SOPs only)
   const filterCounts = {
     all: nonTemplateSOPs.length,
     published: nonTemplateSOPs.filter(s => s.status === 'published').length,
@@ -45,11 +51,11 @@ const SOPPage: React.FC = () => {
     archived: nonTemplateSOPs.filter(s => s.status === 'archived').length,
   };
 
-  // Get unique categories (from non-templates only)
-  const categories = Array.from(new Set(nonTemplateSOPs.map(sop => sop.category)));
+  // Get unique categories from current list
+  const categories = Array.from(new Set(currentList.map(sop => sop.category)));
 
-  // Filter SOPs by department, search, and status (exclude templates)
-  const filteredSOPs = nonTemplateSOPs.filter(sop => {
+  // Filter based on view mode
+  const filteredItems = currentList.filter(sop => {
     const matchesDepartment = selectedDepartment === 'all' || sop.department === selectedDepartment;
 
     const matchesSearch = searchTerm === '' ||
@@ -57,6 +63,12 @@ const SOPPage: React.FC = () => {
       sop.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sop.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
 
+    // For templates, ignore status filter
+    if (viewMode === 'templates') {
+      return matchesDepartment && matchesSearch;
+    }
+
+    // For SOPs, apply status filter
     const matchesFilter =
       filterView === 'all' ||
       (filterView === 'published' && sop.status === 'published') ||
@@ -66,12 +78,12 @@ const SOPPage: React.FC = () => {
     return matchesDepartment && matchesSearch && matchesFilter;
   });
 
-  // Group SOPs by category
-  const sopsByCategory = filteredSOPs.reduce((acc, sop) => {
-    if (!acc[sop.category]) {
-      acc[sop.category] = [];
+  // Group items by category
+  const itemsByCategory = filteredItems.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
     }
-    acc[sop.category].push(sop);
+    acc[item.category].push(item);
     return acc;
   }, {} as Record<string, SOP[]>);
 
@@ -99,7 +111,8 @@ const SOPPage: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this SOP? This action cannot be undone.')) {
+    const itemType = viewMode === 'templates' ? 'template' : 'SOP';
+    if (window.confirm(`Are you sure you want to delete this ${itemType}? This action cannot be undone.`)) {
       deleteSOP(id);
     }
   };
@@ -143,6 +156,7 @@ const SOPPage: React.FC = () => {
 
   const handleUseTemplate = (templateId: string) => {
     createFromTemplate(templateId);
+    setViewMode('sops');
     setFilterView('draft');
   };
 
@@ -194,7 +208,9 @@ const SOPPage: React.FC = () => {
             Standard Operating Procedures
           </h1>
           <p style={styles.subtitle}>
-            Step-by-step procedures for equipment setup and operations
+            {viewMode === 'templates'
+              ? 'Reusable SOP templates for your organization'
+              : 'Step-by-step procedures for equipment setup and operations'}
           </p>
         </div>
         <button
@@ -205,78 +221,118 @@ const SOPPage: React.FC = () => {
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          Create SOP
+          {viewMode === 'templates' ? 'Create Template' : 'Create SOP'}
+        </button>
+      </div>
+
+      {/* View Mode Tabs */}
+      <div style={isMobileOrTablet ? styles.viewModeTabsMobile : styles.viewModeTabs}>
+        <button
+          onClick={() => {
+            setViewMode('sops');
+            setSelectedDepartment('all');
+          }}
+          style={{
+            ...(isMobileOrTablet ? styles.viewModeTabMobile : styles.viewModeTab),
+            ...(viewMode === 'sops' ? styles.viewModeTabActive : {}),
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          SOPs
+        </button>
+        <button
+          onClick={() => {
+            setViewMode('templates');
+            setSelectedDepartment('all');
+          }}
+          style={{
+            ...(isMobileOrTablet ? styles.viewModeTabMobile : styles.viewModeTab),
+            ...(viewMode === 'templates' ? styles.viewModeTabActive : {}),
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+          </svg>
+          Templates
         </button>
       </div>
 
       {/* Department Tabs */}
-      <div style={isMobileOrTablet ? styles.departmentTabsMobile : styles.departmentTabs}>
-        <button
-          onClick={() => setSelectedDepartment('all')}
-          style={{
-            ...(isMobileOrTablet ? styles.departmentTabMobile : styles.departmentTab),
-            ...(selectedDepartment === 'all' ? styles.departmentTabActive : {}),
-          }}
-        >
-          All Departments
-        </button>
-        {departments.map(dept => (
+      {departments.length > 0 && (
+        <div style={isMobileOrTablet ? styles.departmentTabsMobile : styles.departmentTabs}>
           <button
-            key={dept}
-            onClick={() => setSelectedDepartment(dept)}
+            onClick={() => setSelectedDepartment('all')}
             style={{
               ...(isMobileOrTablet ? styles.departmentTabMobile : styles.departmentTab),
-              ...(selectedDepartment === dept ? styles.departmentTabActive : {}),
+              ...(selectedDepartment === 'all' ? styles.departmentTabActive : {}),
             }}
           >
-            {dept}
+            All Departments
           </button>
-        ))}
-      </div>
+          {departments.map(dept => (
+            <button
+              key={dept}
+              onClick={() => setSelectedDepartment(dept)}
+              style={{
+                ...(isMobileOrTablet ? styles.departmentTabMobile : styles.departmentTab),
+                ...(selectedDepartment === dept ? styles.departmentTabActive : {}),
+              }}
+            >
+              {dept}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Filter Tabs */}
-      <div style={isMobileOrTablet ? styles.filterTabsMobile : styles.filterTabs}>
-        <button
-          onClick={() => setFilterView('all')}
-          style={{
-            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
-            ...(filterView === 'all' ? styles.filterTabActive : {}),
-          }}
-        >
-          <span>All</span>
-          <span style={styles.filterCount}>{filterCounts.all}</span>
-        </button>
-        <button
-          onClick={() => setFilterView('published')}
-          style={{
-            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
-            ...(filterView === 'published' ? styles.filterTabActive : {}),
-          }}
-        >
-          <span>Published</span>
-          <span style={styles.filterCount}>{filterCounts.published}</span>
-        </button>
-        <button
-          onClick={() => setFilterView('draft')}
-          style={{
-            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
-            ...(filterView === 'draft' ? styles.filterTabActive : {}),
-          }}
-        >
-          <span>Drafts</span>
-          <span style={styles.filterCount}>{filterCounts.draft}</span>
-        </button>
-        <button
-          onClick={() => setFilterView('archived')}
-          style={{
-            ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
-            ...(filterView === 'archived' ? styles.filterTabActive : {}),
-          }}
-        >
-          <span>Archived</span>
-          <span style={styles.filterCount}>{filterCounts.archived}</span>
-        </button>
-      </div>
+      {/* Filter Tabs (only show for SOPs) */}
+      {viewMode === 'sops' && (
+        <div style={isMobileOrTablet ? styles.filterTabsMobile : styles.filterTabs}>
+          <button
+            onClick={() => setFilterView('all')}
+            style={{
+              ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
+              ...(filterView === 'all' ? styles.filterTabActive : {}),
+            }}
+          >
+            <span>All</span>
+            <span style={styles.filterCount}>{filterCounts.all}</span>
+          </button>
+          <button
+            onClick={() => setFilterView('published')}
+            style={{
+              ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
+              ...(filterView === 'published' ? styles.filterTabActive : {}),
+            }}
+          >
+            <span>Published</span>
+            <span style={styles.filterCount}>{filterCounts.published}</span>
+          </button>
+          <button
+            onClick={() => setFilterView('draft')}
+            style={{
+              ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
+              ...(filterView === 'draft' ? styles.filterTabActive : {}),
+            }}
+          >
+            <span>Drafts</span>
+            <span style={styles.filterCount}>{filterCounts.draft}</span>
+          </button>
+          <button
+            onClick={() => setFilterView('archived')}
+            style={{
+              ...(isMobileOrTablet ? styles.filterTabMobile : styles.filterTab),
+              ...(filterView === 'archived' ? styles.filterTabActive : {}),
+            }}
+          >
+            <span>Archived</span>
+            <span style={styles.filterCount}>{filterCounts.archived}</span>
+          </button>
+        </div>
+      )}
 
       <div style={isMobileOrTablet ? styles.controlsMobile : styles.controls}>
         <div style={isMobileOrTablet ? styles.searchContainerMobile : styles.searchContainer}>
@@ -286,7 +342,7 @@ const SOPPage: React.FC = () => {
           </svg>
           <input
             type="text"
-            placeholder={isMobileOrTablet ? "Search SOPs..." : "Search SOPs by title, description, or tags..."}
+            placeholder={isMobileOrTablet ? `Search ${viewMode}...` : `Search ${viewMode} by title, description, or tags...`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={isMobileOrTablet ? styles.searchInputMobile : styles.searchInput}
@@ -305,20 +361,20 @@ const SOPPage: React.FC = () => {
 
       <div style={isMobileOrTablet ? styles.statsMobile : styles.stats}>
         <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
-          <div style={styles.statNumber}>{sops.length}</div>
-          <div style={styles.statLabel}>Total SOPs</div>
+          <div style={styles.statNumber}>{currentList.length}</div>
+          <div style={styles.statLabel}>Total {viewMode === 'templates' ? 'Templates' : 'SOPs'}</div>
         </div>
         <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
           <div style={styles.statNumber}>{categories.length}</div>
           <div style={styles.statLabel}>Categories</div>
         </div>
         <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
-          <div style={styles.statNumber}>{filteredSOPs.length}</div>
+          <div style={styles.statNumber}>{filteredItems.length}</div>
           <div style={styles.statLabel}>Showing</div>
         </div>
       </div>
 
-      {filteredSOPs.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <div style={styles.emptyState}>
           <svg
             width="64"
@@ -329,28 +385,41 @@ const SOPPage: React.FC = () => {
             strokeWidth="1.5"
             style={{ marginBottom: '16px' }}
           >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
+            {viewMode === 'templates' ? (
+              <>
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+              </>
+            ) : (
+              <>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </>
+            )}
           </svg>
           <h3 style={styles.emptyTitle}>
-            {searchTerm ? 'No SOPs Found' : 'No SOPs Created Yet'}
+            {searchTerm
+              ? `No ${viewMode === 'templates' ? 'Templates' : 'SOPs'} Found`
+              : `No ${viewMode === 'templates' ? 'Templates' : 'SOPs'} Created Yet`}
           </h3>
           <p style={styles.emptyText}>
             {searchTerm
               ? 'Try adjusting your search criteria.'
+              : viewMode === 'templates'
+              ? 'Create your first template to reuse across your organization.'
               : 'Create your first SOP to help your team follow standardized procedures.'}
           </p>
           {!searchTerm && (
             <button onClick={() => setShowForm(true)} style={styles.emptyButton}>
-              Create First SOP
+              Create First {viewMode === 'templates' ? 'Template' : 'SOP'}
             </button>
           )}
         </div>
       ) : (
         <div style={styles.categoriesContainer}>
-          {Object.keys(sopsByCategory).sort().map(category => (
+          {Object.keys(itemsByCategory).sort().map(category => (
             <div key={category} style={styles.categorySection}>
               <button
                 onClick={() => toggleCategory(category)}
@@ -373,54 +442,54 @@ const SOPPage: React.FC = () => {
                   </svg>
                   <h2 style={styles.categoryTitle}>{category}</h2>
                   <span style={styles.categoryCount}>
-                    {sopsByCategory[category].length} {sopsByCategory[category].length === 1 ? 'SOP' : 'SOPs'}
+                    {itemsByCategory[category].length} {itemsByCategory[category].length === 1 ? (viewMode === 'templates' ? 'TEMPLATE' : 'SOP') : (viewMode === 'templates' ? 'TEMPLATES' : 'SOPs')}
                   </span>
                 </div>
               </button>
 
               {expandedCategories.has(category) && (
                 <div style={isMobileOrTablet ? styles.sopGridMobile : styles.sopGrid}>
-                  {sopsByCategory[category].map(sop => (
-            <div key={sop.id} style={isMobileOrTablet ? styles.sopCardMobile : styles.sopCard}>
+                  {itemsByCategory[category].map(item => (
+            <div key={item.id} style={isMobileOrTablet ? styles.sopCardMobile : styles.sopCard}>
               <div style={styles.sopHeader}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div style={styles.sopCategory}>{sop.category}</div>
-                  {sop.isTemplate && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={styles.sopCategory}>{item.category}</div>
+                  {item.isTemplate && (
                     <span style={styles.templateBadge}>Template</span>
                   )}
-                  {sop.status === 'draft' && (
+                  {!item.isTemplate && item.status === 'draft' && (
                     <span style={styles.draftBadge}>Draft</span>
                   )}
-                  {sop.status === 'archived' && (
+                  {!item.isTemplate && item.status === 'archived' && (
                     <span style={styles.archivedBadge}>Archived</span>
                   )}
                 </div>
                 <div style={styles.sopStepCount}>
-                  {sop.steps.length} {sop.steps.length === 1 ? 'Step' : 'Steps'}
+                  {item.steps.length} {item.steps.length === 1 ? 'Step' : 'Steps'}
                 </div>
               </div>
 
               <div style={styles.sopTitleContainer}>
-                <div style={styles.sopIcon}>{getIcon(sop.icon)}</div>
-                <h3 style={styles.sopTitle}>{sop.title}</h3>
+                <div style={styles.sopIcon}>{getIcon(item.icon)}</div>
+                <h3 style={styles.sopTitle}>{item.title}</h3>
               </div>
-              <p style={styles.sopDescription}>{sop.description}</p>
+              <p style={styles.sopDescription}>{item.description}</p>
 
-              {sop.tags && sop.tags.length > 0 && (
+              {item.tags && item.tags.length > 0 && (
                 <div style={styles.sopTags}>
-                  {sop.tags.slice(0, 3).map((tag, index) => (
+                  {item.tags.slice(0, 3).map((tag, index) => (
                     <span key={index} style={styles.sopTag}>
                       {tag}
                     </span>
                   ))}
-                  {sop.tags.length > 3 && (
-                    <span style={styles.sopTag}>+{sop.tags.length - 3}</span>
+                  {item.tags.length > 3 && (
+                    <span style={styles.sopTag}>+{item.tags.length - 3}</span>
                   )}
                 </div>
               )}
 
               <div style={isMobileOrTablet ? styles.sopActionsMobile : styles.sopActions}>
-                <button onClick={() => handleView(sop)} style={isMobileOrTablet ? styles.viewButtonMobile : styles.viewButton}>
+                <button onClick={() => handleView(item)} style={isMobileOrTablet ? styles.viewButtonMobile : styles.viewButton}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <circle cx="12" cy="12" r="3" />
@@ -428,46 +497,46 @@ const SOPPage: React.FC = () => {
                   View
                 </button>
 
-                {/* Template: Show "Use Template" + Delete */}
-                {sop.isTemplate && (
-                  <>
-                    <button onClick={() => handleUseTemplate(sop.id)} style={isMobileOrTablet ? styles.templateButtonMobile : styles.templateButton}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                        <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                      </svg>
-                      {!isMobileOrTablet && 'Use Template'}
-                    </button>
-                    <button onClick={() => handleDelete(sop.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                      {!isMobileOrTablet && 'Delete'}
-                    </button>
-                  </>
+                {/* Template: Show "Use Template" */}
+                {item.isTemplate && (
+                  <button onClick={() => handleUseTemplate(item.id)} style={isMobileOrTablet ? styles.templateButtonMobile : styles.templateButton}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                    </svg>
+                    {!isMobileOrTablet && 'Use'}
+                  </button>
                 )}
 
-                {/* Regular SOP: Show Edit + Delete */}
-                {!sop.isTemplate && (
-                  <>
-                    <button onClick={() => handleEdit(sop)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                      {!isMobileOrTablet && 'Edit'}
-                    </button>
-
-                    <button onClick={() => handleDelete(sop.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                      {!isMobileOrTablet && 'Delete'}
-                    </button>
-                  </>
+                {/* Regular SOP: Show Edit */}
+                {!item.isTemplate && (
+                  <button onClick={() => handleEdit(item)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    {!isMobileOrTablet && 'Edit'}
+                  </button>
                 )}
+
+                {/* Template: Show Edit */}
+                {item.isTemplate && (
+                  <button onClick={() => handleEdit(item)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    {!isMobileOrTablet && 'Edit'}
+                  </button>
+                )}
+
+                <button onClick={() => handleDelete(item.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  {!isMobileOrTablet && 'Delete'}
+                </button>
               </div>
             </div>
                   ))}
@@ -557,6 +626,61 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     minHeight: '44px',
     width: '100%',
+  },
+  viewModeTabs: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '24px',
+    padding: '6px',
+    backgroundColor: theme.colors.cardBackground,
+    borderRadius: theme.borderRadius.lg,
+    border: `2px solid ${theme.colors.border}`,
+  },
+  viewModeTabsMobile: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '8px',
+    marginBottom: '16px',
+    padding: '6px',
+    backgroundColor: theme.colors.cardBackground,
+    borderRadius: theme.borderRadius.lg,
+    border: `2px solid ${theme.colors.border}`,
+  },
+  viewModeTab: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px 24px',
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  viewModeTabMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px 16px',
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+  },
+  viewModeTabActive: {
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.background,
   },
   controls: {
     display: 'flex',
@@ -1066,50 +1190,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s',
     minHeight: '44px',
-  },
-  publishButton: {
-    padding: '10px 16px',
-    backgroundColor: '#10B981',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  unpublishButton: {
-    padding: '10px 16px',
-    backgroundColor: 'transparent',
-    color: theme.colors.textSecondary,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  archiveButton: {
-    padding: '10px 16px',
-    backgroundColor: 'transparent',
-    color: '#6B7280',
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  restoreButton: {
-    padding: '10px 16px',
-    backgroundColor: '#10B981',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
   },
   departmentTabs: {
     display: 'flex',

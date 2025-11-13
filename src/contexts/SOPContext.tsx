@@ -967,35 +967,49 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
   };
 
   const saveAsTemplate = async (id: string) => {
+    const sourceSOP = sops.find(sop => sop.id === id);
+    if (!sourceSOP) return;
+
     if (!useSupabase) {
-      // Fallback to localStorage mode
-      const updated = sops.map(sop =>
-        sop.id === id
-          ? { ...sop, isTemplate: true, updatedAt: new Date().toISOString() }
-          : sop
-      );
+      // Fallback to localStorage mode - CREATE A COPY as template, don't modify original
+      const newTemplate: SOP = {
+        ...sourceSOP,
+        id: `sop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        title: `${sourceSOP.title} (Template)`,
+        isTemplate: true,
+        templateOf: undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const updated = [...sops, newTemplate];
       setSOPs(updated);
       localStorage.setItem('mediamaple_sops', JSON.stringify(updated));
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('sops')
-        .update({ is_template: true })
-        .eq('id', id);
+      // CREATE A COPY as template, don't modify original
+      const { error } = await supabase.from('sops').insert({
+        title: `${sourceSOP.title} (Template)`,
+        description: sourceSOP.description,
+        department: sourceSOP.department,
+        category: sourceSOP.category,
+        icon: sourceSOP.icon,
+        image_url: sourceSOP.imageUrl,
+        steps: sourceSOP.steps,
+        tags: sourceSOP.tags || [],
+        status: sourceSOP.status,
+        is_template: true,
+        created_by: currentUser?.id || sourceSOP.createdBy,
+      });
 
       if (error) {
         console.error('Error saving as template:', error);
         throw error;
       }
 
-      // Update local state
-      setSOPs(prev =>
-        prev.map(sop =>
-          sop.id === id ? { ...sop, isTemplate: true, updatedAt: new Date().toISOString() } : sop
-        )
-      );
+      // Reload SOPs to get the new template
+      await loadSOPs();
     } catch (error) {
       console.error('Error saving as template:', error);
       throw error;

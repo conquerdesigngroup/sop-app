@@ -5,12 +5,14 @@ import { useSOPs } from '../contexts/SOPContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { JobTask, TaskTemplate, TaskStep, TaskPriority } from '../types';
 import { theme } from '../theme';
+import TaskLibraryPage from './TaskLibraryPage';
 
 const JobTasksPage: React.FC = () => {
   const { jobTasks, taskTemplates, createJobTaskFromTemplate, addJobTask, updateJobTask, deleteJobTask } = useTask();
   const { currentUser, users } = useAuth();
   const { sops } = useSOPs();
   const { isMobile } = useResponsive();
+  const [activeTab, setActiveTab] = useState<'jobs' | 'library'>('jobs');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
@@ -90,93 +92,108 @@ const JobTasksPage: React.FC = () => {
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          {!isMobile && 'Create Job Task'}
+          {!isMobile && 'Create Job'}
         </button>
       </div>
 
-      {/* Quick Template Buttons */}
-      {taskTemplates.length > 0 && (
-        <div style={styles.quickTemplatesSection}>
-          <h3 style={styles.quickTemplatesTitle}>Quick Create from Template:</h3>
-          <div style={styles.quickTemplatesGrid}>
-            {taskTemplates.slice(0, 6).map(template => (
-              <button
-                key={template.id}
-                style={styles.quickTemplateButton}
-                onClick={() => handleCreateFromTemplate(template)}
-              >
-                <span style={styles.quickTemplateIcon}>📋</span>
-                <span style={styles.quickTemplateText}>{template.title}</span>
-              </button>
-            ))}
+      {/* Tab Navigation */}
+      <div style={styles.tabNavigation}>
+        <button
+          style={{
+            ...styles.tabButton,
+            ...(activeTab === 'jobs' ? styles.tabButtonActive : {}),
+          }}
+          onClick={() => setActiveTab('jobs')}
+        >
+          Jobs
+        </button>
+        <button
+          style={{
+            ...styles.tabButton,
+            ...(activeTab === 'library' ? styles.tabButtonActive : {}),
+          }}
+          onClick={() => setActiveTab('library')}
+        >
+          Task Library
+        </button>
+      </div>
+
+      {/* Jobs Tab Content */}
+      {activeTab === 'jobs' && (
+        <>
+          {/* Filters */}
+          <div style={{...styles.filtersContainer, ...(isMobile && styles.filtersContainerMobile)}}>
+            <div style={styles.searchContainer}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={styles.searchIcon}>
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{...styles.searchInput, ...(isMobile && styles.inputMobile)}}
+              />
+            </div>
+
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
+            >
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="in-progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="overdue">Overdue</option>
+            </select>
+
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
+            >
+              <option value="all">All Departments</option>
+              {departments.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
           </div>
-        </div>
+
+          {/* Job Tasks List */}
+          <div style={styles.tasksList}>
+            {sortedTasks.length === 0 ? (
+              <div style={styles.emptyState}>
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                  <path d="M9 11l3 3L22 4" />
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+                <p style={styles.emptyText}>No job tasks found</p>
+                <p style={styles.emptySubtext}>Create your first task to get started</p>
+              </div>
+            ) : (
+              sortedTasks.map(task => (
+                <JobTaskCard
+                  key={task.id}
+                  task={task}
+                  users={users}
+                  isMobile={isMobile}
+                  onDelete={() => handleDeleteTask(task.id)}
+                  onClick={() => handleTaskClick(task)}
+                />
+              ))
+            )}
+          </div>
+        </>
       )}
 
-      {/* Filters */}
-      <div style={{...styles.filtersContainer, ...(isMobile && styles.filtersContainerMobile)}}>
-        <div style={styles.searchContainer}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={styles.searchIcon}>
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{...styles.searchInput, ...(isMobile && styles.inputMobile)}}
-          />
+      {/* Task Library Tab Content */}
+      {activeTab === 'library' && (
+        <div style={{ margin: '-40px' }}>
+          <TaskLibraryPage />
         </div>
-
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
-        >
-          <option value="all">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="in-progress">In Progress</option>
-          <option value="completed">Completed</option>
-          <option value="overdue">Overdue</option>
-        </select>
-
-        <select
-          value={filterDepartment}
-          onChange={(e) => setFilterDepartment(e.target.value)}
-          style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
-        >
-          <option value="all">All Departments</option>
-          {departments.map(dept => (
-            <option key={dept} value={dept}>{dept}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Job Tasks List */}
-      <div style={styles.tasksList}>
-        {sortedTasks.length === 0 ? (
-          <div style={styles.emptyState}>
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            <p style={styles.emptyText}>No job tasks found</p>
-            <p style={styles.emptySubtext}>Create your first task to get started</p>
-          </div>
-        ) : (
-          sortedTasks.map(task => (
-            <JobTaskCard
-              key={task.id}
-              task={task}
-              users={users}
-              isMobile={isMobile}
-              onDelete={() => handleDeleteTask(task.id)}
-              onClick={() => handleTaskClick(task)}
-            />
-          ))
-        )}
-      </div>
+      )}
 
       {/* Task Detail Modal for Admins */}
       {showTaskDetailModal && selectedTask && (
@@ -563,10 +580,71 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} style={{...styles.modalForm, ...(isMobile && styles.modalFormMobile)}}>
-          {/* Basic Information Section */}
+          {/* Assign to Team Members Section */}
           <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
-            <h3 style={styles.sectionTitle}>Basic Information</h3>
+            <div style={styles.assignHeaderRow}>
+              <h3 style={styles.sectionTitle}>Assign to Team Members</h3>
+              <div style={styles.assignActions}>
+                <button type="button" onClick={handleSelectAll} style={styles.selectAllButton}>
+                  Select All
+                </button>
+                <button type="button" onClick={handleDeselectAll} style={styles.selectAllButton}>
+                  Deselect All
+                </button>
+              </div>
+            </div>
 
+            <div style={styles.departmentFilter}>
+              <label style={styles.smallLabel}>Filter by Department:</label>
+              <select
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                style={styles.smallSelect}
+              >
+                <option value="all">All Departments</option>
+                {departments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.usersList}>
+              {filteredUsers.length === 0 ? (
+                <p style={styles.noUsersText}>No users found in this department</p>
+              ) : (
+                filteredUsers.map(user => (
+                  <label key={user.id} style={styles.userCheckbox}>
+                    <input
+                      type="checkbox"
+                      checked={assignedTo.includes(user.id)}
+                      onChange={() => handleUserToggle(user.id)}
+                      style={styles.checkbox}
+                    />
+                    <div style={styles.userInfo}>
+                      <div style={styles.userAvatar}>
+                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
+                      </div>
+                      <div style={styles.userDetails}>
+                        <span style={styles.userFullName}>
+                          {user.firstName} {user.lastName}
+                        </span>
+                        <span style={styles.userDepartment}>{user.department}</span>
+                      </div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+
+            {assignedTo.length > 0 && (
+              <div style={styles.selectedCount}>
+                Selected: {assignedTo.length} team member{assignedTo.length !== 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+
+          {/* Task Details Section */}
+          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
             <div style={styles.formGroup}>
               <label style={styles.label}>Task Title *</label>
               <input
@@ -763,69 +841,6 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                 />
               </div>
             </div>
-          </div>
-
-          {/* Assign to Team Members Section */}
-          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
-            <div style={styles.assignHeaderRow}>
-              <h3 style={styles.sectionTitle}>Assign to Team Members</h3>
-              <div style={styles.assignActions}>
-                <button type="button" onClick={handleSelectAll} style={styles.selectAllButton}>
-                  Select All
-                </button>
-                <button type="button" onClick={handleDeselectAll} style={styles.selectAllButton}>
-                  Deselect All
-                </button>
-              </div>
-            </div>
-
-            <div style={styles.departmentFilter}>
-              <label style={styles.smallLabel}>Filter by Department:</label>
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                style={styles.smallSelect}
-              >
-                <option value="all">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.usersList}>
-              {filteredUsers.length === 0 ? (
-                <p style={styles.noUsersText}>No users found in this department</p>
-              ) : (
-                filteredUsers.map(user => (
-                  <label key={user.id} style={styles.userCheckbox}>
-                    <input
-                      type="checkbox"
-                      checked={assignedTo.includes(user.id)}
-                      onChange={() => handleUserToggle(user.id)}
-                      style={styles.checkbox}
-                    />
-                    <div style={styles.userInfo}>
-                      <div style={styles.userAvatar}>
-                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                      </div>
-                      <div style={styles.userDetails}>
-                        <span style={styles.userFullName}>
-                          {user.firstName} {user.lastName}
-                        </span>
-                        <span style={styles.userDepartment}>{user.department}</span>
-                      </div>
-                    </div>
-                  </label>
-                ))
-              )}
-            </div>
-
-            {assignedTo.length > 0 && (
-              <div style={styles.selectedCount}>
-                Selected: {assignedTo.length} team member{assignedTo.length !== 1 ? 's' : ''}
-              </div>
-            )}
           </div>
 
           {/* Form Actions */}
@@ -1945,6 +1960,63 @@ const styles: { [key: string]: React.CSSProperties } = {
     minHeight: '44px',
     fontSize: '16px',
     padding: '12px 20px',
+  },
+  // Tab Navigation Styles
+  tabNavigation: {
+    display: 'flex',
+    gap: '4px',
+    marginBottom: theme.spacing.xl,
+    borderBottom: `2px solid ${theme.colors.bdr.primary}`,
+  },
+  tabButton: {
+    padding: '14px 28px',
+    background: theme.colors.bg.secondary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderBottom: 'none',
+    borderRadius: `${theme.borderRadius.md} ${theme.borderRadius.md} 0 0`,
+    color: theme.colors.txt.secondary,
+    fontSize: '15px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    position: 'relative',
+    marginBottom: '-2px',
+  } as React.CSSProperties,
+  tabButtonActive: {
+    background: theme.colors.cardBackground,
+    color: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    borderBottomColor: theme.colors.cardBackground,
+    fontWeight: 700,
+  },
+  // Task Library Placeholder Styles
+  taskLibraryPlaceholder: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.xxl,
+    textAlign: 'center',
+    minHeight: '400px',
+  },
+  placeholderTitle: {
+    fontSize: '24px',
+    fontWeight: 700,
+    color: theme.colors.txt.primary,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+  },
+  placeholderText: {
+    fontSize: '16px',
+    color: theme.colors.txt.secondary,
+    marginBottom: theme.spacing.xs,
+    maxWidth: '500px',
+    lineHeight: '1.5',
+  },
+  placeholderSubtext: {
+    fontSize: '14px',
+    color: theme.colors.txt.tertiary,
+    fontStyle: 'italic',
   },
 };
 

@@ -76,30 +76,6 @@ const Navigation: React.FC = () => {
         adminOnly: true,
       },
       {
-        path: '/templates',
-        label: 'Templates',
-        icon: (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-          </svg>
-        ),
-        adminOnly: true,
-      },
-      {
-        path: '/task-library',
-        label: 'Task Library',
-        icon: (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" />
-            <rect x="14" y="3" width="7" height="7" />
-            <rect x="3" y="14" width="7" height="7" />
-            <rect x="14" y="14" width="7" height="7" />
-          </svg>
-        ),
-        adminOnly: true,
-      },
-      {
         path: '/job-tasks',
         label: 'Job Tasks',
         icon: (
@@ -248,30 +224,33 @@ const Navigation: React.FC = () => {
         {/* Desktop Layout */}
         {!isMobileOrTablet && (
           <>
-            <div style={styles.navLinks}>
-              {navItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  style={{
-                    ...styles.navLink,
-                    ...(location.pathname === item.path ? styles.navLinkActive : {}),
-                  }}
-                >
-                  <span style={styles.navIcon}>{item.icon}</span>
-                  {item.label}
-                </Link>
-              ))}
+            {/* Left side: Logo + Nav Links */}
+            <div style={styles.leftSection}>
+              <div style={styles.logoContainer}>
+                <img
+                  src="/logo.png"
+                  alt="MediaMaple Logo"
+                  style={styles.logoImage}
+                />
+              </div>
+              <div style={styles.navLinks}>
+                {navItems.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    style={{
+                      ...styles.navLink,
+                      ...(location.pathname === item.path ? styles.navLinkActive : {}),
+                    }}
+                  >
+                    <span style={styles.navIcon}>{item.icon}</span>
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
             </div>
 
-            <div style={styles.centerLogo}>
-              <img
-                src="/logo.png"
-                alt="MediaMaple Logo"
-                style={styles.logoImage}
-              />
-            </div>
-
+            {/* Right side: User Section */}
             <div style={styles.userSection}>
               <div
                 style={styles.userButton}
@@ -359,8 +338,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1400px',
     margin: '0 auto',
     padding: '16px 40px',
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
+    display: 'flex',
+    justifyContent: 'space-between',
     alignItems: 'center',
     gap: '20px',
   },
@@ -486,15 +465,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '13px',
     color: theme.colors.txt.secondary,
   },
+  leftSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '32px',
+    flex: 1,
+  },
+  logoContainer: {
+    display: 'flex',
+    alignItems: 'center',
+  },
   navLinks: {
     display: 'flex',
     gap: '8px',
     justifyContent: 'flex-start',
-  },
-  centerLogo: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   logoImage: {
     height: '40px',
