@@ -23,7 +23,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }
     switch (type) {
       case 'success':
         return {
-          backgroundColor: '#10B981',
+          backgroundColor: theme.colors.status.success,
           icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="20 6 9 17 4 12" />
@@ -32,7 +32,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }
         };
       case 'error':
         return {
-          backgroundColor: theme.colors.error,
+          backgroundColor: theme.colors.status.error,
           icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
@@ -43,7 +43,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }
         };
       case 'warning':
         return {
-          backgroundColor: '#F59E0B',
+          backgroundColor: theme.colors.status.warning,
           icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -54,7 +54,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }
         };
       case 'info':
         return {
-          backgroundColor: '#3B82F6',
+          backgroundColor: theme.colors.status.info,
           icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />

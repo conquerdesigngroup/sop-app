@@ -99,6 +99,32 @@ const Navigation: React.FC = () => {
         ),
         adminOnly: true,
       },
+      {
+        path: '/archive',
+        label: 'Archive',
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 8v13H3V8" />
+            <path d="M1 3h22v5H1z" />
+            <path d="M10 12h4" />
+          </svg>
+        ),
+        adminOnly: true,
+      },
+      {
+        path: '/activity-log',
+        label: 'Activity',
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+            <path d="M16 13H8" />
+            <path d="M16 17H8" />
+            <path d="M10 9H8" />
+          </svg>
+        ),
+        adminOnly: true,
+      },
     ];
 
     return allItems.filter(item => !item.adminOnly || isAdmin);
@@ -138,7 +164,7 @@ const Navigation: React.FC = () => {
             <div style={styles.centerLogoMobile}>
               <img
                 src="/logo.png"
-                alt="MediaMaple Logo"
+                alt="Dancing Images Logo"
                 style={styles.logoImageMobile}
               />
             </div>
@@ -157,20 +183,38 @@ const Navigation: React.FC = () => {
             {/* Mobile Menu Overlay */}
             {showMobileMenu && (
               <>
-                <div style={styles.mobileOverlay} onClick={() => setShowMobileMenu(false)} />
-                <div style={styles.mobileMenu}>
+                <div
+                  className="modal-backdrop backdrop-blur-sm"
+                  style={styles.mobileOverlay}
+                  onClick={() => setShowMobileMenu(false)}
+                />
+                <div className="bottom-sheet-enter" style={styles.mobileMenu}>
+                  {/* Drag handle indicator */}
+                  <div style={styles.dragHandle}>
+                    <div style={styles.dragHandleBar} />
+                  </div>
                   <div style={styles.mobileMenuContent}>
-                    {navItems.map((item) => (
+                    {navItems.map((item, index) => (
                       <Link
                         key={item.path}
                         to={item.path}
+                        className="list-item-enter"
                         style={{
                           ...styles.mobileNavLink,
                           ...(location.pathname === item.path ? styles.mobileNavLinkActive : {}),
+                          animationDelay: `${index * 0.05}s`,
+                          opacity: 0,
                         }}
                       >
                         <span style={styles.navIcon}>{item.icon}</span>
                         {item.label}
+                        {location.pathname === item.path && (
+                          <span style={styles.activeIndicator}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          </span>
+                        )}
                       </Link>
                     ))}
                   </div>
@@ -180,7 +224,7 @@ const Navigation: React.FC = () => {
 
             {/* User Menu (Mobile) */}
             {showUserMenu && (
-              <div style={styles.userMenuMobile}>
+              <div className="modal-content" style={styles.userMenuMobile}>
                 <div style={styles.userInfoMobile}>
                   <div style={styles.userNameMobile}>
                     {currentUser?.firstName} {currentUser?.lastName}
@@ -190,17 +234,23 @@ const Navigation: React.FC = () => {
                   </div>
                 </div>
                 <div style={styles.menuDivider} />
-                <div style={styles.userMenuItem}>
+                <div
+                  style={styles.userMenuItem}
+                  onClick={() => navigate('/profile')}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
                   </svg>
                   Profile
                 </div>
-                <div style={styles.userMenuItem}>
+                <div
+                  style={styles.userMenuItem}
+                  onClick={() => navigate('/settings')}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="3" />
-                    <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l4.2 4.2M1 12h6m6 0h6m-13.2 5.2l4.2-4.2m0-6l-4.2-4.2" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
                   Settings
                 </div>
@@ -229,7 +279,7 @@ const Navigation: React.FC = () => {
               <div style={styles.logoContainer}>
                 <img
                   src="/logo.png"
-                  alt="MediaMaple Logo"
+                  alt="Dancing Images Logo"
                   style={styles.logoImage}
                 />
               </div>
@@ -287,18 +337,24 @@ const Navigation: React.FC = () => {
               </div>
 
               {showUserMenu && (
-                <div style={styles.userMenu}>
-                  <div style={styles.userMenuItem}>
+                <div className="modal-content" style={styles.userMenu}>
+                  <div
+                    style={styles.userMenuItem}
+                    onClick={() => navigate('/profile')}
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
                     </svg>
                     Profile
                   </div>
-                  <div style={styles.userMenuItem}>
+                  <div
+                    style={styles.userMenuItem}
+                    onClick={() => navigate('/settings')}
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="3" />
-                      <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l4.2 4.2M1 12h6m6 0h6m-13.2 5.2l4.2-4.2m0-6l-4.2-4.2" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                     </svg>
                     Settings
                   </div>
@@ -396,29 +452,46 @@ const styles: { [key: string]: React.CSSProperties } = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     zIndex: 998,
-    backdropFilter: 'blur(2px)',
   },
   mobileMenu: {
     position: 'fixed',
-    top: '60px',
     left: 0,
+    right: 0,
     bottom: 0,
-    width: '280px',
-    maxWidth: '80vw',
     backgroundColor: theme.colors.bg.secondary,
-    borderRight: `2px solid ${theme.colors.bdr.primary}`,
+    borderTopLeftRadius: '20px',
+    borderTopRightRadius: '20px',
+    borderTop: `2px solid ${theme.colors.bdr.secondary}`,
     zIndex: 999,
     overflowY: 'auto',
-    boxShadow: theme.shadows.xl,
+    boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.5)',
     WebkitOverflowScrolling: 'touch',
+    maxHeight: '70vh',
+    paddingBottom: 'env(safe-area-inset-bottom, 20px)',
+  },
+  dragHandle: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '12px 0 8px 0',
+  },
+  dragHandleBar: {
+    width: '36px',
+    height: '4px',
+    backgroundColor: theme.colors.bdr.secondary,
+    borderRadius: '2px',
   },
   mobileMenuContent: {
-    padding: '16px',
+    padding: '8px 16px 24px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '6px',
+  },
+  activeIndicator: {
+    marginLeft: 'auto',
+    display: 'flex',
+    alignItems: 'center',
   },
   mobileNavLink: {
     display: 'flex',

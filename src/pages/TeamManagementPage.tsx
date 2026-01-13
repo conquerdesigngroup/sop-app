@@ -5,6 +5,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import { theme } from '../theme';
 import { User, UserRole } from '../types';
 import { DEFAULT_DEPARTMENTS, USER_ROLES, SUCCESS_MESSAGES, ERROR_MESSAGES } from '../constants';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 const TeamManagementPage: React.FC = () => {
   const { users, addUser, updateUser, deleteUser, currentUser } = useAuth();
@@ -112,52 +113,72 @@ const TeamManagementPage: React.FC = () => {
     return true;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) return;
 
-    if (editingUser) {
-      // Update existing user
-      const updateData: Partial<User> = {
-        email: formData.email,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        role: formData.role,
-        department: formData.department,
-        isActive: formData.isActive,
-      };
+    setIsSubmitting(true);
 
-      // Only update password if provided
-      if (formData.password) {
-        updateData.password = formData.password;
+    try {
+      if (editingUser) {
+        // Update existing user
+        const updateData: Partial<User> = {
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          role: formData.role,
+          department: formData.department,
+          isActive: formData.isActive,
+        };
+
+        // Note: Password updates for other users require admin API access
+        // which is not available in client-side Supabase
+        if (formData.password) {
+          updateData.password = formData.password;
+        }
+
+        await updateUser(editingUser.id, updateData);
+        success('User updated successfully');
+        handleCloseModal();
+      } else {
+        // Add new user
+        const result = await addUser({
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          role: formData.role,
+          department: formData.department,
+          isActive: true,
+          invitedBy: currentUser?.id,
+          notificationPreferences: {
+            pushEnabled: true,
+            emailEnabled: true,
+            calendarSyncEnabled: false,
+            taskReminders: true,
+            overdueAlerts: true,
+          },
+        });
+
+        if (result.success) {
+          if (result.requiresEmailConfirmation) {
+            success('User created! They will receive an email to confirm their account before they can log in.');
+          } else {
+            success('User created successfully');
+          }
+          handleCloseModal();
+        } else {
+          error(result.error || 'Failed to create user');
+        }
       }
-
-      updateUser(editingUser.id, updateData);
-      success('User updated successfully');
-    } else {
-      // Add new user
-      addUser({
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        role: formData.role,
-        department: formData.department,
-        isActive: true,
-        invitedBy: currentUser?.id,
-        notificationPreferences: {
-          pushEnabled: true,
-          emailEnabled: true,
-          calendarSyncEnabled: false,
-          taskReminders: true,
-          overdueAlerts: true,
-        },
-      });
-      success('User created successfully');
+    } catch (err: any) {
+      error(err.message || 'An error occurred');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    handleCloseModal();
   };
 
   const handleDeactivateUser = (user: User) => {
@@ -643,22 +664,25 @@ const TeamManagementPage: React.FC = () => {
                 />
               </div>
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>
-                  Password {editingUser ? '(leave blank to keep current)' : <span style={styles.required}>*</span>}
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  style={{
-                    ...styles.input,
-                    ...(isMobile && styles.inputMobile),
-                  }}
-                  required={!editingUser}
-                  placeholder={editingUser ? 'Enter new password or leave blank' : 'Minimum 8 characters'}
-                />
-              </div>
+              {/* Password field: Only show for new users */}
+              {!editingUser && (
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>
+                    Password <span style={styles.required}>*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    style={{
+                      ...styles.input,
+                      ...(isMobile && styles.inputMobile),
+                    }}
+                    required
+                    placeholder="Minimum 8 characters"
+                  />
+                </div>
+              )}
 
               <div style={{
                 ...styles.formRow,
@@ -726,11 +750,16 @@ const TeamManagementPage: React.FC = () => {
                 }}>
                   Cancel
                 </button>
-                <button type="submit" style={{
-                  ...styles.submitButton,
-                  ...(isMobile && styles.submitButtonMobile),
-                }}>
-                  {editingUser ? 'Save Changes' : (isMobile ? 'Add Member' : 'Add Team Member')}
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  style={{
+                    ...styles.submitButton,
+                    ...(isMobile && styles.submitButtonMobile),
+                    ...(isSubmitting && { opacity: 0.7, cursor: 'not-allowed' }),
+                  }}
+                >
+                  {isSubmitting ? 'Saving...' : (editingUser ? 'Save Changes' : (isMobile ? 'Add Member' : 'Add Team Member'))}
                 </button>
               </div>
             </form>

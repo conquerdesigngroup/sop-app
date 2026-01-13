@@ -1,22 +1,33 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { User, UserRole } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { logActivity } from '../utils/activityLogger';
+
+interface AddUserResult {
+  success: boolean;
+  error?: string;
+  requiresEmailConfirmation?: boolean;
+}
 
 interface AuthContextType {
   currentUser: User | null;
   users: User[];
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  addUser: (userData: Omit<User, 'id' | 'createdAt'>) => void;
-  updateUser: (id: string, userData: Partial<User>) => void;
-  deleteUser: (id: string) => void;
+  addUser: (userData: Omit<User, 'id' | 'createdAt'>) => Promise<AddUserResult>;
+  updateUser: (id: string, userData: Partial<User>) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   getUserById: (id: string) => User | undefined;
   getUsersByDepartment: (department: string) => User[];
   getUsersByRole: (role: UserRole) => User[];
   isAuthenticated: boolean;
   isAdmin: boolean;
   loading: boolean;
+  sessionExpiryWarning: boolean;
+  extendSession: () => void;
+  dismissSessionWarning: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,67 +40,8 @@ export const useAuth = () => {
   return context;
 };
 
-// Default admin user for initial setup
-const defaultAdmin: User = {
-  id: 'user_admin_default',
-  email: 'admin@mediamaple.com',
-  password: 'admin123', // In production, this should be hashed
-  firstName: 'Admin',
-  lastName: 'User',
-  role: 'admin',
-  department: 'Admin',
-  createdAt: new Date().toISOString(),
-  isActive: true,
-  notificationPreferences: {
-    pushEnabled: true,
-    emailEnabled: true,
-    calendarSyncEnabled: false,
-    taskReminders: true,
-    overdueAlerts: true,
-  },
-};
-
-// Sample team members for testing
-const defaultTeamMembers: User[] = [
-  {
-    id: 'user_team_1',
-    email: 'john@mediamaple.com',
-    password: 'team123',
-    firstName: 'John',
-    lastName: 'Smith',
-    role: 'team',
-    department: 'Teachers',
-    createdAt: new Date().toISOString(),
-    isActive: true,
-    invitedBy: 'user_admin_default',
-    notificationPreferences: {
-      pushEnabled: false,
-      emailEnabled: true,
-      calendarSyncEnabled: false,
-      taskReminders: true,
-      overdueAlerts: true,
-    },
-  },
-  {
-    id: 'user_team_2',
-    email: 'sarah@mediamaple.com',
-    password: 'team123',
-    firstName: 'Sarah',
-    lastName: 'Johnson',
-    role: 'team',
-    department: 'Admin',
-    createdAt: new Date().toISOString(),
-    isActive: true,
-    invitedBy: 'user_admin_default',
-    notificationPreferences: {
-      pushEnabled: true,
-      emailEnabled: true,
-      calendarSyncEnabled: false,
-      taskReminders: true,
-      overdueAlerts: true,
-    },
-  },
-];
+// Note: Default users removed - app now requires Supabase for user management
+// If running in localStorage mode (no Supabase), users must be created through the UI
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -119,11 +71,20 @@ const mapProfileToUser = (profile: any, authUser?: SupabaseUser): User => {
   };
 };
 
+// Session timeout settings (in milliseconds)
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const WARNING_BEFORE_TIMEOUT = 5 * 60 * 1000; // Show warning 5 minutes before timeout
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sessionExpiryWarning, setSessionExpiryWarning] = useState(false);
   const useSupabase = isSupabaseConfigured();
+
+  const sessionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const warningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
 
   // Load all users from database
   const loadUsers = useCallback(async () => {
@@ -148,22 +109,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       if (!useSupabase) {
-        // Fallback to localStorage mode
+        // localStorage mode - this is a fallback/demo mode only
+        // Clear any old default user data that might be cached
         const storedUsers = localStorage.getItem('mediamaple_users');
         const storedCurrentUser = localStorage.getItem('mediamaple_current_user');
 
         if (storedUsers) {
           const parsedUsers = JSON.parse(storedUsers);
-          setUsers(parsedUsers);
+          // Filter out old default test users that may have been cached
+          const cleanedUsers = parsedUsers.filter((u: User) =>
+            !u.id.startsWith('user_admin_default') &&
+            !u.id.startsWith('user_team_')
+          );
+          setUsers(cleanedUsers);
+          if (cleanedUsers.length !== parsedUsers.length) {
+            localStorage.setItem('mediamaple_users', JSON.stringify(cleanedUsers));
+          }
         } else {
-          // Initialize with default users
-          const initialUsers = [defaultAdmin, ...defaultTeamMembers];
-          setUsers(initialUsers);
-          localStorage.setItem('mediamaple_users', JSON.stringify(initialUsers));
+          // No users - start with empty array
+          setUsers([]);
         }
 
         if (storedCurrentUser) {
-          setCurrentUser(JSON.parse(storedCurrentUser));
+          const parsedUser = JSON.parse(storedCurrentUser);
+          // Don't restore if it was a default test user
+          if (!parsedUser.id.startsWith('user_admin_default') && !parsedUser.id.startsWith('user_team_')) {
+            setCurrentUser(parsedUser);
+          } else {
+            localStorage.removeItem('mediamaple_current_user');
+          }
         }
 
         setLoading(false);
@@ -259,6 +233,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (user) {
         setCurrentUser(user);
         localStorage.setItem('mediamaple_current_user', JSON.stringify(user));
+
+        // Log login activity
+        logActivity({
+          userId: user.id,
+          userEmail: user.email,
+          userName: `${user.firstName} ${user.lastName}`,
+          action: 'user_login',
+          entityType: 'user',
+          entityId: user.id,
+          entityTitle: `${user.firstName} ${user.lastName}`,
+        });
+
         return true;
       }
 
@@ -278,16 +264,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       if (data.user) {
-        // Fetch user profile
-        const { data: profile, error: profileError } = await supabase
+        // First try to fetch profile by user ID
+        let { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', data.user.id)
           .single();
 
-        if (profile && !profileError && profile.is_active) {
-          setCurrentUser(mapProfileToUser(profile, data.user));
+        // If no profile found by ID, try by email (for migrated users)
+        if (!profile || profileError) {
+          console.log('Profile not found by ID, trying by email...');
+          const { data: profileByEmail, error: emailError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', data.user.email)
+            .single();
+
+          if (profileByEmail && !emailError) {
+            // Update the profile to use the correct auth user ID
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ id: data.user.id })
+              .eq('email', data.user.email);
+
+            if (!updateError) {
+              profile = { ...profileByEmail, id: data.user.id };
+              profileError = null;
+            }
+          }
+        }
+
+        if (profile && !profileError && profile.is_active !== false) {
+          const loggedInUser = mapProfileToUser(profile, data.user);
+          setCurrentUser(loggedInUser);
+
+          // Log login activity
+          logActivity({
+            userId: loggedInUser.id,
+            userEmail: loggedInUser.email,
+            userName: `${loggedInUser.firstName} ${loggedInUser.lastName}`,
+            action: 'user_login',
+            entityType: 'user',
+            entityId: loggedInUser.id,
+            entityTitle: `${loggedInUser.firstName} ${loggedInUser.lastName}`,
+          });
+
           return true;
+        } else {
+          console.error('Profile lookup failed:', { profileError, profile, userId: data.user.id });
         }
       }
 
@@ -299,6 +323,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
+    // Log logout activity before clearing user
+    if (currentUser) {
+      logActivity({
+        userId: currentUser.id,
+        userEmail: currentUser.email,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+        action: 'user_logout',
+        entityType: 'user',
+        entityId: currentUser.id,
+        entityTitle: `${currentUser.firstName} ${currentUser.lastName}`,
+      });
+    }
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       setCurrentUser(null);
@@ -314,7 +351,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const addUser = async (userData: Omit<User, 'id' | 'createdAt'>) => {
+  const addUser = async (userData: Omit<User, 'id' | 'createdAt'>): Promise<AddUserResult> => {
     if (!useSupabase) {
       // Fallback to localStorage mode
       const newUser: User = {
@@ -326,12 +363,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const updatedUsers = [...users, newUser];
       setUsers(updatedUsers);
       localStorage.setItem('mediamaple_users', JSON.stringify(updatedUsers));
-      return;
+      return { success: true };
     }
 
     try {
       // Create auth user in Supabase
-      const { error: authError } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
@@ -347,15 +384,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (authError) {
         console.error('Error creating auth user:', authError);
-        throw authError;
+        return { success: false, error: authError.message };
+      }
+
+      // Check if email confirmation is required
+      // If user.identities is empty, it means email confirmation is pending
+      const requiresEmailConfirmation = data.user && (!data.user.identities || data.user.identities.length === 0);
+
+      // If user already exists (identities empty in some Supabase configs), handle gracefully
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        return { success: false, error: 'A user with this email already exists' };
       }
 
       // Profile will be auto-created by database trigger
-      // Reload users to get the new one
+      // Wait a moment for the trigger to execute, then reload users
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await loadUsers();
-    } catch (error) {
+
+      return {
+        success: true,
+        requiresEmailConfirmation: requiresEmailConfirmation || false
+      };
+    } catch (error: any) {
       console.error('Error adding user:', error);
-      throw error;
+      return { success: false, error: error.message || 'Failed to create user' };
     }
   };
 
@@ -386,25 +438,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         updateData.notification_preferences = userData.notificationPreferences;
       }
 
-      const { error } = await supabase
+      console.log('Updating user in Supabase:', { id, updateData });
+
+      const { data, error } = await supabase
         .from('profiles')
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .select();
 
       if (error) {
-        console.error('Error updating user:', error);
-        throw error;
+        console.error('Error updating user in Supabase:', error);
+        throw new Error(error.message || 'Failed to update user in database');
       }
 
-      // Update local state
-      const updatedUsers = users.map((user) => (user.id === id ? { ...user, ...userData } : user));
+      console.log('Supabase update response:', data);
+
+      // Verify the update was applied by checking returned data
+      if (!data || data.length === 0) {
+        console.warn('No rows were updated - this may indicate an RLS policy issue');
+        // Reload users from database to get actual state
+        await loadUsers();
+        throw new Error('Update may not have been saved. Please check your permissions.');
+      }
+
+      // Update local state with the data returned from Supabase
+      const updatedUserFromDB = data[0];
+      const mappedUser = mapProfileToUser(updatedUserFromDB);
+
+      const updatedUsers = users.map((user) => (user.id === id ? mappedUser : user));
       setUsers(updatedUsers);
 
       // Update current user if it's the one being updated
       if (currentUser?.id === id) {
-        setCurrentUser({ ...currentUser, ...userData });
+        setCurrentUser(mappedUser);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating user:', error);
       throw error;
     }
@@ -453,6 +521,124 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return users.filter((user) => user.role === role && user.isActive);
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    if (!useSupabase) {
+      // In localStorage mode, verify current password and update
+      if (currentUser) {
+        // Verify current password
+        if (currentUser.password !== currentPassword) {
+          return { success: false, error: 'Current password is incorrect' };
+        }
+
+        const updatedUsers = users.map((user) =>
+          user.id === currentUser.id ? { ...user, password: newPassword } : user
+        );
+        setUsers(updatedUsers);
+        localStorage.setItem('mediamaple_users', JSON.stringify(updatedUsers));
+        setCurrentUser({ ...currentUser, password: newPassword });
+        return { success: true };
+      }
+      return { success: false, error: 'No user logged in' };
+    }
+
+    try {
+      // First, verify current password by attempting to sign in
+      const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser?.email || '',
+        password: currentPassword,
+      });
+
+      if (signInError || !user) {
+        console.error('Current password verification failed:', signInError);
+        return { success: false, error: 'Current password is incorrect' };
+      }
+
+      // Now update to the new password
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        console.error('Error changing password:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error changing password:', error);
+      return { success: false, error: error.message || 'Failed to change password' };
+    }
+  };
+
+  // Session management functions
+  const clearSessionTimers = useCallback(() => {
+    if (sessionTimeoutRef.current) {
+      clearTimeout(sessionTimeoutRef.current);
+      sessionTimeoutRef.current = null;
+    }
+    if (warningTimeoutRef.current) {
+      clearTimeout(warningTimeoutRef.current);
+      warningTimeoutRef.current = null;
+    }
+  }, []);
+
+  const resetSessionTimers = useCallback(() => {
+    if (!currentUser) return;
+
+    clearSessionTimers();
+    setSessionExpiryWarning(false);
+    lastActivityRef.current = Date.now();
+
+    // Set warning timer
+    warningTimeoutRef.current = setTimeout(() => {
+      setSessionExpiryWarning(true);
+    }, SESSION_TIMEOUT - WARNING_BEFORE_TIMEOUT);
+
+    // Set logout timer
+    sessionTimeoutRef.current = setTimeout(() => {
+      logout();
+    }, SESSION_TIMEOUT);
+  }, [currentUser, clearSessionTimers]);
+
+  const extendSession = useCallback(() => {
+    resetSessionTimers();
+  }, [resetSessionTimers]);
+
+  const dismissSessionWarning = useCallback(() => {
+    setSessionExpiryWarning(false);
+  }, []);
+
+  // Track user activity to reset session timer
+  useEffect(() => {
+    if (!currentUser) {
+      clearSessionTimers();
+      return;
+    }
+
+    const handleActivity = () => {
+      // Only reset if not showing warning (user must explicitly extend session)
+      if (!sessionExpiryWarning) {
+        resetSessionTimers();
+      }
+    };
+
+    // Events that indicate user activity
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(event => {
+      window.addEventListener(event, handleActivity);
+    });
+
+    // Initialize session timers
+    resetSessionTimers();
+
+    return () => {
+      events.forEach(event => {
+        window.removeEventListener(event, handleActivity);
+      });
+      clearSessionTimers();
+    };
+  }, [currentUser, sessionExpiryWarning, resetSessionTimers, clearSessionTimers]);
+
   const value: AuthContextType = {
     currentUser,
     users,
@@ -461,12 +647,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     addUser,
     updateUser,
     deleteUser,
+    changePassword,
     getUserById,
     getUsersByDepartment,
     getUsersByRole,
     isAuthenticated: currentUser !== null,
     isAdmin: currentUser?.role === 'admin',
     loading,
+    sessionExpiryWarning,
+    extendSession,
+    dismissSessionWarning,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

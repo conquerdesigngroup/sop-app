@@ -21,12 +21,25 @@ export const theme = {
       tertiary: '#8B8B8B',      // Muted gray
     },
 
-    // Status colors
+    // Status colors - expanded for consistency
     status: {
-      success: '#4CAF50',
-      warning: '#FFC107',
-      error: '#EF233C',             // Crimson for errors
-      info: '#2196F3',
+      success: '#10B981',          // Emerald green
+      warning: '#F59E0B',          // Amber
+      error: '#EF233C',            // Crimson for errors
+      info: '#3B82F6',             // Blue
+      pending: '#F59E0B',          // Amber (same as warning)
+      inProgress: '#3B82F6',       // Blue (same as info)
+      completed: '#10B981',        // Green (same as success)
+      overdue: '#EF4444',          // Red
+      draft: '#F59E0B',            // Amber
+      published: '#10B981',        // Green
+      archived: '#6B7280',         // Gray
+    },
+
+    // Role colors
+    role: {
+      admin: '#8B5CF6',            // Purple
+      team: '#3B82F6',             // Blue
     },
 
     // Border colors
@@ -105,6 +118,147 @@ export const theme = {
     md: '0 4px 8px rgba(0, 0, 0, 0.6)',
     lg: '0 8px 16px rgba(0, 0, 0, 0.7)',
     xl: '0 12px 24px rgba(0, 0, 0, 0.8)',
+  },
+
+  // Typography scale for consistency
+  typography: {
+    h1: {
+      fontSize: '36px',
+      fontWeight: 800,
+      lineHeight: 1.2,
+    },
+    h1Mobile: {
+      fontSize: '28px',
+      fontWeight: 800,
+      lineHeight: 1.2,
+    },
+    h2: {
+      fontSize: '28px',
+      fontWeight: 700,
+      lineHeight: 1.3,
+    },
+    h2Mobile: {
+      fontSize: '24px',
+      fontWeight: 700,
+      lineHeight: 1.3,
+    },
+    h3: {
+      fontSize: '22px',
+      fontWeight: 700,
+      lineHeight: 1.4,
+    },
+    h3Mobile: {
+      fontSize: '18px',
+      fontWeight: 700,
+      lineHeight: 1.4,
+    },
+    subtitle: {
+      fontSize: '16px',
+      fontWeight: 500,
+      lineHeight: 1.5,
+    },
+    body: {
+      fontSize: '15px',
+      fontWeight: 400,
+      lineHeight: 1.6,
+    },
+    bodySmall: {
+      fontSize: '14px',
+      fontWeight: 400,
+      lineHeight: 1.5,
+    },
+    caption: {
+      fontSize: '13px',
+      fontWeight: 500,
+      lineHeight: 1.4,
+    },
+    captionSmall: {
+      fontSize: '12px',
+      fontWeight: 500,
+      lineHeight: 1.4,
+    },
+  },
+
+  // Component style presets for consistency
+  components: {
+    // Button presets
+    button: {
+      base: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        fontWeight: 600,
+        fontSize: '15px',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        border: 'none',
+        outline: 'none',
+      },
+      sizes: {
+        sm: {
+          padding: '8px 16px',
+          fontSize: '13px',
+          minHeight: '36px',
+        },
+        md: {
+          padding: '12px 20px',
+          fontSize: '15px',
+          minHeight: '44px',
+        },
+        lg: {
+          padding: '14px 28px',
+          fontSize: '16px',
+          minHeight: '48px',
+        },
+      },
+    },
+    // Input presets
+    input: {
+      base: {
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: '15px',
+        fontWeight: 400,
+        borderRadius: '8px',
+        border: '2px solid #2A2A2A',
+        backgroundColor: '#242424',
+        color: '#F2F2F2',
+        outline: 'none',
+        transition: 'border-color 0.2s ease',
+      },
+      mobile: {
+        fontSize: '16px', // Prevents iOS zoom
+        padding: '14px 16px',
+      },
+    },
+    // Card presets
+    card: {
+      base: {
+        backgroundColor: '#1A1A1A',
+        border: '2px solid #2A2A2A',
+        borderRadius: '12px',
+        padding: '24px',
+      },
+      mobile: {
+        padding: '16px',
+        borderRadius: '8px',
+      },
+    },
+    // Badge presets
+    badge: {
+      base: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '4px 12px',
+        fontSize: '12px',
+        fontWeight: 600,
+        borderRadius: '9999px',
+        textTransform: 'uppercase' as const,
+        letterSpacing: '0.5px',
+      },
+    },
   },
 };
 

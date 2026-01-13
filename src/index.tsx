@@ -16,12 +16,39 @@ root.render(
 
 // Register service worker for PWA functionality
 serviceWorkerRegistration.register({
-  onSuccess: () => console.log('Service worker registered successfully'),
+  onSuccess: () => {
+    console.log('Service worker registered successfully');
+    // Check for updates every 60 seconds
+    setInterval(() => {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CHECK_FOR_UPDATE' });
+      }
+    }, 60000);
+  },
   onUpdate: (registration) => {
-    console.log('New content available; please refresh.');
-    // You could show a notification to the user here
-    if (window.confirm('New version available! Refresh to update?')) {
-      window.location.reload();
+    console.log('New content available; forcing update...');
+
+    const waitingServiceWorker = registration.waiting;
+
+    if (waitingServiceWorker) {
+      waitingServiceWorker.addEventListener('statechange', (event: any) => {
+        if (event.target.state === 'activated') {
+          // Force reload to get new version
+          window.location.reload();
+        }
+      });
+
+      // Tell the waiting SW to skip waiting and become active immediately
+      waitingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+    }
+
+    // Show notification to user
+    const shouldUpdate = window.confirm(
+      'A new version is available! Click OK to update now.'
+    );
+
+    if (shouldUpdate && waitingServiceWorker) {
+      waitingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
     }
   },
 });

@@ -5,13 +5,20 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
+import { DashboardSkeleton, StatsGridSkeleton, SectionSkeleton } from '../components/Skeleton';
 
 const Dashboard: React.FC = () => {
-  const { sops } = useSOPs();
+  const { sops, loading: sopsLoading } = useSOPs();
   const { isAdmin, currentUser } = useAuth();
-  const { jobTasks } = useTask();
+  const { jobTasks, loading: tasksLoading } = useTask();
   const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const { isMobileOrTablet } = useResponsive();
+
+  // Show skeleton while loading
+  if ((isAdmin && sopsLoading) || (!isAdmin && tasksLoading)) {
+    return <DashboardSkeleton isMobile={isMobileOrTablet} />;
+  }
 
   // If not admin, show team member dashboard with calendar
   if (!isAdmin && currentUser) {
@@ -122,52 +129,52 @@ const TeamMemberDashboard: React.FC<{
       <div style={isMobileOrTablet ? styles.statsGridMobile : styles.statsGrid}>
         <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.pending} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#F59E0B' }}>{pendingTasks}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</div>
             <div style={styles.statLabel}>Pending</div>
           </div>
         </div>
 
         <div style={styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.inProgress} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#3B82F6' }}>{inProgressTasks}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</div>
             <div style={styles.statLabel}>In Progress</div>
           </div>
         </div>
 
         <div style={styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.completed} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 11 12 14 22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#10B981' }}>{completedTasks}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</div>
             <div style={styles.statLabel}>Completed</div>
           </div>
         </div>
 
         <div style={styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.overdue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#EF4444' }}>{overdueTasks.length}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.overdue }}>{overdueTasks.length}</div>
             <div style={styles.statLabel}>Overdue</div>
           </div>
         </div>
@@ -226,10 +233,10 @@ const TeamMemberDashboard: React.FC<{
                           ...styles.taskDot,
                           backgroundColor:
                             task.status === 'completed'
-                              ? '#10B981'
+                              ? theme.colors.status.completed
                               : task.status === 'in-progress'
-                              ? '#3B82F6'
-                              : '#F59E0B',
+                              ? theme.colors.status.inProgress
+                              : theme.colors.status.pending,
                         }}
                         title={task.title}
                       />
@@ -261,7 +268,7 @@ const TeamMemberDashboard: React.FC<{
                     <div style={styles.taskItemTitle}>{task.title}</div>
                     <div style={{
                       ...styles.statusBadge,
-                      backgroundColor: task.status === 'completed' ? '#10B981' : task.status === 'in-progress' ? '#3B82F6' : '#F59E0B',
+                      backgroundColor: task.status === 'completed' ? theme.colors.status.completed : task.status === 'in-progress' ? theme.colors.status.inProgress : theme.colors.status.pending,
                     }}>
                       {task.status}
                     </div>
@@ -293,7 +300,7 @@ const TeamMemberDashboard: React.FC<{
                     <div style={styles.taskItemTitle}>{task.title}</div>
                     <div style={{
                       ...styles.statusBadge,
-                      backgroundColor: task.status === 'completed' ? '#10B981' : task.status === 'in-progress' ? '#3B82F6' : '#F59E0B',
+                      backgroundColor: task.status === 'completed' ? theme.colors.status.completed : task.status === 'in-progress' ? theme.colors.status.inProgress : theme.colors.status.pending,
                     }}>
                       {task.status}
                     </div>
@@ -314,18 +321,18 @@ const TeamMemberDashboard: React.FC<{
       {/* Overdue Tasks */}
       {overdueTasks.length > 0 && (
         <div style={styles.section}>
-          <h2 style={{ ...styles.sectionTitle, color: '#EF4444' }}>Overdue Tasks ({overdueTasks.length})</h2>
+          <h2 style={{ ...styles.sectionTitle, color: theme.colors.status.overdue }}>Overdue Tasks ({overdueTasks.length})</h2>
           <div style={styles.tasksList}>
             {overdueTasks.map(task => (
-              <div key={task.id} style={{ ...styles.taskItem, borderColor: '#EF4444' }} onClick={() => navigate('/my-tasks')}>
+              <div key={task.id} style={{ ...styles.taskItem, borderColor: theme.colors.status.overdue }} onClick={() => navigate('/my-tasks')}>
                 <div style={styles.taskItemHeader}>
                   <div style={styles.taskItemTitle}>{task.title}</div>
-                  <div style={{ ...styles.statusBadge, backgroundColor: '#EF4444' }}>
+                  <div style={{ ...styles.statusBadge, backgroundColor: theme.colors.status.overdue }}>
                     Overdue
                   </div>
                 </div>
                 <div style={styles.taskItemFooter}>
-                  <span style={{ ...styles.taskDate, color: '#EF4444' }}>
+                  <span style={{ ...styles.taskDate, color: theme.colors.status.overdue }}>
                     Due: {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                   <span>{task.progressPercentage}% complete</span>
@@ -395,51 +402,51 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
       <div style={styles.statsGrid}>
         <div style={styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.published} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 11 12 14 22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#10B981' }}>{publishedSOPs}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.published }}>{publishedSOPs}</div>
             <div style={styles.statLabel}>Published</div>
           </div>
         </div>
 
         <div style={styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.draft} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#F59E0B' }}>{draftSOPs}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.draft }}>{draftSOPs}</div>
             <div style={styles.statLabel}>Drafts</div>
           </div>
         </div>
 
         <div style={styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.archived} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 3h18v18H3zM21 9H3M21 15H3" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#6B7280' }}>{archivedSOPs}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.archived }}>{archivedSOPs}</div>
             <div style={styles.statLabel}>Archived</div>
           </div>
         </div>
 
         <div style={styles.statCard}>
           <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.info} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
               <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
             </svg>
           </div>
           <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: '#3B82F6' }}>{templateSOPs}</div>
+            <div style={{ ...styles.statNumber, color: theme.colors.status.info }}>{templateSOPs}</div>
             <div style={styles.statLabel}>Templates</div>
           </div>
         </div>
@@ -459,15 +466,15 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
                 <div style={styles.departmentStats}>
                   <div style={styles.departmentStat}>
                     <span style={styles.departmentStatLabel}>Published</span>
-                    <span style={{...styles.departmentStatValue, color: '#10B981'}}>{dept.published}</span>
+                    <span style={{...styles.departmentStatValue, color: theme.colors.status.published}}>{dept.published}</span>
                   </div>
                   <div style={styles.departmentStat}>
                     <span style={styles.departmentStatLabel}>Drafts</span>
-                    <span style={{...styles.departmentStatValue, color: '#F59E0B'}}>{dept.drafts}</span>
+                    <span style={{...styles.departmentStatValue, color: theme.colors.status.draft}}>{dept.drafts}</span>
                   </div>
                   <div style={styles.departmentStat}>
                     <span style={styles.departmentStatLabel}>Templates</span>
-                    <span style={{...styles.departmentStatValue, color: '#3B82F6'}}>{dept.templates}</span>
+                    <span style={{...styles.departmentStatValue, color: theme.colors.status.info}}>{dept.templates}</span>
                   </div>
                 </div>
                 <div style={styles.departmentBar}>
@@ -615,12 +622,12 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: '40px',
+    padding: theme.responsiveSpacing.containerPadding.desktop,
     maxWidth: '1400px',
     margin: '0 auto',
   },
   containerMobile: {
-    padding: '16px',
+    padding: theme.responsiveSpacing.containerPadding.mobile,
     maxWidth: '100%',
     margin: '0 auto',
   },
@@ -628,78 +635,66 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '32px',
-    gap: '24px',
+    marginBottom: theme.spacing.xl,
+    gap: theme.spacing.lg,
   },
   headerMobile: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '24px',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   title: {
-    fontSize: '36px',
-    fontWeight: '800',
+    ...theme.typography.h1,
     color: theme.colors.textPrimary,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
+    textAlign: 'left',
   },
   titleMobile: {
-    fontSize: '28px',
-    fontWeight: '800',
+    ...theme.typography.h1Mobile,
     color: theme.colors.textPrimary,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
+    textAlign: 'left',
   },
   subtitle: {
-    fontSize: '16px',
+    ...theme.typography.subtitle,
     color: theme.colors.textSecondary,
-    marginTop: '8px',
+    marginTop: theme.spacing.sm,
   },
   createButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '14px 24px',
+    ...theme.components.button.base,
+    ...theme.components.button.sizes.md,
     backgroundColor: theme.colors.primary,
     color: theme.colors.background,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '15px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
+    fontWeight: 700,
     whiteSpace: 'nowrap',
   },
   statsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '20px',
-    marginBottom: '40px',
+    gap: theme.responsiveSpacing.cardGap.desktop,
+    marginBottom: theme.responsiveSpacing.containerPadding.desktop,
   },
   statsGridMobile: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '12px',
-    marginBottom: '24px',
+    gap: theme.responsiveSpacing.cardGap.mobile,
+    marginBottom: theme.spacing.lg,
   },
   statCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '24px',
+    ...theme.components.card.base,
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
+    gap: theme.responsiveSpacing.cardGap.desktop,
     transition: 'all 0.2s',
   },
   statCardMobile: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '16px',
+    ...theme.components.card.base,
+    ...theme.components.card.mobile,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '12px',
+    gap: theme.responsiveSpacing.cardGap.mobile,
     transition: 'all 0.2s',
     textAlign: 'center',
   },
@@ -713,76 +708,66 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   statNumber: {
     fontSize: '32px',
-    fontWeight: '800',
+    fontWeight: 800,
     color: theme.colors.primary,
-    marginBottom: '4px',
+    marginBottom: theme.spacing.xs,
   },
   statLabel: {
-    fontSize: '14px',
+    ...theme.typography.bodySmall,
     color: theme.colors.textSecondary,
-    fontWeight: '600',
+    fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
   },
   contentGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-    gap: '24px',
-    marginBottom: '40px',
+    gap: theme.spacing.lg,
+    marginBottom: theme.responsiveSpacing.containerPadding.desktop,
   },
   contentGridMobile: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '24px',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   section: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '24px',
-    marginBottom: '24px',
+    ...theme.components.card.base,
+    marginBottom: theme.spacing.lg,
   },
   sectionMobile: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '16px',
-    marginBottom: '16px',
+    ...theme.components.card.base,
+    ...theme.components.card.mobile,
+    marginBottom: theme.spacing.md,
   },
   sectionTitle: {
+    ...theme.typography.h3,
     fontSize: '20px',
-    fontWeight: '700',
     color: theme.colors.textPrimary,
-    marginBottom: '20px',
+    marginBottom: theme.responsiveSpacing.cardGap.desktop,
   },
   emptyState: {
     textAlign: 'center',
-    padding: '40px 20px',
+    padding: `${theme.responsiveSpacing.containerPadding.desktop} ${theme.responsiveSpacing.cardGap.desktop}`,
   },
   emptyText: {
-    fontSize: '14px',
+    ...theme.typography.bodySmall,
     color: theme.colors.textMuted,
-    marginBottom: '16px',
+    marginBottom: theme.spacing.md,
   },
   emptyButton: {
-    padding: '10px 20px',
+    ...theme.components.button.base,
+    ...theme.components.button.sizes.sm,
     backgroundColor: theme.colors.primary,
     color: theme.colors.background,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
   },
   recentList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: theme.responsiveSpacing.cardGap.mobile,
   },
   recentItem: {
-    padding: '16px',
+    padding: theme.spacing.md,
     backgroundColor: theme.colors.background,
     border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
@@ -793,24 +778,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
   },
   recentItemTitle: {
-    fontSize: '16px',
-    fontWeight: '700',
+    ...theme.typography.subtitle,
+    fontWeight: 700,
     color: theme.colors.textPrimary,
   },
   recentItemCategory: {
-    fontSize: '12px',
-    fontWeight: '700',
+    ...theme.typography.captionSmall,
+    fontWeight: 700,
     color: theme.colors.primary,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
   },
   recentItemDescription: {
-    fontSize: '14px',
+    ...theme.typography.bodySmall,
     color: theme.colors.textSecondary,
-    marginBottom: '12px',
+    marginBottom: theme.responsiveSpacing.cardGap.mobile,
     lineHeight: '1.5',
     display: '-webkit-box',
     WebkitLineClamp: 2,

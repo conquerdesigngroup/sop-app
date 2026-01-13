@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useResponsive } from '../hooks/useResponsive';
@@ -9,9 +9,20 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
   const { isMobile, isMobileOrTablet } = useResponsive();
+
+  // Load remembered email on mount
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem('rememberedEmail');
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+      setRememberMe(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,6 +32,12 @@ const Login: React.FC = () => {
     try {
       const success = await login(email, password);
       if (success) {
+        // Handle remember me
+        if (rememberMe) {
+          localStorage.setItem('rememberedEmail', email);
+        } else {
+          localStorage.removeItem('rememberedEmail');
+        }
         navigate('/dashboard');
       } else {
         setError('Invalid email or password');
@@ -30,18 +47,6 @@ const Login: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const fillAdminCredentials = () => {
-    setEmail('admin@mediamaple.com');
-    setPassword('admin123');
-    setError('');
-  };
-
-  const fillTeamCredentials = () => {
-    setEmail('john@mediamaple.com');
-    setPassword('team123');
-    setError('');
   };
 
   // Dynamic styles based on screen size
@@ -58,9 +63,6 @@ const Login: React.FC = () => {
         subtitle: { ...baseStyles.subtitle, ...styles.subtitleMobile },
         input: { ...baseStyles.input, ...styles.inputMobile },
         submitButton: { ...baseStyles.submitButton, ...styles.buttonMobile },
-        demoButton: { ...baseStyles.demoButton, ...styles.buttonMobile },
-        demoSection: { ...baseStyles.demoSection, ...styles.demoSectionMobile },
-        demoButtons: { ...baseStyles.demoButtons, ...styles.demoButtonsMobile },
       };
     } else if (isMobileOrTablet) {
       return {
@@ -80,8 +82,8 @@ const Login: React.FC = () => {
         {/* Logo */}
         <div style={styles.logoContainer}>
           <img
-            src="/mediamaple-logo-white.png"
-            alt="MediaMaple"
+            src="/logo.png"
+            alt="Dancing Images"
             style={responsiveStyles.logo}
           />
         </div>
@@ -115,15 +117,51 @@ const Login: React.FC = () => {
 
           <div style={styles.inputGroup}>
             <label style={styles.label}>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              style={responsiveStyles.input}
-              disabled={isLoading}
-            />
+            <div style={styles.passwordContainer}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                style={{ ...responsiveStyles.input, ...styles.passwordInput }}
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={styles.passwordToggle}
+                disabled={isLoading}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="password-toggle"
+              >
+                {showPassword ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Remember Me Checkbox */}
+          <div style={styles.rememberMeContainer}>
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={styles.checkbox}
+                disabled={isLoading}
+              />
+              <span style={styles.checkboxText}>Remember me</span>
+            </label>
           </div>
 
           <button
@@ -131,38 +169,24 @@ const Login: React.FC = () => {
             style={isLoading ? { ...responsiveStyles.submitButton, ...styles.submitButtonDisabled } : responsiveStyles.submitButton}
             disabled={isLoading}
           >
-            {isLoading ? 'Signing in...' : 'Sign In'}
+            {isLoading ? (
+              <span style={styles.loadingContent}>
+                <svg style={styles.spinner} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                  <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                </svg>
+                Signing in...
+              </span>
+            ) : 'Sign In'}
           </button>
         </form>
 
-        {/* Demo Credentials */}
-        <div style={responsiveStyles.demoSection}>
-          <p style={styles.demoTitle}>Quick Login (Demo)</p>
-          <div style={responsiveStyles.demoButtons}>
-            <button
-              onClick={fillAdminCredentials}
-              style={responsiveStyles.demoButton}
-              disabled={isLoading}
-              className="demo-button"
-            >
-              Admin Login
-            </button>
-            <button
-              onClick={fillTeamCredentials}
-              style={responsiveStyles.demoButton}
-              disabled={isLoading}
-              className="demo-button"
-            >
-              Team Login
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Footer */}
       <div style={styles.footer}>
         <p style={styles.footerText}>
-          MediaMaple Task Management System
+          Dancing Images Task Management System
         </p>
       </div>
     </div>
@@ -279,6 +303,58 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px', // Prevents iOS zoom on focus
     padding: `${theme.spacing.md} ${theme.spacing.sm}`,
   },
+  passwordContainer: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  passwordInput: {
+    paddingRight: '48px',
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: '12px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.colors.txt.secondary,
+    transition: 'color 0.2s ease',
+  },
+  rememberMeContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    marginTop: '-4px',
+  },
+  checkboxLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  checkbox: {
+    width: '18px',
+    height: '18px',
+    marginRight: '8px',
+    accentColor: theme.colors.primary,
+    cursor: 'pointer',
+  },
+  checkboxText: {
+    fontSize: '14px',
+    color: theme.colors.txt.secondary,
+  },
+  loadingContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  },
+  spinner: {
+    animation: 'spin 1s linear infinite',
+  },
   submitButton: {
     width: '100%',
     padding: `${theme.spacing.md} ${theme.spacing.lg}`,
@@ -301,41 +377,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     opacity: 0.6,
     cursor: 'not-allowed',
   },
-  demoSection: {
-    marginTop: theme.spacing.xl,
-    paddingTop: theme.spacing.xl,
-    borderTop: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  demoSectionMobile: {
-    marginTop: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-  },
-  demoTitle: {
-    fontSize: '13px',
-    color: theme.colors.txt.secondary,
-    marginBottom: theme.spacing.md,
-    textAlign: 'center',
-  },
-  demoButtons: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: theme.spacing.sm,
-  },
-  demoButtonsMobile: {
-    gridTemplateColumns: '1fr',
-    gap: theme.spacing.xs,
-  },
-  demoButton: {
-    padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.secondary,
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
   footer: {
     marginTop: theme.spacing.xl,
   },
@@ -346,23 +387,25 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 };
 
-// Add hover states via CSS
+// Add hover states and animations via CSS
 const styleSheet = document.createElement('style');
 styleSheet.textContent = `
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
   input:focus {
     border-color: ${theme.colors.primary} !important;
   }
   button[type="submit"]:hover:not(:disabled) {
-    background-color: #d41f36 !important;
+    background-color: ${theme.colors.primaryDark} !important;
     transform: translateY(-1px);
     box-shadow: ${theme.shadows.md};
   }
   button[type="submit"]:active:not(:disabled) {
     transform: translateY(0);
   }
-  .demo-button:hover:not(:disabled) {
-    background-color: ${theme.colors.bg.secondary} !important;
-    border-color: ${theme.colors.primary} !important;
+  .password-toggle:hover {
     color: ${theme.colors.primary} !important;
   }
 `;

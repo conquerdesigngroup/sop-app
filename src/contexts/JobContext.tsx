@@ -18,6 +18,10 @@ interface JobContextType {
   removeTaskFromJob: (jobId: string, taskId: string) => Promise<void>;
   updateJobProgress: (jobId: string) => Promise<void>;
 
+  // Archive operations
+  archiveJob: (id: string) => Promise<void>;
+  restoreJob: (id: string) => Promise<void>;
+
   loading: boolean;
 }
 
@@ -374,6 +378,14 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
     });
   };
 
+  const archiveJob = async (id: string) => {
+    await updateJob(id, { status: 'archived' });
+  };
+
+  const restoreJob = async (id: string) => {
+    await updateJob(id, { status: 'pending' });
+  };
+
   const value: JobContextType = {
     jobs,
     addJob,
@@ -385,6 +397,8 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
     addTaskToJob,
     removeTaskFromJob,
     updateJobProgress,
+    archiveJob,
+    restoreJob,
     loading,
   };
 

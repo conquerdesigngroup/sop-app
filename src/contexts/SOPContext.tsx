@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { SOP, SOPStatus } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { logActivity } from '../utils/activityLogger';
 
 interface SOPContextType {
   sops: SOP[];
@@ -11,6 +12,8 @@ interface SOPContextType {
   getSOPById: (id: string) => SOP | undefined;
   getSOPsByCategory: (category: string) => SOP[];
   updateSOPStatus: (id: string, status: SOPStatus) => Promise<void>;
+  archiveSOP: (id: string) => Promise<void>;
+  restoreSOP: (id: string) => Promise<void>;
   createFromTemplate: (templateId: string) => Promise<void>;
   saveAsTemplate: (id: string) => Promise<void>;
   loading: boolean;
@@ -765,11 +768,25 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
       const updated = [...sops, newSOP];
       setSOPs(updated);
       localStorage.setItem('mediamaple_sops', JSON.stringify(updated));
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: sopData.isTemplate ? 'template_created' : 'sop_created',
+          entityType: sopData.isTemplate ? 'template' : 'sop',
+          entityId: newSOP.id,
+          entityTitle: sopData.title,
+          details: { department: sopData.department, category: sopData.category },
+        });
+      }
       return;
     }
 
     try {
-      const { error } = await supabase.from('sops').insert({
+      const { data, error } = await supabase.from('sops').insert({
         title: sopData.title,
         description: sopData.description,
         department: sopData.department,
@@ -781,11 +798,25 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
         status: sopData.status,
         is_template: sopData.isTemplate,
         created_by: currentUser?.id || 'system',
-      });
+      }).select().single();
 
       if (error) {
         console.error('Error adding SOP:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser && data) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: sopData.isTemplate ? 'template_created' : 'sop_created',
+          entityType: sopData.isTemplate ? 'template' : 'sop',
+          entityId: data.id,
+          entityTitle: sopData.title,
+          details: { department: sopData.department, category: sopData.category },
+        });
       }
 
       // Reload SOPs to get the new one with its ID
@@ -845,11 +876,26 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
   };
 
   const deleteSOP = async (id: string) => {
+    const sopToDelete = sops.find(s => s.id === id);
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       const updated = sops.filter(sop => sop.id !== id);
       setSOPs(updated);
       localStorage.setItem('mediamaple_sops', JSON.stringify(updated));
+
+      // Log activity
+      if (currentUser && sopToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: sopToDelete.isTemplate ? 'template_deleted' : 'sop_deleted',
+          entityType: sopToDelete.isTemplate ? 'template' : 'sop',
+          entityId: id,
+          entityTitle: sopToDelete.title,
+        });
+      }
       return;
     }
 
@@ -862,6 +908,19 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error deleting SOP:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser && sopToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: sopToDelete.isTemplate ? 'template_deleted' : 'sop_deleted',
+          entityType: sopToDelete.isTemplate ? 'template' : 'sop',
+          entityId: id,
+          entityTitle: sopToDelete.title,
+        });
       }
 
       // Update local state
@@ -881,15 +940,39 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
   };
 
   const updateSOPStatus = async (id: string, status: SOPStatus) => {
+    const sop = sops.find(s => s.id === id);
+
+    // Determine the action type based on status change
+    const getActionType = () => {
+      if (status === 'archived') return 'sop_archived';
+      if (status === 'published') return 'sop_published';
+      if (sop?.status === 'archived') return 'sop_restored';
+      return 'sop_updated';
+    };
+
     if (!useSupabase) {
       // Fallback to localStorage mode
-      const updated = sops.map(sop =>
-        sop.id === id
-          ? { ...sop, status, updatedAt: new Date().toISOString() }
-          : sop
+      const updated = sops.map(s =>
+        s.id === id
+          ? { ...s, status, updatedAt: new Date().toISOString() }
+          : s
       );
       setSOPs(updated);
       localStorage.setItem('mediamaple_sops', JSON.stringify(updated));
+
+      // Log activity
+      if (currentUser && sop) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: getActionType(),
+          entityType: 'sop',
+          entityId: id,
+          entityTitle: sop.title,
+          details: { previousStatus: sop.status, newStatus: status },
+        });
+      }
       return;
     }
 
@@ -904,16 +987,38 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
         throw error;
       }
 
+      // Log activity
+      if (currentUser && sop) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: getActionType(),
+          entityType: 'sop',
+          entityId: id,
+          entityTitle: sop.title,
+          details: { previousStatus: sop.status, newStatus: status },
+        });
+      }
+
       // Update local state
       setSOPs(prev =>
-        prev.map(sop =>
-          sop.id === id ? { ...sop, status, updatedAt: new Date().toISOString() } : sop
+        prev.map(s =>
+          s.id === id ? { ...s, status, updatedAt: new Date().toISOString() } : s
         )
       );
     } catch (error) {
       console.error('Error updating SOP status:', error);
       throw error;
     }
+  };
+
+  const archiveSOP = async (id: string) => {
+    await updateSOPStatus(id, 'archived');
+  };
+
+  const restoreSOP = async (id: string) => {
+    await updateSOPStatus(id, 'draft');
   };
 
   const createFromTemplate = async (templateId: string) => {
@@ -1026,6 +1131,8 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
         getSOPById,
         getSOPsByCategory,
         updateSOPStatus,
+        archiveSOP,
+        restoreSOP,
         createFromTemplate,
         saveAsTemplate,
         loading,

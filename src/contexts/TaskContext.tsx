@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { TaskTemplate, JobTask, TaskTemplateStep, TaskStep, TaskStatus, TaskPriority } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { logActivity } from '../utils/activityLogger';
 
 interface TaskContextType {
   // Task Templates (Library)
@@ -17,11 +18,34 @@ interface TaskContextType {
   addJobTask: (task: Omit<JobTask, 'id' | 'createdAt' | 'progressPercentage'>) => Promise<void>;
   updateJobTask: (id: string, task: Partial<JobTask>) => Promise<void>;
   deleteJobTask: (id: string) => Promise<void>;
+  archiveJobTask: (id: string) => Promise<void>;
+  restoreJobTask: (id: string) => Promise<void>;
   getJobTaskById: (id: string) => JobTask | undefined;
   getJobTasksByUser: (userId: string) => JobTask[];
   getJobTasksByDate: (date: string) => JobTask[];
+  getArchivedJobTasks: () => JobTask[];
   updateTaskProgress: (taskId: string, completedStepIds: string[]) => Promise<void>;
   createJobTaskFromTemplate: (templateId: string, assignedTo: string[], scheduledDate: string, assignedBy: string) => Promise<void>;
+  createJobTaskUnified: (taskData: {
+    title: string;
+    description: string;
+    department: string;
+    category: string;
+    priority: TaskPriority;
+    estimatedDuration: number;
+    steps: {
+      title: string;
+      description?: string;
+      requiresPhoto: boolean;
+      sopId?: string;
+    }[];
+    scheduledDate: string;
+    dueTime?: string;
+    assignedTo: string[];
+    isRecurring?: boolean;
+    recurrencePattern?: any;
+    templateId?: string;
+  }, saveAsTemplate: boolean) => Promise<void>;
   loading: boolean;
 }
 
@@ -73,6 +97,8 @@ const mapSupabaseJobTask = (dbTask: any): JobTask => {
     comments: dbTask.comments || [],
     createdAt: dbTask.created_at,
     updatedAt: dbTask.updated_at,
+    isRecurring: dbTask.is_recurring || false,
+    recurrencePattern: dbTask.recurrence_pattern,
   };
 };
 
@@ -520,11 +546,24 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         progressPercentage,
       };
       setJobTasks([...jobTasks, newTask]);
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'task_created',
+          entityType: 'task',
+          entityId: newTask.id,
+          entityTitle: newTask.title,
+        });
+      }
       return;
     }
 
     try {
-      const { error } = await supabase.from('job_tasks').insert({
+      const { data, error } = await supabase.from('job_tasks').insert({
         template_id: taskData.templateId,
         title: taskData.title,
         description: taskData.description,
@@ -542,11 +581,26 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         progress_percentage: progressPercentage,
         sop_ids: taskData.sopIds,
         comments: taskData.comments,
-      });
+        is_recurring: taskData.isRecurring || false,
+        recurrence_pattern: taskData.recurrencePattern,
+      }).select().single();
 
       if (error) {
         console.error('Error adding job task:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'task_created',
+          entityType: 'task',
+          entityId: data?.id,
+          entityTitle: taskData.title,
+        });
       }
 
       await loadJobTasks();
@@ -665,9 +719,24 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   };
 
   const deleteJobTask = async (id: string) => {
+    const taskToDelete = jobTasks.find((task) => task.id === id);
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       setJobTasks(jobTasks.filter((task) => task.id !== id));
+
+      // Log activity
+      if (currentUser && taskToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'task_deleted',
+          entityType: 'task',
+          entityId: id,
+          entityTitle: taskToDelete.title,
+        });
+      }
       return;
     }
 
@@ -680,6 +749,19 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error deleting job task:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser && taskToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'task_deleted',
+          entityType: 'task',
+          entityId: id,
+          entityTitle: taskToDelete.title,
+        });
       }
 
       // Update local state
@@ -700,6 +782,50 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
   const getJobTasksByDate = (date: string): JobTask[] => {
     return jobTasks.filter((task) => task.scheduledDate === date);
+  };
+
+  const getArchivedJobTasks = (): JobTask[] => {
+    return jobTasks.filter((task) => task.status === 'archived');
+  };
+
+  const archiveJobTask = async (id: string) => {
+    const taskToArchive = jobTasks.find((task) => task.id === id);
+    if (!taskToArchive) return;
+
+    await updateJobTask(id, { status: 'archived' as TaskStatus });
+
+    // Log activity
+    if (currentUser) {
+      logActivity({
+        userId: currentUser.id,
+        userEmail: currentUser.email,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+        action: 'task_archived',
+        entityType: 'task',
+        entityId: id,
+        entityTitle: taskToArchive.title,
+      });
+    }
+  };
+
+  const restoreJobTask = async (id: string) => {
+    const taskToRestore = jobTasks.find((task) => task.id === id);
+    if (!taskToRestore) return;
+
+    await updateJobTask(id, { status: 'pending' as TaskStatus });
+
+    // Log activity
+    if (currentUser) {
+      logActivity({
+        userId: currentUser.id,
+        userEmail: currentUser.email,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+        action: 'task_restored',
+        entityType: 'task',
+        entityId: id,
+        entityTitle: taskToRestore.title,
+      });
+    }
   };
 
   const updateTaskProgress = async (taskId: string, completedStepIds: string[]) => {
@@ -742,6 +868,117 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     await addJobTask(newTask);
   };
 
+  // Unified method for creating job tasks (with optional template saving)
+  const createJobTaskUnified = async (
+    taskData: {
+      title: string;
+      description: string;
+      department: string;
+      category: string;
+      priority: TaskPriority;
+      estimatedDuration: number;
+      steps: {
+        title: string;
+        description?: string;
+        requiresPhoto: boolean;
+        sopId?: string;
+      }[];
+      scheduledDate: string;
+      dueTime?: string;
+      assignedTo: string[];
+      isRecurring?: boolean;
+      recurrencePattern?: any;
+      templateId?: string;
+    },
+    saveAsTemplate: boolean = false
+  ): Promise<void> => {
+    if (!currentUser) {
+      throw new Error('User must be logged in to create tasks');
+    }
+
+    try {
+      // 1. If saveAsTemplate, create template first
+      if (saveAsTemplate) {
+        const templateSteps: TaskTemplateStep[] = taskData.steps.map((step, index) => ({
+          id: `step_${Date.now()}_${index}`,
+          order: index + 1,
+          title: step.title,
+          description: step.description || '',
+          requiresPhoto: step.requiresPhoto,
+          sopId: step.sopId,
+        }));
+
+        const template: Omit<TaskTemplate, 'id' | 'createdAt'> = {
+          title: taskData.title,
+          description: taskData.description,
+          category: taskData.category,
+          department: taskData.department,
+          priority: taskData.priority,
+          estimatedDuration: taskData.estimatedDuration,
+          steps: templateSteps,
+          sopIds: taskData.steps
+            .filter(s => s.sopId)
+            .map(s => s.sopId!),
+          createdBy: currentUser.id,
+          isRecurring: taskData.isRecurring || false,
+          recurrencePattern: taskData.recurrencePattern,
+        };
+
+        await addTaskTemplate(template);
+      }
+
+      // 2. Create job task
+      const taskSteps: TaskStep[] = taskData.steps.map((step, index) => ({
+        id: `step_${Date.now()}_${index}`,
+        order: index + 1,
+        title: step.title,
+        description: step.description || '',
+        isCompleted: false,
+        requiresPhoto: step.requiresPhoto,
+        sopId: step.sopId,
+      }));
+
+      const jobTask: Omit<JobTask, 'id' | 'createdAt' | 'progressPercentage'> = {
+        templateId: taskData.templateId,
+        title: taskData.title,
+        description: taskData.description,
+        assignedTo: taskData.assignedTo,
+        assignedBy: currentUser.id,
+        department: taskData.department,
+        category: taskData.category,
+        scheduledDate: taskData.scheduledDate,
+        dueTime: taskData.dueTime,
+        estimatedDuration: taskData.estimatedDuration,
+        status: 'pending',
+        priority: taskData.priority,
+        steps: taskSteps,
+        completedSteps: [],
+        sopIds: taskData.steps
+          .filter(s => s.sopId)
+          .map(s => s.sopId!),
+        comments: [],
+        isRecurring: taskData.isRecurring,
+        recurrencePattern: taskData.recurrencePattern,
+      };
+
+      await addJobTask(jobTask);
+
+      // Log activity
+      logActivity({
+        userId: currentUser.id,
+        userEmail: currentUser.email,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+        action: 'task_created',
+        entityType: 'task',
+        entityId: jobTask.title, // Will be replaced with actual ID after creation
+        entityTitle: jobTask.title,
+      });
+    } catch (error) {
+      console.error('Error creating job task:', error);
+      throw error;
+    }
+  };
+
   const value: TaskContextType = {
     taskTemplates,
     addTaskTemplate,
@@ -753,11 +990,15 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     addJobTask,
     updateJobTask,
     deleteJobTask,
+    archiveJobTask,
+    restoreJobTask,
     getJobTaskById,
     getJobTasksByUser,
     getJobTasksByDate,
+    getArchivedJobTasks,
     updateTaskProgress,
     createJobTaskFromTemplate,
+    createJobTaskUnified,
     loading,
   };
 

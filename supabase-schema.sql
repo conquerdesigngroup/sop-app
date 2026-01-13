@@ -60,16 +60,15 @@ CREATE TABLE IF NOT EXISTS public.task_templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
   description TEXT,
-  sop_id UUID REFERENCES public.sops(id) ON DELETE SET NULL,
+  category TEXT,
   department TEXT NOT NULL,
-  assigned_role TEXT,
   estimated_duration INTEGER, -- in minutes
   priority TEXT CHECK (priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
+  sop_ids TEXT[] DEFAULT '{}',  -- Array of SOP IDs
   steps JSONB NOT NULL DEFAULT '[]'::jsonb,
-  tags TEXT[] DEFAULT '{}',
+  created_by TEXT NOT NULL,
+  is_recurring BOOLEAN DEFAULT false,
   recurrence_pattern JSONB,
-  requires_approval BOOLEAN DEFAULT false,
-  created_by UUID REFERENCES auth.users(id) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -82,19 +81,52 @@ CREATE TABLE IF NOT EXISTS public.job_tasks (
   title TEXT NOT NULL,
   description TEXT,
   template_id UUID REFERENCES public.task_templates(id) ON DELETE SET NULL,
-  sop_id UUID REFERENCES public.sops(id) ON DELETE SET NULL,
-  assigned_to UUID REFERENCES auth.users(id) NOT NULL,
-  assigned_by UUID REFERENCES auth.users(id) NOT NULL,
-  scheduled_date TIMESTAMP WITH TIME ZONE NOT NULL,
-  due_date TIMESTAMP WITH TIME ZONE,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'in-progress', 'completed', 'blocked')) DEFAULT 'pending',
+  assigned_to TEXT[] DEFAULT '{}',  -- Array of user IDs (supports multiple assignees)
+  assigned_by TEXT NOT NULL,
+  department TEXT,
+  category TEXT,
+  scheduled_date DATE NOT NULL,
+  due_time TEXT,
+  estimated_duration INTEGER, -- in minutes
+  status TEXT NOT NULL CHECK (status IN ('pending', 'in-progress', 'completed', 'overdue', 'draft', 'archived')) DEFAULT 'pending',
   priority TEXT CHECK (priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
   steps JSONB NOT NULL DEFAULT '[]'::jsonb,
   completed_steps TEXT[] DEFAULT '{}',
-  comments JSONB DEFAULT '[]'::jsonb,
-  completion_photos TEXT[] DEFAULT '{}',
-  notes TEXT,
+  progress_percentage INTEGER DEFAULT 0,
+  sop_ids TEXT[] DEFAULT '{}',  -- Array of SOP IDs
+  started_at TIMESTAMP WITH TIME ZONE,
   completed_at TIMESTAMP WITH TIME ZONE,
+  completed_by TEXT,
+  completion_notes TEXT,
+  completion_photos TEXT[] DEFAULT '{}',
+  comments JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =============================================
+-- JOBS TABLE (for Job Management)
+-- =============================================
+CREATE TABLE IF NOT EXISTS public.jobs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  description TEXT,
+  assigned_to TEXT[] DEFAULT '{}',  -- Array of user IDs
+  assigned_by TEXT NOT NULL,
+  department TEXT,
+  scheduled_date DATE NOT NULL,
+  due_time TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'in-progress', 'completed', 'overdue', 'draft', 'archived')) DEFAULT 'pending',
+  priority TEXT CHECK (priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
+  tasks JSONB NOT NULL DEFAULT '[]'::jsonb,  -- Embedded tasks within the job
+  completed_tasks_count INTEGER DEFAULT 0,
+  total_tasks_count INTEGER DEFAULT 0,
+  progress_percentage INTEGER DEFAULT 0,
+  started_at TIMESTAMP WITH TIME ZONE,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  completed_by TEXT,
+  completion_notes TEXT,
+  comments JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -117,15 +149,19 @@ CREATE INDEX IF NOT EXISTS idx_sops_is_template ON public.sops(is_template);
 
 -- Task Templates indexes
 CREATE INDEX IF NOT EXISTS idx_task_templates_department ON public.task_templates(department);
-CREATE INDEX IF NOT EXISTS idx_task_templates_sop_id ON public.task_templates(sop_id);
 CREATE INDEX IF NOT EXISTS idx_task_templates_created_by ON public.task_templates(created_by);
+CREATE INDEX IF NOT EXISTS idx_task_templates_category ON public.task_templates(category);
 
 -- Job Tasks indexes
-CREATE INDEX IF NOT EXISTS idx_job_tasks_assigned_to ON public.job_tasks(assigned_to);
-CREATE INDEX IF NOT EXISTS idx_job_tasks_assigned_by ON public.job_tasks(assigned_by);
 CREATE INDEX IF NOT EXISTS idx_job_tasks_status ON public.job_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_job_tasks_scheduled_date ON public.job_tasks(scheduled_date);
 CREATE INDEX IF NOT EXISTS idx_job_tasks_template_id ON public.job_tasks(template_id);
+CREATE INDEX IF NOT EXISTS idx_job_tasks_department ON public.job_tasks(department);
+
+-- Jobs indexes
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON public.jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_scheduled_date ON public.jobs(scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_jobs_department ON public.jobs(department);
 
 -- =============================================
 -- TRIGGERS for updated_at timestamps
@@ -159,6 +195,11 @@ CREATE TRIGGER update_job_tasks_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_jobs_updated_at
+  BEFORE UPDATE ON public.jobs
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
 -- =============================================
 -- ROW LEVEL SECURITY (RLS)
 -- =============================================
@@ -168,6 +209,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sops ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.task_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.job_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 CREATE POLICY "Users can view all profiles"
@@ -258,8 +300,7 @@ CREATE POLICY "Admins can manage task templates"
 CREATE POLICY "Users can view their assigned tasks"
   ON public.job_tasks FOR SELECT
   USING (
-    assigned_to = auth.uid() OR
-    assigned_by = auth.uid() OR
+    auth.uid()::text = ANY(assigned_to) OR
     EXISTS (
       SELECT 1 FROM public.profiles
       WHERE id = auth.uid() AND role = 'admin'
@@ -278,7 +319,7 @@ CREATE POLICY "Admins can insert job tasks"
 CREATE POLICY "Users can update their assigned tasks"
   ON public.job_tasks FOR UPDATE
   USING (
-    assigned_to = auth.uid() OR
+    auth.uid()::text = ANY(assigned_to) OR
     EXISTS (
       SELECT 1 FROM public.profiles
       WHERE id = auth.uid() AND role = 'admin'
@@ -287,6 +328,43 @@ CREATE POLICY "Users can update their assigned tasks"
 
 CREATE POLICY "Admins can delete job tasks"
   ON public.job_tasks FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+-- Jobs policies
+CREATE POLICY "Admins can view all jobs"
+  ON public.jobs FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can insert jobs"
+  ON public.jobs FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can update jobs"
+  ON public.jobs FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can delete jobs"
+  ON public.jobs FOR DELETE
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
@@ -332,3 +410,47 @@ COMMENT ON TABLE public.profiles IS 'Extended user profile information';
 COMMENT ON TABLE public.sops IS 'Standard Operating Procedures';
 COMMENT ON TABLE public.task_templates IS 'Reusable task templates';
 COMMENT ON TABLE public.job_tasks IS 'Assigned tasks for team members';
+
+-- =============================================
+-- ACTIVITY LOGS TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS public.activity_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) NOT NULL,
+  user_email TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('sop', 'task', 'job', 'template', 'user', 'system')),
+  entity_id TEXT,
+  entity_title TEXT,
+  details JSONB DEFAULT '{}'::jsonb,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Activity logs indexes for performance
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON public.activity_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_entity_type ON public.activity_logs(entity_type);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON public.activity_logs(action);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON public.activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_entity_id ON public.activity_logs(entity_id);
+
+-- Enable RLS on activity_logs
+ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- Activity logs policies - admins can view all, users can only insert
+CREATE POLICY "Admins can view all activity logs"
+  ON public.activity_logs FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Authenticated users can insert activity logs"
+  ON public.activity_logs FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL);
+
+COMMENT ON TABLE public.activity_logs IS 'Audit trail of all user actions in the system';

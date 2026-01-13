@@ -92,7 +92,7 @@ export interface TaskTemplate {
 
 // Task Types (Individual Tasks)
 
-export type TaskStatus = 'pending' | 'in-progress' | 'completed' | 'overdue' | 'skipped' | 'draft';
+export type TaskStatus = 'pending' | 'in-progress' | 'completed' | 'overdue' | 'skipped' | 'draft' | 'archived';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface TaskStep {
@@ -130,6 +130,10 @@ export interface JobTask {
   scheduledDate: string; // ISO date
   dueTime?: string; // e.g., "14:00"
   estimatedDuration: number; // minutes
+
+  // Recurrence
+  isRecurring?: boolean;
+  recurrencePattern?: RecurrencePattern;
 
   // Status
   status: TaskStatus;
@@ -199,7 +203,7 @@ export interface Task {
 
 // Job Types (Container for multiple tasks)
 
-export type JobStatus = 'pending' | 'in-progress' | 'completed' | 'overdue' | 'draft';
+export type JobStatus = 'pending' | 'in-progress' | 'completed' | 'overdue' | 'draft' | 'archived';
 
 export interface Job {
   id: string;

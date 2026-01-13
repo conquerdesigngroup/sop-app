@@ -5,20 +5,23 @@ import { theme } from '../theme';
 import { SOP, SOPStatus } from '../types';
 import SOPForm from '../components/SOPForm';
 import SOPViewer from '../components/SOPViewer';
+import SOPImport from '../components/SOPImport';
 import { equipmentIcons, IconName } from '../components/IconSelector';
 import { useResponsive } from '../hooks/useResponsive';
+import { SOPPageSkeleton } from '../components/Skeleton';
 
 type FilterView = 'all' | 'published' | 'draft' | 'archived';
 type ViewMode = 'sops' | 'templates';
 
 const SOPPage: React.FC = () => {
-  const { sops, deleteSOP, updateSOPStatus, createFromTemplate } = useSOPs();
+  const { sops, deleteSOP, updateSOPStatus, createFromTemplate, loading } = useSOPs();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
   const [viewMode, setViewMode] = useState<ViewMode>('sops');
   const [showForm, setShowForm] = useState(false);
   const [editingSOP, setEditingSOP] = useState<SOP | null>(null);
   const [viewingSOP, setViewingSOP] = useState<SOP | null>(null);
+  const [showImport, setShowImport] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [filterView, setFilterView] = useState<FilterView>('all');
@@ -32,6 +35,11 @@ const SOPPage: React.FC = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location]);
+
+  // Show skeleton while loading
+  if (loading) {
+    return <SOPPageSkeleton isMobile={isMobileOrTablet} />;
+  }
 
   // Split SOPs into templates and non-templates
   const templates = sops.filter(sop => sop.isTemplate);
@@ -184,6 +192,13 @@ const SOPPage: React.FC = () => {
   }
 
   return (
+    <>
+      {showImport && (
+        <SOPImport
+          onClose={() => setShowImport(false)}
+          onImportComplete={() => setShowImport(false)}
+        />
+      )}
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
       <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
@@ -213,16 +228,29 @@ const SOPPage: React.FC = () => {
               : 'Step-by-step procedures for equipment setup and operations'}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          style={isMobileOrTablet ? styles.addButtonMobile : styles.addButton}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          {viewMode === 'templates' ? 'Create Template' : 'Create SOP'}
-        </button>
+        <div style={isMobileOrTablet ? styles.headerButtonsMobile : styles.headerButtons}>
+          <button
+            onClick={() => setShowImport(true)}
+            style={isMobileOrTablet ? styles.importButtonMobile : styles.importButton}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            {!isMobileOrTablet && 'Import'}
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            style={isMobileOrTablet ? styles.addButtonMobile : styles.addButton}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            {viewMode === 'templates' ? 'Create Template' : 'Create SOP'}
+          </button>
+        </div>
       </div>
 
       {/* View Mode Tabs */}
@@ -547,17 +575,18 @@ const SOPPage: React.FC = () => {
         </div>
       )}
     </div>
+    </>
   );
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: '40px',
+    padding: theme.responsiveSpacing.containerPadding.desktop,
     maxWidth: '1400px',
     margin: '0 auto',
   },
   containerMobile: {
-    padding: '16px',
+    padding: theme.responsiveSpacing.containerPadding.mobile,
     maxWidth: '100%',
     margin: '0 auto',
   },
@@ -565,72 +594,83 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '32px',
-    gap: '24px',
+    marginBottom: theme.spacing.xl,
+    gap: theme.spacing.lg,
   },
   headerMobile: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '24px',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   title: {
-    fontSize: '36px',
-    fontWeight: '800',
+    ...theme.typography.h1,
     color: theme.colors.textPrimary,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
     display: 'flex',
     alignItems: 'center',
   },
   titleMobile: {
-    fontSize: '24px',
-    fontWeight: '800',
+    ...theme.typography.h2Mobile,
     color: theme.colors.textPrimary,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
     display: 'flex',
     alignItems: 'center',
   },
   subtitle: {
-    fontSize: '16px',
+    ...theme.typography.subtitle,
     color: theme.colors.textSecondary,
-    marginTop: '8px',
+    marginTop: theme.spacing.sm,
   },
   addButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '14px 24px',
+    ...theme.components.button.base,
+    ...theme.components.button.sizes.md,
     backgroundColor: theme.colors.primary,
     color: theme.colors.background,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '15px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
+    fontWeight: 700,
     whiteSpace: 'nowrap',
   },
   addButtonMobile: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '14px 24px',
+    ...theme.components.button.base,
+    ...theme.components.button.sizes.md,
     backgroundColor: theme.colors.primary,
     color: theme.colors.background,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '15px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    minHeight: '44px',
+    fontWeight: 700,
+    flex: 1,
+  },
+  headerButtons: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'center',
+  },
+  headerButtonsMobile: {
+    display: 'flex',
+    gap: '8px',
     width: '100%',
+  },
+  importButton: {
+    ...theme.components.button.base,
+    ...theme.components.button.sizes.md,
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    fontWeight: 600,
+    border: `2px solid ${theme.colors.border}`,
+    whiteSpace: 'nowrap',
+  },
+  importButtonMobile: {
+    ...theme.components.button.base,
+    ...theme.components.button.sizes.md,
+    backgroundColor: 'transparent',
+    color: theme.colors.textSecondary,
+    fontWeight: 600,
+    border: `2px solid ${theme.colors.border}`,
+    padding: '12px 16px',
+    minWidth: '48px',
   },
   viewModeTabs: {
     display: 'flex',
-    gap: '12px',
-    marginBottom: '24px',
+    gap: theme.responsiveSpacing.cardGap.mobile,
+    marginBottom: theme.spacing.lg,
     padding: '6px',
     backgroundColor: theme.colors.cardBackground,
     borderRadius: theme.borderRadius.lg,
@@ -639,8 +679,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   viewModeTabsMobile: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '8px',
-    marginBottom: '16px',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
     padding: '6px',
     backgroundColor: theme.colors.cardBackground,
     borderRadius: theme.borderRadius.lg,
@@ -1132,8 +1172,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '10px',
     fontWeight: '700',
     padding: '4px 8px',
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    color: '#3B82F6',
+    backgroundColor: `${theme.colors.status.info}20`,
+    color: theme.colors.status.info,
     borderRadius: theme.borderRadius.sm,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
@@ -1142,8 +1182,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '10px',
     fontWeight: '700',
     padding: '4px 8px',
-    backgroundColor: 'rgba(251, 191, 36, 0.15)',
-    color: '#F59E0B',
+    backgroundColor: `${theme.colors.status.draft}20`,
+    color: theme.colors.status.draft,
     borderRadius: theme.borderRadius.sm,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
@@ -1152,8 +1192,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '10px',
     fontWeight: '700',
     padding: '4px 8px',
-    backgroundColor: 'rgba(156, 163, 175, 0.15)',
-    color: '#6B7280',
+    backgroundColor: `${theme.colors.status.archived}20`,
+    color: theme.colors.status.archived,
     borderRadius: theme.borderRadius.sm,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
@@ -1165,7 +1205,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     gap: '6px',
     padding: '10px 16px',
-    backgroundColor: '#3B82F6',
+    backgroundColor: theme.colors.status.info,
     color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
@@ -1181,7 +1221,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     gap: '6px',
     padding: '12px 16px',
-    backgroundColor: '#3B82F6',
+    backgroundColor: theme.colors.status.info,
     color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,

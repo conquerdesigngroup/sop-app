@@ -1,20 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { JobTask, TaskTemplate, TaskStep, TaskPriority } from '../types';
+import { useSearchParams } from 'react-router-dom';
+import { JobTask, TaskTemplate } from '../types';
 import { theme } from '../theme';
-import TaskLibraryPage from './TaskLibraryPage';
+import { UnifiedJobTaskModal } from '../components/UnifiedJobTaskModal';
+import { useToast } from '../contexts/ToastContext';
 
 const JobTasksPage: React.FC = () => {
-  const { jobTasks, taskTemplates, createJobTaskFromTemplate, addJobTask, updateJobTask, deleteJobTask } = useTask();
+  const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask } = useTask();
   const { currentUser, users } = useAuth();
   const { sops } = useSOPs();
   const { isMobile } = useResponsive();
-  const [activeTab, setActiveTab] = useState<'jobs' | 'library'>('jobs');
+  const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [activeTab, setActiveTab] = useState<'tasks' | 'library'>('tasks');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
+  const [initialTemplateId, setInitialTemplateId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -24,8 +29,21 @@ const JobTasksPage: React.FC = () => {
   // Get unique departments from job tasks
   const departments = Array.from(new Set(jobTasks.map(t => t.department)));
 
-  // Filter job tasks
+  // Handle template URL parameter (when coming from Task Library "Use Template")
+  useEffect(() => {
+    const templateId = searchParams.get('templateId');
+    if (templateId) {
+      setInitialTemplateId(templateId);
+      setShowCreateModal(true);
+      // Clear the URL parameter
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Filter job tasks (exclude archived tasks)
   const filteredTasks = jobTasks.filter(task => {
+    // Exclude archived tasks from the main list
+    if (task.status === 'archived') return false;
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          task.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
@@ -38,20 +56,41 @@ const JobTasksPage: React.FC = () => {
     return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
   });
 
-  const handleCreateFromTemplate = (template: TaskTemplate) => {
-    setSelectedTemplate(template);
-    setShowCreateModal(true);
+  const handleCreateTask = async (
+    taskData: any,
+    saveAsTemplate: boolean
+  ) => {
+    try {
+      await createJobTaskUnified(taskData, saveAsTemplate);
+      showToast(
+        saveAsTemplate
+          ? 'Job task created and saved as template!'
+          : 'Job task created successfully!',
+        'success'
+      );
+      setShowCreateModal(false);
+      setInitialTemplateId(null);
+    } catch (error) {
+      console.error('Error creating job task:', error);
+      showToast('Failed to create job task', 'error');
+    }
+  };
+
+  const handleArchiveTask = (id: string) => {
+    if (window.confirm('Are you sure you want to archive this job task? You can restore it later from the Archive page.')) {
+      archiveJobTask(id);
+    }
   };
 
   const handleDeleteTask = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this job task?')) {
+    if (window.confirm('Are you sure you want to permanently delete this job task? This action cannot be undone.')) {
       deleteJobTask(id);
     }
   };
 
   const handleCloseModal = () => {
     setShowCreateModal(false);
-    setSelectedTemplate(null);
+    setInitialTemplateId(null);
   };
 
   const handleTaskClick = (task: JobTask) => {
@@ -85,41 +124,58 @@ const JobTasksPage: React.FC = () => {
             </svg>
             Job Tasks
           </h1>
-          <p style={{...styles.subtitle, ...(isMobile && styles.subtitleMobile)}}>Create and assign tasks to team members</p>
+          <p style={{...styles.subtitle, ...(isMobile && styles.subtitleMobile)}}>
+            {activeTab === 'tasks' ? 'Create and assign tasks to team members' : 'Browse and use saved task templates'}
+          </p>
         </div>
-        <button style={{...styles.createButton, ...(isMobile && styles.createButtonMobile)}} onClick={() => setShowCreateModal(true)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          {!isMobile && 'Create Job'}
-        </button>
+        <div style={styles.headerActions}>
+          <button
+            style={{...styles.createButton, ...(isMobile && styles.createButtonMobile)}}
+            onClick={() => setShowCreateModal(true)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            {!isMobile && 'Create Job Task'}
+          </button>
+        </div>
       </div>
 
       {/* Tab Navigation */}
-      <div style={styles.tabNavigation}>
+      <div style={{...styles.tabNavigation, ...(isMobile && styles.tabNavigationMobile)}}>
         <button
+          onClick={() => setActiveTab('tasks')}
           style={{
             ...styles.tabButton,
-            ...(activeTab === 'jobs' ? styles.tabButtonActive : {}),
+            ...(isMobile && styles.tabButtonMobile),
+            ...(activeTab === 'tasks' && styles.tabButtonActive),
           }}
-          onClick={() => setActiveTab('jobs')}
         >
-          Jobs
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          Assigned Tasks
         </button>
         <button
+          onClick={() => setActiveTab('library')}
           style={{
             ...styles.tabButton,
-            ...(activeTab === 'library' ? styles.tabButtonActive : {}),
+            ...(isMobile && styles.tabButtonMobile),
+            ...(activeTab === 'library' && styles.tabButtonActive),
           }}
-          onClick={() => setActiveTab('library')}
         >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+          </svg>
           Task Library
         </button>
       </div>
 
-      {/* Jobs Tab Content */}
-      {activeTab === 'jobs' && (
+      {/* Conditional Content Based on Active Tab */}
+      {activeTab === 'tasks' ? (
         <>
           {/* Filters */}
           <div style={{...styles.filtersContainer, ...(isMobile && styles.filtersContainerMobile)}}>
@@ -179,20 +235,23 @@ const JobTasksPage: React.FC = () => {
                   task={task}
                   users={users}
                   isMobile={isMobile}
-                  onDelete={() => handleDeleteTask(task.id)}
+                  onArchive={() => handleArchiveTask(task.id)}
                   onClick={() => handleTaskClick(task)}
                 />
               ))
             )}
           </div>
         </>
-      )}
-
-      {/* Task Library Tab Content */}
-      {activeTab === 'library' && (
-        <div style={{ margin: '-40px' }}>
-          <TaskLibraryPage />
-        </div>
+      ) : (
+        <TaskLibraryTab
+          taskTemplates={taskTemplates}
+          isMobile={isMobile}
+          onUseTemplate={(templateId) => {
+            setInitialTemplateId(templateId);
+            setShowCreateModal(true);
+            setActiveTab('tasks');
+          }}
+        />
       )}
 
       {/* Task Detail Modal for Admins */}
@@ -210,51 +269,17 @@ const JobTasksPage: React.FC = () => {
         />
       )}
 
-      {/* Create Job Task Modal */}
-      {showCreateModal && (
-        <CreateJobTaskModal
-          template={selectedTemplate}
-          onClose={handleCloseModal}
-          isMobile={isMobile}
-          onCreate={(taskData) => {
-            // Convert checklist items to TaskStep format
-            const taskSteps: TaskStep[] = taskData.checklistItems.map((item, index) => ({
-              id: item.id,
-              order: index + 1,
-              title: item.title,
-              description: item.description,
-              isCompleted: false,
-              requiresPhoto: item.requiresPhoto,
-              sopId: item.sopId,
-            }));
-
-            // Create the job task
-            addJobTask({
-              title: taskData.title,
-              description: taskData.description,
-              assignedTo: taskData.assignedTo,
-              assignedBy: currentUser?.id || 'unknown',
-              department: taskData.department,
-              category: taskData.category,
-              scheduledDate: taskData.scheduledDate,
-              dueTime: taskData.dueTime,
-              estimatedDuration: taskData.estimatedDuration,
-              status: 'pending',
-              priority: taskData.priority as TaskPriority,
-              steps: taskSteps,
-              completedSteps: [],
-              sopIds: taskSteps.filter(s => s.sopId).map(s => s.sopId!),
-              comments: [],
-            });
-
-            handleCloseModal();
-          }}
-          taskTemplates={taskTemplates}
-          users={users.filter(u => u.isActive)}
-          sops={sops}
-          currentUserId={currentUser?.id || ''}
-        />
-      )}
+      {/* Unified Job Task Modal */}
+      <UnifiedJobTaskModal
+        isOpen={showCreateModal}
+        onClose={handleCloseModal}
+        onCreate={handleCreateTask}
+        taskTemplates={taskTemplates}
+        users={users.filter(u => u.isActive)}
+        sops={sops}
+        currentUserId={currentUser?.id || ''}
+        initialTemplateId={initialTemplateId}
+      />
     </div>
   );
 };
@@ -264,11 +289,11 @@ interface JobTaskCardProps {
   task: JobTask;
   users: any[];
   isMobile: boolean;
-  onDelete: () => void;
+  onArchive: () => void;
   onClick: () => void;
 }
 
-const JobTaskCard: React.FC<JobTaskCardProps> = ({ task, users, isMobile, onDelete, onClick }) => {
+const JobTaskCard: React.FC<JobTaskCardProps> = ({ task, users, isMobile, onArchive, onClick }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return theme.colors.status.success;
@@ -304,15 +329,17 @@ const JobTaskCard: React.FC<JobTaskCardProps> = ({ task, users, isMobile, onDele
         </div>
         <div style={styles.taskCardActions}>
           <button
-            style={styles.deleteButton}
+            style={styles.archiveButton}
             onClick={(e) => {
               e.stopPropagation();
-              onDelete();
+              onArchive();
             }}
+            title="Archive task"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <polyline points="21 8 21 21 3 21 3 8" />
+              <rect x="1" y="3" width="22" height="5" />
+              <line x1="10" y1="12" x2="14" y2="12" />
             </svg>
           </button>
         </div>
@@ -1096,6 +1123,166 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
   );
 };
 
+// Task Library Tab Component
+interface TaskLibraryTabProps {
+  taskTemplates: TaskTemplate[];
+  isMobile: boolean;
+  onUseTemplate: (templateId: string) => void;
+}
+
+const TaskLibraryTab: React.FC<TaskLibraryTabProps> = ({ taskTemplates, isMobile, onUseTemplate }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+
+  // Get unique departments and categories
+  const departments = Array.from(new Set(taskTemplates.map(t => t.department))).sort();
+  const categories = Array.from(new Set(taskTemplates.map(t => t.category)));
+
+  // Filter templates by department and search
+  const filteredTemplates = taskTemplates.filter(template => {
+    const matchesSearch = searchQuery === '' ||
+                         template.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         template.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesDepartment = selectedDepartment === 'all' || template.department === selectedDepartment;
+    return matchesSearch && matchesDepartment;
+  });
+
+  // Group templates by category
+  const templatesByCategory = filteredTemplates.reduce((acc, template) => {
+    if (!acc[template.category]) {
+      acc[template.category] = [];
+    }
+    acc[template.category].push(template);
+    return acc;
+  }, {} as Record<string, TaskTemplate[]>);
+
+  return (
+    <div>
+      {/* Filters */}
+      <div style={{...styles.filtersContainer, ...(isMobile && styles.filtersContainerMobile)}}>
+        <div style={styles.searchContainer}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={styles.searchIcon}>
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search templates..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{...styles.searchInput, ...(isMobile && styles.inputMobile)}}
+          />
+        </div>
+
+        <select
+          value={selectedDepartment}
+          onChange={(e) => setSelectedDepartment(e.target.value)}
+          style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
+        >
+          <option value="all">All Departments</option>
+          {departments.map(dept => (
+            <option key={dept} value={dept}>{dept}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Templates Grid */}
+      {filteredTemplates.length === 0 ? (
+        <div style={styles.emptyState}>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+          </svg>
+          <p style={styles.emptyText}>No templates found</p>
+          <p style={styles.emptySubtext}>
+            {searchQuery || selectedDepartment !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Create templates by checking "Save as template" when creating a job task'}
+          </p>
+        </div>
+      ) : (
+        <div>
+          {categories.map(category => {
+            const templatesInCategory = templatesByCategory[category] || [];
+            if (templatesInCategory.length === 0) return null;
+
+            return (
+              <div key={category} style={styles.categorySection}>
+                <h3 style={styles.categoryTitle}>{category}</h3>
+                <div style={styles.templatesGrid}>
+                  {templatesInCategory.map(template => (
+                    <TemplateCard
+                      key={template.id}
+                      template={template}
+                      isMobile={isMobile}
+                      onUseTemplate={() => onUseTemplate(template.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Template Card Component
+interface TemplateCardProps {
+  template: TaskTemplate;
+  isMobile: boolean;
+  onUseTemplate: () => void;
+}
+
+const TemplateCard: React.FC<TemplateCardProps> = ({ template, isMobile, onUseTemplate }) => {
+  return (
+    <div style={styles.templateCard}>
+      <div style={styles.templateCardHeader}>
+        <h4 style={styles.templateCardTitle}>{template.title}</h4>
+        <span style={styles.departmentBadge}>{template.department}</span>
+      </div>
+
+      {template.description && (
+        <p style={styles.templateCardDescription}>{template.description}</p>
+      )}
+
+      <div style={styles.templateCardMeta}>
+        <div style={styles.templateMetaItem}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          <span>{template.steps.length} steps</span>
+        </div>
+        <div style={styles.templateMetaItem}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span>{template.estimatedDuration || 30} min</span>
+        </div>
+        {template.sopIds && template.sopIds.length > 0 && (
+          <div style={styles.templateMetaItem}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <span>{template.sopIds.length} SOPs</span>
+          </div>
+        )}
+      </div>
+
+      <button
+        style={{...styles.useTemplateButton, ...(isMobile && styles.buttonMobile)}}
+        onClick={onUseTemplate}
+      >
+        Use Template
+      </button>
+    </div>
+  );
+};
+
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '40px',
@@ -1121,6 +1308,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     color: theme.colors.textSecondary,
     marginTop: '8px',
+  },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  secondaryButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 20px',
+    backgroundColor: 'transparent',
+    color: theme.colors.txt.primary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    whiteSpace: 'nowrap',
+  },
+  secondaryButtonMobile: {
+    padding: '10px',
   },
   createButton: {
     display: 'flex',
@@ -1280,6 +1490,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  archiveButton: {
+    padding: theme.spacing.xs,
+    backgroundColor: 'rgba(107, 114, 128, 0.1)',
+    border: `1px solid rgba(107, 114, 128, 0.3)`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.txt.secondary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
   },
   taskCardMeta: {
     display: 'flex',
@@ -1968,7 +2190,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: theme.spacing.xl,
     borderBottom: `2px solid ${theme.colors.bdr.primary}`,
   },
+  tabNavigationMobile: {
+    gap: '2px',
+    marginBottom: theme.spacing.lg,
+  },
   tabButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: '14px 28px',
     background: theme.colors.bg.secondary,
     border: `2px solid ${theme.colors.bdr.primary}`,
@@ -1982,12 +2211,88 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'relative',
     marginBottom: '-2px',
   } as React.CSSProperties,
+  tabButtonMobile: {
+    padding: '12px 16px',
+    fontSize: '14px',
+    flex: 1,
+  },
   tabButtonActive: {
     background: theme.colors.cardBackground,
     color: theme.colors.primary,
     borderColor: theme.colors.primary,
     borderBottomColor: theme.colors.cardBackground,
     fontWeight: 700,
+  },
+  // Template Card Styles
+  categorySection: {
+    marginBottom: theme.spacing.xl,
+  },
+  categoryTitle: {
+    fontSize: '20px',
+    fontWeight: 700,
+    color: theme.colors.txt.primary,
+    marginBottom: theme.spacing.lg,
+    paddingLeft: theme.spacing.xs,
+  },
+  templatesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: theme.spacing.lg,
+  },
+  templateCard: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    transition: 'all 0.2s',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing.md,
+  },
+  templateCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+  },
+  templateCardTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    margin: 0,
+    flex: 1,
+  },
+  templateCardDescription: {
+    fontSize: '14px',
+    color: theme.colors.txt.secondary,
+    lineHeight: '1.5',
+    margin: 0,
+  },
+  templateCardMeta: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    borderTop: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  templateMetaItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+  },
+  useTemplateButton: {
+    padding: `${theme.spacing.md} ${theme.spacing.lg}`,
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.txt.primary,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    marginTop: 'auto',
   },
   // Task Library Placeholder Styles
   taskLibraryPlaceholder: {
