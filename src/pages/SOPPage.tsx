@@ -253,19 +253,20 @@ const SOPPage: React.FC = () => {
         </div>
       </div>
 
-      {/* View Mode Tabs */}
-      <div style={isMobileOrTablet ? styles.viewModeTabsMobile : styles.viewModeTabs}>
+      {/* View Mode Tabs - Matching Job Tasks Page Style */}
+      <div style={isMobileOrTablet ? styles.tabNavigationMobile : styles.tabNavigation}>
         <button
           onClick={() => {
             setViewMode('sops');
             setSelectedDepartment('all');
           }}
           style={{
-            ...(isMobileOrTablet ? styles.viewModeTabMobile : styles.viewModeTab),
-            ...(viewMode === 'sops' ? styles.viewModeTabActive : {}),
+            ...styles.tabButton,
+            ...(isMobileOrTablet && styles.tabButtonMobile),
+            ...(viewMode === 'sops' && styles.tabButtonActive),
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />
           </svg>
@@ -277,11 +278,12 @@ const SOPPage: React.FC = () => {
             setSelectedDepartment('all');
           }}
           style={{
-            ...(isMobileOrTablet ? styles.viewModeTabMobile : styles.viewModeTab),
-            ...(viewMode === 'templates' ? styles.viewModeTabActive : {}),
+            ...styles.tabButton,
+            ...(isMobileOrTablet && styles.tabButtonMobile),
+            ...(viewMode === 'templates' && styles.tabButtonActive),
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
           </svg>
@@ -667,60 +669,45 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '12px 16px',
     minWidth: '48px',
   },
-  viewModeTabs: {
+  // Tab Navigation Styles - Matching Job Tasks Page
+  tabNavigation: {
     display: 'flex',
-    gap: theme.responsiveSpacing.cardGap.mobile,
+    gap: '4px',
+    marginBottom: theme.spacing.xl,
+    borderBottom: `2px solid ${theme.colors.bdr.primary}`,
+  },
+  tabNavigationMobile: {
+    gap: '2px',
     marginBottom: theme.spacing.lg,
-    padding: '6px',
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.border}`,
   },
-  viewModeTabsMobile: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
-    padding: '6px',
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.border}`,
-  },
-  viewModeTab: {
-    flex: 1,
+  tabButton: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
-    padding: '12px 24px',
-    backgroundColor: 'transparent',
-    color: theme.colors.textSecondary,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
+    padding: '14px 28px',
+    background: theme.colors.bg.secondary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderBottom: 'none',
+    borderRadius: `${theme.borderRadius.md} ${theme.borderRadius.md} 0 0`,
+    color: theme.colors.txt.secondary,
     fontSize: '15px',
-    fontWeight: '600',
+    fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  viewModeTabMobile: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
+    transition: 'all 0.2s ease',
+    position: 'relative',
+    marginBottom: '-2px',
+  } as React.CSSProperties,
+  tabButtonMobile: {
     padding: '12px 16px',
-    backgroundColor: 'transparent',
-    color: theme.colors.textSecondary,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
     fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    minHeight: '44px',
+    flex: 1,
   },
-  viewModeTabActive: {
-    backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+  tabButtonActive: {
+    background: theme.colors.cardBackground,
+    color: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    borderBottomColor: theme.colors.cardBackground,
+    fontWeight: 700,
   },
   controls: {
     display: 'flex',
