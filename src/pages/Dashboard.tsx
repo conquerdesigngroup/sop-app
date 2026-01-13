@@ -1,15 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
-import { DashboardSkeleton, StatsGridSkeleton, SectionSkeleton } from '../components/Skeleton';
+import { DashboardSkeleton } from '../components/Skeleton';
+import CalendarTaskModal from '../components/CalendarTaskModal';
+import { JobTask, User } from '../types';
 
 const Dashboard: React.FC = () => {
   const { sops, loading: sopsLoading } = useSOPs();
-  const { isAdmin, currentUser } = useAuth();
+  const { isAdmin, currentUser, users } = useAuth();
   const { jobTasks, loading: tasksLoading } = useTask();
   const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -22,29 +24,185 @@ const Dashboard: React.FC = () => {
 
   // If not admin, show team member dashboard with calendar
   if (!isAdmin && currentUser) {
-    return <TeamMemberDashboard currentUser={currentUser} jobTasks={jobTasks} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} navigate={navigate} />;
+    return <TeamMemberDashboard currentUser={currentUser} jobTasks={jobTasks} users={users} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} navigate={navigate} />;
   }
 
-  // Admin dashboard - existing SOP statistics
-  return <AdminDashboard sops={sops} navigate={navigate} />;
+  // Admin dashboard - existing SOP statistics plus task calendar
+  return <AdminDashboard sops={sops} jobTasks={jobTasks} users={users} navigate={navigate} />;
+};
+
+// Helper function to get user initials
+const getUserInitials = (userId: string, users: User[]): string => {
+  const user = users.find(u => u.id === userId);
+  if (user) {
+    return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
+  }
+  return '??';
+};
+
+// Helper function to get status color
+const getStatusColor = (status: string): string => {
+  switch (status) {
+    case 'completed': return theme.colors.status.completed;
+    case 'in-progress': return theme.colors.status.inProgress;
+    case 'overdue': return theme.colors.status.overdue;
+    case 'pending': return theme.colors.status.pending;
+    default: return theme.colors.textMuted;
+  }
+};
+
+// Shared Calendar Component
+const TaskCalendar: React.FC<{
+  tasks: JobTask[];
+  users: User[];
+  currentMonth: Date;
+  setCurrentMonth: (date: Date) => void;
+  onTaskClick: (task: JobTask) => void;
+  showAllUsers?: boolean;
+}> = ({ tasks, users, currentMonth, setCurrentMonth, onTaskClick, showAllUsers = false }) => {
+  const { isMobileOrTablet } = useResponsive();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    return { daysInMonth, startingDayOfWeek, year, month };
+  };
+
+  const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
+
+  const getTasksForDate = (day: number) => {
+    const date = new Date(year, month, day);
+    date.setHours(0, 0, 0, 0);
+    return tasks.filter(task => {
+      const taskDate = new Date(task.scheduledDate);
+      taskDate.setHours(0, 0, 0, 0);
+      return taskDate.getTime() === date.getTime();
+    });
+  };
+
+  const previousMonth = () => {
+    setCurrentMonth(new Date(year, month - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(year, month + 1, 1));
+  };
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  return (
+    <div style={isMobileOrTablet ? styles.sectionMobile : styles.section}>
+      <div style={styles.calendarHeader}>
+        <h2 style={styles.sectionTitle}>{monthNames[month]} {year}</h2>
+        <div style={styles.calendarNav}>
+          <button onClick={previousMonth} style={styles.navButton}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <button onClick={nextMonth} style={styles.navButton}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div style={styles.calendar}>
+        {/* Day headers */}
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+          <div key={day} style={styles.dayHeader}>{day}</div>
+        ))}
+
+        {/* Empty cells before first day */}
+        {Array.from({ length: startingDayOfWeek }).map((_, index) => (
+          <div key={`empty-${index}`} style={styles.calendarDayEmpty} />
+        ))}
+
+        {/* Days of month */}
+        {Array.from({ length: daysInMonth }).map((_, index) => {
+          const day = index + 1;
+          const tasksForDay = getTasksForDate(day);
+          const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
+
+          return (
+            <div
+              key={day}
+              style={{
+                ...styles.calendarDay,
+                ...(isToday ? styles.calendarDayToday : {}),
+              }}
+            >
+              <div style={styles.dayNumber}>{day}</div>
+              {tasksForDay.length > 0 && (
+                <div style={styles.calendarTaskList}>
+                  {tasksForDay.slice(0, isMobileOrTablet ? 2 : 3).map(task => (
+                    <div
+                      key={task.id}
+                      style={{
+                        ...styles.calendarTaskItem,
+                        borderLeftColor: getStatusColor(task.status),
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTaskClick(task);
+                      }}
+                    >
+                      {showAllUsers && task.assignedTo.length > 0 && (
+                        <div style={styles.taskInitialsContainer}>
+                          {task.assignedTo.slice(0, 2).map(userId => (
+                            <span key={userId} style={styles.taskInitials}>
+                              {getUserInitials(userId, users)}
+                            </span>
+                          ))}
+                          {task.assignedTo.length > 2 && (
+                            <span style={styles.taskInitialsMore}>+{task.assignedTo.length - 2}</span>
+                          )}
+                        </div>
+                      )}
+                      <span style={styles.calendarTaskTitle}>{task.title}</span>
+                    </div>
+                  ))}
+                  {tasksForDay.length > (isMobileOrTablet ? 2 : 3) && (
+                    <div style={styles.moreTasksIndicator}>
+                      +{tasksForDay.length - (isMobileOrTablet ? 2 : 3)} more
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 // Team Member Dashboard Component with Calendar View
 const TeamMemberDashboard: React.FC<{
-  currentUser: any;
-  jobTasks: any[];
+  currentUser: User;
+  jobTasks: JobTask[];
+  users: User[];
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
-  navigate: any;
-}> = ({ currentUser, jobTasks, currentMonth, setCurrentMonth, navigate }) => {
+  navigate: ReturnType<typeof useNavigate>;
+}> = ({ currentUser, jobTasks, users, currentMonth, setCurrentMonth, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
+  const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
+
   const myTasks = jobTasks.filter(task => task.assignedTo.includes(currentUser.id));
 
   // Task stats
   const pendingTasks = myTasks.filter(t => t.status === 'pending').length;
   const inProgressTasks = myTasks.filter(t => t.status === 'in-progress').length;
   const completedTasks = myTasks.filter(t => t.status === 'completed').length;
-  const totalTasks = myTasks.length;
 
   // Today's tasks
   const today = new Date();
@@ -68,41 +226,6 @@ const TeamMemberDashboard: React.FC<{
     const taskDate = new Date(task.scheduledDate);
     return taskDate < today && task.status !== 'completed';
   });
-
-  // Calendar helpers
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-
-    return { daysInMonth, startingDayOfWeek, year, month };
-  };
-
-  const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
-
-  const getTasksForDate = (day: number) => {
-    const date = new Date(year, month, day);
-    date.setHours(0, 0, 0, 0);
-
-    return myTasks.filter(task => {
-      const taskDate = new Date(task.scheduledDate);
-      taskDate.setHours(0, 0, 0, 0);
-      return taskDate.getTime() === date.getTime();
-    });
-  };
-
-  const previousMonth = () => {
-    setCurrentMonth(new Date(year, month - 1, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentMonth(new Date(year, month + 1, 1));
-  };
-
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
@@ -144,7 +267,7 @@ const TeamMemberDashboard: React.FC<{
         </div>
 
         <div
-          style={styles.statCardClickable}
+          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
           onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}
         >
           <div style={styles.statIcon}>
@@ -159,7 +282,7 @@ const TeamMemberDashboard: React.FC<{
         </div>
 
         <div
-          style={styles.statCardClickable}
+          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
           onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}
         >
           <div style={styles.statIcon}>
@@ -175,7 +298,7 @@ const TeamMemberDashboard: React.FC<{
         </div>
 
         <div
-          style={styles.statCardClickable}
+          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
           onClick={() => navigate('/my-tasks', { state: { filterDate: 'past', filterStatus: 'all' } })}
         >
           <div style={styles.statIcon}>
@@ -193,76 +316,14 @@ const TeamMemberDashboard: React.FC<{
       </div>
 
       {/* Calendar Section */}
-      <div style={isMobileOrTablet ? styles.sectionMobile : styles.section}>
-        <div style={styles.calendarHeader}>
-          <h2 style={styles.sectionTitle}>{monthNames[month]} {year}</h2>
-          <div style={styles.calendarNav}>
-            <button onClick={previousMonth} style={styles.navButton}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-            </button>
-            <button onClick={nextMonth} style={styles.navButton}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div style={styles.calendar}>
-          {/* Day headers */}
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} style={styles.dayHeader}>{day}</div>
-          ))}
-
-          {/* Empty cells before first day */}
-          {Array.from({ length: startingDayOfWeek }).map((_, index) => (
-            <div key={`empty-${index}`} style={styles.calendarDay} />
-          ))}
-
-          {/* Days of month */}
-          {Array.from({ length: daysInMonth }).map((_, index) => {
-            const day = index + 1;
-            const tasksForDay = getTasksForDate(day);
-            const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
-
-            return (
-              <div
-                key={day}
-                style={{
-                  ...styles.calendarDay,
-                  ...(isToday ? styles.calendarDayToday : {}),
-                }}
-              >
-                <div style={styles.dayNumber}>{day}</div>
-                {tasksForDay.length > 0 && (
-                  <div style={styles.taskIndicators}>
-                    {tasksForDay.slice(0, 3).map(task => (
-                      <div
-                        key={task.id}
-                        style={{
-                          ...styles.taskDot,
-                          backgroundColor:
-                            task.status === 'completed'
-                              ? theme.colors.status.completed
-                              : task.status === 'in-progress'
-                              ? theme.colors.status.inProgress
-                              : theme.colors.status.pending,
-                        }}
-                        title={task.title}
-                      />
-                    ))}
-                    {tasksForDay.length > 3 && (
-                      <span style={styles.moreTasksIndicator}>+{tasksForDay.length - 3}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <TaskCalendar
+        tasks={myTasks}
+        users={users}
+        currentMonth={currentMonth}
+        setCurrentMonth={setCurrentMonth}
+        onTaskClick={setSelectedTask}
+        showAllUsers={false}
+      />
 
       {/* Today's Tasks & Upcoming */}
       <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
@@ -275,14 +336,14 @@ const TeamMemberDashboard: React.FC<{
           ) : (
             <div style={styles.tasksList}>
               {todayTasks.map(task => (
-                <div key={task.id} style={styles.taskItem} onClick={() => navigate('/my-tasks')}>
+                <div key={task.id} style={styles.taskItem} onClick={() => setSelectedTask(task)}>
                   <div style={styles.taskItemHeader}>
                     <div style={styles.taskItemTitle}>{task.title}</div>
                     <div style={{
                       ...styles.statusBadge,
-                      backgroundColor: task.status === 'completed' ? theme.colors.status.completed : task.status === 'in-progress' ? theme.colors.status.inProgress : theme.colors.status.pending,
+                      backgroundColor: getStatusColor(task.status),
                     }}>
-                      {task.status}
+                      {task.status.replace('-', ' ')}
                     </div>
                   </div>
                   <div style={styles.progressInfo}>
@@ -307,19 +368,19 @@ const TeamMemberDashboard: React.FC<{
           ) : (
             <div style={styles.tasksList}>
               {upcomingTasks.slice(0, 5).map(task => (
-                <div key={task.id} style={styles.taskItem} onClick={() => navigate('/my-tasks')}>
+                <div key={task.id} style={styles.taskItem} onClick={() => setSelectedTask(task)}>
                   <div style={styles.taskItemHeader}>
                     <div style={styles.taskItemTitle}>{task.title}</div>
                     <div style={{
                       ...styles.statusBadge,
-                      backgroundColor: task.status === 'completed' ? theme.colors.status.completed : task.status === 'in-progress' ? theme.colors.status.inProgress : theme.colors.status.pending,
+                      backgroundColor: getStatusColor(task.status),
                     }}>
-                      {task.status}
+                      {task.status.replace('-', ' ')}
                     </div>
                   </div>
                   <div style={styles.taskItemFooter}>
                     <span style={styles.taskDate}>
-                      {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {new Date(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                     <span>{task.progressPercentage}% complete</span>
                   </div>
@@ -336,7 +397,7 @@ const TeamMemberDashboard: React.FC<{
           <h2 style={{ ...styles.sectionTitle, color: theme.colors.status.overdue }}>Overdue Tasks ({overdueTasks.length})</h2>
           <div style={styles.tasksList}>
             {overdueTasks.map(task => (
-              <div key={task.id} style={{ ...styles.taskItem, borderColor: theme.colors.status.overdue }} onClick={() => navigate('/my-tasks')}>
+              <div key={task.id} style={{ ...styles.taskItem, borderColor: theme.colors.status.overdue }} onClick={() => setSelectedTask(task)}>
                 <div style={styles.taskItemHeader}>
                   <div style={styles.taskItemTitle}>{task.title}</div>
                   <div style={{ ...styles.statusBadge, backgroundColor: theme.colors.status.overdue }}>
@@ -345,7 +406,7 @@ const TeamMemberDashboard: React.FC<{
                 </div>
                 <div style={styles.taskItemFooter}>
                   <span style={{ ...styles.taskDate, color: theme.colors.status.overdue }}>
-                    Due: {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    Due: {new Date(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                   <span>{task.progressPercentage}% complete</span>
                 </div>
@@ -354,23 +415,32 @@ const TeamMemberDashboard: React.FC<{
           </div>
         </div>
       )}
+
+      {/* Task Detail Modal */}
+      <CalendarTaskModal
+        isOpen={selectedTask !== null}
+        onClose={() => setSelectedTask(null)}
+        task={selectedTask}
+        users={users}
+      />
     </div>
   );
 };
 
-// Admin Dashboard Component (existing dashboard)
-const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, navigate }) => {
+// Admin Dashboard Component (existing dashboard + task calendar)
+const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; users: User[]; navigate: ReturnType<typeof useNavigate> }> = ({ sops, jobTasks, users, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
 
-  // Calculate stats
+  // Calculate SOP stats
   const totalSOPs = sops.length;
   const publishedSOPs = sops.filter(s => s.status === 'published' && !s.isTemplate).length;
   const draftSOPs = sops.filter(s => s.status === 'draft').length;
   const archivedSOPs = sops.filter(s => s.status === 'archived').length;
   const templateSOPs = sops.filter(s => s.isTemplate).length;
   const categories = Array.from(new Set(sops.map(sop => sop.category)));
-  const departments = Array.from(new Set(sops.map(sop => sop.department))).filter(d => d); // Filter out undefined
-  const totalSteps = sops.reduce((sum, sop) => sum + sop.steps.length, 0);
+  const departments = Array.from(new Set(sops.map(sop => sop.department))).filter(d => d);
   const recentSOPs = [...sops]
     .filter(s => !s.isTemplate)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -388,6 +458,9 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
     drafts: sops.filter(sop => sop.department === department && sop.status === 'draft').length,
     templates: sops.filter(sop => sop.department === department && sop.isTemplate).length,
   })).sort((a, b) => b.count - a.count);
+
+  // Filter only active tasks (not archived or draft)
+  const activeTasks = jobTasks.filter(t => t.status !== 'archived' && t.status !== 'draft');
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
@@ -475,6 +548,18 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
           </div>
         </div>
       </div>
+
+      {/* Task Calendar Section - NEW */}
+      {activeTasks.length > 0 && (
+        <TaskCalendar
+          tasks={activeTasks}
+          users={users}
+          currentMonth={currentMonth}
+          setCurrentMonth={setCurrentMonth}
+          onTaskClick={setSelectedTask}
+          showAllUsers={true}
+        />
+      )}
 
       {/* Department Breakdown - Full Width */}
       {departmentStats.length > 0 && (
@@ -648,6 +733,14 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
           </button>
         </div>
       </div>
+
+      {/* Task Detail Modal */}
+      <CalendarTaskModal
+        isOpen={selectedTask !== null}
+        onClose={() => setSelectedTask(null)}
+        task={selectedTask}
+        users={users}
+      />
     </div>
   );
 };
@@ -1057,15 +1150,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.5px',
   },
   calendarDay: {
-    minHeight: '100px',
+    minHeight: '120px',
     padding: '8px',
     backgroundColor: theme.colors.bg.tertiary,
     border: `1px solid ${theme.colors.bdr.primary}`,
     borderRadius: theme.borderRadius.md,
     position: 'relative',
-    cursor: 'pointer',
     transition: 'all 0.2s',
   } as React.CSSProperties,
+  calendarDayEmpty: {
+    minHeight: '120px',
+    padding: '8px',
+    backgroundColor: 'transparent',
+  },
   calendarDayToday: {
     border: `2px solid ${theme.colors.primary}`,
     backgroundColor: theme.colors.bg.secondary,
@@ -1074,7 +1171,62 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     fontWeight: '600',
     color: theme.colors.txt.primary,
-    marginBottom: '4px',
+    marginBottom: '8px',
+  },
+  calendarTaskList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  calendarTaskItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 8px',
+    backgroundColor: theme.colors.bg.secondary,
+    borderRadius: theme.borderRadius.sm,
+    borderLeft: '3px solid',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    overflow: 'hidden',
+  },
+  taskInitialsContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    flexShrink: 0,
+  },
+  taskInitials: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20px',
+    height: '20px',
+    borderRadius: '50%',
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    fontSize: '9px',
+    fontWeight: 700,
+  },
+  taskInitialsMore: {
+    fontSize: '9px',
+    color: theme.colors.textMuted,
+    fontWeight: 600,
+    marginLeft: '2px',
+  },
+  calendarTaskTitle: {
+    fontSize: '11px',
+    fontWeight: '500',
+    color: theme.colors.txt.primary,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  moreTasksIndicator: {
+    fontSize: '10px',
+    color: theme.colors.txt.secondary,
+    fontWeight: '600',
+    padding: '2px 8px',
   },
   taskIndicators: {
     display: 'flex',
@@ -1086,11 +1238,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '6px',
     height: '6px',
     borderRadius: '50%',
-  },
-  moreTasksIndicator: {
-    fontSize: '10px',
-    color: theme.colors.txt.secondary,
-    fontWeight: '600',
   },
   tasksList: {
     display: 'flex',
