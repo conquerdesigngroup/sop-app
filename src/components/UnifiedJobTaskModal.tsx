@@ -671,7 +671,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
             )}
           </div>
 
-          {/* Save as Template */}
+          {/* Save to Task Library */}
           {!editingTask && (
             <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
               <label style={styles.checkboxLabel}>
@@ -681,7 +681,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                   onChange={(e) => setSaveAsTemplate(e.target.checked)}
                   style={styles.checkbox}
                 />
-                <span>Save as template for future use</span>
+                <span>Save to Task Library for future use</span>
               </label>
             </div>
           )}
