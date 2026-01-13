@@ -1,6 +1,7 @@
 import React, { forwardRef, useCallback } from 'react';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
+import { CustomCheckbox } from './CustomCheckbox';
 
 // Ripple effect hook
 const useRipple = () => {
@@ -347,32 +348,38 @@ FormButton.displayName = 'FormButton';
 // ============================================
 // FormCheckbox Component
 // ============================================
-interface FormCheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
+interface FormCheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
   label: string;
   error?: string;
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
 }
 
 export const FormCheckbox = forwardRef<HTMLInputElement, FormCheckboxProps>(({
   label,
   error,
   disabled,
+  checked = false,
+  onChange,
   className,
   style,
   ...props
 }, ref) => {
+  const handleChange = (newChecked: boolean) => {
+    if (onChange) {
+      onChange(newChecked);
+    }
+  };
+
   return (
     <div style={styles.checkboxContainer}>
-      <label style={{ ...styles.checkboxLabel, ...(disabled ? { opacity: 0.6 } : {}) }}>
-        <input
-          ref={ref}
-          type="checkbox"
-          style={{ ...styles.checkbox, ...style }}
-          disabled={disabled}
-          className={className}
-          {...props}
-        />
-        <span style={styles.checkboxText}>{label}</span>
-      </label>
+      <CustomCheckbox
+        checked={checked}
+        onChange={handleChange}
+        label={label}
+        disabled={disabled}
+        style={style}
+      />
       {error && <span style={styles.errorText}>{error}</span>}
     </div>
   );

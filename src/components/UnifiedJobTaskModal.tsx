@@ -3,6 +3,7 @@ import { JobTask, TaskTemplate, TaskPriority, RecurrencePattern } from '../types
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import TemplateSelector from './TemplateSelector';
+import { CustomCheckbox } from './CustomCheckbox';
 
 interface ChecklistItem {
   id: string;
@@ -473,15 +474,11 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                   </div>
 
                   <div style={styles.checklistItemOptions}>
-                    <label style={styles.checkboxLabel}>
-                      <input
-                        type="checkbox"
-                        checked={item.requiresPhoto}
-                        onChange={(e) => handleUpdateChecklistItem(item.id, 'requiresPhoto', e.target.checked)}
-                        style={styles.checkbox}
-                      />
-                      <span>Requires Photo</span>
-                    </label>
+                    <CustomCheckbox
+                      checked={item.requiresPhoto}
+                      onChange={(checked) => handleUpdateChecklistItem(item.id, 'requiresPhoto', checked)}
+                      label="Requires Photo"
+                    />
 
                     <div style={styles.sopSelect}>
                       <label style={styles.smallLabel}>Link SOP:</label>
@@ -508,15 +505,11 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
           <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
             <h3 style={styles.sectionTitle}>Recurrence (Optional)</h3>
 
-            <label style={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={isRecurring}
-                onChange={(e) => setIsRecurring(e.target.checked)}
-                style={styles.checkbox}
-              />
-              <span>Make this a recurring task</span>
-            </label>
+            <CustomCheckbox
+              checked={isRecurring}
+              onChange={setIsRecurring}
+              label="Make this a recurring task"
+            />
 
             {isRecurring && (
               <div style={styles.recurrenceOptions}>
@@ -566,15 +559,12 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                         // Map Monday=0 to Sunday=6 -> 1-6,0 for RecurrencePattern (Sunday=0)
                         const dayIndex = index === 6 ? 0 : index + 1;
                         return (
-                          <label key={day} style={styles.dayCheckbox}>
-                            <input
-                              type="checkbox"
-                              checked={recurrenceDays.includes(dayIndex)}
-                              onChange={() => handleDayToggle(dayIndex)}
-                              style={styles.checkbox}
-                            />
-                            <span>{day.substring(0, 3)}</span>
-                          </label>
+                          <CustomCheckbox
+                            key={day}
+                            checked={recurrenceDays.includes(dayIndex)}
+                            onChange={() => handleDayToggle(dayIndex)}
+                            label={day.substring(0, 3)}
+                          />
                         );
                       })}
                     </div>
@@ -641,12 +631,11 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                 <p style={styles.noUsersText}>No users found in this department</p>
               ) : (
                 filteredUsers.map((user: any) => (
-                  <label key={user.id} style={styles.userCheckbox}>
-                    <input
-                      type="checkbox"
+                  <div key={user.id} style={styles.userCheckbox}>
+                    <CustomCheckbox
                       checked={assignedTo.includes(user.id)}
                       onChange={() => handleUserToggle(user.id)}
-                      style={styles.checkbox}
+                      label=""
                     />
                     <div style={styles.userInfo}>
                       <div style={styles.userAvatar}>
@@ -659,7 +648,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                         <span style={styles.userDepartment}>{user.department}</span>
                       </div>
                     </div>
-                  </label>
+                  </div>
                 ))
               )}
             </div>
@@ -674,15 +663,11 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
           {/* Save to Task Library */}
           {!editingTask && (
             <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
-              <label style={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={saveAsTemplate}
-                  onChange={(e) => setSaveAsTemplate(e.target.checked)}
-                  style={styles.checkbox}
-                />
-                <span>Save to Task Library for future use</span>
-              </label>
+              <CustomCheckbox
+                checked={saveAsTemplate}
+                onChange={setSaveAsTemplate}
+                label="Save to Task Library for future use"
+              />
             </div>
           )}
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { theme } from '../theme';
 import { SOP } from '../types';
 import { useResponsive } from '../hooks/useResponsive';
+import { CustomCheckbox } from './CustomCheckbox';
 
 interface SOPViewerProps {
   sop: SOP;
@@ -63,11 +64,10 @@ const SOPViewer: React.FC<SOPViewerProps> = ({ sop, onClose, embedded = false })
                 ...(completedSteps.has(index) ? styles.embeddedStepCompleted : {}),
               }}
             >
-              <input
-                type="checkbox"
+              <CustomCheckbox
                 checked={completedSteps.has(index)}
                 onChange={() => toggleStepComplete(index)}
-                style={isMobileOrTablet ? styles.embeddedCheckboxMobile : styles.embeddedCheckbox}
+                label=""
               />
               <div style={styles.embeddedStepContent}>
                 <div style={styles.embeddedStepTitle}>

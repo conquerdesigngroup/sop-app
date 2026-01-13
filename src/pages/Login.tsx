@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { theme } from '../theme';
+import { CustomCheckbox } from '../components/CustomCheckbox';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -152,16 +153,12 @@ const Login: React.FC = () => {
 
           {/* Remember Me Checkbox */}
           <div style={styles.rememberMeContainer}>
-            <label style={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                style={styles.checkbox}
-                disabled={isLoading}
-              />
-              <span style={styles.checkboxText}>Remember me</span>
-            </label>
+            <CustomCheckbox
+              checked={rememberMe}
+              onChange={setRememberMe}
+              label="Remember me"
+              disabled={isLoading}
+            />
           </div>
 
           <button
