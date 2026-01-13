@@ -8,6 +8,7 @@ import { JobTask, TaskTemplate } from '../types';
 import { theme } from '../theme';
 import { UnifiedJobTaskModal } from '../components/UnifiedJobTaskModal';
 import { useToast } from '../contexts/ToastContext';
+import TaskLibraryImport from '../components/TaskLibraryImport';
 
 const JobTasksPage: React.FC = () => {
   const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask } = useTask();
@@ -19,6 +20,7 @@ const JobTasksPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'library'>('tasks');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [initialTemplateId, setInitialTemplateId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
@@ -129,6 +131,19 @@ const JobTasksPage: React.FC = () => {
           </p>
         </div>
         <div style={styles.headerActions}>
+          {activeTab === 'library' && (
+            <button
+              style={{...styles.createButton, ...(isMobile && styles.createButtonMobile)}}
+              onClick={() => setShowImportModal(true)}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              {!isMobile && 'Import CSV'}
+            </button>
+          )}
           <button
             style={{...styles.createButton, ...(isMobile && styles.createButtonMobile)}}
             onClick={() => setShowCreateModal(true)}
@@ -279,6 +294,16 @@ const JobTasksPage: React.FC = () => {
         sops={sops}
         currentUserId={currentUser?.id || ''}
         initialTemplateId={initialTemplateId}
+      />
+
+      {/* Task Library Import Modal */}
+      <TaskLibraryImport
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          setShowImportModal(false);
+          showToast('Task templates imported successfully', 'success');
+        }}
       />
     </div>
   );
