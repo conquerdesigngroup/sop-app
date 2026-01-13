@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
@@ -10,10 +11,26 @@ const MyTasksPage: React.FC = () => {
   const { jobTasks, updateJobTask } = useTask();
   const { currentUser } = useAuth();
   const { sops } = useSOPs();
+  const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
+
+  // Check if we should apply filters based on navigation state
+  useEffect(() => {
+    if (location.state) {
+      const state = location.state as any;
+      if (state.filterStatus) {
+        setFilterStatus(state.filterStatus);
+      }
+      if (state.filterDate) {
+        setFilterDate(state.filterDate);
+      }
+      // Clear the state so it doesn't reapply on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   // Get tasks assigned to current user
   const myTasks = jobTasks.filter(task =>

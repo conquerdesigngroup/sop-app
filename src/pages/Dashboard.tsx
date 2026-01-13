@@ -127,7 +127,10 @@ const TeamMemberDashboard: React.FC<{
 
       {/* Stats Grid */}
       <div style={isMobileOrTablet ? styles.statsGridMobile : styles.statsGrid}>
-        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
+        <div
+          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
+          onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.pending} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -140,7 +143,10 @@ const TeamMemberDashboard: React.FC<{
           </div>
         </div>
 
-        <div style={styles.statCard}>
+        <div
+          style={styles.statCardClickable}
+          onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.inProgress} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
@@ -152,7 +158,10 @@ const TeamMemberDashboard: React.FC<{
           </div>
         </div>
 
-        <div style={styles.statCard}>
+        <div
+          style={styles.statCardClickable}
+          onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.completed} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 11 12 14 22 4" />
@@ -165,7 +174,10 @@ const TeamMemberDashboard: React.FC<{
           </div>
         </div>
 
-        <div style={styles.statCard}>
+        <div
+          style={styles.statCardClickable}
+          onClick={() => navigate('/my-tasks', { state: { filterDate: 'past', filterStatus: 'all' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.overdue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -400,7 +412,10 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
 
       {/* Stats Grid */}
       <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
+        <div
+          style={styles.statCardClickable}
+          onClick={() => navigate('/sop', { state: { filterStatus: 'published' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.published} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 11 12 14 22 4" />
@@ -413,7 +428,10 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
           </div>
         </div>
 
-        <div style={styles.statCard}>
+        <div
+          style={styles.statCardClickable}
+          onClick={() => navigate('/sop', { state: { filterStatus: 'draft' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.draft} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -426,7 +444,10 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
           </div>
         </div>
 
-        <div style={styles.statCard}>
+        <div
+          style={styles.statCardClickable}
+          onClick={() => navigate('/sop', { state: { filterStatus: 'archived' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.archived} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 3h18v18H3zM21 9H3M21 15H3" />
@@ -438,7 +459,10 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
           </div>
         </div>
 
-        <div style={styles.statCard}>
+        <div
+          style={styles.statCardClickable}
+          onClick={() => navigate('/sop', { state: { viewMode: 'templates' } })}
+        >
           <div style={styles.statIcon}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.info} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
@@ -458,7 +482,11 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
           <h2 style={styles.sectionTitle}>Departments</h2>
           <div style={styles.departmentGrid}>
             {departmentStats.map((dept, index) => (
-              <div key={index} style={styles.departmentCard}>
+              <div
+                key={index}
+                style={styles.departmentCardClickable}
+                onClick={() => navigate('/sop', { state: { filterDepartment: dept.name } })}
+              >
                 <div style={styles.departmentHeader}>
                   <div style={styles.departmentName}>{dept.name}</div>
                   <div style={styles.departmentTotal}>{dept.count} Total</div>
@@ -556,7 +584,11 @@ const AdminDashboard: React.FC<{ sops: any[]; navigate: any }> = ({ sops, naviga
           ) : (
             <div style={styles.categoryList}>
               {categoryStats.map((category, index) => (
-                <div key={index} style={styles.categoryItem}>
+                <div
+                  key={index}
+                  style={styles.categoryItemClickable}
+                  onClick={() => navigate('/sop', { state: { expandCategory: category.name } })}
+                >
                   <div style={styles.categoryInfo}>
                     <div style={styles.categoryName}>{category.name}</div>
                     <div style={styles.categoryCount}>
@@ -698,6 +730,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     textAlign: 'center',
   },
+  statCardClickable: {
+    ...theme.components.card.base,
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.responsiveSpacing.cardGap.desktop,
+    transition: 'all 0.2s',
+    cursor: 'pointer',
+  },
+  statCardClickableMobile: {
+    ...theme.components.card.base,
+    ...theme.components.card.mobile,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: theme.responsiveSpacing.cardGap.mobile,
+    transition: 'all 0.2s',
+    textAlign: 'center',
+    cursor: 'pointer',
+  },
   statIcon: {
     display: 'flex',
     alignItems: 'center',
@@ -823,6 +874,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '8px',
   },
+  categoryItemClickable: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    cursor: 'pointer',
+    padding: '12px',
+    borderRadius: theme.borderRadius.md,
+    transition: 'all 0.2s',
+    margin: '-12px',
+    marginBottom: '4px',
+  },
   categoryInfo: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -892,6 +954,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
     transition: 'all 0.2s',
+  },
+  departmentCardClickable: {
+    padding: '20px',
+    backgroundColor: theme.colors.background,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    transition: 'all 0.2s',
+    cursor: 'pointer',
   },
   departmentHeader: {
     display: 'flex',

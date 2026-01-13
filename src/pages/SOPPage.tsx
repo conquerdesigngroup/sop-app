@@ -27,11 +27,26 @@ const SOPPage: React.FC = () => {
   const [filterView, setFilterView] = useState<FilterView>('all');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
 
-  // Check if we should open the form based on navigation state
+  // Check if we should open the form or apply filters based on navigation state
   useEffect(() => {
-    if (location.state && (location.state as any).openForm) {
-      setShowForm(true);
-      // Clear the state so it doesn't reopen on refresh
+    if (location.state) {
+      const state = location.state as any;
+      if (state.openForm) {
+        setShowForm(true);
+      }
+      if (state.filterStatus) {
+        setFilterView(state.filterStatus as FilterView);
+      }
+      if (state.filterDepartment) {
+        setSelectedDepartment(state.filterDepartment);
+      }
+      if (state.viewMode) {
+        setViewMode(state.viewMode as ViewMode);
+      }
+      if (state.expandCategory) {
+        setExpandedCategories(new Set([state.expandCategory]));
+      }
+      // Clear the state so it doesn't reapply on refresh
       window.history.replaceState({}, document.title);
     }
   }, [location]);
