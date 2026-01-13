@@ -168,6 +168,10 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         sopId: step.sopId,
       }));
       setChecklistItems(items.length > 0 ? items : [{ id: '1', title: '', description: '', requiresPhoto: false }]);
+
+      // IMPORTANT: Uncheck "Save as template" when using an existing template
+      // to prevent duplicating templates unintentionally
+      setSaveAsTemplate(false);
     }
   };
 
