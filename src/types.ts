@@ -241,3 +241,32 @@ export interface Job {
   createdAt: string;
   updatedAt?: string;
 }
+
+// Calendar Event Types
+
+export interface EventReminder {
+  id: string;
+  type: 'notification' | 'email';
+  time: number; // Minutes before event
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description: string;
+  startDate: string; // ISO date
+  startTime?: string; // HH:MM format
+  endDate?: string; // ISO date (for multi-day events)
+  endTime?: string; // HH:MM format
+  location?: string;
+  isAllDay: boolean;
+  color: string; // Default: blue for events
+  attendees: string[]; // User IDs
+  reminders?: EventReminder[];
+  isRecurring: boolean;
+  recurrencePattern?: RecurrencePattern;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}

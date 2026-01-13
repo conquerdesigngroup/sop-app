@@ -3,16 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
+import { useEvent } from '../contexts/EventContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { DashboardSkeleton } from '../components/Skeleton';
 import CalendarTaskModal from '../components/CalendarTaskModal';
-import { JobTask, User } from '../types';
+import EventDetailModal from '../components/EventDetailModal';
+import { JobTask, User, CalendarEvent } from '../types';
 
 const Dashboard: React.FC = () => {
   const { sops, loading: sopsLoading } = useSOPs();
   const { isAdmin, currentUser, users } = useAuth();
   const { jobTasks, loading: tasksLoading } = useTask();
+  const { events } = useEvent();
   const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const { isMobileOrTablet } = useResponsive();
@@ -24,11 +27,11 @@ const Dashboard: React.FC = () => {
 
   // If not admin, show team member dashboard with calendar
   if (!isAdmin && currentUser) {
-    return <TeamMemberDashboard currentUser={currentUser} jobTasks={jobTasks} users={users} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} navigate={navigate} />;
+    return <TeamMemberDashboard currentUser={currentUser} jobTasks={jobTasks} events={events} users={users} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} navigate={navigate} />;
   }
 
   // Admin dashboard - existing SOP statistics plus task calendar
-  return <AdminDashboard sops={sops} jobTasks={jobTasks} users={users} navigate={navigate} />;
+  return <AdminDashboard sops={sops} jobTasks={jobTasks} events={events} users={users} navigate={navigate} />;
 };
 
 // Helper function to get user initials
@@ -54,12 +57,14 @@ const getStatusColor = (status: string): string => {
 // Shared Calendar Component
 const TaskCalendar: React.FC<{
   tasks: JobTask[];
+  events: CalendarEvent[];
   users: User[];
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
   onTaskClick: (task: JobTask) => void;
+  onEventClick: (event: CalendarEvent) => void;
   showAllUsers?: boolean;
-}> = ({ tasks, users, currentMonth, setCurrentMonth, onTaskClick, showAllUsers = false }) => {
+}> = ({ tasks, events, users, currentMonth, setCurrentMonth, onTaskClick, onEventClick, showAllUsers = false }) => {
   const { isMobileOrTablet } = useResponsive();
 
   const today = new Date();
@@ -84,6 +89,18 @@ const TaskCalendar: React.FC<{
       const taskDate = new Date(task.scheduledDate);
       taskDate.setHours(0, 0, 0, 0);
       return taskDate.getTime() === date.getTime();
+    });
+  };
+
+  const getEventsForDate = (day: number) => {
+    const date = new Date(year, month, day);
+    date.setHours(0, 0, 0, 0);
+    return events.filter(event => {
+      const eventStartDate = new Date(event.startDate);
+      eventStartDate.setHours(0, 0, 0, 0);
+      const eventEndDate = event.endDate ? new Date(event.endDate) : eventStartDate;
+      eventEndDate.setHours(0, 0, 0, 0);
+      return date >= eventStartDate && date <= eventEndDate;
     });
   };
 
@@ -130,7 +147,10 @@ const TaskCalendar: React.FC<{
         {Array.from({ length: daysInMonth }).map((_, index) => {
           const day = index + 1;
           const tasksForDay = getTasksForDate(day);
+          const eventsForDay = getEventsForDate(day);
           const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
+          const totalItems = tasksForDay.length + eventsForDay.length;
+          const maxVisible = isMobileOrTablet ? 2 : 3;
 
           return (
             <div
@@ -141,9 +161,26 @@ const TaskCalendar: React.FC<{
               }}
             >
               <div style={styles.dayNumber}>{day}</div>
-              {tasksForDay.length > 0 && (
+              {totalItems > 0 && (
                 <div style={styles.calendarTaskList}>
-                  {tasksForDay.slice(0, isMobileOrTablet ? 2 : 3).map(task => (
+                  {/* Events first (blue) */}
+                  {eventsForDay.slice(0, maxVisible).map(event => (
+                    <div
+                      key={event.id}
+                      style={{
+                        ...styles.calendarEventItem,
+                        backgroundColor: event.color,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEventClick(event);
+                      }}
+                    >
+                      <span style={styles.calendarEventTitle}>{event.title}</span>
+                    </div>
+                  ))}
+                  {/* Tasks (status colored) */}
+                  {tasksForDay.slice(0, Math.max(0, maxVisible - eventsForDay.length)).map(task => (
                     <div
                       key={task.id}
                       style={{
@@ -170,9 +207,9 @@ const TaskCalendar: React.FC<{
                       <span style={styles.calendarTaskTitle}>{task.title}</span>
                     </div>
                   ))}
-                  {tasksForDay.length > (isMobileOrTablet ? 2 : 3) && (
+                  {totalItems > maxVisible && (
                     <div style={styles.moreTasksIndicator}>
-                      +{tasksForDay.length - (isMobileOrTablet ? 2 : 3)} more
+                      +{totalItems - maxVisible} more
                     </div>
                   )}
                 </div>
@@ -189,13 +226,15 @@ const TaskCalendar: React.FC<{
 const TeamMemberDashboard: React.FC<{
   currentUser: User;
   jobTasks: JobTask[];
+  events: CalendarEvent[];
   users: User[];
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
   navigate: ReturnType<typeof useNavigate>;
-}> = ({ currentUser, jobTasks, users, currentMonth, setCurrentMonth, navigate }) => {
+}> = ({ currentUser, jobTasks, events, users, currentMonth, setCurrentMonth, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   const myTasks = jobTasks.filter(task => task.assignedTo.includes(currentUser.id));
 
@@ -409,10 +448,12 @@ const TeamMemberDashboard: React.FC<{
       {/* Calendar Section - At Bottom */}
       <TaskCalendar
         tasks={myTasks}
+        events={events}
         users={users}
         currentMonth={currentMonth}
         setCurrentMonth={setCurrentMonth}
         onTaskClick={setSelectedTask}
+        onEventClick={setSelectedEvent}
         showAllUsers={false}
       />
 
@@ -423,15 +464,26 @@ const TeamMemberDashboard: React.FC<{
         task={selectedTask}
         users={users}
       />
+
+      {/* Event Detail Modal */}
+      <EventDetailModal
+        isOpen={selectedEvent !== null}
+        onClose={() => setSelectedEvent(null)}
+        event={selectedEvent}
+        users={users}
+        onEdit={() => {}}
+        onDelete={() => {}}
+      />
     </div>
   );
 };
 
 // Admin Dashboard Component (existing dashboard + task calendar)
-const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; users: User[]; navigate: ReturnType<typeof useNavigate> }> = ({ sops, jobTasks, users, navigate }) => {
+const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; events: CalendarEvent[]; users: User[]; navigate: ReturnType<typeof useNavigate> }> = ({ sops, jobTasks, events, users, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   // Calculate SOP stats
   const totalSOPs = sops.length;
@@ -723,13 +775,15 @@ const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; users: User[]
       </div>
 
       {/* Task Calendar Section - At Bottom */}
-      {activeTasks.length > 0 && (
+      {(activeTasks.length > 0 || events.length > 0) && (
         <TaskCalendar
           tasks={activeTasks}
+          events={events}
           users={users}
           currentMonth={currentMonth}
           setCurrentMonth={setCurrentMonth}
           onTaskClick={setSelectedTask}
+          onEventClick={setSelectedEvent}
           showAllUsers={true}
         />
       )}
@@ -740,6 +794,16 @@ const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; users: User[]
         onClose={() => setSelectedTask(null)}
         task={selectedTask}
         users={users}
+      />
+
+      {/* Event Detail Modal */}
+      <EventDetailModal
+        isOpen={selectedEvent !== null}
+        onClose={() => setSelectedEvent(null)}
+        event={selectedEvent}
+        users={users}
+        onEdit={() => {}}
+        onDelete={() => {}}
       />
     </div>
   );
@@ -1221,6 +1285,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+  },
+  calendarEventItem: {
+    padding: '4px 8px',
+    borderRadius: theme.borderRadius.sm,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    overflow: 'hidden',
+  },
+  calendarEventTitle: {
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'block',
   },
   moreTasksIndicator: {
     fontSize: '10px',

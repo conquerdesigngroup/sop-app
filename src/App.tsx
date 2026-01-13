@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SOPProvider } from './contexts/SOPContext';
 import { TaskProvider } from './contexts/TaskContext';
 import { JobProvider } from './contexts/JobContext';
+import { EventProvider } from './contexts/EventContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ActivityLogProvider } from './contexts/ActivityLogContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -25,6 +26,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ArchivePage = lazy(() => import('./pages/ArchivePage'));
 const ActivityLogPage = lazy(() => import('./pages/ActivityLogPage'));
+const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 
 // Page loading fallback - simple centered spinner
 const PageLoadingFallback: React.FC = () => (
@@ -188,6 +190,14 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute adminOnly>
+                <CalendarPage />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </Suspense>
       <OfflineIndicator />
@@ -205,9 +215,11 @@ function App() {
             <SOPProvider>
               <TaskProvider>
                 <JobProvider>
-                  <Router>
-                    <AppContent />
-                  </Router>
+                  <EventProvider>
+                    <Router>
+                      <AppContent />
+                    </Router>
+                  </EventProvider>
                 </JobProvider>
               </TaskProvider>
             </SOPProvider>
