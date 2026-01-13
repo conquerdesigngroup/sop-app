@@ -315,16 +315,6 @@ const TeamMemberDashboard: React.FC<{
         </div>
       </div>
 
-      {/* Calendar Section */}
-      <TaskCalendar
-        tasks={myTasks}
-        users={users}
-        currentMonth={currentMonth}
-        setCurrentMonth={setCurrentMonth}
-        onTaskClick={setSelectedTask}
-        showAllUsers={false}
-      />
-
       {/* Today's Tasks & Upcoming */}
       <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
         <div style={styles.section}>
@@ -415,6 +405,16 @@ const TeamMemberDashboard: React.FC<{
           </div>
         </div>
       )}
+
+      {/* Calendar Section - At Bottom */}
+      <TaskCalendar
+        tasks={myTasks}
+        users={users}
+        currentMonth={currentMonth}
+        setCurrentMonth={setCurrentMonth}
+        onTaskClick={setSelectedTask}
+        showAllUsers={false}
+      />
 
       {/* Task Detail Modal */}
       <CalendarTaskModal
@@ -548,18 +548,6 @@ const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; users: User[]
           </div>
         </div>
       </div>
-
-      {/* Task Calendar Section - NEW */}
-      {activeTasks.length > 0 && (
-        <TaskCalendar
-          tasks={activeTasks}
-          users={users}
-          currentMonth={currentMonth}
-          setCurrentMonth={setCurrentMonth}
-          onTaskClick={setSelectedTask}
-          showAllUsers={true}
-        />
-      )}
 
       {/* Department Breakdown - Full Width */}
       {departmentStats.length > 0 && (
@@ -733,6 +721,18 @@ const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; users: User[]
           </button>
         </div>
       </div>
+
+      {/* Task Calendar Section - At Bottom */}
+      {activeTasks.length > 0 && (
+        <TaskCalendar
+          tasks={activeTasks}
+          users={users}
+          currentMonth={currentMonth}
+          setCurrentMonth={setCurrentMonth}
+          onTaskClick={setSelectedTask}
+          showAllUsers={true}
+        />
+      )}
 
       {/* Task Detail Modal */}
       <CalendarTaskModal
