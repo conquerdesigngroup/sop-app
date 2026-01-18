@@ -343,27 +343,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 auto',
   },
   header: {
-    marginBottom: '32px',
+    marginBottom: theme.pageLayout.headerMargin.desktop,
   },
   title: {
-    fontSize: '28px',
-    fontWeight: 700,
+    ...theme.typography.h2,
     color: theme.colors.txt.primary,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
   },
   subtitle: {
-    fontSize: '16px',
+    ...theme.typography.subtitle,
     color: theme.colors.txt.secondary,
   },
   avatarSection: {
     display: 'flex',
     alignItems: 'center',
-    gap: '24px',
-    marginBottom: '32px',
-    padding: '24px',
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.bdr.primary}`,
+    gap: theme.pageLayout.sectionMargin.desktop,
+    marginBottom: theme.pageLayout.headerMargin.desktop,
+    ...theme.components.card.base,
   },
   avatarLarge: {
     width: '100px',
@@ -407,17 +403,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: 'fit-content',
   },
   card: {
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.bdr.primary}`,
-    padding: '24px',
-    marginBottom: '20px',
+    ...theme.components.card.base,
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
   },
   cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px',
+    marginBottom: theme.pageLayout.filterGap.desktop,
   },
   cardTitle: {
     fontSize: '18px',
@@ -431,7 +424,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   infoGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '20px',
+    gap: theme.pageLayout.filterGap.desktop,
   },
   infoItem: {
     display: 'flex',
@@ -461,7 +454,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   fieldRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '16px',
+    gap: theme.pageLayout.filterGap.desktop,
   },
   buttonRow: {
     display: 'flex',

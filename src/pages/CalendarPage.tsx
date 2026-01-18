@@ -12,11 +12,12 @@ import CalendarTaskModal from '../components/CalendarTaskModal';
 const CalendarPage: React.FC = () => {
   const { events, addEvent, updateEvent, deleteEvent, tags } = useEvent();
   const { jobTasks } = useTask();
-  const { users, currentUser, isAdmin } = useAuth();
+  const { users, currentUser } = useAuth();
   const { isMobileOrTablet } = useResponsive();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+  const [selectedDayDate, setSelectedDayDate] = useState<Date>(new Date());
 
   // Modal states
   const [showEventForm, setShowEventForm] = useState(false);
@@ -35,10 +36,6 @@ const CalendarPage: React.FC = () => {
   const [filterColor, setFilterColor] = useState<string | ''>('');
   const [filterAttendee, setFilterAttendee] = useState<string | ''>('');
   const [filterTag, setFilterTag] = useState<string | ''>('');
-
-  // Drag and drop states
-  const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null);
-  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -143,7 +140,28 @@ const CalendarPage: React.FC = () => {
   // Navigation
   const previousMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
-  const goToToday = () => setCurrentMonth(new Date());
+  const goToToday = () => {
+    setCurrentMonth(new Date());
+    setSelectedDayDate(new Date());
+  };
+
+  // Day view navigation
+  const previousDay = () => {
+    const prevDay = new Date(selectedDayDate);
+    prevDay.setDate(prevDay.getDate() - 1);
+    setSelectedDayDate(prevDay);
+    setCurrentMonth(new Date(prevDay.getFullYear(), prevDay.getMonth(), 1));
+  };
+  const nextDay = () => {
+    const nextDayDate = new Date(selectedDayDate);
+    nextDayDate.setDate(nextDayDate.getDate() + 1);
+    setSelectedDayDate(nextDayDate);
+    setCurrentMonth(new Date(nextDayDate.getFullYear(), nextDayDate.getMonth(), 1));
+  };
+  const goToTodayDay = () => {
+    setSelectedDayDate(new Date());
+    setCurrentMonth(new Date());
+  };
 
   // Event handlers
   const handleAddEvent = () => {
@@ -153,7 +171,15 @@ const CalendarPage: React.FC = () => {
   };
 
   const handleDayClick = (day: number) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    // Navigate to day view for that specific day
+    const clickedDate = new Date(year, month, day);
+    setSelectedDayDate(clickedDate);
+    setViewMode('day');
+  };
+
+  // Add event on a specific day (from day view)
+  const handleAddEventOnDay = (date: Date) => {
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     setSelectedDate(dateStr);
     setEditingEvent(null);
     setShowEventForm(true);
@@ -220,81 +246,6 @@ const CalendarPage: React.FC = () => {
     if (e.key === 'Escape') {
       setQuickAddDay(null);
       setQuickAddTitle('');
-    }
-  };
-
-  // Drag and drop handlers
-  const handleDragStart = (e: React.DragEvent, event: CalendarEvent) => {
-    e.dataTransfer.setData('text/plain', event.id);
-    e.dataTransfer.setData('eventId', event.id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.dropEffect = 'move';
-    setDraggedEvent(event);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedEvent(null);
-    setDragOverDay(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent, day: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverDay(day);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverDay(null);
-  };
-
-  const handleDrop = async (e: React.DragEvent, day: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Prevent duplicate processing - only process if we have a dragged event
-    if (!draggedEvent) return;
-
-    const eventId = e.dataTransfer.getData('eventId');
-    const event = events.find(ev => ev.id === eventId);
-
-    if (event && isAdmin) {
-      // Create the new date using local timezone (year and month from currentMonth state)
-      const newStartDate = new Date(year, month, day);
-      const newDate = `${newStartDate.getFullYear()}-${String(newStartDate.getMonth() + 1).padStart(2, '0')}-${String(newStartDate.getDate()).padStart(2, '0')}`;
-
-      // Calculate new end date
-      let newEndDate: string | undefined;
-
-      // Check if this is a multi-day event (endDate exists and is different from startDate)
-      const isMultiDay = event.endDate && event.startDate !== event.endDate;
-
-      if (isMultiDay) {
-        // Parse dates using local timezone by splitting the string
-        const [startYear, startMonth, startDay] = event.startDate.split('-').map(Number);
-        const [endYear, endMonth, endDay] = event.endDate!.split('-').map(Number);
-
-        const originalStart = new Date(startYear, startMonth - 1, startDay);
-        const originalEnd = new Date(endYear, endMonth - 1, endDay);
-        const daysDiff = Math.round((originalEnd.getTime() - originalStart.getTime()) / (1000 * 60 * 60 * 24));
-
-        const newEnd = new Date(year, month, day + daysDiff);
-        newEndDate = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`;
-      } else {
-        // Single-day event: set endDate to same as startDate (or undefined if it wasn't set)
-        newEndDate = event.endDate ? newDate : undefined;
-      }
-
-      // Clear drag state BEFORE updating to prevent re-processing
-      setDraggedEvent(null);
-      setDragOverDay(null);
-
-      await updateEvent(eventId, {
-        startDate: newDate,
-        endDate: newEndDate,
-      });
-    } else {
-      setDraggedEvent(null);
-      setDragOverDay(null);
     }
   };
 
@@ -539,6 +490,15 @@ const CalendarPage: React.FC = () => {
           >
             Week
           </button>
+          <button
+            onClick={() => {
+              setSelectedDayDate(new Date());
+              setViewMode('day');
+            }}
+            style={viewMode === 'day' ? styles.viewButtonActive : styles.viewButton}
+          >
+            Day
+          </button>
         </div>
       </div>
 
@@ -646,16 +606,270 @@ const CalendarPage: React.FC = () => {
 
         {/* Calendar Grid */}
         <div style={styles.calendarWrapper}>
-        {viewMode === 'month' ? (
-          <div style={styles.calendar}>
+        {viewMode === 'day' ? (
+          /* Day View */
+          <div style={styles.dayViewContainer}>
+            {/* Day Header with Navigation */}
+            <div style={styles.dayViewHeader}>
+              <div style={styles.dayNavControls}>
+                <button onClick={previousDay} style={styles.navButton}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
+                <button onClick={goToTodayDay} style={styles.todayButton}>
+                  Today
+                </button>
+                <button onClick={nextDay} style={styles.navButton}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+              </div>
+              <div style={styles.dayViewTitle}>
+                <span style={styles.dayViewDayName}>
+                  {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][selectedDayDate.getDay()]}
+                </span>
+                <span style={styles.dayViewDate}>
+                  {monthNames[selectedDayDate.getMonth()]} {selectedDayDate.getDate()}, {selectedDayDate.getFullYear()}
+                </span>
+              </div>
+              <button
+                onClick={() => handleAddEventOnDay(selectedDayDate)}
+                style={styles.dayAddEventBtn}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add Event
+              </button>
+            </div>
+
+            {/* All-day events section */}
+            {(() => {
+              const dayAllDayEvents = filteredEvents.filter(event => {
+                if (!event.isAllDay) return false;
+                const eventStart = new Date(event.startDate);
+                const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
+                eventStart.setHours(0, 0, 0, 0);
+                eventEnd.setHours(0, 0, 0, 0);
+                const checkDate = new Date(selectedDayDate);
+                checkDate.setHours(0, 0, 0, 0);
+                return checkDate >= eventStart && checkDate <= eventEnd;
+              });
+
+              return dayAllDayEvents.length > 0 && (
+                <div style={styles.dayAllDaySection}>
+                  <div style={styles.dayAllDayLabel}>All Day</div>
+                  <div style={styles.dayAllDayEvents}>
+                    {dayAllDayEvents.map(event => (
+                      <div
+                        key={event.id}
+                        style={{
+                          ...styles.dayAllDayEvent,
+                          backgroundColor: event.color,
+                        }}
+                        onClick={() => setSelectedEvent(event)}
+                      >
+                        {event.isRecurring && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', flexShrink: 0 }}>
+                            <polyline points="23 4 23 10 17 10" />
+                            <polyline points="1 20 1 14 7 14" />
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                          </svg>
+                        )}
+                        <span style={styles.dayAllDayEventTitle}>{event.title}</span>
+                        {event.attendees.length > 0 && (
+                          <span style={styles.dayEventAttendees}>
+                            {event.attendees.slice(0, 3).map(id => getUserInitials(id)).join(', ')}
+                            {event.attendees.length > 3 && ` +${event.attendees.length - 3}`}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Time grid */}
+            <div style={styles.dayTimeGrid}>
+              {/* Time column */}
+              <div style={styles.dayTimeColumn}>
+                {timeSlots.map(slot => (
+                  <div key={slot.hour} style={styles.dayTimeSlotLabel}>
+                    {slot.label}
+                  </div>
+                ))}
+              </div>
+
+              {/* Events/Tasks column */}
+              <div style={styles.dayEventsColumn}>
+                {/* Hour lines */}
+                {timeSlots.map(slot => (
+                  <div key={slot.hour} style={styles.dayHourSlot}>
+                    <div style={styles.dayHourLine} />
+                  </div>
+                ))}
+
+                {/* Positioned events */}
+                {(() => {
+                  const dayEvents = filteredEvents.filter(event => {
+                    if (event.isAllDay) return false;
+                    const eventStartDate = new Date(event.startDate);
+                    const eventEndDate = event.endDate ? new Date(event.endDate) : eventStartDate;
+                    eventStartDate.setHours(0, 0, 0, 0);
+                    eventEndDate.setHours(0, 0, 0, 0);
+                    const checkDate = new Date(selectedDayDate);
+                    checkDate.setHours(0, 0, 0, 0);
+                    return checkDate >= eventStartDate && checkDate <= eventEndDate;
+                  });
+
+                  return dayEvents.map(event => {
+                    const pos = getEventPosition(event);
+                    if (!pos) {
+                      // No specific time - render at top
+                      return (
+                        <div
+                          key={event.id}
+                          style={{
+                            ...styles.dayEventNoTime,
+                            backgroundColor: event.color,
+                          }}
+                          onClick={() => setSelectedEvent(event)}
+                        >
+                          {event.isRecurring && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', flexShrink: 0 }}>
+                              <polyline points="23 4 23 10 17 10" />
+                              <polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                          )}
+                          <span style={styles.dayEventTitle}>{event.title}</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={event.id}
+                        style={{
+                          ...styles.dayEventPositioned,
+                          backgroundColor: event.color,
+                          top: `${pos.top}px`,
+                          height: `${pos.height}px`,
+                        }}
+                        onClick={() => setSelectedEvent(event)}
+                      >
+                        <div style={styles.dayEventHeader}>
+                          <span style={styles.dayEventTime}>
+                            {event.startTime}{event.endTime && ` - ${event.endTime}`}
+                          </span>
+                          {event.isRecurring && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="23 4 23 10 17 10" />
+                              <polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                          )}
+                        </div>
+                        <span style={styles.dayEventTitleLarge}>{event.title}</span>
+                        {event.description && pos.height > 60 && (
+                          <span style={styles.dayEventDescription}>{event.description}</span>
+                        )}
+                        {event.attendees.length > 0 && pos.height > 80 && (
+                          <div style={styles.dayEventAttendeesRow}>
+                            {event.attendees.slice(0, 5).map(id => (
+                              <span key={id} style={styles.dayEventAttendeeBadge}>{getUserInitials(id)}</span>
+                            ))}
+                            {event.attendees.length > 5 && (
+                              <span style={styles.dayEventAttendeeMore}>+{event.attendees.length - 5}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+
+                {/* Positioned tasks */}
+                {(() => {
+                  const dayTasks = jobTasks.filter(task => {
+                    if (task.status === 'archived' || task.status === 'draft') return false;
+                    const taskDate = new Date(task.scheduledDate);
+                    return taskDate.toDateString() === selectedDayDate.toDateString();
+                  });
+
+                  return dayTasks.map(task => {
+                    const pos = getTaskPosition(task);
+                    if (!pos) {
+                      // No specific time - render at top
+                      return (
+                        <div
+                          key={task.id}
+                          style={styles.dayTaskNoTime}
+                          onClick={() => setSelectedTask(task)}
+                        >
+                          {task.isRecurring && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={{ marginRight: '6px', flexShrink: 0 }}>
+                              <polyline points="23 4 23 10 17 10" />
+                              <polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                          )}
+                          {getTaskInitials(task) && (
+                            <span style={{ ...styles.taskInitials, marginRight: '8px' }}>{getTaskInitials(task)}</span>
+                          )}
+                          <span style={styles.dayTaskTitle}>{task.title}</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={task.id}
+                        style={{
+                          ...styles.dayTaskPositioned,
+                          top: `${pos.top}px`,
+                          height: `${pos.height}px`,
+                        }}
+                        onClick={() => setSelectedTask(task)}
+                      >
+                        <div style={styles.dayTaskHeader}>
+                          <span style={styles.dayTaskTime}>{task.dueTime}</span>
+                          {task.isRecurring && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+                              <polyline points="23 4 23 10 17 10" />
+                              <polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                          )}
+                        </div>
+                        <div style={styles.dayTaskTitleRow}>
+                          {getTaskInitials(task) && (
+                            <span style={{ ...styles.taskInitials, marginRight: '8px' }}>{getTaskInitials(task)}</span>
+                          )}
+                          <span style={styles.dayTaskTitleLarge}>{task.title}</span>
+                        </div>
+                        {task.estimatedDuration && pos.height > 50 && (
+                          <span style={styles.dayTaskDuration}>{task.estimatedDuration} min</span>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </div>
+        ) : viewMode === 'month' ? (
+          <div style={isMobileOrTablet ? styles.calendarMobile : styles.calendar}>
             {/* Day headers */}
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} style={styles.dayHeader}>{day}</div>
+            {(isMobileOrTablet ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((day, idx) => (
+              <div key={idx} style={isMobileOrTablet ? styles.dayHeaderMobile : styles.dayHeader}>{day}</div>
             ))}
 
             {/* Empty cells before first day */}
             {Array.from({ length: startingDayOfWeek }).map((_, index) => (
-              <div key={`empty-${index}`} style={styles.calendarDayEmpty} />
+              <div key={`empty-${index}`} style={isMobileOrTablet ? styles.calendarDayEmptyMobile : styles.calendarDayEmpty} />
             ))}
 
             {/* Days of month */}
@@ -668,40 +882,36 @@ const CalendarPage: React.FC = () => {
               const maxVisible = isMobileOrTablet ? 2 : 3;
 
               return (
-                <div
+                <CalendarDayCell
                   key={day}
-                  style={{
-                    ...styles.calendarDay,
-                    ...(isToday ? styles.calendarDayToday : {}),
-                    ...(dragOverDay === day ? styles.calendarDayDragOver : {}),
-                  }}
+                  isToday={isToday}
+                  isMobileOrTablet={isMobileOrTablet}
                   onClick={() => handleDayClick(day)}
-                  onDragOver={(e) => handleDragOver(e, day)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, day)}
                 >
-                  <div style={styles.dayHeader2}>
+                  <div style={isMobileOrTablet ? styles.dayHeader2Mobile : styles.dayHeader2}>
                     <div style={{
-                      ...styles.dayNumber,
-                      ...(isToday ? styles.dayNumberToday : {}),
+                      ...(isMobileOrTablet ? styles.dayNumberMobile : styles.dayNumber),
+                      ...(isToday ? (isMobileOrTablet ? styles.dayNumberTodayMobile : styles.dayNumberToday) : {}),
                     }}>
                       {day}
                     </div>
-                    {/* Quick Add Button */}
-                    <button
-                      style={styles.quickAddBtn}
-                      onClick={(e) => handleQuickAddClick(day, e)}
-                      title="Quick add event"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                    </button>
+                    {/* Quick Add Button - hide on mobile */}
+                    {!isMobileOrTablet && (
+                      <button
+                        style={styles.quickAddBtn}
+                        onClick={(e) => handleQuickAddClick(day, e)}
+                        title="Quick add event"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
 
-                  {/* Quick Add Input */}
-                  {quickAddDay === day && (
+                  {/* Quick Add Input - desktop only */}
+                  {!isMobileOrTablet && quickAddDay === day && (
                     <form onSubmit={handleQuickAddSubmit} style={styles.quickAddForm}>
                       <input
                         ref={quickAddInputRef}
@@ -720,49 +930,26 @@ const CalendarPage: React.FC = () => {
                     </form>
                   )}
 
-                  <div style={styles.itemsList}>
+                  <div style={isMobileOrTablet ? styles.itemsListMobile : styles.itemsList}>
                     {/* Events first (colored left border) */}
                     {eventsForDay.slice(0, maxVisible).map(event => (
                       <div
                         key={event.id}
                         style={{
-                          ...styles.eventItem,
+                          ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem),
                           borderLeftColor: event.color,
-                          opacity: draggedEvent?.id === event.id ? 0.5 : 1,
-                          cursor: isAdmin ? 'grab' : 'pointer',
-                          WebkitUserSelect: 'none',
-                          userSelect: 'none',
                         }}
-                        onClick={(e) => {
-                          // Only trigger click if not dragging
-                          if (!draggedEvent) {
-                            handleEventClick(event, e);
-                          }
-                        }}
-                        title={isAdmin ? `${event.title} (drag to reschedule)` : event.title}
-                        draggable={isAdmin}
-                        onDragStart={(e) => {
-                          if (isAdmin) {
-                            e.stopPropagation();
-                            handleDragStart(e, event);
-                          }
-                        }}
-                        onDragEnd={handleDragEnd}
-                        onMouseDown={(e) => {
-                          // Prevent text selection during drag
-                          if (isAdmin) {
-                            e.stopPropagation();
-                          }
-                        }}
+                        onClick={(e) => handleEventClick(event, e)}
+                        title={event.title}
                       >
-                        {event.isRecurring && (
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
+                        {!isMobileOrTablet && event.isRecurring && (
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
                             <polyline points="23 4 23 10 17 10" />
                             <polyline points="1 20 1 14 7 14" />
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                           </svg>
                         )}
-                        <span style={styles.itemTitle}>{event.title}</span>
+                        <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{event.title}</span>
                       </div>
                     ))}
 
@@ -771,34 +958,34 @@ const CalendarPage: React.FC = () => {
                       <div
                         key={task.id}
                         style={{
-                          ...styles.taskItem,
+                          ...(isMobileOrTablet ? styles.taskItemMobile : styles.taskItem),
                           borderLeftColor: theme.colors.primary,
                         }}
                         onClick={(e) => handleTaskClick(task, e)}
                         title={task.title}
                       >
-                        {task.isRecurring && (
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
+                        {!isMobileOrTablet && task.isRecurring && (
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
                             <polyline points="23 4 23 10 17 10" />
                             <polyline points="1 20 1 14 7 14" />
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                           </svg>
                         )}
                         {getTaskInitials(task) && (
-                          <span style={styles.taskInitials}>{getTaskInitials(task)}</span>
+                          <span style={isMobileOrTablet ? styles.taskInitialsMobile : styles.taskInitials}>{getTaskInitials(task)}</span>
                         )}
-                        <span style={styles.itemTitle}>{task.title}</span>
+                        <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{task.title}</span>
                       </div>
                     ))}
 
                     {/* More indicator */}
                     {totalItems > maxVisible && (
-                      <div style={styles.moreIndicator}>
+                      <div style={isMobileOrTablet ? styles.moreIndicatorMobile : styles.moreIndicator}>
                         +{totalItems - maxVisible} more
                       </div>
                     )}
                   </div>
-                </div>
+                </CalendarDayCell>
               );
             })}
           </div>
@@ -1099,12 +1286,12 @@ const CalendarPage: React.FC = () => {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: theme.responsiveSpacing.containerPadding.desktop,
-    maxWidth: '1400px',
+    padding: theme.pageLayout.containerPadding.desktop,
+    maxWidth: theme.pageLayout.maxWidth,
     margin: '0 auto',
   },
   containerMobile: {
-    padding: theme.responsiveSpacing.containerPadding.mobile,
+    padding: theme.pageLayout.containerPadding.mobile,
     maxWidth: '100%',
     margin: '0 auto',
   },
@@ -1112,14 +1299,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.pageLayout.headerMargin.desktop,
     gap: theme.spacing.lg,
   },
   headerMobile: {
     display: 'flex',
     flexDirection: 'column',
     gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.pageLayout.headerMargin.mobile,
   },
   headerLeft: {},
   title: {
@@ -1226,28 +1413,66 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, 1fr)',
   },
+  calendarMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+  },
   dayHeader: {
-    textAlign: 'center',
+    textAlign: 'center' as const,
     fontSize: '13px',
     fontWeight: 700,
     color: theme.colors.txt.secondary,
-    padding: '16px 8px',
-    textTransform: 'uppercase',
+    padding: '12px 4px',
+    textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
     backgroundColor: theme.colors.bg.tertiary,
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    borderRight: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  dayHeaderMobile: {
+    textAlign: 'center' as const,
+    fontSize: '11px',
+    fontWeight: 700,
+    color: theme.colors.txt.secondary,
+    padding: '10px 2px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.3px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    borderRight: `1px solid ${theme.colors.bdr.primary}`,
   },
   calendarDay: {
-    minHeight: '120px',
-    padding: '8px',
+    height: '110px',
+    padding: '6px',
     backgroundColor: theme.colors.bg.secondary,
     borderRight: `1px solid ${theme.colors.bdr.primary}`,
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
     cursor: 'pointer',
     transition: 'background-color 0.2s',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  calendarDayMobile: {
+    height: '80px',
+    padding: '4px',
+    backgroundColor: theme.colors.bg.secondary,
+    borderRight: `1px solid ${theme.colors.bdr.primary}`,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
   },
   calendarDayEmpty: {
-    minHeight: '120px',
+    height: '110px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRight: `1px solid ${theme.colors.bdr.primary}`,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  calendarDayEmptyMobile: {
+    height: '80px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRight: `1px solid ${theme.colors.bdr.primary}`,
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
@@ -1255,33 +1480,60 @@ const styles: { [key: string]: React.CSSProperties } = {
   calendarDayToday: {
     backgroundColor: theme.colors.bg.primary,
   },
-  calendarDayDragOver: {
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
-    border: `2px dashed ${theme.colors.primary}`,
+  calendarDayHover: {
+    backgroundColor: '#2a2a2a',
+    cursor: 'pointer',
   },
   dayNumber: {
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: 600,
     color: theme.colors.txt.secondary,
-    marginBottom: '8px',
+  },
+  dayNumberMobile: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: theme.colors.txt.secondary,
   },
   dayNumberToday: {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '28px',
-    height: '28px',
+    width: '24px',
+    height: '24px',
     backgroundColor: theme.colors.primary,
     color: '#FFFFFF',
     borderRadius: '50%',
+    fontSize: '12px',
+  },
+  dayNumberTodayMobile: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20px',
+    height: '20px',
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    borderRadius: '50%',
+    fontSize: '10px',
   },
   itemsList: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
+    flexDirection: 'column' as const,
+    gap: '2px',
+    flex: 1,
+    overflow: 'hidden',
+    marginTop: '4px',
+  },
+  itemsListMobile: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '1px',
+    flex: 1,
+    overflow: 'hidden',
+    marginTop: '2px',
   },
   eventItem: {
-    padding: '4px 8px',
+    padding: '3px 6px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.sm,
     borderLeft: '3px solid',
@@ -1290,10 +1542,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '3px',
+    flexShrink: 0,
+  },
+  eventItemMobile: {
+    padding: '2px 4px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: '3px',
+    borderLeft: '2px solid',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    flexShrink: 0,
   },
   taskItem: {
-    padding: '4px 8px',
+    padding: '3px 6px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.sm,
     borderLeft: '3px solid',
@@ -1302,31 +1567,70 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '3px',
+    flexShrink: 0,
+  },
+  taskItemMobile: {
+    padding: '2px 4px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: '3px',
+    borderLeft: '2px solid',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    flexShrink: 0,
   },
   taskInitials: {
-    fontSize: '9px',
+    fontSize: '8px',
     fontWeight: 700,
     color: '#FFFFFF',
     backgroundColor: theme.colors.primary,
-    padding: '1px 4px',
-    borderRadius: '3px',
+    padding: '1px 3px',
+    borderRadius: '2px',
+    flexShrink: 0,
+  },
+  taskInitialsMobile: {
+    fontSize: '7px',
+    fontWeight: 700,
+    color: '#FFFFFF',
+    backgroundColor: theme.colors.primary,
+    padding: '0px 2px',
+    borderRadius: '2px',
     flexShrink: 0,
   },
   itemTitle: {
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 500,
     color: theme.colors.txt.primary,
-    whiteSpace: 'nowrap',
+    whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     display: 'block',
+    lineHeight: 1.3,
+  },
+  itemTitleMobile: {
+    fontSize: '8px',
+    fontWeight: 500,
+    color: theme.colors.txt.primary,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'block',
+    lineHeight: 1.2,
   },
   moreIndicator: {
-    fontSize: '10px',
+    fontSize: '9px',
     color: theme.colors.txt.secondary,
     fontWeight: 600,
-    padding: '2px 8px',
+    padding: '1px 4px',
+  },
+  moreIndicatorMobile: {
+    fontSize: '8px',
+    color: theme.colors.txt.secondary,
+    fontWeight: 600,
+    padding: '1px 2px',
   },
   weekView: {
     display: 'grid',
@@ -1642,7 +1946,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '8px',
+    flexShrink: 0,
+  },
+  dayHeader2Mobile: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexShrink: 0,
   },
   quickAddBtn: {
     padding: '2px',
@@ -1650,12 +1960,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: 'none',
     cursor: 'pointer',
     color: theme.colors.textSecondary,
-    opacity: 0.5,
+    opacity: 0.4,
     transition: 'opacity 0.2s',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: theme.borderRadius.sm,
+  },
+  quickAddBtnMobile: {
+    padding: '1px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: theme.colors.textSecondary,
+    opacity: 0.4,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '2px',
   },
   quickAddForm: {
     marginBottom: '8px',
@@ -1819,6 +2141,299 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '2px',
     zIndex: 2,
   },
+
+  // Day View Styles
+  dayViewContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  dayViewHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 20px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    gap: '16px',
+    flexWrap: 'wrap',
+  },
+  dayNavControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  dayViewTitle: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  dayViewDayName: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
+  dayViewDate: {
+    fontSize: '20px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+  },
+  dayAddEventBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 16px',
+    backgroundColor: theme.colors.primary,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#FFFFFF',
+    cursor: 'pointer',
+  },
+  dayAllDaySection: {
+    display: 'flex',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    minHeight: '50px',
+  },
+  dayAllDayLabel: {
+    width: '80px',
+    padding: '12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+    backgroundColor: theme.colors.bg.tertiary,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRight: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  dayAllDayEvents: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: theme.colors.bg.secondary,
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  dayAllDayEvent: {
+    padding: '8px 12px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    maxWidth: '300px',
+  },
+  dayAllDayEventTitle: {
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  dayEventAttendees: {
+    fontSize: '11px',
+    opacity: 0.8,
+    marginLeft: '8px',
+  },
+  dayTimeGrid: {
+    display: 'grid',
+    gridTemplateColumns: '80px 1fr',
+    maxHeight: '700px',
+    overflowY: 'auto',
+  },
+  dayTimeColumn: {
+    backgroundColor: theme.colors.bg.tertiary,
+  },
+  dayTimeSlotLabel: {
+    height: '60px',
+    padding: '4px 12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    borderRight: `1px solid ${theme.colors.bdr.primary}`,
+    display: 'flex',
+    alignItems: 'flex-start',
+  },
+  dayEventsColumn: {
+    position: 'relative',
+    backgroundColor: theme.colors.bg.secondary,
+  },
+  dayHourSlot: {
+    height: '60px',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    position: 'relative',
+  },
+  dayHourLine: {
+    position: 'absolute',
+    top: '30px',
+    left: 0,
+    right: 0,
+    height: '1px',
+    backgroundColor: `${theme.colors.bdr.primary}50`,
+  },
+  dayEventPositioned: {
+    position: 'absolute',
+    left: '8px',
+    right: '8px',
+    padding: '8px 12px',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    overflow: 'hidden',
+    zIndex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+  },
+  dayEventNoTime: {
+    position: 'relative',
+    margin: '8px',
+    padding: '8px 12px',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    display: 'flex',
+    alignItems: 'center',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+  },
+  dayEventHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dayEventTime: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  dayEventTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+  },
+  dayEventTitleLarge: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#FFFFFF',
+  },
+  dayEventDescription: {
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.8)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  dayEventAttendeesRow: {
+    display: 'flex',
+    gap: '4px',
+    alignItems: 'center',
+    marginTop: '4px',
+  },
+  dayEventAttendeeBadge: {
+    fontSize: '10px',
+    fontWeight: 700,
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+  },
+  dayEventAttendeeMore: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  dayTaskPositioned: {
+    position: 'absolute',
+    left: '8px',
+    right: '8px',
+    padding: '8px 12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    borderLeft: `4px solid ${theme.colors.primary}`,
+    cursor: 'pointer',
+    overflow: 'hidden',
+    zIndex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+  },
+  dayTaskNoTime: {
+    position: 'relative',
+    margin: '8px',
+    padding: '8px 12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    borderLeft: `4px solid ${theme.colors.primary}`,
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
+    display: 'flex',
+    alignItems: 'center',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+  },
+  dayTaskHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dayTaskTime: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+  },
+  dayTaskTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.textPrimary,
+  },
+  dayTaskTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  dayTaskTitleLarge: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+  },
+  dayTaskDuration: {
+    fontSize: '11px',
+    color: theme.colors.textSecondary,
+    marginTop: '2px',
+  },
+};
+
+// Calendar Day Component with hover effect (defined after styles)
+const CalendarDayCell: React.FC<{
+  isToday: boolean;
+  isMobileOrTablet: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}> = ({ isToday, isMobileOrTablet, onClick, children }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={onClick}
+      style={{
+        ...(isMobileOrTablet ? styles.calendarDayMobile : styles.calendarDay),
+        ...(isToday ? styles.calendarDayToday : {}),
+        ...(isHovered && !isToday ? styles.calendarDayHover : {}),
+      }}
+    >
+      {children}
+    </div>
+  );
 };
 
 export default CalendarPage;

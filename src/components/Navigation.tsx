@@ -174,13 +174,13 @@ const Navigation: React.FC = () => {
             </button>
 
             {/* Center Logo */}
-            <div style={styles.centerLogoMobile}>
+            <Link to="/dashboard" style={styles.centerLogoMobile}>
               <img
                 src="/logo.png"
                 alt="Dancing Images Logo"
                 style={styles.logoImageMobile}
               />
-            </div>
+            </Link>
 
             {/* User Avatar (Mobile) */}
             <div
@@ -289,13 +289,13 @@ const Navigation: React.FC = () => {
           <>
             {/* Left side: Logo + Nav Links */}
             <div style={styles.leftSection}>
-              <div style={styles.logoContainer}>
+              <Link to="/dashboard" style={styles.logoContainer}>
                 <img
                   src="/logo.png"
                   alt="Dancing Images Logo"
                   style={styles.logoImage}
                 />
-              </div>
+              </Link>
               <div style={styles.navLinks}>
                 {navItems.map((item) => (
                   <Link

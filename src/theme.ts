@@ -179,6 +179,31 @@ export const theme = {
     },
   },
 
+  // Page layout constants for consistency across all pages
+  pageLayout: {
+    maxWidth: '1400px',
+    containerPadding: {
+      desktop: '40px',
+      mobile: '16px',
+    },
+    headerMargin: {
+      desktop: '32px',
+      mobile: '24px',
+    },
+    sectionMargin: {
+      desktop: '24px',
+      mobile: '16px',
+    },
+    cardPadding: {
+      desktop: '24px',
+      mobile: '16px',
+    },
+    filterGap: {
+      desktop: '16px',
+      mobile: '12px',
+    },
+  },
+
   // Component style presets for consistency
   components: {
     // Button presets

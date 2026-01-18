@@ -4,6 +4,7 @@ import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormButton } from '../components/FormComponents';
+import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -234,12 +235,18 @@ const SettingsPage: React.FC = () => {
             </h3>
           </div>
 
+          <div style={styles.integrationSection}>
+            <GoogleCalendarConnect />
+          </div>
+
+          <div style={styles.divider} />
+
           <div style={styles.settingsList}>
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Calendar Sync</span>
+                <span style={styles.settingLabel}>Auto-sync Tasks to Calendar</span>
                 <span style={styles.settingDescription}>
-                  Sync tasks with your calendar app
+                  Automatically sync new tasks to your connected calendar
                 </span>
               </div>
               <ToggleSwitch checked={calendarSync} onChange={setCalendarSync} />
@@ -253,7 +260,7 @@ const SettingsPage: React.FC = () => {
                 <line x1="12" y1="16" x2="12" y2="12" />
                 <line x1="12" y1="8" x2="12.01" y2="8" />
               </svg>
-              <span>Calendar integration requires additional setup. Contact your administrator.</span>
+              <span>When enabled, new tasks will automatically be added to your connected Google Calendar.</span>
             </div>
           )}
         </div>
@@ -416,27 +423,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 auto',
   },
   header: {
-    marginBottom: '32px',
+    marginBottom: theme.pageLayout.headerMargin.desktop,
   },
   title: {
-    fontSize: '28px',
-    fontWeight: 700,
+    ...theme.typography.h2,
     color: theme.colors.txt.primary,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
   },
   subtitle: {
-    fontSize: '16px',
+    ...theme.typography.subtitle,
     color: theme.colors.txt.secondary,
   },
   card: {
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.bdr.primary}`,
-    padding: '24px',
-    marginBottom: '20px',
+    ...theme.components.card.base,
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
   },
   cardHeader: {
-    marginBottom: '20px',
+    marginBottom: theme.pageLayout.filterGap.desktop,
   },
   cardTitle: {
     fontSize: '18px',
@@ -479,6 +482,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   divider: {
     height: '1px',
     backgroundColor: theme.colors.bdr.primary,
+  },
+  integrationSection: {
+    marginBottom: '16px',
   },
   integrationNote: {
     display: 'flex',

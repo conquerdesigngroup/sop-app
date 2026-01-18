@@ -49,6 +49,7 @@
     ]
   },
   "devDependencies": {
+    "supabase": "^2.72.8",
     "workbox-webpack-plugin": "^7.3.0"
   }
 }

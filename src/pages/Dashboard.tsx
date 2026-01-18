@@ -17,24 +17,78 @@ const Dashboard: React.FC = () => {
   const { jobTasks, loading: tasksLoading } = useTask();
   const { events } = useEvent();
   const navigate = useNavigate();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
   const { isMobileOrTablet } = useResponsive();
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   // Show skeleton while loading
   if ((isAdmin && sopsLoading) || (!isAdmin && tasksLoading)) {
     return <DashboardSkeleton isMobile={isMobileOrTablet} />;
   }
 
-  // If not admin, show team member dashboard with calendar
+  // If not admin, show team member dashboard
   if (!isAdmin && currentUser) {
-    return <TeamMemberDashboard currentUser={currentUser} jobTasks={jobTasks} events={events} users={users} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} navigate={navigate} />;
+    return (
+      <TeamMemberDashboard
+        currentUser={currentUser}
+        jobTasks={jobTasks}
+        events={events}
+        users={users}
+        currentMonth={currentMonth}
+        setCurrentMonth={setCurrentMonth}
+        selectedTask={selectedTask}
+        setSelectedTask={setSelectedTask}
+        selectedEvent={selectedEvent}
+        setSelectedEvent={setSelectedEvent}
+        navigate={navigate}
+      />
+    );
   }
 
-  // Admin dashboard - existing SOP statistics plus task calendar
-  return <AdminDashboard sops={sops} jobTasks={jobTasks} events={events} users={users} navigate={navigate} />;
+  // Admin dashboard
+  return (
+    <AdminDashboard
+      sops={sops}
+      jobTasks={jobTasks}
+      events={events}
+      users={users}
+      currentMonth={currentMonth}
+      setCurrentMonth={setCurrentMonth}
+      selectedTask={selectedTask}
+      setSelectedTask={setSelectedTask}
+      selectedEvent={selectedEvent}
+      setSelectedEvent={setSelectedEvent}
+      navigate={navigate}
+    />
+  );
 };
 
-// Helper function to get user initials
+// Calendar Day Component with hover effect
+const CalendarDayCell: React.FC<{
+  day: number;
+  isToday: boolean;
+  isMobileOrTablet: boolean;
+  children: React.ReactNode;
+}> = ({ day, isToday, isMobileOrTablet, children }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        ...(isMobileOrTablet ? styles.calendarDayMobile : styles.calendarDay),
+        ...(isToday ? styles.calendarDayToday : {}),
+        ...(isHovered && !isToday ? styles.calendarDayHover : {}),
+      }}
+    >
+      {children}
+    </div>
+  );
+};
+
+// Helper functions
 const getUserInitials = (userId: string, users: User[]): string => {
   const user = users.find(u => u.id === userId);
   if (user) {
@@ -43,7 +97,6 @@ const getUserInitials = (userId: string, users: User[]): string => {
   return '??';
 };
 
-// Helper function to get status color
 const getStatusColor = (status: string): string => {
   switch (status) {
     case 'completed': return theme.colors.status.completed;
@@ -54,7 +107,7 @@ const getStatusColor = (status: string): string => {
   }
 };
 
-// Shared Calendar Component
+// Shared Calendar Component (compact version)
 const TaskCalendar: React.FC<{
   tasks: JobTask[];
   events: CalendarEvent[];
@@ -66,7 +119,6 @@ const TaskCalendar: React.FC<{
   showAllUsers?: boolean;
 }> = ({ tasks, events, users, currentMonth, setCurrentMonth, onTaskClick, onEventClick, showAllUsers = false }) => {
   const { isMobileOrTablet } = useResponsive();
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -75,12 +127,16 @@ const TaskCalendar: React.FC<{
     const month = date.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-    return { daysInMonth, startingDayOfWeek, year, month };
+    return {
+      daysInMonth: lastDay.getDate(),
+      startingDayOfWeek: firstDay.getDay(),
+      year,
+      month
+    };
   };
 
   const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   const getTasksForDate = (day: number) => {
     const date = new Date(year, month, day);
@@ -104,46 +160,34 @@ const TaskCalendar: React.FC<{
     });
   };
 
-  const previousMonth = () => {
-    setCurrentMonth(new Date(year, month - 1, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentMonth(new Date(year, month + 1, 1));
-  };
-
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
   return (
-    <div style={isMobileOrTablet ? styles.sectionMobile : styles.section}>
+    <div style={styles.calendarSection}>
       <div style={styles.calendarHeader}>
-        <h2 style={styles.sectionTitle}>{monthNames[month]} {year}</h2>
+        <h3 style={styles.calendarTitle}>{monthNames[month]} {year}</h3>
         <div style={styles.calendarNav}>
-          <button onClick={previousMonth} style={styles.navButton}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <button onClick={() => setCurrentMonth(new Date())} style={styles.todayBtn}>Today</button>
+          <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))} style={styles.navBtn}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
-          <button onClick={nextMonth} style={styles.navButton}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <button onClick={() => setCurrentMonth(new Date(year, month + 1, 1))} style={styles.navBtn}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
         </div>
       </div>
 
-      <div style={styles.calendar}>
-        {/* Day headers */}
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} style={styles.dayHeader}>{day}</div>
+      <div style={styles.calendarGrid}>
+        {(isMobileOrTablet ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((day, idx) => (
+          <div key={idx} style={isMobileOrTablet ? styles.dayHeaderMobile : styles.dayHeader}>{day}</div>
         ))}
 
-        {/* Empty cells before first day */}
         {Array.from({ length: startingDayOfWeek }).map((_, index) => (
-          <div key={`empty-${index}`} style={styles.calendarDayEmpty} />
+          <div key={`empty-${index}`} style={isMobileOrTablet ? styles.calendarDayEmptyMobile : styles.calendarDayEmpty} />
         ))}
 
-        {/* Days of month */}
         {Array.from({ length: daysInMonth }).map((_, index) => {
           const day = index + 1;
           const tasksForDay = getTasksForDate(day);
@@ -153,68 +197,52 @@ const TaskCalendar: React.FC<{
           const maxVisible = isMobileOrTablet ? 2 : 3;
 
           return (
-            <div
+            <CalendarDayCell
               key={day}
-              style={{
-                ...styles.calendarDay,
-                ...(isToday ? styles.calendarDayToday : {}),
-              }}
+              day={day}
+              isToday={isToday}
+              isMobileOrTablet={isMobileOrTablet}
             >
-              <div style={styles.dayNumber}>{day}</div>
+              <div style={{
+                ...(isMobileOrTablet ? styles.dayNumberMobile : styles.dayNumber),
+                ...(isToday ? (isMobileOrTablet ? styles.dayNumberTodayMobile : styles.dayNumberToday) : {}),
+              }}>
+                {day}
+              </div>
+
               {totalItems > 0 && (
-                <div style={styles.calendarTaskList}>
-                  {/* Events first (blue) */}
+                <div style={isMobileOrTablet ? styles.itemsListMobile : styles.itemsList}>
                   {eventsForDay.slice(0, maxVisible).map(event => (
                     <div
                       key={event.id}
-                      style={{
-                        ...styles.calendarEventItem,
-                        backgroundColor: event.color,
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEventClick(event);
-                      }}
+                      style={{ ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem), backgroundColor: event.color }}
+                      onClick={(e) => { e.stopPropagation(); onEventClick(event); }}
                     >
-                      <span style={styles.calendarEventTitle}>{event.title}</span>
+                      <span style={isMobileOrTablet ? styles.eventTitleMobile : styles.eventTitle}>{event.title}</span>
                     </div>
                   ))}
-                  {/* Tasks (status colored) */}
+
                   {tasksForDay.slice(0, Math.max(0, maxVisible - eventsForDay.length)).map(task => (
                     <div
                       key={task.id}
-                      style={{
-                        ...styles.calendarTaskItem,
-                        borderLeftColor: getStatusColor(task.status),
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTaskClick(task);
-                      }}
+                      style={{ ...(isMobileOrTablet ? styles.taskItemMobile : styles.taskItem), borderLeftColor: getStatusColor(task.status) }}
+                      onClick={(e) => { e.stopPropagation(); onTaskClick(task); }}
                     >
                       {showAllUsers && task.assignedTo.length > 0 && (
-                        <div style={styles.taskInitialsContainer}>
-                          {task.assignedTo.slice(0, 2).map(userId => (
-                            <span key={userId} style={styles.taskInitials}>
-                              {getUserInitials(userId, users)}
-                            </span>
-                          ))}
-                          {task.assignedTo.length > 2 && (
-                            <span style={styles.taskInitialsMore}>+{task.assignedTo.length - 2}</span>
-                          )}
-                        </div>
+                        <span style={isMobileOrTablet ? styles.taskInitialsMobile : styles.taskInitials}>
+                          {getUserInitials(task.assignedTo[0], users)}
+                        </span>
                       )}
-                      <span style={styles.calendarTaskTitle}>{task.title}</span>
+                      <span style={isMobileOrTablet ? styles.taskTitleMobile : styles.taskTitle}>{task.title}</span>
                     </div>
                   ))}
+
                   {totalItems > maxVisible && (
-                    <div style={styles.moreTasksIndicator}>
-                      +{totalItems - maxVisible} more
-                    </div>
+                    <div style={isMobileOrTablet ? styles.moreIndicatorMobile : styles.moreIndicator}>+{totalItems - maxVisible}</div>
                   )}
                 </div>
               )}
-            </div>
+            </CalendarDayCell>
           );
         })}
       </div>
@@ -222,7 +250,7 @@ const TaskCalendar: React.FC<{
   );
 };
 
-// Team Member Dashboard Component with Calendar View
+// Team Member Dashboard
 const TeamMemberDashboard: React.FC<{
   currentUser: User;
   jobTasks: JobTask[];
@@ -230,22 +258,29 @@ const TeamMemberDashboard: React.FC<{
   users: User[];
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
+  selectedTask: JobTask | null;
+  setSelectedTask: (task: JobTask | null) => void;
+  selectedEvent: CalendarEvent | null;
+  setSelectedEvent: (event: CalendarEvent | null) => void;
   navigate: ReturnType<typeof useNavigate>;
-}> = ({ currentUser, jobTasks, events, users, currentMonth, setCurrentMonth, navigate }) => {
+}> = ({ currentUser, jobTasks, events, users, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
-  const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-
   const myTasks = jobTasks.filter(task => task.assignedTo.includes(currentUser.id));
 
-  // Task stats
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Stats
   const pendingTasks = myTasks.filter(t => t.status === 'pending').length;
   const inProgressTasks = myTasks.filter(t => t.status === 'in-progress').length;
   const completedTasks = myTasks.filter(t => t.status === 'completed').length;
+  const overdueTasks = myTasks.filter(task => {
+    const taskDate = new Date(task.scheduledDate);
+    taskDate.setHours(0, 0, 0, 0);
+    return taskDate < today && task.status !== 'completed';
+  });
 
   // Today's tasks
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   const todayTasks = myTasks.filter(task => {
     const taskDate = new Date(task.scheduledDate);
     taskDate.setHours(0, 0, 0, 0);
@@ -260,127 +295,65 @@ const TeamMemberDashboard: React.FC<{
     return taskDate > today && taskDate <= nextWeek;
   });
 
-  // Overdue tasks
-  const overdueTasks = myTasks.filter(task => {
-    const taskDate = new Date(task.scheduledDate);
-    return taskDate < today && task.status !== 'completed';
-  });
-
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
-      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
-        <div>
-          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>My Dashboard</h1>
-          <p style={styles.subtitle}>
-            Welcome back, {currentUser.firstName}! Here's your task overview.
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/my-tasks')}
-          style={styles.createButton}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M9 11l3 3L22 4" />
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-          </svg>
-          View All Tasks
-        </button>
+      {/* Header */}
+      <div style={styles.header}>
+        <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Welcome, {currentUser.firstName}</h1>
       </div>
 
-      {/* Stats Grid */}
-      <div style={isMobileOrTablet ? styles.statsGridMobile : styles.statsGrid}>
-        <div
-          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
-          onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.pending} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</div>
-            <div style={styles.statLabel}>Pending</div>
-          </div>
+      {/* Stats Row - Compact */}
+      <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
+        <div style={styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
+          <span style={styles.statLabel}>Pending</span>
         </div>
-
-        <div
-          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
-          onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.inProgress} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</div>
-            <div style={styles.statLabel}>In Progress</div>
-          </div>
+        <div style={styles.statDivider} />
+        <div style={styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
+          <span style={styles.statLabel}>In Progress</span>
         </div>
-
-        <div
-          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
-          onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.completed} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 11 12 14 22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</div>
-            <div style={styles.statLabel}>Completed</div>
-          </div>
+        <div style={styles.statDivider} />
+        <div style={styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
+          <span style={styles.statLabel}>Completed</span>
         </div>
-
-        <div
-          style={isMobileOrTablet ? styles.statCardClickableMobile : styles.statCardClickable}
-          onClick={() => navigate('/my-tasks', { state: { filterDate: 'past', filterStatus: 'all' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.overdue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.overdue }}>{overdueTasks.length}</div>
-            <div style={styles.statLabel}>Overdue</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Today's Tasks & Upcoming */}
-      <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Today's Tasks ({todayTasks.length})</h2>
-          {todayTasks.length === 0 ? (
-            <div style={styles.emptyState}>
-              <p style={styles.emptyText}>No tasks due today</p>
+        {overdueTasks.length > 0 && (
+          <>
+            <div style={styles.statDivider} />
+            <div style={styles.statItem} onClick={() => navigate('/my-tasks')}>
+              <span style={{ ...styles.statNumber, color: theme.colors.status.overdue }}>{overdueTasks.length}</span>
+              <span style={styles.statLabel}>Overdue</span>
             </div>
+          </>
+        )}
+      </div>
+
+      {/* Task Lists */}
+      <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
+        {/* Today's Tasks */}
+        <div style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>Today ({todayTasks.length})</h3>
+            <button onClick={() => navigate('/my-tasks')} style={styles.viewAllBtn}>View All</button>
+          </div>
+          {todayTasks.length === 0 ? (
+            <p style={styles.emptyText}>No tasks due today</p>
           ) : (
             <div style={styles.tasksList}>
-              {todayTasks.map(task => (
-                <div key={task.id} style={styles.taskItem} onClick={() => setSelectedTask(task)}>
-                  <div style={styles.taskItemHeader}>
-                    <div style={styles.taskItemTitle}>{task.title}</div>
-                    <div style={{
-                      ...styles.statusBadge,
-                      backgroundColor: getStatusColor(task.status),
-                    }}>
+              {todayTasks.slice(0, 4).map(task => (
+                <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+                  <div style={styles.taskCardHeader}>
+                    <span style={styles.taskCardTitle}>{task.title}</span>
+                    <span style={{ ...styles.taskCardStatus, backgroundColor: getStatusColor(task.status) }}>
                       {task.status.replace('-', ' ')}
+                    </span>
+                  </div>
+                  <div style={styles.taskCardProgress}>
+                    <div style={styles.progressBar}>
+                      <div style={{ ...styles.progressFill, width: `${task.progressPercentage}%` }} />
                     </div>
-                  </div>
-                  <div style={styles.progressInfo}>
-                    <span>{task.completedSteps.length} / {task.steps.length} steps</span>
-                    <span>{task.progressPercentage}%</span>
-                  </div>
-                  <div style={styles.progressBar}>
-                    <div style={{ ...styles.progressFill, width: `${task.progressPercentage}%` }} />
+                    <span style={styles.progressText}>{task.progressPercentage}%</span>
                   </div>
                 </div>
               ))}
@@ -388,30 +361,22 @@ const TeamMemberDashboard: React.FC<{
           )}
         </div>
 
+        {/* Upcoming Tasks */}
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Upcoming (Next 7 Days)</h2>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>Upcoming ({upcomingTasks.length})</h3>
+          </div>
           {upcomingTasks.length === 0 ? (
-            <div style={styles.emptyState}>
-              <p style={styles.emptyText}>No upcoming tasks</p>
-            </div>
+            <p style={styles.emptyText}>No upcoming tasks</p>
           ) : (
             <div style={styles.tasksList}>
-              {upcomingTasks.slice(0, 5).map(task => (
-                <div key={task.id} style={styles.taskItem} onClick={() => setSelectedTask(task)}>
-                  <div style={styles.taskItemHeader}>
-                    <div style={styles.taskItemTitle}>{task.title}</div>
-                    <div style={{
-                      ...styles.statusBadge,
-                      backgroundColor: getStatusColor(task.status),
-                    }}>
-                      {task.status.replace('-', ' ')}
-                    </div>
-                  </div>
-                  <div style={styles.taskItemFooter}>
-                    <span style={styles.taskDate}>
+              {upcomingTasks.slice(0, 4).map(task => (
+                <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+                  <div style={styles.taskCardHeader}>
+                    <span style={styles.taskCardTitle}>{task.title}</span>
+                    <span style={styles.taskCardDate}>
                       {new Date(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
-                    <span>{task.progressPercentage}% complete</span>
                   </div>
                 </div>
               ))}
@@ -422,22 +387,18 @@ const TeamMemberDashboard: React.FC<{
 
       {/* Overdue Tasks */}
       {overdueTasks.length > 0 && (
-        <div style={styles.section}>
-          <h2 style={{ ...styles.sectionTitle, color: theme.colors.status.overdue }}>Overdue Tasks ({overdueTasks.length})</h2>
+        <div style={{ ...styles.section, borderColor: theme.colors.status.overdue }}>
+          <div style={styles.sectionHeader}>
+            <h3 style={{ ...styles.sectionTitle, color: theme.colors.status.overdue }}>Overdue ({overdueTasks.length})</h3>
+          </div>
           <div style={styles.tasksList}>
-            {overdueTasks.map(task => (
-              <div key={task.id} style={{ ...styles.taskItem, borderColor: theme.colors.status.overdue }} onClick={() => setSelectedTask(task)}>
-                <div style={styles.taskItemHeader}>
-                  <div style={styles.taskItemTitle}>{task.title}</div>
-                  <div style={{ ...styles.statusBadge, backgroundColor: theme.colors.status.overdue }}>
-                    Overdue
-                  </div>
-                </div>
-                <div style={styles.taskItemFooter}>
-                  <span style={{ ...styles.taskDate, color: theme.colors.status.overdue }}>
-                    Due: {new Date(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            {overdueTasks.slice(0, 3).map(task => (
+              <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+                <div style={styles.taskCardHeader}>
+                  <span style={styles.taskCardTitle}>{task.title}</span>
+                  <span style={{ ...styles.taskCardDate, color: theme.colors.status.overdue }}>
+                    Due: {new Date(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
-                  <span>{task.progressPercentage}% complete</span>
                 </div>
               </div>
             ))}
@@ -445,7 +406,7 @@ const TeamMemberDashboard: React.FC<{
         </div>
       )}
 
-      {/* Calendar Section - At Bottom */}
+      {/* Calendar */}
       <TaskCalendar
         tasks={myTasks}
         events={events}
@@ -457,241 +418,132 @@ const TeamMemberDashboard: React.FC<{
         showAllUsers={false}
       />
 
-      {/* Task Detail Modal */}
-      <CalendarTaskModal
-        isOpen={selectedTask !== null}
-        onClose={() => setSelectedTask(null)}
-        task={selectedTask}
-        users={users}
-      />
-
-      {/* Event Detail Modal */}
-      <EventDetailModal
-        isOpen={selectedEvent !== null}
-        onClose={() => setSelectedEvent(null)}
-        event={selectedEvent}
-        users={users}
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />
+      {/* Modals */}
+      <CalendarTaskModal isOpen={selectedTask !== null} onClose={() => setSelectedTask(null)} task={selectedTask} users={users} />
+      <EventDetailModal isOpen={selectedEvent !== null} onClose={() => setSelectedEvent(null)} event={selectedEvent} users={users} onEdit={() => {}} onDelete={() => {}} />
     </div>
   );
 };
 
-// Admin Dashboard Component (existing dashboard + task calendar)
-const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; events: CalendarEvent[]; users: User[]; navigate: ReturnType<typeof useNavigate> }> = ({ sops, jobTasks, events, users, navigate }) => {
+// Admin Dashboard
+const AdminDashboard: React.FC<{
+  sops: any[];
+  jobTasks: JobTask[];
+  events: CalendarEvent[];
+  users: User[];
+  currentMonth: Date;
+  setCurrentMonth: (date: Date) => void;
+  selectedTask: JobTask | null;
+  setSelectedTask: (task: JobTask | null) => void;
+  selectedEvent: CalendarEvent | null;
+  setSelectedEvent: (event: CalendarEvent | null) => void;
+  navigate: ReturnType<typeof useNavigate>;
+}> = ({ sops, jobTasks, events, users, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
-  // Calculate SOP stats
-  const totalSOPs = sops.length;
+  // SOP Stats
   const publishedSOPs = sops.filter(s => s.status === 'published' && !s.isTemplate).length;
   const draftSOPs = sops.filter(s => s.status === 'draft').length;
-  const archivedSOPs = sops.filter(s => s.status === 'archived').length;
   const templateSOPs = sops.filter(s => s.isTemplate).length;
-  const categories = Array.from(new Set(sops.map(sop => sop.category)));
-  const departments = Array.from(new Set(sops.map(sop => sop.department))).filter(d => d);
-  const recentSOPs = [...sops]
-    .filter(s => !s.isTemplate)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
 
+  // Department stats
+  const departments = Array.from(new Set(sops.map(sop => sop.department))).filter(d => d);
+  const departmentStats = departments.map(department => ({
+    name: department,
+    count: sops.filter(sop => sop.department === department).length,
+  })).sort((a, b) => b.count - a.count);
+
+  // Category stats
+  const categories = Array.from(new Set(sops.map(sop => sop.category)));
   const categoryStats = categories.map(category => ({
     name: category,
     count: sops.filter(sop => sop.category === category).length,
   })).sort((a, b) => b.count - a.count);
 
-  const departmentStats = departments.map(department => ({
-    name: department,
-    count: sops.filter(sop => sop.department === department).length,
-    published: sops.filter(sop => sop.department === department && sop.status === 'published' && !sop.isTemplate).length,
-    drafts: sops.filter(sop => sop.department === department && sop.status === 'draft').length,
-    templates: sops.filter(sop => sop.department === department && sop.isTemplate).length,
-  })).sort((a, b) => b.count - a.count);
+  // Recent SOPs
+  const recentSOPs = [...sops]
+    .filter(s => !s.isTemplate)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
 
-  // Filter only active tasks (not archived or draft)
+  // Active tasks
   const activeTasks = jobTasks.filter(t => t.status !== 'archived' && t.status !== 'draft');
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
-      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
-        <div>
-          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Dashboard</h1>
-          <p style={styles.subtitle}>
-            Overview of your Standard Operating Procedures
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/sop', { state: { openForm: true } })}
-          style={styles.createButton}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Create SOP
+      {/* Header */}
+      <div style={styles.headerRow}>
+        <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Dashboard</h1>
+        <button onClick={() => navigate('/sop', { state: { openForm: true } })} style={styles.createBtn}>
+          + New SOP
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div style={styles.statsGrid}>
-        <div
-          style={styles.statCardClickable}
-          onClick={() => navigate('/sop', { state: { filterStatus: 'published' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.published} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 11 12 14 22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.published }}>{publishedSOPs}</div>
-            <div style={styles.statLabel}>Published</div>
-          </div>
+      {/* Stats Row - Compact, no icons */}
+      <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
+        <div style={styles.statItem} onClick={() => navigate('/sop', { state: { filterStatus: 'published' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.published }}>{publishedSOPs}</span>
+          <span style={styles.statLabel}>Published</span>
         </div>
-
-        <div
-          style={styles.statCardClickable}
-          onClick={() => navigate('/sop', { state: { filterStatus: 'draft' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.draft} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.draft }}>{draftSOPs}</div>
-            <div style={styles.statLabel}>Drafts</div>
-          </div>
+        <div style={styles.statDivider} />
+        <div style={styles.statItem} onClick={() => navigate('/sop', { state: { filterStatus: 'draft' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.draft }}>{draftSOPs}</span>
+          <span style={styles.statLabel}>Drafts</span>
         </div>
-
-        <div
-          style={styles.statCardClickable}
-          onClick={() => navigate('/sop', { state: { filterStatus: 'archived' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.archived} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3h18v18H3zM21 9H3M21 15H3" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.archived }}>{archivedSOPs}</div>
-            <div style={styles.statLabel}>Archived</div>
-          </div>
+        <div style={styles.statDivider} />
+        <div style={styles.statItem} onClick={() => navigate('/sop', { state: { viewMode: 'templates' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.info }}>{templateSOPs}</span>
+          <span style={styles.statLabel}>Templates</span>
         </div>
-
-        <div
-          style={styles.statCardClickable}
-          onClick={() => navigate('/sop', { state: { viewMode: 'templates' } })}
-        >
-          <div style={styles.statIcon}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.info} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-            </svg>
-          </div>
-          <div style={styles.statContent}>
-            <div style={{ ...styles.statNumber, color: theme.colors.status.info }}>{templateSOPs}</div>
-            <div style={styles.statLabel}>Templates</div>
-          </div>
+        <div style={styles.statDivider} />
+        <div style={styles.statItem} onClick={() => navigate('/job-tasks')}>
+          <span style={{ ...styles.statNumber, color: theme.colors.primary }}>{activeTasks.length}</span>
+          <span style={styles.statLabel}>Tasks</span>
         </div>
       </div>
 
-      {/* Department Breakdown - Full Width */}
+      {/* Departments - Compact pills */}
       {departmentStats.length > 0 && (
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Departments</h2>
-          <div style={styles.departmentGrid}>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>Departments</h3>
+          </div>
+          <div style={styles.pillsGrid}>
             {departmentStats.map((dept, index) => (
               <div
                 key={index}
-                style={styles.departmentCardClickable}
+                style={styles.departmentPill}
                 onClick={() => navigate('/sop', { state: { filterDepartment: dept.name } })}
               >
-                <div style={styles.departmentHeader}>
-                  <div style={styles.departmentName}>{dept.name}</div>
-                  <div style={styles.departmentTotal}>{dept.count} Total</div>
-                </div>
-                <div style={styles.departmentStats}>
-                  <div style={styles.departmentStat}>
-                    <span style={styles.departmentStatLabel}>Published</span>
-                    <span style={{...styles.departmentStatValue, color: theme.colors.status.published}}>{dept.published}</span>
-                  </div>
-                  <div style={styles.departmentStat}>
-                    <span style={styles.departmentStatLabel}>Drafts</span>
-                    <span style={{...styles.departmentStatValue, color: theme.colors.status.draft}}>{dept.drafts}</span>
-                  </div>
-                  <div style={styles.departmentStat}>
-                    <span style={styles.departmentStatLabel}>Templates</span>
-                    <span style={{...styles.departmentStatValue, color: theme.colors.status.info}}>{dept.templates}</span>
-                  </div>
-                </div>
-                <div style={styles.departmentBar}>
-                  <div
-                    style={{
-                      ...styles.departmentBarFill,
-                      width: `${(dept.count / totalSOPs) * 100}%`,
-                    }}
-                  />
-                </div>
+                <span style={styles.pillName}>{dept.name}</span>
+                <span style={styles.pillCount}>{dept.count}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <div style={styles.contentGrid}>
+      {/* Content Grid: Recent SOPs + Categories */}
+      <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
         {/* Recent SOPs */}
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Recent SOPs</h2>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>Recent SOPs</h3>
+            <button onClick={() => navigate('/sop')} style={styles.viewAllBtn}>View All</button>
+          </div>
           {recentSOPs.length === 0 ? (
-            <div style={styles.emptyState}>
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={theme.colors.textMuted}
-                strokeWidth="1.5"
-                style={{ marginBottom: '12px' }}
-              >
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-              <p style={styles.emptyText}>No SOPs created yet</p>
-              <button
-                onClick={() => navigate('/sop', { state: { openForm: true } })}
-                style={styles.emptyButton}
-              >
-                Create Your First SOP
-              </button>
-            </div>
+            <p style={styles.emptyText}>No SOPs created yet</p>
           ) : (
             <div style={styles.recentList}>
               {recentSOPs.map(sop => (
-                <div
-                  key={sop.id}
-                  style={styles.recentItem}
-                  onClick={() => navigate('/sop')}
-                >
+                <div key={sop.id} style={styles.recentItem} onClick={() => navigate('/sop')}>
                   <div style={styles.recentItemHeader}>
-                    <div style={styles.recentItemTitle}>{sop.title}</div>
-                    <div style={styles.recentItemCategory}>{sop.category}</div>
+                    <span style={styles.recentItemTitle}>{sop.title}</span>
+                    <span style={styles.recentItemCategory}>{sop.category}</span>
                   </div>
-                  <div style={styles.recentItemDescription}>
-                    {sop.description}
-                  </div>
-                  <div style={styles.recentItemFooter}>
-                    <span style={styles.recentItemSteps}>
-                      {sop.steps.length} {sop.steps.length === 1 ? 'step' : 'steps'}
-                    </span>
-                    <span style={styles.recentItemDate}>
-                      {new Date(sop.createdAt).toLocaleDateString()}
-                    </span>
+                  <div style={styles.recentItemMeta}>
+                    <span>{sop.steps.length} steps</span>
+                    <span>{new Date(sop.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
               ))}
@@ -699,35 +551,23 @@ const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; events: Calen
           )}
         </div>
 
-        {/* Category Breakdown */}
+        {/* Categories */}
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Categories</h2>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>Categories</h3>
+          </div>
           {categoryStats.length === 0 ? (
-            <div style={styles.emptyState}>
-              <p style={styles.emptyText}>No categories yet</p>
-            </div>
+            <p style={styles.emptyText}>No categories yet</p>
           ) : (
             <div style={styles.categoryList}>
-              {categoryStats.map((category, index) => (
+              {categoryStats.slice(0, 6).map((category, index) => (
                 <div
                   key={index}
-                  style={styles.categoryItemClickable}
+                  style={styles.categoryItem}
                   onClick={() => navigate('/sop', { state: { expandCategory: category.name } })}
                 >
-                  <div style={styles.categoryInfo}>
-                    <div style={styles.categoryName}>{category.name}</div>
-                    <div style={styles.categoryCount}>
-                      {category.count} {category.count === 1 ? 'SOP' : 'SOPs'}
-                    </div>
-                  </div>
-                  <div style={styles.categoryBar}>
-                    <div
-                      style={{
-                        ...styles.categoryBarFill,
-                        width: `${(category.count / totalSOPs) * 100}%`,
-                      }}
-                    />
-                  </div>
+                  <span style={styles.categoryName}>{category.name}</span>
+                  <span style={styles.categoryCount}>{category.count}</span>
                 </div>
               ))}
             </div>
@@ -735,46 +575,7 @@ const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; events: Calen
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Quick Actions</h2>
-        <div style={styles.actionsGrid}>
-          <button
-            onClick={() => navigate('/sop')}
-            style={styles.actionCard}
-          >
-            <div style={styles.actionIcon}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-              </svg>
-            </div>
-            <div style={styles.actionTitle}>View All SOPs</div>
-            <div style={styles.actionDescription}>
-              Browse and manage all procedures
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate('/sop', { state: { openForm: true } })}
-            style={styles.actionCard}
-          >
-            <div style={styles.actionIcon}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="16" />
-                <line x1="8" y1="12" x2="16" y2="12" />
-              </svg>
-            </div>
-            <div style={styles.actionTitle}>Create New SOP</div>
-            <div style={styles.actionDescription}>
-              Add a new standard operating procedure
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Task Calendar Section - At Bottom */}
+      {/* Calendar */}
       {(activeTasks.length > 0 || events.length > 0) && (
         <TaskCalendar
           tasks={activeTasks}
@@ -788,196 +589,194 @@ const AdminDashboard: React.FC<{ sops: any[]; jobTasks: JobTask[]; events: Calen
         />
       )}
 
-      {/* Task Detail Modal */}
-      <CalendarTaskModal
-        isOpen={selectedTask !== null}
-        onClose={() => setSelectedTask(null)}
-        task={selectedTask}
-        users={users}
-      />
-
-      {/* Event Detail Modal */}
-      <EventDetailModal
-        isOpen={selectedEvent !== null}
-        onClose={() => setSelectedEvent(null)}
-        event={selectedEvent}
-        users={users}
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />
+      {/* Modals */}
+      <CalendarTaskModal isOpen={selectedTask !== null} onClose={() => setSelectedTask(null)} task={selectedTask} users={users} />
+      <EventDetailModal isOpen={selectedEvent !== null} onClose={() => setSelectedEvent(null)} event={selectedEvent} users={users} onEdit={() => {}} onDelete={() => {}} />
     </div>
   );
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: theme.responsiveSpacing.containerPadding.desktop,
-    maxWidth: '1400px',
+    padding: theme.pageLayout.containerPadding.desktop,
+    maxWidth: theme.pageLayout.maxWidth,
     margin: '0 auto',
   },
   containerMobile: {
-    padding: theme.responsiveSpacing.containerPadding.mobile,
-    maxWidth: '100%',
-    margin: '0 auto',
+    padding: theme.pageLayout.containerPadding.mobile,
   },
   header: {
+    marginBottom: theme.spacing.lg,
+  },
+  headerRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: theme.spacing.xl,
-    gap: theme.spacing.lg,
-  },
-  headerMobile: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing.md,
+    alignItems: 'center',
     marginBottom: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   title: {
     ...theme.typography.h1,
     color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'left',
+    margin: 0,
   },
   titleMobile: {
     ...theme.typography.h1Mobile,
     color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'left',
+    margin: 0,
   },
-  subtitle: {
-    ...theme.typography.subtitle,
-    color: theme.colors.textSecondary,
-    marginTop: theme.spacing.sm,
-  },
-  createButton: {
-    ...theme.components.button.base,
-    ...theme.components.button.sizes.md,
-    backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+  createBtn: {
+    padding: '10px 20px',
+    fontSize: '14px',
     fontWeight: 700,
-    whiteSpace: 'nowrap',
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
   },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: theme.responsiveSpacing.cardGap.desktop,
-    marginBottom: theme.responsiveSpacing.containerPadding.desktop,
-  },
-  statsGridMobile: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: theme.responsiveSpacing.cardGap.mobile,
+
+  // Stats Row - Compact inline
+  statsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
     marginBottom: theme.spacing.lg,
+    padding: '14px 20px',
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
   },
-  statCard: {
-    ...theme.components.card.base,
+  statsRowMobile: {
     display: 'flex',
     alignItems: 'center',
-    gap: theme.responsiveSpacing.cardGap.desktop,
-    transition: 'all 0.2s',
+    justifyContent: 'space-around',
+    flexWrap: 'wrap' as const,
+    gap: '12px',
+    marginBottom: theme.spacing.md,
+    padding: '12px',
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
   },
-  statCardMobile: {
-    ...theme.components.card.base,
-    ...theme.components.card.mobile,
+  statItem: {
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'column' as const,
     alignItems: 'center',
-    gap: theme.responsiveSpacing.cardGap.mobile,
-    transition: 'all 0.2s',
-    textAlign: 'center',
-  },
-  statCardClickable: {
-    ...theme.components.card.base,
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.responsiveSpacing.cardGap.desktop,
-    transition: 'all 0.2s',
     cursor: 'pointer',
-  },
-  statCardClickableMobile: {
-    ...theme.components.card.base,
-    ...theme.components.card.mobile,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: theme.responsiveSpacing.cardGap.mobile,
-    transition: 'all 0.2s',
-    textAlign: 'center',
-    cursor: 'pointer',
-  },
-  statIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statContent: {
-    flex: 1,
+    padding: '4px 12px',
+    borderRadius: theme.borderRadius.md,
+    transition: 'background-color 0.2s',
   },
   statNumber: {
-    fontSize: '32px',
+    fontSize: '26px',
     fontWeight: 800,
-    color: theme.colors.primary,
-    marginBottom: theme.spacing.xs,
+    lineHeight: 1,
   },
   statLabel: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.textSecondary,
+    fontSize: '13px',
     fontWeight: 600,
-    textTransform: 'uppercase',
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
+    marginTop: '2px',
   },
+  statDivider: {
+    width: '1px',
+    height: '32px',
+    backgroundColor: theme.colors.border,
+  },
+
+  // Sections
+  section: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '16px',
+    marginBottom: theme.spacing.lg,
+  },
+  sectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
+  },
+  sectionTitle: {
+    fontSize: '17px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+    margin: 0,
+  },
+  viewAllBtn: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.primary,
+    backgroundColor: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '4px 8px',
+  },
+  emptyText: {
+    fontSize: '15px',
+    color: theme.colors.textMuted,
+    textAlign: 'center' as const,
+    padding: '20px',
+  },
+
+  // Content Grid
   contentGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
     gap: theme.spacing.lg,
-    marginBottom: theme.responsiveSpacing.containerPadding.desktop,
   },
   contentGridMobile: {
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'column' as const,
     gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
   },
-  section: {
-    ...theme.components.card.base,
-    marginBottom: theme.spacing.lg,
+
+  // Department Pills
+  pillsGrid: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '8px',
   },
-  sectionMobile: {
-    ...theme.components.card.base,
-    ...theme.components.card.mobile,
-    marginBottom: theme.spacing.md,
+  departmentPill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 14px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.full,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
   },
-  sectionTitle: {
-    ...theme.typography.h3,
-    fontSize: '20px',
+  pillName: {
+    fontSize: '15px',
+    fontWeight: 600,
     color: theme.colors.textPrimary,
-    marginBottom: theme.responsiveSpacing.cardGap.desktop,
   },
-  emptyState: {
-    textAlign: 'center',
-    padding: `${theme.responsiveSpacing.containerPadding.desktop} ${theme.responsiveSpacing.cardGap.desktop}`,
-  },
-  emptyText: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.textMuted,
-    marginBottom: theme.spacing.md,
-  },
-  emptyButton: {
-    ...theme.components.button.base,
-    ...theme.components.button.sizes.sm,
+  pillCount: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#FFFFFF',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    padding: '2px 8px',
+    borderRadius: theme.borderRadius.full,
   },
+
+  // Recent List
   recentList: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: theme.responsiveSpacing.cardGap.mobile,
+    flexDirection: 'column' as const,
+    gap: '8px',
   },
   recentItem: {
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.background,
-    border: `2px solid ${theme.colors.border}`,
+    padding: '10px 12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     transition: 'all 0.2s',
@@ -986,382 +785,106 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.sm,
+    marginBottom: '4px',
   },
   recentItemTitle: {
-    ...theme.typography.subtitle,
-    fontWeight: 700,
+    fontSize: '15px',
+    fontWeight: 600,
     color: theme.colors.textPrimary,
   },
   recentItemCategory: {
-    ...theme.typography.captionSmall,
+    fontSize: '12px',
     fontWeight: 700,
     color: theme.colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    textTransform: 'uppercase' as const,
   },
-  recentItemDescription: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.responsiveSpacing.cardGap.mobile,
-    lineHeight: '1.5',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  },
-  recentItemFooter: {
+  recentItemMeta: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
     fontSize: '13px',
     color: theme.colors.textMuted,
   },
-  recentItemSteps: {
-    fontWeight: '600',
-  },
-  recentItemDate: {},
+
+  // Category List
   categoryList: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
+    flexDirection: 'column' as const,
+    gap: '6px',
   },
   categoryItem: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  categoryItemClickable: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    cursor: 'pointer',
-    padding: '12px',
-    borderRadius: theme.borderRadius.md,
-    transition: 'all 0.2s',
-    margin: '-12px',
-    marginBottom: '4px',
-  },
-  categoryInfo: {
-    display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: '10px 12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
   },
   categoryName: {
     fontSize: '15px',
-    fontWeight: '600',
+    fontWeight: 600,
     color: theme.colors.textPrimary,
   },
   categoryCount: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    fontWeight: '600',
-  },
-  categoryBar: {
-    height: '8px',
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.full,
-    overflow: 'hidden',
-  },
-  categoryBarFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.full,
-    transition: 'width 0.3s ease',
-  },
-  actionsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '16px',
-  },
-  actionCard: {
-    padding: '24px',
-    backgroundColor: theme.colors.background,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    textAlign: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  actionIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: '12px',
-  },
-  actionTitle: {
-    fontSize: '16px',
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-    marginBottom: '8px',
-  },
-  actionDescription: {
-    fontSize: '13px',
-    color: theme.colors.textSecondary,
-    lineHeight: '1.5',
-  },
-  departmentGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '20px',
-  },
-  departmentCard: {
-    padding: '20px',
-    backgroundColor: theme.colors.background,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    transition: 'all 0.2s',
-  },
-  departmentCardClickable: {
-    padding: '20px',
-    backgroundColor: theme.colors.background,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    transition: 'all 0.2s',
-    cursor: 'pointer',
-  },
-  departmentHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-    paddingBottom: '12px',
-    borderBottom: `2px solid ${theme.colors.border}`,
-  },
-  departmentName: {
-    fontSize: '18px',
-    fontWeight: '700',
-    color: theme.colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  departmentTotal: {
     fontSize: '14px',
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  departmentStats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '12px',
-    marginBottom: '16px',
-  },
-  departmentStat: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '4px',
-  },
-  departmentStatLabel: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  departmentStatValue: {
-    fontSize: '24px',
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-  },
-  departmentBar: {
-    height: '8px',
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.full,
-    overflow: 'hidden',
-    border: `1px solid ${theme.colors.border}`,
-  },
-  departmentBarFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.full,
-    transition: 'width 0.3s ease',
-  },
-  calendarHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '24px',
-  },
-  calendarNav: {
-    display: 'flex',
-    gap: '8px',
-  },
-  navButton: {
-    padding: '8px',
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: theme.colors.txt.primary,
-    transition: 'all 0.2s',
-  },
-  calendar: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: '8px',
-  },
-  dayHeader: {
-    textAlign: 'center',
-    fontSize: '13px',
-    fontWeight: '700',
-    color: theme.colors.txt.secondary,
-    padding: '12px 0',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  calendarDay: {
-    minHeight: '120px',
-    padding: '8px',
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    position: 'relative',
-    transition: 'all 0.2s',
-  } as React.CSSProperties,
-  calendarDayEmpty: {
-    minHeight: '120px',
-    padding: '8px',
-    backgroundColor: 'transparent',
-  },
-  calendarDayToday: {
-    border: `2px solid ${theme.colors.primary}`,
-    backgroundColor: theme.colors.bg.secondary,
-  },
-  dayNumber: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: theme.colors.txt.primary,
-    marginBottom: '8px',
-  },
-  calendarTaskList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  calendarTaskItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '4px 8px',
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.sm,
-    borderLeft: '3px solid',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    overflow: 'hidden',
-  },
-  taskInitialsContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    flexShrink: 0,
-  },
-  taskInitials: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '20px',
-    height: '20px',
-    borderRadius: '50%',
-    backgroundColor: theme.colors.primary,
-    color: '#FFFFFF',
-    fontSize: '9px',
     fontWeight: 700,
+    color: theme.colors.textSecondary,
   },
-  taskInitialsMore: {
-    fontSize: '9px',
-    color: theme.colors.textMuted,
-    fontWeight: 600,
-    marginLeft: '2px',
-  },
-  calendarTaskTitle: {
-    fontSize: '11px',
-    fontWeight: '500',
-    color: theme.colors.txt.primary,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  calendarEventItem: {
-    padding: '4px 8px',
-    borderRadius: theme.borderRadius.sm,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    overflow: 'hidden',
-  },
-  calendarEventTitle: {
-    fontSize: '11px',
-    fontWeight: '500',
-    color: '#FFFFFF',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: 'block',
-  },
-  moreTasksIndicator: {
-    fontSize: '10px',
-    color: theme.colors.txt.secondary,
-    fontWeight: '600',
-    padding: '2px 8px',
-  },
-  taskIndicators: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    marginTop: '8px',
-  },
-  taskDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-  },
+
+  // Task Cards
   tasksList: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
+    flexDirection: 'column' as const,
+    gap: '8px',
   },
-  taskItem: {
-    padding: '16px',
+  taskCard: {
+    padding: '10px 12px',
     backgroundColor: theme.colors.bg.tertiary,
-    border: `2px solid ${theme.colors.bdr.primary}`,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
-  taskItemHeader: {
+  taskCardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '12px',
+    gap: '8px',
   },
-  taskItemTitle: {
+  taskCardTitle: {
     fontSize: '15px',
-    fontWeight: '700',
-    color: theme.colors.txt.primary,
+    fontWeight: 600,
+    color: theme.colors.textPrimary,
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
   },
-  statusBadge: {
-    padding: '4px 12px',
-    borderRadius: theme.borderRadius.full,
+  taskCardStatus: {
     fontSize: '11px',
-    fontWeight: '700',
+    fontWeight: 700,
     color: '#FFFFFF',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    padding: '3px 8px',
+    borderRadius: theme.borderRadius.full,
+    textTransform: 'uppercase' as const,
   },
-  progressInfo: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  taskCardDate: {
     fontSize: '13px',
-    color: theme.colors.txt.secondary,
-    marginBottom: '8px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
+    whiteSpace: 'nowrap' as const,
+  },
+  taskCardProgress: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginTop: '8px',
   },
   progressBar: {
-    height: '6px',
+    flex: 1,
+    height: '4px',
     backgroundColor: theme.colors.bg.secondary,
     borderRadius: theme.borderRadius.full,
     overflow: 'hidden',
@@ -1372,15 +895,267 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.full,
     transition: 'width 0.3s ease',
   },
-  taskItemFooter: {
+  progressText: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
+    minWidth: '32px',
+    textAlign: 'right' as const,
+  },
+
+  // Calendar
+  calendarSection: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    overflow: 'hidden',
+  },
+  calendarHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: '12px 16px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  calendarTitle: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+    margin: 0,
+  },
+  calendarNav: {
+    display: 'flex',
+    gap: '6px',
+  },
+  todayBtn: {
+    padding: '5px 10px',
+    fontSize: '14px',
+    fontWeight: 600,
+    backgroundColor: 'transparent',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.textSecondary,
+    cursor: 'pointer',
+  },
+  navBtn: {
+    padding: '5px',
+    backgroundColor: 'transparent',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.textSecondary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+  },
+  dayHeader: {
+    textAlign: 'center' as const,
+    fontSize: '14px',
+    fontWeight: 700,
+    color: theme.colors.textMuted,
+    padding: '10px 4px',
+    textTransform: 'uppercase' as const,
+    backgroundColor: theme.colors.bg.tertiary,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    borderRight: `1px solid ${theme.colors.border}`,
+  },
+  dayHeaderMobile: {
+    textAlign: 'center' as const,
     fontSize: '13px',
+    fontWeight: 700,
+    color: theme.colors.textMuted,
+    padding: '8px 2px',
+    textTransform: 'uppercase' as const,
+    backgroundColor: theme.colors.bg.tertiary,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    borderRight: `1px solid ${theme.colors.border}`,
+  },
+  calendarDay: {
+    height: '90px',
+    padding: '4px',
+    backgroundColor: theme.colors.bg.secondary,
+    borderRight: `1px solid ${theme.colors.border}`,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  calendarDayMobile: {
+    height: '65px',
+    padding: '3px',
+    backgroundColor: theme.colors.bg.secondary,
+    borderRight: `1px solid ${theme.colors.border}`,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  calendarDayEmpty: {
+    height: '90px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRight: `1px solid ${theme.colors.border}`,
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  calendarDayEmptyMobile: {
+    height: '65px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRight: `1px solid ${theme.colors.border}`,
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  calendarDayToday: {
+    backgroundColor: theme.colors.bg.primary,
+  },
+  calendarDayHover: {
+    backgroundColor: '#2a2a2a',
+    cursor: 'pointer',
+  },
+  dayNumber: {
+    fontSize: '16px',
+    fontWeight: 600,
     color: theme.colors.txt.secondary,
   },
-  taskDate: {
-    fontWeight: '600',
+  dayNumberMobile: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.txt.secondary,
+  },
+  dayNumberToday: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '28px',
+    height: '28px',
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    borderRadius: '50%',
+    fontSize: '15px',
+  },
+  dayNumberTodayMobile: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '24px',
+    height: '24px',
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    borderRadius: '50%',
+    fontSize: '13px',
+  },
+  itemsList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '2px',
+    flex: 1,
+    overflow: 'hidden',
+    marginTop: '2px',
+  },
+  itemsListMobile: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '1px',
+    flex: 1,
+    overflow: 'hidden',
+    marginTop: '1px',
+  },
+  eventItem: {
+    padding: '2px 4px',
+    borderRadius: '2px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+  },
+  eventItemMobile: {
+    padding: '1px 3px',
+    borderRadius: '2px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+  },
+  eventTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'block',
+  },
+  eventTitleMobile: {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'block',
+  },
+  taskItem: {
+    padding: '2px 4px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: '2px',
+    borderLeft: '2px solid',
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '3px',
+    cursor: 'pointer',
+  },
+  taskItemMobile: {
+    padding: '1px 3px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: '2px',
+    borderLeft: '2px solid',
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    cursor: 'pointer',
+  },
+  taskInitials: {
+    fontSize: '10px',
+    fontWeight: 700,
+    color: '#FFFFFF',
+    backgroundColor: theme.colors.primary,
+    padding: '2px 4px',
+    borderRadius: '2px',
+    flexShrink: 0,
+  },
+  taskInitialsMobile: {
+    fontSize: '9px',
+    fontWeight: 700,
+    color: '#FFFFFF',
+    backgroundColor: theme.colors.primary,
+    padding: '1px 3px',
+    borderRadius: '2px',
+    flexShrink: 0,
+  },
+  taskTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.txt.primary,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  taskTitleMobile: {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: theme.colors.txt.primary,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  moreIndicator: {
+    fontSize: '12px',
+    color: theme.colors.txt.secondary,
+    fontWeight: 600,
+  },
+  moreIndicatorMobile: {
+    fontSize: '10px',
+    color: theme.colors.txt.secondary,
+    fontWeight: 600,
   },
 };
 

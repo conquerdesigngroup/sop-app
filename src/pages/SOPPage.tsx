@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,6 +52,51 @@ const SOPPage: React.FC = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location]);
+
+  // Memoized callbacks - must be defined before any early returns to follow hooks rules
+  const handleEdit = useCallback((sop: SOP) => {
+    setEditingSOP(sop);
+    setShowForm(true);
+  }, []);
+
+  const handleDelete = useCallback((id: string) => {
+    if (viewMode === 'templates') {
+      // Templates are permanently deleted
+      if (window.confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
+        deleteSOP(id);
+      }
+    } else {
+      // SOPs are archived instead of deleted
+      if (window.confirm('Are you sure you want to archive this SOP?')) {
+        updateSOPStatus(id, 'archived');
+      }
+    }
+  }, [viewMode, deleteSOP, updateSOPStatus]);
+
+  const handleView = useCallback((sop: SOP) => {
+    setViewingSOP(sop);
+  }, []);
+
+  const handleUseTemplate = useCallback((templateId: string) => {
+    createFromTemplate(templateId);
+    setViewMode('sops');
+    setFilterView('draft');
+  }, [createFromTemplate]);
+
+  const getIcon = useCallback((iconName?: string) => {
+    if (iconName && iconName in equipmentIcons) {
+      return equipmentIcons[iconName as IconName];
+    }
+    // Default icon for SOPs (document/clipboard)
+    return (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+    );
+  }, []);
 
   // Show skeleton while loading
   if (loading) {
@@ -130,29 +175,6 @@ const SOPPage: React.FC = () => {
     setExpandedCategories(new Set());
   };
 
-  const handleEdit = (sop: SOP) => {
-    setEditingSOP(sop);
-    setShowForm(true);
-  };
-
-  const handleDelete = (id: string) => {
-    if (viewMode === 'templates') {
-      // Templates are permanently deleted
-      if (window.confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
-        deleteSOP(id);
-      }
-    } else {
-      // SOPs are archived instead of deleted
-      if (window.confirm('Are you sure you want to archive this SOP?')) {
-        updateSOPStatus(id, 'archived');
-      }
-    }
-  };
-
-  const handleView = (sop: SOP) => {
-    setViewingSOP(sop);
-  };
-
   const handleCloseForm = () => {
     setShowForm(false);
     setEditingSOP(null);
@@ -184,27 +206,6 @@ const SOPPage: React.FC = () => {
     } else {
       updateSOPStatus(id, 'published');
     }
-  };
-
-  const handleUseTemplate = (templateId: string) => {
-    createFromTemplate(templateId);
-    setViewMode('sops');
-    setFilterView('draft');
-  };
-
-  const getIcon = (iconName?: string) => {
-    if (iconName && iconName in equipmentIcons) {
-      return equipmentIcons[iconName as IconName];
-    }
-    // Default icon for SOPs (document/clipboard)
-    return (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-      </svg>
-    );
   };
 
   if (viewingSOP) {
@@ -415,21 +416,6 @@ const SOPPage: React.FC = () => {
         </div>
       </div>
 
-      <div style={isMobileOrTablet ? styles.statsMobile : styles.stats}>
-        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
-          <div style={styles.statNumber}>{currentList.length}</div>
-          <div style={styles.statLabel}>Total {viewMode === 'templates' ? 'Templates' : 'SOPs'}</div>
-        </div>
-        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
-          <div style={styles.statNumber}>{categories.length}</div>
-          <div style={styles.statLabel}>Categories</div>
-        </div>
-        <div style={isMobileOrTablet ? styles.statCardMobile : styles.statCard}>
-          <div style={styles.statNumber}>{filteredItems.length}</div>
-          <div style={styles.statLabel}>Showing</div>
-        </div>
-      </div>
-
       {filteredItems.length === 0 ? (
         <div style={styles.emptyState}>
           <svg
@@ -506,97 +492,17 @@ const SOPPage: React.FC = () => {
               {expandedCategories.has(category) && (
                 <div style={isMobileOrTablet ? styles.sopGridMobile : styles.sopGrid}>
                   {itemsByCategory[category].map(item => (
-            <div key={item.id} style={isMobileOrTablet ? styles.sopCardMobile : styles.sopCard}>
-              <div style={styles.sopHeader}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={styles.sopCategory}>{item.category}</div>
-                  {item.isTemplate && (
-                    <span style={styles.templateBadge}>Template</span>
-                  )}
-                  {!item.isTemplate && item.status === 'draft' && (
-                    <span style={styles.draftBadge}>Draft</span>
-                  )}
-                  {!item.isTemplate && item.status === 'archived' && (
-                    <span style={styles.archivedBadge}>Archived</span>
-                  )}
-                </div>
-                <div style={styles.sopStepCount}>
-                  {item.steps.length} {item.steps.length === 1 ? 'Step' : 'Steps'}
-                </div>
-              </div>
-
-              <div style={styles.sopTitleContainer}>
-                <div style={styles.sopIcon}>{getIcon(item.icon)}</div>
-                <h3 style={styles.sopTitle}>{item.title}</h3>
-              </div>
-              <p style={styles.sopDescription}>{item.description}</p>
-
-              {item.tags && item.tags.length > 0 && (
-                <div style={styles.sopTags}>
-                  {item.tags.slice(0, 3).map((tag, index) => (
-                    <span key={index} style={styles.sopTag}>
-                      {tag}
-                    </span>
-                  ))}
-                  {item.tags.length > 3 && (
-                    <span style={styles.sopTag}>+{item.tags.length - 3}</span>
-                  )}
-                </div>
-              )}
-
-              <div style={isMobileOrTablet ? styles.sopActionsMobile : styles.sopActions}>
-                <button onClick={() => handleView(item)} style={isMobileOrTablet ? styles.viewButtonMobile : styles.viewButton}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  View
-                </button>
-
-                {/* Template: Show "Use Template" */}
-                {item.isTemplate && (
-                  <button onClick={() => handleUseTemplate(item.id)} style={isMobileOrTablet ? styles.templateButtonMobile : styles.templateButton}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                    </svg>
-                    {!isMobileOrTablet && 'Use'}
-                  </button>
-                )}
-
-                {/* Regular SOP: Show Edit (Admin only) */}
-                {!item.isTemplate && isAdmin && (
-                  <button onClick={() => handleEdit(item)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
-                    {!isMobileOrTablet && 'Edit'}
-                  </button>
-                )}
-
-                {/* Template: Show Edit (Admin only) */}
-                {item.isTemplate && isAdmin && (
-                  <button onClick={() => handleEdit(item)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
-                    {!isMobileOrTablet && 'Edit'}
-                  </button>
-                )}
-
-                {isAdmin && (
-                  <button onClick={() => handleDelete(item.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                    {!isMobileOrTablet && 'Delete'}
-                  </button>
-                )}
-              </div>
-            </div>
+                    <SOPCard
+                      key={item.id}
+                      item={item}
+                      isMobileOrTablet={isMobileOrTablet}
+                      isAdmin={isAdmin}
+                      getIcon={getIcon}
+                      onView={handleView}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onUseTemplate={handleUseTemplate}
+                    />
                   ))}
                 </div>
               )}
@@ -609,14 +515,120 @@ const SOPPage: React.FC = () => {
   );
 };
 
+// Memoized SOP Card Component for better list performance
+interface SOPCardProps {
+  item: SOP;
+  isMobileOrTablet: boolean;
+  isAdmin: boolean;
+  getIcon: (iconName?: IconName) => React.ReactNode;
+  onView: (sop: SOP) => void;
+  onEdit: (sop: SOP) => void;
+  onDelete: (id: string) => void;
+  onUseTemplate: (id: string) => void;
+}
+
+const SOPCard: React.FC<SOPCardProps> = memo(({
+  item,
+  isMobileOrTablet,
+  isAdmin,
+  getIcon,
+  onView,
+  onEdit,
+  onDelete,
+  onUseTemplate,
+}) => {
+  return (
+    <div style={isMobileOrTablet ? styles.sopCardMobile : styles.sopCard}>
+      <div style={styles.sopHeader}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={styles.sopCategory}>{item.category}</div>
+          {item.isTemplate && (
+            <span style={styles.templateBadge}>Template</span>
+          )}
+          {!item.isTemplate && item.status === 'draft' && (
+            <span style={styles.draftBadge}>Draft</span>
+          )}
+          {!item.isTemplate && item.status === 'archived' && (
+            <span style={styles.archivedBadge}>Archived</span>
+          )}
+        </div>
+        <div style={styles.sopStepCount}>
+          {item.steps.length} {item.steps.length === 1 ? 'Step' : 'Steps'}
+        </div>
+      </div>
+
+      <div style={styles.sopTitleContainer}>
+        <div style={styles.sopIcon}>{getIcon(item.icon as IconName)}</div>
+        <h3 style={styles.sopTitle}>{item.title}</h3>
+      </div>
+      <p style={styles.sopDescription}>{item.description}</p>
+
+      {item.tags && item.tags.length > 0 && (
+        <div style={styles.sopTags}>
+          {item.tags.slice(0, 3).map((tag, index) => (
+            <span key={index} style={styles.sopTag}>
+              {tag}
+            </span>
+          ))}
+          {item.tags.length > 3 && (
+            <span style={styles.sopTag}>+{item.tags.length - 3}</span>
+          )}
+        </div>
+      )}
+
+      <div style={isMobileOrTablet ? styles.sopActionsMobile : styles.sopActions}>
+        <button onClick={() => onView(item)} style={isMobileOrTablet ? styles.viewButtonMobile : styles.viewButton}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          View
+        </button>
+
+        {item.isTemplate && (
+          <button onClick={() => onUseTemplate(item.id)} style={isMobileOrTablet ? styles.templateButtonMobile : styles.templateButton}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+            </svg>
+            {!isMobileOrTablet && 'Use'}
+          </button>
+        )}
+
+        {isAdmin && (
+          <button onClick={() => onEdit(item)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            {!isMobileOrTablet && 'Edit'}
+          </button>
+        )}
+
+        {isAdmin && (
+          <button onClick={() => onDelete(item.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            {!isMobileOrTablet && 'Delete'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+SOPCard.displayName = 'SOPCard';
+
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: theme.responsiveSpacing.containerPadding.desktop,
-    maxWidth: '1400px',
+    padding: theme.pageLayout.containerPadding.desktop,
+    maxWidth: theme.pageLayout.maxWidth,
     margin: '0 auto',
   },
   containerMobile: {
-    padding: theme.responsiveSpacing.containerPadding.mobile,
+    padding: theme.pageLayout.containerPadding.mobile,
     maxWidth: '100%',
     margin: '0 auto',
   },
@@ -624,14 +636,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.pageLayout.headerMargin.desktop,
     gap: theme.spacing.lg,
   },
   headerMobile: {
     display: 'flex',
     flexDirection: 'column',
     gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.pageLayout.headerMargin.mobile,
   },
   title: {
     ...theme.typography.h1,
@@ -739,15 +751,15 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   controls: {
     display: 'flex',
-    gap: '16px',
-    marginBottom: '24px',
+    gap: theme.pageLayout.filterGap.desktop,
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
     flexWrap: 'wrap',
   },
   controlsMobile: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
-    marginBottom: '16px',
+    gap: theme.pageLayout.filterGap.mobile,
+    marginBottom: theme.pageLayout.sectionMargin.mobile,
   },
   searchContainer: {
     position: 'relative',
@@ -818,45 +830,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.2s',
     minHeight: '44px',
-  },
-  stats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '20px',
-    marginBottom: '32px',
-  },
-  statsMobile: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '12px',
-    marginBottom: '16px',
-  },
-  statCard: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: '24px',
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.border}`,
-    textAlign: 'center',
-  },
-  statCardMobile: {
-    backgroundColor: theme.colors.cardBackground,
-    padding: '16px 12px',
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.border}`,
-    textAlign: 'center',
-  },
-  statNumber: {
-    fontSize: '32px',
-    fontWeight: '800',
-    color: theme.colors.primary,
-    marginBottom: '8px',
-  },
-  statLabel: {
-    fontSize: '14px',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    fontWeight: '600',
   },
   categoriesContainer: {
     display: 'flex',

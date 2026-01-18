@@ -772,41 +772,40 @@ const TeamManagementPage: React.FC = () => {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: '40px',
-    maxWidth: '1400px',
+    padding: theme.pageLayout.containerPadding.desktop,
+    maxWidth: theme.pageLayout.maxWidth,
     margin: '0 auto',
   },
   containerMobile: {
-    padding: '16px',
+    padding: theme.pageLayout.containerPadding.mobile,
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '32px',
+    marginBottom: theme.pageLayout.headerMargin.desktop,
   },
   headerMobile: {
     flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '24px',
+    gap: theme.pageLayout.filterGap.mobile,
+    marginBottom: theme.pageLayout.headerMargin.mobile,
   },
   title: {
-    fontSize: '32px',
-    fontWeight: '800',
+    ...theme.typography.h1,
     color: theme.colors.textPrimary,
     margin: 0,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
   },
   titleMobile: {
-    fontSize: '24px',
+    ...theme.typography.h1Mobile,
   },
   subtitle: {
-    fontSize: '16px',
+    ...theme.typography.subtitle,
     color: theme.colors.textSecondary,
     margin: 0,
   },
   subtitleMobile: {
-    fontSize: '14px',
+    ...theme.typography.bodySmall,
   },
   addButton: {
     display: 'flex',
@@ -830,19 +829,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
   },
   filtersCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '24px',
-    marginBottom: '24px',
+    ...theme.components.card.base,
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
     display: 'flex',
-    gap: '16px',
+    gap: theme.pageLayout.filterGap.desktop,
     alignItems: 'flex-end',
     flexWrap: 'wrap',
   },
   filtersCardMobile: {
-    padding: '16px',
-    marginBottom: '16px',
+    ...theme.components.card.mobile,
+    marginBottom: theme.pageLayout.sectionMargin.mobile,
   },
   searchContainer: {
     position: 'relative',
@@ -905,19 +901,16 @@ const styles: { [key: string]: React.CSSProperties } = {
   statsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '16px',
-    marginBottom: '24px',
+    gap: theme.pageLayout.filterGap.desktop,
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
   },
   statsGridMobile: {
     gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '12px',
-    marginBottom: '16px',
+    gap: theme.pageLayout.filterGap.mobile,
+    marginBottom: theme.pageLayout.sectionMargin.mobile,
   },
   statCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '24px',
+    ...theme.components.card.base,
     textAlign: 'center',
   },
   statNumber: {
@@ -932,9 +925,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: '600',
   },
   tableCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
+    ...theme.components.card.base,
+    padding: 0,
     overflow: 'hidden',
   },
   table: {
@@ -1048,10 +1040,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   // Mobile Card styles
   userCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    marginBottom: '12px',
+    ...theme.components.card.base,
+    padding: 0,
+    marginBottom: theme.pageLayout.filterGap.mobile,
     overflow: 'hidden',
   },
   userCardHeader: {
@@ -1093,20 +1084,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
-    padding: '20px',
+    padding: theme.spacing.lg,
   },
   modalOverlayMobile: {
     padding: 0,
     alignItems: 'flex-end',
   },
   modal: {
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: theme.borderRadius.lg,
-    border: `2px solid ${theme.colors.border}`,
+    ...theme.components.card.base,
     maxWidth: '600px',
     width: '100%',
     maxHeight: '90vh',
     overflow: 'auto',
+    padding: 0,
   },
   modalMobile: {
     maxWidth: '100%',
@@ -1118,20 +1108,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '24px',
+    padding: theme.pageLayout.cardPadding.desktop,
     borderBottom: `2px solid ${theme.colors.border}`,
   },
   modalHeaderMobile: {
-    padding: '16px',
+    padding: theme.pageLayout.cardPadding.mobile,
   },
   modalTitle: {
-    fontSize: '24px',
-    fontWeight: '800',
+    ...theme.typography.h2,
     color: theme.colors.textPrimary,
     margin: 0,
   },
   modalTitleMobile: {
-    fontSize: '20px',
+    ...theme.typography.h2Mobile,
   },
   closeButton: {
     padding: '8px',
@@ -1150,15 +1139,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '10px',
   },
   form: {
-    padding: '24px',
+    padding: theme.pageLayout.cardPadding.desktop,
   },
   formMobile: {
-    padding: '16px',
+    padding: theme.pageLayout.cardPadding.mobile,
   },
   formRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '16px',
+    gap: theme.pageLayout.filterGap.desktop,
   },
   formRowMobile: {
     gridTemplateColumns: '1fr',

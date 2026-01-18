@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { theme } from '../theme';
 import { JobTask, User } from '../types';
 import { useTask } from '../contexts/TaskContext';
+import { useToast } from '../contexts/ToastContext';
+import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
+import {
+  generateGoogleCalendarUrlForTask,
+  generateICSForTask,
+  downloadICS,
+  openGoogleCalendar,
+  copyCalendarLink,
+} from '../utils/calendarExport';
 
 interface CalendarTaskModalProps {
   isOpen: boolean;
@@ -10,74 +19,80 @@ interface CalendarTaskModalProps {
   users: User[];
 }
 
-// Generate ICS file content for calendar export
-const generateICSContent = (task: JobTask, users: User[]): string => {
-  const assignedUsers = users.filter(u => task.assignedTo.includes(u.id));
-  const assigneeNames = assignedUsers.map(u => `${u.firstName} ${u.lastName}`).join(', ');
-
-  // Parse the scheduled date and time
-  const scheduledDate = new Date(task.scheduledDate);
-  const [hours, minutes] = task.dueTime ? task.dueTime.split(':').map(Number) : [9, 0];
-  scheduledDate.setHours(hours, minutes, 0, 0);
-
-  // Calculate end time based on estimated duration
-  const endDate = new Date(scheduledDate.getTime() + task.estimatedDuration * 60 * 1000);
-
-  // Format dates for ICS (YYYYMMDDTHHMMSS)
-  const formatICSDate = (date: Date): string => {
-    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-  };
-
-  // Build description with steps
-  const stepsDescription = task.steps.map((step, index) =>
-    `${index + 1}. ${step.title}${step.description ? ': ' + step.description : ''}`
-  ).join('\\n');
-
-  const description = `${task.description}\\n\\nAssigned to: ${assigneeNames}\\nPriority: ${task.priority}\\nDepartment: ${task.department}\\nCategory: ${task.category}\\n\\nSteps:\\n${stepsDescription}`;
-
-  const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//SOP App//Task Calendar//EN
-CALSCALE:GREGORIAN
-METHOD:PUBLISH
-BEGIN:VEVENT
-DTSTART:${formatICSDate(scheduledDate)}
-DTEND:${formatICSDate(endDate)}
-DTSTAMP:${formatICSDate(new Date())}
-UID:${task.id}@sop-app
-SUMMARY:${task.title}
-DESCRIPTION:${description}
-STATUS:${task.status === 'completed' ? 'COMPLETED' : 'CONFIRMED'}
-PRIORITY:${task.priority === 'urgent' ? 1 : task.priority === 'high' ? 3 : task.priority === 'medium' ? 5 : 9}
-END:VEVENT
-END:VCALENDAR`;
-
-  return icsContent;
-};
-
-// Download ICS file
-const downloadICSFile = (task: JobTask, users: User[]) => {
-  const icsContent = generateICSContent(task, users);
-  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${task.title.replace(/[^a-z0-9]/gi, '_')}.ics`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
-
 const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   isOpen,
   onClose,
-  task,
+  task: initialTask,
   users,
 }) => {
   const { updateJobTask } = useTask();
+  const { showToast } = useToast();
+  const { isConnected: isGoogleConnected, syncTaskToGoogle } = useGoogleCalendar();
+  const [showCalendarMenu, setShowCalendarMenu] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  if (!isOpen || !task) return null;
+  // Local state to track task changes within the modal
+  const [localTask, setLocalTask] = useState<JobTask | null>(initialTask);
+
+  // Update local task when the prop changes (e.g., modal opens with new task)
+  useEffect(() => {
+    setLocalTask(initialTask);
+  }, [initialTask]);
+
+  if (!isOpen || !localTask) return null;
+
+  // Use localTask for display
+  const task = localTask;
+
+  // Calendar export handlers
+  const handleAddToGoogleCalendar = () => {
+    const url = generateGoogleCalendarUrlForTask(task);
+    openGoogleCalendar(url);
+    setShowCalendarMenu(false);
+    showToast('Opening Google Calendar...', 'success');
+  };
+
+  const handleDownloadICS = () => {
+    const icsContent = generateICSForTask(task);
+    const filename = task.title.replace(/[^a-zA-Z0-9]/g, '_');
+    downloadICS(icsContent, filename);
+    setShowCalendarMenu(false);
+    showToast('Calendar file downloaded', 'success');
+  };
+
+  const handleCopyCalendarLink = async () => {
+    const url = generateGoogleCalendarUrlForTask(task);
+    const success = await copyCalendarLink(url);
+    setShowCalendarMenu(false);
+    if (success) {
+      showToast('Calendar link copied to clipboard', 'success');
+    } else {
+      showToast('Failed to copy link', 'error');
+    }
+  };
+
+  const handleSyncToGoogleCalendar = async () => {
+    if (!isGoogleConnected) {
+      showToast('Please connect your Google Calendar in Settings first', 'info');
+      setShowCalendarMenu(false);
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const success = await syncTaskToGoogle(task);
+      setShowCalendarMenu(false);
+      if (success) {
+        showToast('Task synced to Google Calendar!', 'success');
+      } else {
+        showToast('Failed to sync task', 'error');
+      }
+    } catch (error) {
+      showToast('Error syncing to Google Calendar', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const assignedUsers = users.filter(u => task.assignedTo.includes(u.id));
   const completedStepsCount = task.completedSteps.length;
@@ -102,7 +117,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
     }
 
     // Update status based on progress
-    let newStatus = task.status;
+    let newStatus: JobTask['status'] = task.status;
     if (newCompletedSteps.length === 0) {
       newStatus = 'pending';
     } else if (newCompletedSteps.length === task.steps.length) {
@@ -111,10 +126,25 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
       newStatus = 'in-progress';
     }
 
+    // Calculate new progress percentage
+    const newProgressPercentage = Math.round((newCompletedSteps.length / task.steps.length) * 100);
+
+    // Update local state immediately for responsive UI
+    setLocalTask({
+      ...task,
+      steps: updatedSteps,
+      completedSteps: newCompletedSteps,
+      status: newStatus,
+      progressPercentage: newProgressPercentage,
+      startedAt: task.startedAt || new Date().toISOString(),
+    });
+
+    // Then persist to database
     await updateJobTask(task.id, {
       steps: updatedSteps,
       completedSteps: newCompletedSteps,
       status: newStatus,
+      progressPercentage: newProgressPercentage,
       startedAt: task.startedAt || new Date().toISOString(),
     });
   };
@@ -258,18 +288,54 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
           {/* Steps */}
           {task.steps.length > 0 && (
             <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>Steps</h3>
+              <div style={styles.stepsHeader}>
+                <h3 style={{...styles.sectionTitle, marginBottom: 0}}>Steps</h3>
+                {completedStepsCount < totalSteps && (
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      // Mark all steps as complete
+                      const updatedSteps = task.steps.map(s => ({ ...s, isCompleted: true }));
+                      const allStepIds = task.steps.map(s => s.id);
+
+                      // Update local state immediately
+                      setLocalTask({
+                        ...task,
+                        steps: updatedSteps,
+                        completedSteps: allStepIds,
+                        status: 'completed',
+                        progressPercentage: 100,
+                      });
+
+                      // Persist to database
+                      await updateJobTask(task.id, {
+                        steps: updatedSteps,
+                        completedSteps: allStepIds,
+                        status: 'completed',
+                        progressPercentage: 100,
+                      });
+                    }}
+                    style={styles.markAllButton}
+                  >
+                    Mark All Complete
+                  </button>
+                )}
+              </div>
               <div style={styles.stepsList}>
                 {task.steps.map((step, index) => (
                   <div
                     key={step.id}
-                    style={styles.stepItem}
+                    style={{
+                      ...styles.stepItem,
+                      backgroundColor: step.isCompleted ? 'rgba(16, 185, 129, 0.1)' : theme.colors.inputBackground,
+                    }}
                     onClick={() => handleStepToggle(step.id)}
                   >
                     <div style={{
                       ...styles.stepCheckbox,
                       backgroundColor: step.isCompleted ? theme.colors.status.completed : 'transparent',
-                      borderColor: step.isCompleted ? theme.colors.status.completed : theme.colors.border,
+                      borderColor: step.isCompleted ? theme.colors.status.completed : theme.colors.textSecondary,
                     }}>
                       {step.isCompleted && (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
@@ -296,22 +362,74 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
           )}
         </div>
 
-        {/* Footer with Export Button */}
+        {/* Footer with Calendar Dropdown */}
         <div style={styles.footer}>
-          <button
-            style={styles.exportButton}
-            onClick={() => downloadICSFile(task, users)}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-              <path d="M12 14l-3 3h6l-3-3z" />
-              <line x1="12" y1="14" x2="12" y2="20" />
-            </svg>
-            Add to Calendar
-          </button>
+          <div style={styles.calendarDropdownContainer}>
+            <button
+              onClick={() => setShowCalendarMenu(!showCalendarMenu)}
+              style={styles.calendarButton}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <line x1="12" y1="14" x2="12" y2="18" />
+                <line x1="10" y1="16" x2="14" y2="16" />
+              </svg>
+              Add to Calendar
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {showCalendarMenu && (
+              <div style={styles.calendarDropdown}>
+                {isGoogleConnected && (
+                  <button
+                    onClick={handleSyncToGoogleCalendar}
+                    style={styles.calendarMenuItem}
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? (
+                      <div style={styles.syncSpinner} />
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.success} strokeWidth="2">
+                        <polyline points="17 1 21 5 17 9" />
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                        <polyline points="7 23 3 19 7 15" />
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                      </svg>
+                    )}
+                    {isSyncing ? 'Syncing...' : 'Sync to My Calendar'}
+                  </button>
+                )}
+                <button onClick={handleAddToGoogleCalendar} style={styles.calendarMenuItem}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  Open in Google Calendar
+                </button>
+                <button onClick={handleDownloadICS} style={styles.calendarMenuItem}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download .ics File
+                </button>
+                <button onClick={handleCopyCalendarLink} style={styles.calendarMenuItem}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Copy Link
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -474,6 +592,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.full,
     transition: 'width 0.3s ease',
   },
+  stepsHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
+  },
+  markAllButton: {
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    backgroundColor: theme.colors.status.error,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    color: '#FFFFFF',
+    cursor: 'pointer',
+    transition: 'opacity 0.2s',
+  },
   stepsList: {
     display: 'flex',
     flexDirection: 'column',
@@ -522,12 +657,58 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'flex-end',
   },
-  exportButton: {
-    ...theme.components.button.base,
-    ...theme.components.button.sizes.md,
-    backgroundColor: theme.colors.primary,
-    color: '#FFFFFF',
+  calendarDropdownContainer: {
+    position: 'relative',
+  },
+  calendarButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 20px',
+    fontSize: '14px',
     fontWeight: 600,
+    backgroundColor: theme.colors.primary,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    color: '#FFFFFF',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  calendarDropdown: {
+    position: 'absolute',
+    bottom: '100%',
+    right: 0,
+    marginBottom: '8px',
+    backgroundColor: theme.colors.backgroundLight,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)',
+    minWidth: '200px',
+    zIndex: 10,
+    overflow: 'hidden',
+  },
+  calendarMenuItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    width: '100%',
+    padding: '12px 16px',
+    fontSize: '14px',
+    fontWeight: 500,
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'background-color 0.2s',
+  },
+  syncSpinner: {
+    width: '16px',
+    height: '16px',
+    border: `2px solid ${theme.colors.border}`,
+    borderTopColor: theme.colors.status.success,
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
   },
 };
 

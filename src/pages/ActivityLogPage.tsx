@@ -221,7 +221,7 @@ const ActivityLogPage: React.FC = () => {
     };
   };
 
-  const formatTimestamp = (timestamp: string) => {
+  const formatRelativeTime = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -234,12 +234,26 @@ const ActivityLogPage: React.FC = () => {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
 
+    return `${diffDays}d ago`;
+  };
+
+  const formatDate = (timestamp: string) => {
+    const date = new Date(timestamp);
     return date.toLocaleDateString('en-US', {
+      weekday: 'short',
       month: 'short',
       day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
     });
   };
 
@@ -253,6 +267,44 @@ const ActivityLogPage: React.FC = () => {
       minute: '2-digit',
       second: '2-digit',
     });
+  };
+
+  // Parse user agent to get readable browser/OS info
+  const parseUserAgent = (userAgent?: string) => {
+    if (!userAgent) return null;
+
+    let browser = 'Unknown Browser';
+    let os = 'Unknown OS';
+
+    // Detect browser
+    if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
+      const match = userAgent.match(/Chrome\/(\d+)/);
+      browser = `Chrome ${match ? match[1] : ''}`;
+    } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
+      const match = userAgent.match(/Version\/(\d+)/);
+      browser = `Safari ${match ? match[1] : ''}`;
+    } else if (userAgent.includes('Firefox')) {
+      const match = userAgent.match(/Firefox\/(\d+)/);
+      browser = `Firefox ${match ? match[1] : ''}`;
+    } else if (userAgent.includes('Edg')) {
+      const match = userAgent.match(/Edg\/(\d+)/);
+      browser = `Edge ${match ? match[1] : ''}`;
+    }
+
+    // Detect OS
+    if (userAgent.includes('Windows')) {
+      os = 'Windows';
+    } else if (userAgent.includes('Mac OS')) {
+      os = 'macOS';
+    } else if (userAgent.includes('Linux')) {
+      os = 'Linux';
+    } else if (userAgent.includes('Android')) {
+      os = 'Android';
+    } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+      os = 'iOS';
+    }
+
+    return { browser, os };
   };
 
   const getEntityTypeLabel = (type: EntityType) => {
@@ -474,6 +526,7 @@ const ActivityLogPage: React.FC = () => {
             <>
               {logs.map((log, index) => {
                 const actionInfo = getActionInfo(log.action);
+                const userAgentInfo = parseUserAgent(log.user_agent);
                 return (
                   <div
                     key={log.id}
@@ -482,6 +535,7 @@ const ActivityLogPage: React.FC = () => {
                       borderBottom: index === logs.length - 1 ? 'none' : `1px solid ${theme.colors.bdr.primary}`,
                     }}
                   >
+                    {/* Left: Icon */}
                     <div style={{
                       ...styles.logIcon,
                       backgroundColor: `${actionInfo.color}20`,
@@ -490,13 +544,12 @@ const ActivityLogPage: React.FC = () => {
                       {actionInfo.icon}
                     </div>
 
+                    {/* Center: Main content */}
                     <div style={styles.logContent}>
+                      {/* Row 1: User, Action, Entity */}
                       <div style={styles.logMain}>
                         <span style={styles.logUser}>{log.user_name}</span>
-                        <span style={{
-                          ...styles.logAction,
-                          color: actionInfo.color,
-                        }}>
+                        <span style={{ ...styles.logAction, color: actionInfo.color }}>
                           {actionInfo.label}
                         </span>
                         {log.entity_title && (
@@ -507,28 +560,51 @@ const ActivityLogPage: React.FC = () => {
                         )}
                       </div>
 
-                      <div style={styles.logMeta}>
+                      {/* Row 2: Metadata chips (all in one row) */}
+                      <div style={styles.logMetaRow}>
                         <span style={styles.logType}>
                           {getEntityTypeLabel(log.entity_type as EntityType)}
                         </span>
-                        <span style={styles.logTimestamp} title={formatFullTimestamp(log.created_at)}>
-                          {formatTimestamp(log.created_at)}
-                        </span>
+                        {log.entity_id && (
+                          <span style={styles.logChip} title={log.entity_id}>
+                            ID: {log.entity_id.slice(0, 8)}...
+                          </span>
+                        )}
+                        {log.user_email && (
+                          <span style={styles.logChip}>
+                            {log.user_email}
+                          </span>
+                        )}
+                        {userAgentInfo && (
+                          <span style={styles.logChip}>
+                            {userAgentInfo.browser} · {userAgentInfo.os}
+                          </span>
+                        )}
+                        {log.ip_address && (
+                          <span style={styles.logChip}>
+                            IP: {log.ip_address}
+                          </span>
+                        )}
                       </div>
 
+                      {/* Row 3: Details (collapsible style, compact) */}
                       {log.details && Object.keys(log.details).length > 0 && (
-                        <div style={styles.logDetails}>
-                          {Object.entries(log.details).map(([key, value]) => (
-                            <span key={key} style={styles.logDetail}>
-                              <strong>{key}:</strong> {String(value)}
+                        <div style={styles.logDetailsCompact}>
+                          {Object.entries(log.details).map(([key, value], i) => (
+                            <span key={key} style={styles.logDetailItem}>
+                              {i > 0 && <span style={styles.detailSeparator}>•</span>}
+                              <strong>{key.replace(/_/g, ' ')}:</strong> {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                             </span>
                           ))}
                         </div>
                       )}
                     </div>
 
-                    <div style={styles.logTime}>
-                      {formatTimestamp(log.created_at)}
+                    {/* Right: Timestamp column */}
+                    <div style={styles.logTimeColumn}>
+                      <div style={styles.logTimeDate}>{formatDate(log.created_at)}</div>
+                      <div style={styles.logTimeExact}>{formatTime(log.created_at)}</div>
+                      <div style={styles.logTimeRelative}>{formatRelativeTime(log.created_at)}</div>
                     </div>
                   </div>
                 );
@@ -686,26 +762,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.background,
   },
   content: {
-    maxWidth: '1400px',
+    maxWidth: theme.pageLayout.maxWidth,
     margin: '0 auto',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '24px',
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
   },
   title: {
+    ...theme.typography.h1,
     color: theme.colors.txt.primary,
-    fontWeight: 700,
     margin: 0,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
     display: 'flex',
     alignItems: 'center',
   },
   subtitle: {
+    ...theme.typography.subtitle,
     color: theme.colors.textSecondary,
-    fontSize: '15px',
     margin: 0,
   },
   stats: {
@@ -735,18 +811,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.5px',
   },
   filtersCard: {
+    ...theme.components.card.base,
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    padding: '20px',
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    marginBottom: '24px',
+    gap: theme.pageLayout.filterGap.desktop,
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
   },
   filtersRow: {
     display: 'flex',
-    gap: '16px',
+    gap: theme.pageLayout.filterGap.desktop,
     alignItems: 'flex-end',
     flexWrap: 'wrap',
   },
@@ -873,14 +946,14 @@ const styles: { [key: string]: React.CSSProperties } = {
   logItem: {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '16px',
-    padding: '16px 20px',
+    gap: '12px',
+    padding: '12px 16px',
     transition: 'background-color 0.2s',
   },
   logIcon: {
-    width: '36px',
-    height: '36px',
-    borderRadius: theme.borderRadius.md,
+    width: '32px',
+    height: '32px',
+    borderRadius: theme.borderRadius.sm,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -893,60 +966,167 @@ const styles: { [key: string]: React.CSSProperties } = {
   logMain: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     flexWrap: 'wrap',
-    marginBottom: '4px',
+    marginBottom: '6px',
   },
   logUser: {
     fontWeight: 600,
     color: theme.colors.txt.primary,
-    fontSize: '14px',
+    fontSize: '13px',
   },
   logAction: {
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: 500,
   },
   logSeparator: {
     color: theme.colors.textMuted,
+    fontSize: '13px',
   },
   logEntity: {
     color: theme.colors.txt.secondary,
-    fontSize: '14px',
+    fontSize: '13px',
   },
+  logMetaRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  logType: {
+    padding: '2px 6px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '10px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    color: theme.colors.textMuted,
+  },
+  logChip: {
+    fontSize: '11px',
+    color: theme.colors.textMuted,
+    backgroundColor: theme.colors.bg.tertiary,
+    padding: '2px 6px',
+    borderRadius: theme.borderRadius.sm,
+    fontFamily: 'inherit',
+  },
+  logDetailsCompact: {
+    marginTop: '6px',
+    fontSize: '11px',
+    color: theme.colors.textSecondary,
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '4px',
+  },
+  logDetailItem: {
+    display: 'inline',
+  },
+  detailSeparator: {
+    color: theme.colors.textMuted,
+    margin: '0 4px',
+  },
+  logTimeColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '1px',
+    flexShrink: 0,
+    minWidth: '120px',
+  },
+  logTimeDate: {
+    fontSize: '12px',
+    fontWeight: 500,
+    color: theme.colors.txt.secondary,
+  },
+  logTimeExact: {
+    fontSize: '11px',
+    color: theme.colors.textMuted,
+  },
+  logTimeRelative: {
+    fontSize: '10px',
+    color: theme.colors.textMuted,
+    fontStyle: 'italic',
+  },
+  // Legacy styles kept for compatibility
   logMeta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-  },
-  logType: {
-    padding: '2px 8px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.sm,
+    gap: '8px',
     fontSize: '11px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
+    color: theme.colors.textMuted,
   },
   logTimestamp: {
     cursor: 'help',
   },
+  logEntityId: {
+    fontSize: '11px',
+    color: theme.colors.textMuted,
+    fontFamily: 'monospace',
+    backgroundColor: theme.colors.bg.tertiary,
+    padding: '2px 6px',
+    borderRadius: theme.borderRadius.sm,
+  },
+  timestampSection: {
+    marginTop: '6px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  timestampRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '12px',
+  },
+  timestampDate: {
+    color: theme.colors.txt.secondary,
+    fontWeight: 500,
+  },
+  timestampTime: {
+    color: theme.colors.txt.secondary,
+  },
+  timestampRelative: {
+    color: theme.colors.textMuted,
+    fontSize: '11px',
+  },
+  metadataSection: {
+    marginTop: '6px',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  metadataItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '11px',
+    color: theme.colors.textMuted,
+    backgroundColor: theme.colors.bg.tertiary,
+    padding: '4px 8px',
+    borderRadius: theme.borderRadius.sm,
+  },
   logDetails: {
     marginTop: '8px',
-    padding: '8px 12px',
+    padding: '8px 10px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.sm,
-    fontSize: '12px',
+    fontSize: '11px',
     color: theme.colors.textSecondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  detailsHeader: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: '6px',
+    paddingBottom: '4px',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
   logDetail: {
     display: 'block',
-  },
-  logTime: {
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
+    marginBottom: '2px',
   },
   loadMore: {
     padding: '16px 20px',

@@ -1,12 +1,9 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { SOPProvider } from './contexts/SOPContext';
-import { TaskProvider } from './contexts/TaskContext';
-import { JobProvider } from './contexts/JobContext';
-import { EventProvider } from './contexts/EventContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ActivityLogProvider } from './contexts/ActivityLogContext';
+import { DataProvider } from './contexts/DataProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navigation from './components/Navigation';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -27,6 +24,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ArchivePage = lazy(() => import('./pages/ArchivePage'));
 const ActivityLogPage = lazy(() => import('./pages/ActivityLogPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
+const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 
 // Page loading fallback - simple centered spinner
 const PageLoadingFallback: React.FC = () => (
@@ -102,6 +100,7 @@ const AppContent: React.FC = () => {
       <Suspense fallback={<PageLoadingFallback />}>
         <Routes>
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route
             path="/"
             element={
@@ -206,23 +205,33 @@ const AppContent: React.FC = () => {
   );
 };
 
+/**
+ * App Component - Optimized Provider Structure
+ *
+ * Provider hierarchy (optimized from 7 levels to 4 levels):
+ * 1. ErrorBoundary - Error handling wrapper
+ * 2. ToastProvider - UI notifications (no data dependencies)
+ * 3. AuthProvider - User authentication & session
+ * 4. ActivityLogProvider - Audit trail (depends on Auth)
+ * 5. DataProvider - All data contexts combined (SOP, Task, Job, Event)
+ * 6. Router - Navigation
+ *
+ * Benefits:
+ * - Reduced re-render cascades when one context updates
+ * - Cleaner separation of concerns (Auth vs Data vs UI)
+ * - Easier to maintain and test
+ */
 function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
           <ActivityLogProvider>
-            <SOPProvider>
-              <TaskProvider>
-                <JobProvider>
-                  <EventProvider>
-                    <Router>
-                      <AppContent />
-                    </Router>
-                  </EventProvider>
-                </JobProvider>
-              </TaskProvider>
-            </SOPProvider>
+            <DataProvider>
+              <Router>
+                <AppContent />
+              </Router>
+            </DataProvider>
           </ActivityLogProvider>
         </AuthProvider>
       </ToastProvider>

@@ -17,6 +17,10 @@ export const isSupabaseConfigured = () => {
   );
 };
 
+// Flag to indicate if activity_logs table exists in Supabase
+// Set to false since the table doesn't exist - prevents WebSocket errors
+export const hasActivityLogsTable = false;
+
 // Create Supabase client only if properly configured
 // Otherwise, create a mock client to prevent crashes
 let supabaseClient: SupabaseClient | null = null;
@@ -36,9 +40,12 @@ if (isSupabaseConfigured()) {
         'x-application-name': 'sop-app',
       },
     },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
   });
-} else {
-  console.log('Supabase not configured - running in localStorage mode');
 }
 
 // Export the client (will be null if not configured)

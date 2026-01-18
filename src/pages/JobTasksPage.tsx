@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
@@ -9,6 +9,7 @@ import { theme } from '../theme';
 import { UnifiedJobTaskModal } from '../components/UnifiedJobTaskModal';
 import { useToast } from '../contexts/ToastContext';
 import TaskLibraryImport from '../components/TaskLibraryImport';
+import CalendarTaskModal from '../components/CalendarTaskModal';
 
 const JobTasksPage: React.FC = () => {
   const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask } = useTask();
@@ -271,16 +272,11 @@ const JobTasksPage: React.FC = () => {
 
       {/* Task Detail Modal for Admins */}
       {showTaskDetailModal && selectedTask && (
-        <JobTaskDetailModal
+        <CalendarTaskModal
+          isOpen={showTaskDetailModal}
+          onClose={handleCloseTaskDetail}
           task={selectedTask}
           users={users}
-          sops={sops}
-          isMobile={isMobile}
-          onClose={handleCloseTaskDetail}
-          onUpdate={(updatedTask: Partial<JobTask>) => {
-            updateJobTask(selectedTask.id, updatedTask);
-            handleCloseTaskDetail();
-          }}
         />
       )}
 
@@ -318,7 +314,7 @@ interface JobTaskCardProps {
   onClick: () => void;
 }
 
-const JobTaskCard: React.FC<JobTaskCardProps> = ({ task, users, isMobile, onArchive, onClick }) => {
+const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, onArchive, onClick }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return theme.colors.status.success;
@@ -454,7 +450,10 @@ const JobTaskCard: React.FC<JobTaskCardProps> = ({ task, users, isMobile, onArch
       </div>
     </div>
   );
-};
+});
+
+// Add display name for React DevTools
+JobTaskCard.displayName = 'JobTaskCard';
 
 // Create Job Task Modal Component
 interface ChecklistItem {
@@ -1081,8 +1080,18 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
                           type="checkbox"
                           checked={isCompleted}
                           onChange={() => handleToggleStep(step.id)}
-                          style={styles.checkbox}
+                          style={styles.hiddenCheckbox}
                         />
+                        <span style={{
+                          ...styles.customCheckbox,
+                          ...(isCompleted ? styles.customCheckboxChecked : {})
+                        }}>
+                          {isCompleted && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </span>
                         <span style={{...styles.taskStepTitle, textDecoration: isCompleted ? 'line-through' : 'none', opacity: isCompleted ? 0.6 : 1}}>
                           {index + 1}. {step.title}
                         </span>
@@ -1260,7 +1269,7 @@ interface TemplateCardProps {
   onUseTemplate: () => void;
 }
 
-const TemplateCard: React.FC<TemplateCardProps> = ({ template, isMobile, onUseTemplate }) => {
+const TemplateCard: React.FC<TemplateCardProps> = memo(({ template, isMobile, onUseTemplate }) => {
   return (
     <div style={styles.templateCard}>
       <div style={styles.templateCardHeader}>
@@ -1306,33 +1315,35 @@ const TemplateCard: React.FC<TemplateCardProps> = ({ template, isMobile, onUseTe
       </button>
     </div>
   );
-};
+});
+
+// Add display name for React DevTools
+TemplateCard.displayName = 'TemplateCard';
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: '40px',
-    maxWidth: '1400px',
+    padding: theme.pageLayout.containerPadding.desktop,
+    maxWidth: theme.pageLayout.maxWidth,
     margin: '0 auto',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '32px',
-    gap: '24px',
+    marginBottom: theme.pageLayout.headerMargin.desktop,
+    gap: theme.pageLayout.sectionMargin.desktop,
   },
   title: {
-    fontSize: '36px',
-    fontWeight: '800',
+    ...theme.typography.h1,
     color: theme.colors.textPrimary,
-    marginBottom: '8px',
+    marginBottom: theme.spacing.sm,
     display: 'flex',
     alignItems: 'center',
   },
   subtitle: {
-    fontSize: '16px',
+    ...theme.typography.subtitle,
     color: theme.colors.textSecondary,
-    marginTop: '8px',
+    marginTop: theme.spacing.sm,
   },
   headerActions: {
     display: 'flex',
@@ -1474,10 +1485,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.txt.tertiary,
   },
   taskCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '24px',
+    ...theme.components.card.base,
     transition: 'all 0.2s',
     cursor: 'pointer',
   },
@@ -1711,21 +1719,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: theme.spacing.lg,
   },
   section: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '24px',
-    marginBottom: '24px',
+    ...theme.components.card.base,
+    marginBottom: theme.pageLayout.sectionMargin.desktop,
   },
   sectionMobile: {
-    padding: '16px',
-    marginBottom: '16px',
+    ...theme.components.card.mobile,
+    marginBottom: theme.pageLayout.sectionMargin.mobile,
   },
   sectionTitle: {
+    ...theme.typography.h3,
     fontSize: '18px',
-    fontWeight: '700',
     color: theme.colors.textPrimary,
-    marginBottom: '20px',
+    marginBottom: theme.pageLayout.filterGap.desktop,
     margin: 0,
   },
   formGroup: {
@@ -1857,6 +1862,32 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '18px',
     height: '18px',
     cursor: 'pointer',
+  },
+  hiddenCheckbox: {
+    position: 'absolute' as const,
+    opacity: 0,
+    width: 0,
+    height: 0,
+    margin: 0,
+    padding: 0,
+  },
+  customCheckbox: {
+    width: '22px',
+    height: '22px',
+    minWidth: '22px',
+    borderRadius: theme.borderRadius.sm,
+    border: `2px solid ${theme.colors.bdr.secondary}`,
+    backgroundColor: theme.colors.bg.tertiary,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    cursor: 'pointer',
+  },
+  customCheckboxChecked: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: '#fff',
   },
   userInfo: {
     display: 'flex',
@@ -2072,7 +2103,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   taskStepDescription: {
     fontSize: '13px',
     color: theme.colors.txt.secondary,
-    marginLeft: '30px',
+    marginLeft: '34px',
     marginTop: theme.spacing.xs,
     lineHeight: '1.5',
   },
@@ -2090,7 +2121,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: theme.spacing.xs,
     fontSize: '12px',
     color: theme.colors.primary,
-    marginLeft: '30px',
+    marginLeft: '34px',
     marginTop: theme.spacing.xs,
     padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
     backgroundColor: 'rgba(239, 35, 60, 0.1)',
@@ -2130,18 +2161,18 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   // Mobile-specific styles
   containerMobile: {
-    padding: '16px',
+    padding: theme.pageLayout.containerPadding.mobile,
   },
   headerMobile: {
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: '16px',
+    gap: theme.pageLayout.filterGap.mobile,
   },
   titleMobile: {
-    fontSize: '24px',
+    ...theme.typography.h1Mobile,
   },
   subtitleMobile: {
-    fontSize: '14px',
+    ...theme.typography.bodySmall,
   },
   createButtonMobile: {
     width: '100%',
@@ -2265,10 +2296,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: theme.spacing.lg,
   },
   templateCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
+    ...theme.components.card.base,
     transition: 'all 0.2s',
     display: 'flex',
     flexDirection: 'column',

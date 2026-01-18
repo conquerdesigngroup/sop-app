@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, hasActivityLogsTable } from '../lib/supabase';
 
 export type EntityType = 'sop' | 'task' | 'job' | 'template' | 'user' | 'system';
 
@@ -161,8 +161,8 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
       created_at: new Date().toISOString(),
     };
 
-    // Try to save to Supabase first
-    if (isSupabaseConfigured() && supabase) {
+    // Try to save to Supabase first (only if table exists)
+    if (isSupabaseConfigured() && supabase && hasActivityLogsTable) {
       try {
         const { error } = await supabase.from('activity_logs').insert({
           user_id: currentUser?.id,
@@ -176,12 +176,11 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
           user_agent: newLog.user_agent,
         });
         if (error) {
-          console.error('Failed to log activity to Supabase:', error);
-          // Fall back to localStorage
+          // Silently fall back to localStorage - table may not exist
           saveToLocalStorage(newLog);
         }
-      } catch (err) {
-        console.error('Error logging activity to Supabase:', err);
+      } catch {
+        // Silently fall back to localStorage
         saveToLocalStorage(newLog);
       }
     } else {
@@ -207,8 +206,8 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
     setCurrentFilters(options);
     setCurrentOffset(0);
 
-    // Try Supabase first
-    if (isSupabaseConfigured() && supabase) {
+    // Try Supabase first (only if table exists)
+    if (isSupabaseConfigured() && supabase && hasActivityLogsTable) {
       try {
         // Build the query
         let query = supabase
@@ -245,16 +244,15 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
         const { data, error, count } = await query;
 
         if (error) {
-          console.error('Failed to fetch logs from Supabase:', error);
-          // Fall back to localStorage
+          // Silently fall back to localStorage - table may not exist
           fetchLogsFromLocalStorage(options);
         } else {
           setTotalCount(count || 0);
           setLogs(data || []);
           setLoading(false);
         }
-      } catch (err) {
-        console.error('Error fetching logs from Supabase:', err);
+      } catch {
+        // Silently fall back to localStorage
         fetchLogsFromLocalStorage(options);
       }
     } else {
@@ -305,8 +303,8 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
     setLoading(true);
     const newOffset = currentOffset + LOGS_PER_PAGE;
 
-    // Try Supabase first
-    if (isSupabaseConfigured() && supabase) {
+    // Try Supabase first (only if table exists)
+    if (isSupabaseConfigured() && supabase && hasActivityLogsTable) {
       try {
         let query = supabase
           .from('activity_logs')
@@ -339,15 +337,15 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
         const { data, error } = await query;
 
         if (error) {
-          console.error('Failed to fetch more logs from Supabase:', error);
+          // Silently fall back to localStorage - table may not exist
           fetchMoreLogsFromLocalStorage(newOffset);
         } else {
           setLogs(prev => [...prev, ...(data || [])]);
           setCurrentOffset(newOffset);
           setLoading(false);
         }
-      } catch (err) {
-        console.error('Error fetching more logs from Supabase:', err);
+      } catch {
+        // Silently fall back to localStorage
         fetchMoreLogsFromLocalStorage(newOffset);
       }
     } else {
