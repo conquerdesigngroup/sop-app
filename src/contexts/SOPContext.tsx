@@ -664,7 +664,7 @@ const defaultSOPs: SOP[] = [
 export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
   const [sops, setSOPs] = useState<SOP[]>([]);
   const [loading, setLoading] = useState(true);
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthenticated, loading: authLoading } = useAuth();
   const useSupabase = isSupabaseConfigured();
 
   // Load SOPs from database
@@ -718,11 +718,20 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
     }
   }, [useSupabase]);
 
-  // Initialize: Load SOPs
+  // Initialize: Load SOPs only after auth is ready
   useEffect(() => {
+    // Wait for auth to finish loading before fetching data
+    if (authLoading) return;
+
+    // Only load data if authenticated (Supabase requires auth for RLS)
+    if (useSupabase && !isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+
     loadSOPs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useSupabase]);
+  }, [useSupabase, authLoading, isAuthenticated]);
 
   // Subscribe to real-time SOP changes
   useEffect(() => {

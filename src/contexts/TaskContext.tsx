@@ -265,7 +265,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
   const [jobTasks, setJobTasks] = useState<JobTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthenticated, loading: authLoading } = useAuth();
   const useSupabase = isSupabaseConfigured();
 
   // Load task templates from database
@@ -306,8 +306,11 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     }
   }, [useSupabase]);
 
-  // Initialize: Load data from Supabase or localStorage
+  // Initialize: Load data from Supabase or localStorage (only after auth is ready)
   useEffect(() => {
+    // Wait for auth to finish loading before fetching data
+    if (authLoading) return;
+
     const initializeData = async () => {
       if (!useSupabase) {
         // Fallback to localStorage mode
@@ -329,6 +332,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         return;
       }
 
+      // Only load data if authenticated (Supabase requires auth for RLS)
+      if (!isAuthenticated) {
+        setLoading(false);
+        return;
+      }
+
       try {
         // Load from Supabase
         await Promise.all([loadTaskTemplates(), loadJobTasks()]);
@@ -340,7 +349,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     };
 
     initializeData();
-  }, [useSupabase, loadTaskTemplates, loadJobTasks]);
+  }, [useSupabase, authLoading, isAuthenticated, loadTaskTemplates, loadJobTasks]);
 
   // Subscribe to real-time changes for task templates
   useEffect(() => {

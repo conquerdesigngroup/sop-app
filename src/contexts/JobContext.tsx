@@ -67,7 +67,7 @@ interface JobProviderProps {
 export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthenticated, loading: authLoading } = useAuth();
   const useSupabase = isSupabaseConfigured();
 
   // Load jobs from database
@@ -88,8 +88,11 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
     }
   }, [useSupabase]);
 
-  // Initialize: Load data from Supabase or localStorage
+  // Initialize: Load data from Supabase or localStorage (only after auth is ready)
   useEffect(() => {
+    // Wait for auth to finish loading before fetching data
+    if (authLoading) return;
+
     const initializeData = async () => {
       if (!useSupabase) {
         // Fallback to localStorage mode
@@ -99,6 +102,12 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
           setJobs(JSON.parse(storedJobs));
         }
 
+        setLoading(false);
+        return;
+      }
+
+      // Only load data if authenticated (Supabase requires auth for RLS)
+      if (!isAuthenticated) {
         setLoading(false);
         return;
       }
@@ -114,7 +123,7 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
     };
 
     initializeData();
-  }, [useSupabase, loadJobs]);
+  }, [useSupabase, authLoading, isAuthenticated, loadJobs]);
 
   // Subscribe to real-time changes for jobs
   useEffect(() => {
