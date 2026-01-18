@@ -5,6 +5,7 @@ import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormButton } from '../components/FormComponents';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
+import DataIntegrityPanel from '../components/DataIntegrityPanel';
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -56,7 +57,7 @@ const toggleStyles: { [key: string]: React.CSSProperties } = {
 };
 
 const SettingsPage: React.FC = () => {
-  const { currentUser, updateUser } = useAuth();
+  const { currentUser, updateUser, isAdmin } = useAuth();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
 
@@ -409,6 +410,22 @@ const SettingsPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Admin Tools - Data Integrity Agent (Admin Only) */}
+        {isAdmin && (
+          <div style={styles.adminSection}>
+            <div style={styles.adminSectionHeader}>
+              <h2 style={styles.adminSectionTitle}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                Admin Tools
+              </h2>
+              <span style={styles.adminBadge}>Admin Only</span>
+            </div>
+            <DataIntegrityPanel />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -545,6 +562,35 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     fontWeight: 500,
     color: theme.colors.txt.primary,
+  },
+  adminSection: {
+    marginTop: theme.spacing.xl,
+    paddingTop: theme.spacing.xl,
+    borderTop: `2px solid ${theme.colors.primary}`,
+  },
+  adminSectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.lg,
+  },
+  adminSectionTitle: {
+    fontSize: '20px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  adminBadge: {
+    fontSize: '11px',
+    fontWeight: 700,
+    padding: '4px 10px',
+    backgroundColor: `${theme.colors.primary}20`,
+    color: theme.colors.primary,
+    borderRadius: theme.borderRadius.sm,
+    textTransform: 'uppercase' as const,
   },
 };
 
