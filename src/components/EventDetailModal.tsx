@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { theme } from '../theme';
 import { CalendarEvent, User } from '../types';
 import { useResponsive } from '../hooks/useResponsive';
+import { useEvent } from '../contexts/EventContext';
 
 interface EventDetailModalProps {
   isOpen: boolean;
@@ -21,9 +22,19 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   onDelete,
 }) => {
   const { isMobileOrTablet } = useResponsive();
+  const { tags: allTags } = useEvent();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!isOpen || !event) return null;
+
+  // Get tag names for display
+  const getTagNames = () => {
+    if (!event.tags || event.tags.length === 0) return [];
+    return event.tags
+      .map(tagId => allTags.find(t => t.id === tagId))
+      .filter(Boolean)
+      .map(t => t!.name);
+  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -161,6 +172,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
   const attendeeNames = getAttendeeNames();
   const recurrenceText = getRecurrenceText();
+  const tagNames = getTagNames();
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -278,6 +290,25 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <div style={styles.attendeesContainer}>
                   {attendeeNames.map((name, index) => (
                     <span key={index} style={styles.attendeeTag}>{name}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tags */}
+          {tagNames.length > 0 && (
+            <div style={styles.infoRow}>
+              <div style={styles.iconWrapper}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                  <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+              </div>
+              <div style={styles.infoContent}>
+                <div style={styles.tagsContainer}>
+                  {tagNames.map((name, index) => (
+                    <span key={index} style={styles.tagBadge}>{name}</span>
                   ))}
                 </div>
               </div>
@@ -505,6 +536,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '13px',
     fontWeight: 500,
     color: theme.colors.textPrimary,
+  },
+  tagsContainer: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  tagBadge: {
+    padding: '5px 10px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.full,
+    fontSize: '12px',
+    fontWeight: 500,
+    color: theme.colors.textSecondary,
   },
   footer: {
     display: 'flex',

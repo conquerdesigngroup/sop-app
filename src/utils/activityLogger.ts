@@ -55,6 +55,19 @@ interface LogActivityParams {
   details?: Record<string, any>;
 }
 
+const STORAGE_KEY = 'mediamaple_activity_logs';
+
+// Helper to save to localStorage
+const saveToLocalStorage = (newLog: Record<string, any>) => {
+  const localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  localLogs.unshift(newLog);
+  // Keep only last 1000 logs in localStorage
+  if (localLogs.length > 1000) {
+    localLogs.pop();
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs));
+};
+
 export const logActivity = async ({
   userId,
   userEmail,
@@ -65,50 +78,45 @@ export const logActivity = async ({
   entityTitle,
   details,
 }: LogActivityParams): Promise<void> => {
-  const useSupabase = isSupabaseConfigured();
+  const newLog = {
+    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+    user_id: userId,
+    user_email: userEmail,
+    user_name: userName,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    entity_title: entityTitle,
+    details,
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+    created_at: new Date().toISOString(),
+  };
 
-  if (!useSupabase) {
-    // Fallback to localStorage for demo mode
-    const localLogs = JSON.parse(localStorage.getItem('mediamaple_activity_logs') || '[]');
-    const newLog = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      user_id: userId,
-      user_email: userEmail,
-      user_name: userName,
-      action,
-      entity_type: entityType,
-      entity_id: entityId,
-      entity_title: entityTitle,
-      details,
-      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-      created_at: new Date().toISOString(),
-    };
-    localLogs.unshift(newLog);
-    // Keep only last 1000 logs in localStorage
-    if (localLogs.length > 1000) {
-      localLogs.pop();
+  // Try to save to Supabase first
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const { error } = await supabase.from('activity_logs').insert({
+        user_id: userId,
+        user_email: userEmail,
+        user_name: userName,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        entity_title: entityTitle,
+        details: details || {},
+        user_agent: newLog.user_agent,
+      });
+      if (error) {
+        console.error('Failed to log activity to Supabase:', error);
+        // Fall back to localStorage
+        saveToLocalStorage(newLog);
+      }
+    } catch (err) {
+      console.error('Error logging activity to Supabase:', err);
+      saveToLocalStorage(newLog);
     }
-    localStorage.setItem('mediamaple_activity_logs', JSON.stringify(localLogs));
-    return;
-  }
-
-  try {
-    const { error } = await supabase.from('activity_logs').insert({
-      user_id: userId,
-      user_email: userEmail,
-      user_name: userName,
-      action,
-      entity_type: entityType,
-      entity_id: entityId,
-      entity_title: entityTitle,
-      details,
-      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-    });
-
-    if (error) {
-      console.error('Error logging activity:', error);
-    }
-  } catch (error) {
-    console.error('Error logging activity:', error);
+  } else {
+    // Use localStorage as fallback
+    saveToLocalStorage(newLog);
   }
 };

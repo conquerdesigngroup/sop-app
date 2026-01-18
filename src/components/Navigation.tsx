@@ -73,7 +73,7 @@ const Navigation: React.FC = () => {
             <line x1="10" y1="9" x2="8" y2="9" />
           </svg>
         ),
-        adminOnly: true,
+        adminOnly: false,
       },
       {
         path: '/job-tasks',
@@ -97,7 +97,7 @@ const Navigation: React.FC = () => {
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
         ),
-        adminOnly: true,
+        adminOnly: false,
       },
       {
         path: '/team',

@@ -121,7 +121,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/sop"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute>
                 <SOPPage />
               </ProtectedRoute>
             }
@@ -193,7 +193,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/calendar"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute>
                 <CalendarPage />
               </ProtectedRoute>
             }

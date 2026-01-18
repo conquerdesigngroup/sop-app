@@ -1,6 +1,7 @@
 import React from 'react';
 import { theme } from '../theme';
 import { JobTask, User } from '../types';
+import { useTask } from '../contexts/TaskContext';
 
 interface CalendarTaskModalProps {
   isOpen: boolean;
@@ -74,11 +75,49 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   task,
   users,
 }) => {
+  const { updateJobTask } = useTask();
+
   if (!isOpen || !task) return null;
 
   const assignedUsers = users.filter(u => task.assignedTo.includes(u.id));
   const completedStepsCount = task.completedSteps.length;
   const totalSteps = task.steps.length;
+
+  const handleStepToggle = async (stepId: string) => {
+    const step = task.steps.find(s => s.id === stepId);
+    if (!step) return;
+
+    // Toggle the step completion
+    const updatedSteps = task.steps.map(s =>
+      s.id === stepId ? { ...s, isCompleted: !s.isCompleted } : s
+    );
+
+    let newCompletedSteps: string[];
+    if (step.isCompleted) {
+      // Unchecking - remove from completed
+      newCompletedSteps = task.completedSteps.filter(id => id !== stepId);
+    } else {
+      // Checking - add to completed
+      newCompletedSteps = [...task.completedSteps, stepId];
+    }
+
+    // Update status based on progress
+    let newStatus = task.status;
+    if (newCompletedSteps.length === 0) {
+      newStatus = 'pending';
+    } else if (newCompletedSteps.length === task.steps.length) {
+      newStatus = 'completed';
+    } else if (task.status === 'pending') {
+      newStatus = 'in-progress';
+    }
+
+    await updateJobTask(task.id, {
+      steps: updatedSteps,
+      completedSteps: newCompletedSteps,
+      status: newStatus,
+      startedAt: task.startedAt || new Date().toISOString(),
+    });
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -222,7 +261,11 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
               <h3 style={styles.sectionTitle}>Steps</h3>
               <div style={styles.stepsList}>
                 {task.steps.map((step, index) => (
-                  <div key={step.id} style={styles.stepItem}>
+                  <div
+                    key={step.id}
+                    style={styles.stepItem}
+                    onClick={() => handleStepToggle(step.id)}
+                  >
                     <div style={{
                       ...styles.stepCheckbox,
                       backgroundColor: step.isCompleted ? theme.colors.status.completed : 'transparent',
@@ -444,6 +487,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.inputBackground,
     borderRadius: theme.borderRadius.md,
     border: `1px solid ${theme.colors.border}`,
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
   },
   stepCheckbox: {
     width: '20px',

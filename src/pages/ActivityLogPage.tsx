@@ -20,7 +20,7 @@ const ActivityLogPage: React.FC = () => {
   // Load logs on mount
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [fetchLogs]);
 
   // Apply filters
   const handleApplyFilters = () => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSOPs } from '../contexts/SOPContext';
+import { useAuth } from '../contexts/AuthContext';
 import { theme } from '../theme';
 import { SOP, SOPStatus } from '../types';
 import SOPForm from '../components/SOPForm';
@@ -15,6 +16,7 @@ type ViewMode = 'sops' | 'templates';
 
 const SOPPage: React.FC = () => {
   const { sops, deleteSOP, updateSOPStatus, createFromTemplate, loading } = useSOPs();
+  const { isAdmin } = useAuth();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
   const [viewMode, setViewMode] = useState<ViewMode>('sops');
@@ -134,9 +136,16 @@ const SOPPage: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    const itemType = viewMode === 'templates' ? 'template' : 'SOP';
-    if (window.confirm(`Are you sure you want to delete this ${itemType}? This action cannot be undone.`)) {
-      deleteSOP(id);
+    if (viewMode === 'templates') {
+      // Templates are permanently deleted
+      if (window.confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
+        deleteSOP(id);
+      }
+    } else {
+      // SOPs are archived instead of deleted
+      if (window.confirm('Are you sure you want to archive this SOP?')) {
+        updateSOPStatus(id, 'archived');
+      }
     }
   };
 
@@ -243,29 +252,31 @@ const SOPPage: React.FC = () => {
               : 'Step-by-step procedures for equipment setup and operations'}
           </p>
         </div>
-        <div style={isMobileOrTablet ? styles.headerButtonsMobile : styles.headerButtons}>
-          <button
-            onClick={() => setShowImport(true)}
-            style={isMobileOrTablet ? styles.importButtonMobile : styles.importButton}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            {!isMobileOrTablet && 'Import'}
-          </button>
-          <button
-            onClick={() => setShowForm(true)}
-            style={isMobileOrTablet ? styles.addButtonMobile : styles.addButton}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            {viewMode === 'templates' ? 'Create Template' : 'Create SOP'}
-          </button>
-        </div>
+        {isAdmin && (
+          <div style={isMobileOrTablet ? styles.headerButtonsMobile : styles.headerButtons}>
+            <button
+              onClick={() => setShowImport(true)}
+              style={isMobileOrTablet ? styles.importButtonMobile : styles.importButton}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              {!isMobileOrTablet && 'Import'}
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              style={isMobileOrTablet ? styles.addButtonMobile : styles.addButton}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              {viewMode === 'templates' ? 'Create Template' : 'Create SOP'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* View Mode Tabs - Matching Job Tasks Page Style */}
@@ -456,7 +467,7 @@ const SOPPage: React.FC = () => {
               ? 'Create your first template to reuse across your organization.'
               : 'Create your first SOP to help your team follow standardized procedures.'}
           </p>
-          {!searchTerm && (
+          {!searchTerm && isAdmin && (
             <button onClick={() => setShowForm(true)} style={styles.emptyButton}>
               Create First {viewMode === 'templates' ? 'Template' : 'SOP'}
             </button>
@@ -553,8 +564,8 @@ const SOPPage: React.FC = () => {
                   </button>
                 )}
 
-                {/* Regular SOP: Show Edit */}
-                {!item.isTemplate && (
+                {/* Regular SOP: Show Edit (Admin only) */}
+                {!item.isTemplate && isAdmin && (
                   <button onClick={() => handleEdit(item)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -564,8 +575,8 @@ const SOPPage: React.FC = () => {
                   </button>
                 )}
 
-                {/* Template: Show Edit */}
-                {item.isTemplate && (
+                {/* Template: Show Edit (Admin only) */}
+                {item.isTemplate && isAdmin && (
                   <button onClick={() => handleEdit(item)} style={isMobileOrTablet ? styles.editButtonMobile : styles.editButton}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -575,13 +586,15 @@ const SOPPage: React.FC = () => {
                   </button>
                 )}
 
-                <button onClick={() => handleDelete(item.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  {!isMobileOrTablet && 'Delete'}
-                </button>
+                {isAdmin && (
+                  <button onClick={() => handleDelete(item.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    {!isMobileOrTablet && 'Delete'}
+                  </button>
+                )}
               </div>
             </div>
                   ))}

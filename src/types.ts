@@ -250,6 +250,32 @@ export interface EventReminder {
   time: number; // Minutes before event
 }
 
+export interface EventTag {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface EventTemplate {
+  id: string;
+  name: string;           // Template display name
+  title: string;          // Pre-filled event title
+  description: string;
+  duration?: number;      // Minutes (to calculate endTime from startTime)
+  location?: string;
+  isAllDay: boolean;
+  color: string;
+  attendees: string[];
+  reminders?: EventReminder[];
+  isRecurring: boolean;
+  recurrencePattern?: RecurrencePattern;
+  notes?: string;
+  tags?: string[];        // Tag IDs
+  createdBy: string;
+  createdAt: string;
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -266,6 +292,7 @@ export interface CalendarEvent {
   isRecurring: boolean;
   recurrencePattern?: RecurrencePattern;
   notes?: string;
+  tags?: string[]; // Tag IDs for categorization
   createdBy: string;
   createdAt: string;
   updatedAt?: string;

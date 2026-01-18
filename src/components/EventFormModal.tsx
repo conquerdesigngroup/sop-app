@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { theme } from '../theme';
-import { CalendarEvent, User, RecurrencePattern } from '../types';
+import { CalendarEvent, User } from '../types';
 import { useResponsive } from '../hooks/useResponsive';
+import { useEvent } from '../contexts/EventContext';
 
 interface EventFormModalProps {
   isOpen: boolean;
@@ -15,12 +16,10 @@ interface EventFormModalProps {
 const EVENT_COLORS = [
   { name: 'Blue', value: '#3B82F6' },
   { name: 'Green', value: '#10B981' },
-  { name: 'Purple', value: '#8B5CF6' },
   { name: 'Orange', value: '#F59E0B' },
-  { name: 'Red', value: '#EF4444' },
+  { name: 'Purple', value: '#8B5CF6' },
   { name: 'Pink', value: '#EC4899' },
-  { name: 'Teal', value: '#14B8A6' },
-  { name: 'Indigo', value: '#6366F1' },
+  { name: 'Cyan', value: '#06B6D4' },
 ];
 
 const REMINDER_OPTIONS = [
@@ -45,6 +44,7 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
   initialDate,
 }) => {
   const { isMobileOrTablet } = useResponsive();
+  const { tags, addTag, templates, addTemplate } = useEvent();
 
   // Form state
   const [title, setTitle] = useState('');
@@ -63,6 +63,16 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
   const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Tags state
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [newTagName, setNewTagName] = useState('');
+  const [showTagInput, setShowTagInput] = useState(false);
+
+  // Template state
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
 
   // Reset form when modal opens/closes or editing event changes
   useEffect(() => {
@@ -86,6 +96,7 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
           setRecurrenceEndDate(editingEvent.recurrencePattern.endDate || '');
         }
         setNotes(editingEvent.notes || '');
+        setSelectedTags(editingEvent.tags || []);
       } else {
         // Reset to defaults
         const today = initialDate || new Date().toISOString().split('T')[0];
@@ -105,7 +116,14 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
         setRecurrenceDays([]);
         setRecurrenceEndDate('');
         setNotes('');
+        setSelectedTags([]);
       }
+      // Reset template/tag input state
+      setSelectedTemplate('');
+      setShowTagInput(false);
+      setNewTagName('');
+      setShowSaveTemplateModal(false);
+      setTemplateName('');
     }
   }, [isOpen, editingEvent, initialDate]);
 
@@ -135,11 +153,79 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
         endDate: recurrenceEndDate || undefined,
       } : undefined,
       notes: notes.trim() || undefined,
+      tags: selectedTags.length > 0 ? selectedTags : undefined,
       updatedAt: editingEvent ? new Date().toISOString() : undefined,
     };
 
     onSave(eventData);
     onClose();
+  };
+
+  // Tag handlers
+  const toggleTag = (tagId: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tagId)
+        ? prev.filter(id => id !== tagId)
+        : [...prev, tagId]
+    );
+  };
+
+  const handleAddNewTag = async () => {
+    if (newTagName.trim()) {
+      const newTag = await addTag(newTagName.trim());
+      setSelectedTags(prev => [...prev, newTag.id]);
+      setNewTagName('');
+      setShowTagInput(false);
+    }
+  };
+
+  // Template handlers
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+      setTitle(template.title);
+      setDescription(template.description);
+      setLocation(template.location || '');
+      setIsAllDay(template.isAllDay);
+      setColor(template.color);
+      setAttendees(template.attendees);
+      setReminderTime(template.reminders?.[0]?.time || 0);
+      setIsRecurring(template.isRecurring);
+      if (template.recurrencePattern) {
+        setRecurrenceFrequency(template.recurrencePattern.frequency);
+        setRecurrenceDays(template.recurrencePattern.daysOfWeek || []);
+        setRecurrenceEndDate(template.recurrencePattern.endDate || '');
+      }
+      setNotes(template.notes || '');
+      setSelectedTags(template.tags || []);
+    }
+  };
+
+  const handleSaveAsTemplate = async () => {
+    if (templateName.trim()) {
+      await addTemplate({
+        name: templateName.trim(),
+        title: title.trim(),
+        description: description.trim(),
+        duration: undefined, // Could calculate from start/end times
+        location: location.trim() || undefined,
+        isAllDay,
+        color,
+        attendees,
+        reminders: reminderTime > 0 ? [{ id: '1', type: 'notification', time: reminderTime }] : undefined,
+        isRecurring,
+        recurrencePattern: isRecurring ? {
+          frequency: recurrenceFrequency,
+          daysOfWeek: recurrenceFrequency === 'weekly' ? recurrenceDays : undefined,
+          endDate: recurrenceEndDate || undefined,
+        } : undefined,
+        notes: notes.trim() || undefined,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+      });
+      setShowSaveTemplateModal(false);
+      setTemplateName('');
+    }
   };
 
   const toggleAttendee = (userId: string) => {
@@ -184,6 +270,32 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.scrollContent}>
+            {/* Template Selector */}
+            {templates.length > 0 && !editingEvent && (
+              <div style={styles.formGroup}>
+                <label style={styles.label}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', verticalAlign: 'middle' }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="9" y1="21" x2="9" y2="9" />
+                  </svg>
+                  Use Template
+                </label>
+                <select
+                  value={selectedTemplate}
+                  onChange={(e) => handleSelectTemplate(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="">Select a template...</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Title */}
             <div style={styles.formGroup}>
               <label style={styles.label}>Event Title *</label>
@@ -313,6 +425,93 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
                     title={c.name}
                   />
                 ))}
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', verticalAlign: 'middle' }}>
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                  <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+                Tags
+              </label>
+              <div style={styles.tagsList}>
+                {tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => toggleTag(tag.id)}
+                    style={{
+                      ...styles.tagChip,
+                      ...(selectedTags.includes(tag.id) ? styles.tagChipSelected : {}),
+                    }}
+                  >
+                    <span>{tag.name}</span>
+                    {selectedTags.includes(tag.id) && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+                {!showTagInput ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowTagInput(true)}
+                    style={styles.addTagButton}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span>Add Tag</span>
+                  </button>
+                ) : (
+                  <div style={styles.newTagInput}>
+                    <input
+                      type="text"
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      placeholder="Tag name"
+                      style={styles.tagInput}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddNewTag();
+                        } else if (e.key === 'Escape') {
+                          setShowTagInput(false);
+                          setNewTagName('');
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddNewTag}
+                      style={styles.tagSaveButton}
+                      disabled={!newTagName.trim()}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTagInput(false);
+                        setNewTagName('');
+                      }}
+                      style={styles.tagCancelButton}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -460,14 +659,78 @@ const EventFormModal: React.FC<EventFormModalProps> = ({
 
           {/* Footer */}
           <div style={styles.footer}>
-            <button type="button" onClick={onClose} style={styles.cancelButton}>
-              Cancel
+            <button
+              type="button"
+              onClick={() => setShowSaveTemplateModal(true)}
+              style={styles.templateButton}
+              disabled={!title.trim()}
+              title="Save current settings as a reusable template"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+              Save as Template
             </button>
-            <button type="submit" style={styles.saveButton}>
-              {editingEvent ? 'Save Changes' : 'Create Event'}
-            </button>
+            <div style={styles.footerActions}>
+              <button type="button" onClick={onClose} style={styles.cancelButton}>
+                Cancel
+              </button>
+              <button type="submit" style={styles.saveButton}>
+                {editingEvent ? 'Save Changes' : 'Create Event'}
+              </button>
+            </div>
           </div>
         </form>
+
+        {/* Save as Template Modal */}
+        {showSaveTemplateModal && (
+          <div style={styles.templateModalOverlay} onClick={() => setShowSaveTemplateModal(false)}>
+            <div style={styles.templateModal} onClick={(e) => e.stopPropagation()}>
+              <h3 style={styles.templateModalTitle}>Save as Template</h3>
+              <p style={styles.templateModalDescription}>
+                Give your template a name to identify it later.
+              </p>
+              <input
+                type="text"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Template name (e.g., Weekly Team Meeting)"
+                style={styles.templateNameInput}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && templateName.trim()) {
+                    handleSaveAsTemplate();
+                  } else if (e.key === 'Escape') {
+                    setShowSaveTemplateModal(false);
+                    setTemplateName('');
+                  }
+                }}
+              />
+              <div style={styles.templateModalActions}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSaveTemplateModal(false);
+                    setTemplateName('');
+                  }}
+                  style={styles.cancelButton}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAsTemplate}
+                  style={styles.saveButton}
+                  disabled={!templateName.trim()}
+                >
+                  Save Template
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -699,10 +962,15 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   footer: {
     display: 'flex',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: '12px',
     padding: '20px 24px',
     borderTop: `2px solid ${theme.colors.border}`,
+  },
+  footerActions: {
+    display: 'flex',
+    gap: '12px',
   },
   cancelButton: {
     padding: '12px 24px',
@@ -725,6 +993,146 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  templateButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 16px',
+    fontSize: '14px',
+    fontWeight: 500,
+    backgroundColor: 'transparent',
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.textSecondary,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  // Tags styles
+  tagsList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  tagChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    backgroundColor: theme.colors.inputBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.full,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontSize: '13px',
+    color: theme.colors.textPrimary,
+  },
+  tagChipSelected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: '#FFFFFF',
+  },
+  addTagButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    backgroundColor: 'transparent',
+    border: `2px dashed ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.full,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontSize: '13px',
+    color: theme.colors.textMuted,
+  },
+  newTagInput: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  tagInput: {
+    padding: '6px 12px',
+    fontSize: '13px',
+    backgroundColor: theme.colors.inputBackground,
+    border: `2px solid ${theme.colors.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.textPrimary,
+    outline: 'none',
+    width: '120px',
+  },
+  tagSaveButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '6px',
+    backgroundColor: theme.colors.primary,
+    border: 'none',
+    borderRadius: theme.borderRadius.sm,
+    cursor: 'pointer',
+    color: '#FFFFFF',
+  },
+  tagCancelButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '6px',
+    backgroundColor: 'transparent',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.sm,
+    cursor: 'pointer',
+    color: theme.colors.textMuted,
+  },
+  // Template modal styles
+  templateModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    borderRadius: theme.borderRadius.lg,
+  },
+  templateModal: {
+    backgroundColor: theme.colors.backgroundLight,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '24px',
+    width: '90%',
+    maxWidth: '400px',
+  },
+  templateModalTitle: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+    margin: 0,
+    marginBottom: '8px',
+  },
+  templateModalDescription: {
+    fontSize: '14px',
+    color: theme.colors.textSecondary,
+    margin: 0,
+    marginBottom: '16px',
+  },
+  templateNameInput: {
+    width: '100%',
+    padding: '12px 16px',
+    fontSize: '15px',
+    backgroundColor: theme.colors.inputBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.textPrimary,
+    outline: 'none',
+    marginBottom: '16px',
+    boxSizing: 'border-box',
+  },
+  templateModalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px',
   },
 };
 
