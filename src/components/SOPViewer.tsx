@@ -16,7 +16,6 @@ const SOPViewer: React.FC<SOPViewerProps> = ({ sop, onClose, embedded = false })
   const { isMobileOrTablet } = useResponsive();
 
   const currentStep = sop.steps[currentStepIndex];
-  const progress = ((completedSteps.size / sop.steps.length) * 100).toFixed(0);
 
   const toggleStepComplete = (index: number) => {
     const newCompleted = new Set(completedSteps);
@@ -115,23 +114,6 @@ const SOPViewer: React.FC<SOPViewerProps> = ({ sop, onClose, embedded = false })
         )}
       </div>
 
-      <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
-        <div style={styles.progressInfo}>
-          <span style={styles.progressLabel}>Progress</span>
-          <span style={isMobileOrTablet ? styles.progressPercentMobile : styles.progressPercent}>{progress}%</span>
-        </div>
-        <div style={styles.progressBar}>
-          <div
-            style={{
-              ...styles.progressFill,
-              width: `${progress}%`,
-            }}
-          />
-        </div>
-        <div style={styles.progressText}>
-          {completedSteps.size} of {sop.steps.length} steps completed
-        </div>
-      </div>
 
       <div style={isMobileOrTablet ? styles.contentMobile : styles.content}>
         {!isMobileOrTablet && (
@@ -382,60 +364,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.textSecondary,
     borderRadius: theme.borderRadius.full,
     fontWeight: '600',
-  },
-  progressSection: {
-    marginBottom: '32px',
-    padding: '20px',
-    backgroundColor: theme.colors.cardBackground,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.lg,
-  },
-  progressSectionMobile: {
-    marginBottom: '0',
-    padding: '16px',
-    backgroundColor: theme.colors.cardBackground,
-    borderBottom: `2px solid ${theme.colors.border}`,
-  },
-  progressInfo: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '12px',
-  },
-  progressLabel: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  progressPercent: {
-    fontSize: '24px',
-    fontWeight: '800',
-    color: theme.colors.primary,
-  },
-  progressPercentMobile: {
-    fontSize: '20px',
-    fontWeight: '800',
-    color: theme.colors.primary,
-  },
-  progressBar: {
-    height: '12px',
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.full,
-    overflow: 'hidden',
-    marginBottom: '8px',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.full,
-    transition: 'width 0.3s ease',
-  },
-  progressText: {
-    fontSize: '13px',
-    color: theme.colors.textMuted,
-    textAlign: 'center',
   },
   content: {
     display: 'grid',

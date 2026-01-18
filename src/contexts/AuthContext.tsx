@@ -387,23 +387,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, error: authError.message };
       }
 
-      // Check if email confirmation is required
-      // If user.identities is empty, it means email confirmation is pending
-      const requiresEmailConfirmation = data.user && (!data.user.identities || data.user.identities.length === 0);
-
       // If user already exists (identities empty in some Supabase configs), handle gracefully
       if (data.user && data.user.identities && data.user.identities.length === 0) {
         return { success: false, error: 'A user with this email already exists' };
       }
 
-      // Profile will be auto-created by database trigger
-      // Wait a moment for the trigger to execute, then reload users
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Check if email confirmation is required (no session means confirmation is needed)
+      const requiresEmailConfirmation = !data.session;
+
+      if (data.user) {
+        // Wait a moment for the trigger to execute
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Check if profile was created by the trigger
+        const { data: existingProfile, error: checkError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', data.user.id)
+          .single();
+
+        // If profile doesn't exist, create it manually
+        if (!existingProfile || checkError) {
+          console.log('Profile not created by trigger, creating manually...');
+
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              email: userData.email,
+              first_name: userData.firstName,
+              last_name: userData.lastName,
+              role: userData.role,
+              department: userData.department,
+              is_active: true,
+              invited_by: currentUser?.id || null,
+              notification_preferences: userData.notificationPreferences || {
+                pushEnabled: true,
+                emailEnabled: true,
+                calendarSyncEnabled: false,
+                taskReminders: true,
+                overdueAlerts: true,
+              },
+            });
+
+          if (profileError) {
+            console.error('Error creating profile manually:', profileError);
+            // The auth user was created but profile failed
+            // This is not ideal but we can try to continue
+            console.warn('Profile creation failed. User may need admin intervention.');
+          }
+        }
+      }
+
+      // Reload users to get the latest list
       await loadUsers();
 
       return {
         success: true,
-        requiresEmailConfirmation: requiresEmailConfirmation || false
+        requiresEmailConfirmation
       };
     } catch (error: any) {
       console.error('Error adding user:', error);
