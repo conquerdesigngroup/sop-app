@@ -72,15 +72,18 @@ const MyTasksPage: React.FC = () => {
     const step = task.steps.find(s => s.id === stepId);
     if (!step) return;
 
+    // Check current completion state from completedSteps array (source of truth)
+    const isCurrentlyCompleted = task.completedSteps.includes(stepId);
+
     let newCompletedSteps: string[];
     let updatedSteps = task.steps.map(s => {
       if (s.id === stepId) {
-        return { ...s, isCompleted: !s.isCompleted, completedAt: !s.isCompleted ? new Date().toISOString() : undefined };
+        return { ...s, isCompleted: !isCurrentlyCompleted, completedAt: !isCurrentlyCompleted ? new Date().toISOString() : undefined };
       }
       return s;
     });
 
-    if (step.isCompleted) {
+    if (isCurrentlyCompleted) {
       // Unchecking - remove from completed
       newCompletedSteps = task.completedSteps.filter(id => id !== stepId);
     } else {
@@ -88,13 +91,18 @@ const MyTasksPage: React.FC = () => {
       newCompletedSteps = [...task.completedSteps, stepId];
     }
 
+    // Calculate new progress percentage
+    const newProgressPercentage = task.steps.length > 0
+      ? Math.round((newCompletedSteps.length / task.steps.length) * 100)
+      : 0;
+
     // Update status based on progress
     let newStatus = task.status;
     if (newCompletedSteps.length === 0) {
       newStatus = 'pending';
     } else if (newCompletedSteps.length === task.steps.length) {
       newStatus = 'completed';
-    } else if (task.status === 'pending') {
+    } else {
       newStatus = 'in-progress';
     }
 
@@ -102,12 +110,19 @@ const MyTasksPage: React.FC = () => {
       steps: updatedSteps,
       completedSteps: newCompletedSteps,
       status: newStatus,
+      progressPercentage: newProgressPercentage,
       startedAt: task.startedAt || new Date().toISOString(),
     });
 
     // Update selected task if it's open
     if (selectedTask?.id === task.id) {
-      const updatedTask = { ...task, steps: updatedSteps, completedSteps: newCompletedSteps, status: newStatus };
+      const updatedTask = {
+        ...task,
+        steps: updatedSteps,
+        completedSteps: newCompletedSteps,
+        status: newStatus,
+        progressPercentage: newProgressPercentage,
+      };
       setSelectedTask(updatedTask);
     }
   };
@@ -394,6 +409,13 @@ interface TaskDetailModalProps {
 const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, onStepToggle, isMobileOrTablet }) => {
   const attachedSOPs = sops.filter(sop => task.sopIds.includes(sop.id));
 
+  // Calculate progress from actual completedSteps array - NOT from stored progressPercentage
+  const totalSteps = task.steps.length;
+  const completedCount = task.completedSteps.filter(id =>
+    task.steps.some(step => step.id === id)
+  ).length;
+  const progressPercent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -448,11 +470,11 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
             <h3 style={styles.sectionTitle}>Progress</h3>
             <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
               <div style={styles.progressHeader}>
-                <span style={styles.progressText}>{task.progressPercentage}%</span>
-                <span style={styles.progressSteps}>{task.completedSteps.length} / {task.steps.length} steps completed</span>
+                <span style={styles.progressText}>{progressPercent}%</span>
+                <span style={styles.progressSteps}>{completedCount} / {totalSteps} steps completed</span>
               </div>
               <div style={isMobileOrTablet ? styles.progressBarMobile : styles.progressBar}>
-                <div style={{...styles.progressFill, width: `${task.progressPercentage}%`}} />
+                <div style={{...styles.progressFill, width: `${progressPercent}%`}} />
               </div>
             </div>
           </div>

@@ -21,6 +21,7 @@ const Dashboard: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [dayActionModal, setDayActionModal] = useState<{ date: Date; x: number; y: number } | null>(null);
 
   // Show skeleton while loading
   if ((isAdmin && sopsLoading) || (!isAdmin && tasksLoading)) {
@@ -59,6 +60,8 @@ const Dashboard: React.FC = () => {
       setSelectedTask={setSelectedTask}
       selectedEvent={selectedEvent}
       setSelectedEvent={setSelectedEvent}
+      dayActionModal={dayActionModal}
+      setDayActionModal={setDayActionModal}
       navigate={navigate}
     />
   );
@@ -70,17 +73,21 @@ const CalendarDayCell: React.FC<{
   isToday: boolean;
   isMobileOrTablet: boolean;
   children: React.ReactNode;
-}> = ({ day, isToday, isMobileOrTablet, children }) => {
+  onClick?: (e: React.MouseEvent) => void;
+  isClickable?: boolean;
+}> = ({ day, isToday, isMobileOrTablet, children, onClick, isClickable = false }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={onClick}
       style={{
         ...(isMobileOrTablet ? styles.calendarDayMobile : styles.calendarDay),
         ...(isToday ? styles.calendarDayToday : {}),
         ...(isHovered && !isToday ? styles.calendarDayHover : {}),
+        ...(isClickable ? { cursor: 'pointer' } : {}),
       }}
     >
       {children}
@@ -117,7 +124,8 @@ const TaskCalendar: React.FC<{
   onTaskClick: (task: JobTask) => void;
   onEventClick: (event: CalendarEvent) => void;
   showAllUsers?: boolean;
-}> = ({ tasks, events, users, currentMonth, setCurrentMonth, onTaskClick, onEventClick, showAllUsers = false }) => {
+  onDayClick?: (date: Date, e: React.MouseEvent) => void;
+}> = ({ tasks, events, users, currentMonth, setCurrentMonth, onTaskClick, onEventClick, showAllUsers = false, onDayClick }) => {
   const { isMobileOrTablet } = useResponsive();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -195,6 +203,7 @@ const TaskCalendar: React.FC<{
           const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
           const totalItems = tasksForDay.length + eventsForDay.length;
           const maxVisible = isMobileOrTablet ? 2 : 3;
+          const clickedDate = new Date(year, month, day);
 
           return (
             <CalendarDayCell
@@ -202,6 +211,8 @@ const TaskCalendar: React.FC<{
               day={day}
               isToday={isToday}
               isMobileOrTablet={isMobileOrTablet}
+              onClick={onDayClick ? (e) => onDayClick(clickedDate, e) : undefined}
+              isClickable={!!onDayClick}
             >
               <div style={{
                 ...(isMobileOrTablet ? styles.dayNumberMobile : styles.dayNumber),
@@ -437,8 +448,10 @@ const AdminDashboard: React.FC<{
   setSelectedTask: (task: JobTask | null) => void;
   selectedEvent: CalendarEvent | null;
   setSelectedEvent: (event: CalendarEvent | null) => void;
+  dayActionModal: { date: Date; x: number; y: number } | null;
+  setDayActionModal: (modal: { date: Date; x: number; y: number } | null) => void;
   navigate: ReturnType<typeof useNavigate>;
-}> = ({ sops, jobTasks, events, users, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, navigate }) => {
+}> = ({ sops, jobTasks, events, users, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, dayActionModal, setDayActionModal, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
 
   // SOP Stats
@@ -466,40 +479,61 @@ const AdminDashboard: React.FC<{
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
 
-  // Active tasks
+  // Task stats
   const activeTasks = jobTasks.filter(t => t.status !== 'archived' && t.status !== 'draft');
+  const pendingTasks = activeTasks.filter(t => t.status === 'pending').length;
+  const inProgressTasks = activeTasks.filter(t => t.status === 'in-progress').length;
+  const completedTasks = activeTasks.filter(t => t.status === 'completed').length;
+
+  // Calculate overdue tasks
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const overdueTasks = activeTasks.filter(t => {
+    const taskDate = new Date(t.scheduledDate);
+    taskDate.setHours(0, 0, 0, 0);
+    return taskDate < today && t.status !== 'completed';
+  }).length;
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
       {/* Header */}
       <div style={styles.headerRow}>
         <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Dashboard</h1>
-        <button onClick={() => navigate('/sop', { state: { openForm: true } })} style={styles.createBtn}>
-          + New SOP
-        </button>
+        <div style={styles.headerButtons}>
+          <button onClick={() => navigate('/job-tasks', { state: { openCreateModal: true } })} style={styles.createBtnSecondary}>
+            + New Task
+          </button>
+          <button onClick={() => navigate('/sop', { state: { openForm: true } })} style={styles.createBtn}>
+            + New SOP
+          </button>
+        </div>
       </div>
 
-      {/* Stats Row - Compact, no icons */}
+      {/* Task Stats Row */}
       <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
-        <div style={styles.statItem} onClick={() => navigate('/sop', { state: { filterStatus: 'published' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.published }}>{publishedSOPs}</span>
-          <span style={styles.statLabel}>Published</span>
+        <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'pending' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
+          <span style={styles.statLabel}>Pending</span>
         </div>
         <div style={styles.statDivider} />
-        <div style={styles.statItem} onClick={() => navigate('/sop', { state: { filterStatus: 'draft' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.draft }}>{draftSOPs}</span>
-          <span style={styles.statLabel}>Drafts</span>
+        <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'in-progress' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
+          <span style={styles.statLabel}>In Progress</span>
         </div>
         <div style={styles.statDivider} />
-        <div style={styles.statItem} onClick={() => navigate('/sop', { state: { viewMode: 'templates' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.info }}>{templateSOPs}</span>
-          <span style={styles.statLabel}>Templates</span>
+        <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'completed' } })}>
+          <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
+          <span style={styles.statLabel}>Completed</span>
         </div>
-        <div style={styles.statDivider} />
-        <div style={styles.statItem} onClick={() => navigate('/job-tasks')}>
-          <span style={{ ...styles.statNumber, color: theme.colors.primary }}>{activeTasks.length}</span>
-          <span style={styles.statLabel}>Tasks</span>
-        </div>
+        {overdueTasks > 0 && (
+          <>
+            <div style={styles.statDivider} />
+            <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>
+              <span style={{ ...styles.statNumber, color: theme.colors.status.error }}>{overdueTasks}</span>
+              <span style={styles.statLabel}>Overdue</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Departments - Compact pills */}
@@ -586,6 +620,33 @@ const AdminDashboard: React.FC<{
           onTaskClick={setSelectedTask}
           onEventClick={setSelectedEvent}
           showAllUsers={true}
+          onDayClick={(date, e) => {
+            const rect = (e.target as HTMLElement).getBoundingClientRect();
+            setDayActionModal({
+              date,
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            });
+          }}
+        />
+      )}
+
+      {/* Day Action Modal */}
+      {dayActionModal && (
+        <DayActionModal
+          date={dayActionModal.date}
+          position={{ x: dayActionModal.x, y: dayActionModal.y }}
+          onClose={() => setDayActionModal(null)}
+          onAddEvent={() => {
+            const dateStr = `${dayActionModal.date.getFullYear()}-${String(dayActionModal.date.getMonth() + 1).padStart(2, '0')}-${String(dayActionModal.date.getDate()).padStart(2, '0')}`;
+            setDayActionModal(null);
+            navigate('/calendar', { state: { openEventForm: true, selectedDate: dateStr } });
+          }}
+          onAddJobTask={() => {
+            const dateStr = `${dayActionModal.date.getFullYear()}-${String(dayActionModal.date.getMonth() + 1).padStart(2, '0')}-${String(dayActionModal.date.getDate()).padStart(2, '0')}`;
+            setDayActionModal(null);
+            navigate('/job-tasks', { state: { openCreateModal: true, selectedDate: dateStr } });
+          }}
         />
       )}
 
@@ -594,6 +655,160 @@ const AdminDashboard: React.FC<{
       <EventDetailModal isOpen={selectedEvent !== null} onClose={() => setSelectedEvent(null)} event={selectedEvent} users={users} onEdit={() => {}} onDelete={() => {}} />
     </div>
   );
+};
+
+// Day Action Modal - popup when admin clicks on a calendar day
+const DayActionModal: React.FC<{
+  date: Date;
+  position: { x: number; y: number };
+  onClose: () => void;
+  onAddEvent: () => void;
+  onAddJobTask: () => void;
+}> = ({ date, position, onClose, onAddEvent, onAddJobTask }) => {
+  const modalRef = React.useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  // Close on escape key
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
+  // Calculate position to keep modal in viewport
+  const modalStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: Math.min(position.y, window.innerHeight - 200),
+    left: Math.min(Math.max(position.x - 120, 10), window.innerWidth - 250),
+    zIndex: 1000,
+  };
+
+  const formattedDate = date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div style={dayActionStyles.backdrop} />
+
+      {/* Modal */}
+      <div ref={modalRef} style={{ ...dayActionStyles.modal, ...modalStyle }}>
+        <div style={dayActionStyles.header}>
+          <span style={dayActionStyles.dateLabel}>{formattedDate}</span>
+          <button onClick={onClose} style={dayActionStyles.closeBtn}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={dayActionStyles.buttonGroup}>
+          <button onClick={onAddEvent} style={dayActionStyles.actionBtn}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span>Add Event</span>
+          </button>
+
+          <button onClick={onAddJobTask} style={{ ...dayActionStyles.actionBtn, ...dayActionStyles.actionBtnPrimary }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            <span>Add Job Task</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const dayActionStyles: { [key: string]: React.CSSProperties } = {
+  backdrop: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 999,
+  },
+  modal: {
+    backgroundColor: theme.colors.cardBackground,
+    border: `2px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '12px',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    minWidth: '200px',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
+    paddingBottom: '10px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  dateLabel: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+  },
+  closeBtn: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.colors.textMuted,
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '4px',
+  },
+  buttonGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  actionBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '12px 16px',
+    fontSize: '14px',
+    fontWeight: 600,
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.textPrimary,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  actionBtnPrimary: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: '#FFFFFF',
+  },
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
@@ -625,6 +840,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.textPrimary,
     margin: 0,
   },
+  headerButtons: {
+    display: 'flex',
+    gap: '10px',
+  },
   createBtn: {
     padding: '10px 20px',
     fontSize: '14px',
@@ -632,6 +851,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.primary,
     color: '#FFFFFF',
     border: 'none',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
+  },
+  createBtnSecondary: {
+    padding: '10px 20px',
+    fontSize: '14px',
+    fontWeight: 700,
+    backgroundColor: theme.colors.bg.tertiary,
+    color: theme.colors.textPrimary,
+    border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     whiteSpace: 'nowrap' as const,

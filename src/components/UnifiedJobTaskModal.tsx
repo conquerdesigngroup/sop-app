@@ -43,6 +43,7 @@ interface UnifiedJobTaskModalProps {
   sops: any[];
   currentUserId: string;
   initialTemplateId?: string | null;
+  initialScheduledDate?: string | null;
 }
 
 export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
@@ -56,6 +57,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   sops,
   currentUserId,
   initialTemplateId = null,
+  initialScheduledDate = null,
 }) => {
   const { isMobile } = useResponsive();
 
@@ -134,13 +136,13 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     }
   }, [editingTask, initialTemplateId, taskTemplates]);
 
-  // Set default date to today
+  // Set default date to today or use initialScheduledDate
   useEffect(() => {
     if (!editingTask) {
-      const today = new Date().toISOString().split('T')[0];
-      setScheduledDate(today);
+      const defaultDate = initialScheduledDate || new Date().toISOString().split('T')[0];
+      setScheduledDate(defaultDate);
     }
-  }, [editingTask]);
+  }, [editingTask, initialScheduledDate]);
 
   // Handle template selection
   const handleTemplateSelect = (template: TaskTemplate | null) => {
@@ -185,7 +187,8 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   };
 
   const handleSelectAll = () => {
-    const allUserIds = filteredUsers.map((u: any) => u.id);
+    // Select ALL users, not just filtered ones
+    const allUserIds = users.map((u: any) => u.id);
     setAssignedTo(allUserIds);
   };
 
@@ -356,6 +359,29 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
               />
             </div>
 
+            {/* Scheduled Date & Due Time */}
+            <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Scheduled Date *</label>
+                <input
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  required
+                  style={{...styles.input, ...(isMobile && styles.inputMobile)}}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Due Time (Optional)</label>
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  style={{...styles.input, ...(isMobile && styles.inputMobile)}}
+                />
+              </div>
+            </div>
+
             {/* Department and Category */}
             <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
               <div style={styles.formGroup}>
@@ -388,14 +414,81 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
               </div>
             </div>
 
+            {/* Assign to Team Members */}
+            <div style={styles.assignHeaderRow}>
+              <label style={styles.label}>Assign to Team Members *</label>
+              <div style={styles.assignControlsRow}>
+                <select
+                  value={filterDepartment}
+                  onChange={(e) => setFilterDepartment(e.target.value)}
+                  style={styles.departmentSelect}
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={handleSelectAll} style={styles.selectAllButton}>
+                  All
+                </button>
+                <button type="button" onClick={handleDeselectAll} style={styles.selectAllButton}>
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div style={styles.usersList}>
+              {filteredUsers.length === 0 ? (
+                <p style={styles.noUsersText}>No users found in this department</p>
+              ) : (
+                <div style={styles.usersGrid}>
+                  {filteredUsers.map((user: any) => {
+                    const isSelected = assignedTo.includes(user.id);
+                    return (
+                      <div
+                        key={user.id}
+                        style={{
+                          ...styles.userCard,
+                          ...(isSelected ? styles.userCardSelected : {}),
+                        }}
+                        onClick={() => handleUserToggle(user.id)}
+                      >
+                        <div style={styles.userCardCheckbox}>
+                          <CustomCheckbox
+                            checked={isSelected}
+                            onChange={() => handleUserToggle(user.id)}
+                            label=""
+                          />
+                        </div>
+                        <div style={styles.userCardAvatar}>
+                          {user.firstName.charAt(0)}{user.lastName.charAt(0)}
+                        </div>
+                        <div style={styles.userCardInfo}>
+                          <span style={styles.userCardName}>
+                            {user.firstName} {user.lastName}
+                          </span>
+                          <span style={styles.userCardRole}>{user.role === 'admin' ? 'Admin' : user.department}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {assignedTo.length > 0 && (
+              <div style={styles.selectedCount}>
+                Selected: {assignedTo.length} team member{assignedTo.length !== 1 ? 's' : ''}
+              </div>
+            )}
+
             {/* Priority and Duration */}
             <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Priority *</label>
+                <label style={styles.label}>Priority</label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                  required
                   style={{...styles.select, ...(isMobile && styles.selectMobile)}}
                 >
                   <option value="low">Low</option>
@@ -405,13 +498,13 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                 </select>
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Est. Duration (min) *</label>
+                <label style={styles.label}>Est. Duration (min)</label>
                 <input
                   type="number"
                   value={estimatedDuration}
                   onChange={(e) => setEstimatedDuration(Number(e.target.value))}
-                  min={1}
-                  required
+                  min={0}
+                  placeholder="Optional"
                   style={{...styles.input, ...(isMobile && styles.inputMobile)}}
                 />
               </div>
@@ -574,92 +667,6 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
             )}
           </div>
 
-          {/* Schedule & Assignment Section */}
-          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
-            <h3 style={styles.sectionTitle}>Schedule & Assignment</h3>
-
-            <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Scheduled Date *</label>
-                <input
-                  type="date"
-                  value={scheduledDate}
-                  onChange={(e) => setScheduledDate(e.target.value)}
-                  required
-                  style={{...styles.input, ...(isMobile && styles.inputMobile)}}
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Due Time (Optional)</label>
-                <input
-                  type="time"
-                  value={dueTime}
-                  onChange={(e) => setDueTime(e.target.value)}
-                  style={{...styles.input, ...(isMobile && styles.inputMobile)}}
-                />
-              </div>
-            </div>
-
-            <div style={styles.assignHeaderRow}>
-              <label style={styles.label}>Assign to Team Members *</label>
-              <div style={styles.assignActions}>
-                <button type="button" onClick={handleSelectAll} style={styles.selectAllButton}>
-                  Select All
-                </button>
-                <button type="button" onClick={handleDeselectAll} style={styles.selectAllButton}>
-                  Deselect All
-                </button>
-              </div>
-            </div>
-
-            <div style={styles.departmentFilter}>
-              <label style={styles.smallLabel}>Filter by Department:</label>
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                style={styles.smallSelect}
-              >
-                <option value="all">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.usersList}>
-              {filteredUsers.length === 0 ? (
-                <p style={styles.noUsersText}>No users found in this department</p>
-              ) : (
-                filteredUsers.map((user: any) => (
-                  <div key={user.id} style={styles.userCheckbox}>
-                    <CustomCheckbox
-                      checked={assignedTo.includes(user.id)}
-                      onChange={() => handleUserToggle(user.id)}
-                      label=""
-                    />
-                    <div style={styles.userInfo}>
-                      <div style={styles.userAvatar}>
-                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                      </div>
-                      <div style={styles.userDetails}>
-                        <span style={styles.userFullName}>
-                          {user.firstName} {user.lastName}
-                        </span>
-                        <span style={styles.userDepartment}>{user.department}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {assignedTo.length > 0 && (
-              <div style={styles.selectedCount}>
-                Selected: {assignedTo.length} team member{assignedTo.length !== 1 ? 's' : ''}
-              </div>
-            )}
-          </div>
-
           {/* Save to Task Library */}
           {!editingTask && (
             <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
@@ -777,12 +784,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
   },
   formGroup: {
-    marginBottom: '16px',
+    marginBottom: '20px',
   },
   formRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '16px',
+    gap: '20px',
+    marginBottom: '20px',
   },
   formRowMobile: {
     gridTemplateColumns: '1fr',
@@ -970,76 +978,104 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: '8px',
     marginBottom: '12px',
-  },
-  assignActions: {
-    display: 'flex',
+    flexWrap: 'wrap',
     gap: '8px',
+  },
+  assignControlsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  departmentSelect: {
+    padding: '6px 10px',
+    fontSize: '12px',
+    fontWeight: 500,
+    color: theme.colors.textSecondary,
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.sm,
+    cursor: 'pointer',
+    outline: 'none',
   },
   selectAllButton: {
     padding: '6px 12px',
     fontSize: '12px',
     fontWeight: 500,
-    color: theme.colors.primary,
+    color: theme.colors.textSecondary,
     backgroundColor: 'transparent',
-    border: `1px solid ${theme.colors.primary}`,
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.sm,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
   },
-  departmentFilter: {
-    display: 'flex',
-    alignItems: 'center',
-    marginBottom: '12px',
-    gap: '8px',
-  },
   usersList: {
-    maxHeight: '250px',
+    maxHeight: '300px',
     overflowY: 'auto',
-    padding: '12px',
+    padding: '16px',
+    marginBottom: '20px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.md,
     border: `1px solid ${theme.colors.bdr.primary}`,
   },
-  userCheckbox: {
+  usersGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: '12px',
+  },
+  userCard: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    padding: '12px',
-    cursor: 'pointer',
+    padding: '12px 14px',
+    backgroundColor: theme.colors.bg.secondary,
     borderRadius: theme.borderRadius.md,
-    transition: 'background-color 0.2s ease',
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
   },
-  userInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    flex: 1,
+  userCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: `${theme.colors.primary}15`,
   },
-  userAvatar: {
-    width: '36px',
-    height: '36px',
+  userCardCheckbox: {
+    flexShrink: 0,
+  },
+  userCardAvatar: {
+    width: '40px',
+    height: '40px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
     color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '12px',
+    fontSize: '13px',
     fontWeight: 600,
+    flexShrink: 0,
   },
-  userDetails: {
+  userCardInfo: {
     display: 'flex',
     flexDirection: 'column',
+    gap: '2px',
+    minWidth: 0,
+    flex: 1,
   },
-  userFullName: {
+  userCardName: {
     fontSize: '14px',
-    fontWeight: 500,
+    fontWeight: 600,
     color: theme.colors.txt.primary,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
-  userDepartment: {
+  userCardRole: {
     fontSize: '12px',
     color: theme.colors.txt.tertiary,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   noUsersText: {
     textAlign: 'center',
@@ -1048,7 +1084,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontStyle: 'italic',
   },
   selectedCount: {
-    marginTop: '12px',
+    marginTop: '-8px',
+    marginBottom: '20px',
     fontSize: '13px',
     fontWeight: 500,
     color: theme.colors.primary,

@@ -57,14 +57,11 @@ interface LogActivityParams {
 
 const STORAGE_KEY = 'mediamaple_activity_logs';
 
-// Helper to save to localStorage
+// Helper to save to localStorage - no cap, logs persist until admin clears them
 const saveToLocalStorage = (newLog: Record<string, any>) => {
   const localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
   localLogs.unshift(newLog);
-  // Keep only last 1000 logs in localStorage
-  if (localLogs.length > 1000) {
-    localLogs.pop();
-  }
+  // No cap - logs persist until admin manually clears them
   localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs));
 };
 

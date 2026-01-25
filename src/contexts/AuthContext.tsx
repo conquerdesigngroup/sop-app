@@ -3,6 +3,7 @@ import { User, UserRole } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { logActivity } from '../utils/activityLogger';
+import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
 
 interface AddUserResult {
   success: boolean;
@@ -14,7 +15,7 @@ interface AuthContextType {
   currentUser: User | null;
   users: User[];
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   addUser: (userData: Omit<User, 'id' | 'createdAt'>) => Promise<AddUserResult>;
   updateUser: (id: string, userData: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
@@ -223,6 +224,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, [useSupabase, loadUsers]);
 
+  // Refresh user data when tab becomes visible (ensures data is fresh when users return)
+  const handleVisibilityRefresh = useCallback(() => {
+    if (useSupabase && currentUser !== null) {
+      console.log('[AuthContext] Tab visible - refreshing users...');
+      loadUsers();
+    }
+  }, [useSupabase, currentUser, loadUsers]);
+
+  useVisibilityRefresh(handleVisibilityRefresh, 3000);
+
   const login = async (email: string, password: string): Promise<boolean> => {
     if (!useSupabase) {
       // Fallback to localStorage mode
@@ -363,6 +374,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const updatedUsers = [...users, newUser];
       setUsers(updatedUsers);
       localStorage.setItem('mediamaple_users', JSON.stringify(updatedUsers));
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'user_created',
+          entityType: 'user',
+          entityId: newUser.id,
+          entityTitle: `${userData.firstName} ${userData.lastName}`,
+          details: {
+            newUserEmail: userData.email,
+            newUserRole: userData.role,
+            newUserDepartment: userData.department,
+          },
+        });
+      }
       return { success: true };
     }
 
@@ -439,6 +468,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       }
 
+      // Log activity
+      if (currentUser && data.user) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'user_created',
+          entityType: 'user',
+          entityId: data.user.id,
+          entityTitle: `${userData.firstName} ${userData.lastName}`,
+          details: {
+            newUserEmail: userData.email,
+            newUserRole: userData.role,
+            newUserDepartment: userData.department,
+            requiresEmailConfirmation,
+          },
+        });
+      }
+
       // Reload users to get the latest list
       await loadUsers();
 
@@ -453,11 +501,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const updateUser = async (id: string, userData: Partial<User>) => {
+    const existingUser = users.find(u => u.id === id);
+
+    // Determine if this is a role change
+    const isRoleChange = userData.role && existingUser && userData.role !== existingUser.role;
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       const updatedUsers = users.map((user) => (user.id === id ? { ...user, ...userData } : user));
       setUsers(updatedUsers);
       localStorage.setItem('mediamaple_users', JSON.stringify(updatedUsers));
+
+      // Log activity
+      if (currentUser && existingUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: isRoleChange ? 'user_role_changed' : 'user_updated',
+          entityType: 'user',
+          entityId: id,
+          entityTitle: `${existingUser.firstName} ${existingUser.lastName}`,
+          details: {
+            changedFields: Object.keys(userData),
+            previousRole: existingUser.role,
+            newRole: userData.role || existingUser.role,
+          },
+        });
+      }
 
       // Update current user if it's the one being updated
       if (currentUser?.id === id) {
@@ -502,6 +573,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error('Update may not have been saved. Please check your permissions.');
       }
 
+      // Log activity
+      if (currentUser && existingUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: isRoleChange ? 'user_role_changed' : 'user_updated',
+          entityType: 'user',
+          entityId: id,
+          entityTitle: `${existingUser.firstName} ${existingUser.lastName}`,
+          details: {
+            changedFields: Object.keys(userData),
+            previousRole: existingUser.role,
+            newRole: userData.role || existingUser.role,
+          },
+        });
+      }
+
       // Update local state with the data returned from Supabase
       const updatedUserFromDB = data[0];
       const mappedUser = mapProfileToUser(updatedUserFromDB);
@@ -520,11 +609,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const deleteUser = async (id: string) => {
+    const userToDelete = users.find(u => u.id === id);
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       const updatedUsers = users.filter((user) => user.id !== id);
       setUsers(updatedUsers);
       localStorage.setItem('mediamaple_users', JSON.stringify(updatedUsers));
+
+      // Log activity
+      if (currentUser && userToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'user_deleted',
+          entityType: 'user',
+          entityId: id,
+          entityTitle: `${userToDelete.firstName} ${userToDelete.lastName}`,
+          details: {
+            deletedUserEmail: userToDelete.email,
+            deletedUserRole: userToDelete.role,
+          },
+        });
+      }
       return;
     }
 
@@ -540,6 +648,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error deactivating user:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser && userToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'user_deleted',
+          entityType: 'user',
+          entityId: id,
+          entityTitle: `${userToDelete.firstName} ${userToDelete.lastName}`,
+          details: {
+            deletedUserEmail: userToDelete.email,
+            deletedUserRole: userToDelete.role,
+            deactivated: true,
+          },
+        });
       }
 
       // Update local state
@@ -577,6 +703,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUsers(updatedUsers);
         localStorage.setItem('mediamaple_users', JSON.stringify(updatedUsers));
         setCurrentUser({ ...currentUser, password: newPassword });
+
+        // Log activity
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'user_password_changed',
+          entityType: 'user',
+          entityId: currentUser.id,
+          entityTitle: `${currentUser.firstName} ${currentUser.lastName}`,
+        });
+
         return { success: true };
       }
       return { success: false, error: 'No user logged in' };
@@ -602,6 +740,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error changing password:', error);
         return { success: false, error: error.message };
+      }
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'user_password_changed',
+          entityType: 'user',
+          entityId: currentUser.id,
+          entityTitle: `${currentUser.firstName} ${currentUser.lastName}`,
+        });
       }
 
       return { success: true };

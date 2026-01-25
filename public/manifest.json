@@ -1,8 +1,8 @@
 {
-  "short_name": "SOP App",
-  "name": "Standard Operating Procedures App",
+  "short_name": "DIDC",
+  "name": "DIDC",
   "version": "1.0.2",
-  "description": "Task management and SOP tracking application for teams",
+  "description": "Task management and SOP tracking for teams",
   "icons": [
     {
       "src": "favicon.ico",

@@ -3,6 +3,7 @@ import { SOP, SOPStatus } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logActivity } from '../utils/activityLogger';
+import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
 
 interface SOPContextType {
   sops: SOP[];
@@ -765,6 +766,16 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
     }
   }, [sops, useSupabase]);
 
+  // Refresh data when tab becomes visible (ensures data is fresh when users return)
+  const handleVisibilityRefresh = useCallback(() => {
+    if (useSupabase && isAuthenticated && !authLoading) {
+      console.log('[SOPContext] Tab visible - refreshing data...');
+      loadSOPs();
+    }
+  }, [useSupabase, isAuthenticated, authLoading, loadSOPs]);
+
+  useVisibilityRefresh(handleVisibilityRefresh, 3000);
+
   const addSOP = async (sopData: Omit<SOP, 'id' | 'createdAt'>) => {
     if (!useSupabase) {
       // Fallback to localStorage mode
@@ -837,6 +848,8 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
   };
 
   const updateSOP = async (id: string, sopData: Partial<SOP>) => {
+    const existingSOP = sops.find(s => s.id === id);
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       const updated = sops.map(sop =>
@@ -846,6 +859,24 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
       );
       setSOPs(updated);
       localStorage.setItem('mediamaple_sops', JSON.stringify(updated));
+
+      // Log activity
+      if (currentUser && existingSOP) {
+        const changedFields = Object.keys(sopData).filter(key => key !== 'updatedAt');
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'sop_updated',
+          entityType: existingSOP.isTemplate ? 'template' : 'sop',
+          entityId: id,
+          entityTitle: sopData.title || existingSOP.title,
+          details: {
+            changedFields,
+            changes: sopData,
+          },
+        });
+      }
       return;
     }
 
@@ -870,6 +901,24 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error updating SOP:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser && existingSOP) {
+        const changedFields = Object.keys(sopData).filter(key => key !== 'updatedAt');
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'sop_updated',
+          entityType: existingSOP.isTemplate ? 'template' : 'sop',
+          entityId: id,
+          entityTitle: sopData.title || existingSOP.title,
+          details: {
+            changedFields,
+            changes: sopData,
+          },
+        });
       }
 
       // Update local state optimistically
@@ -1034,12 +1083,14 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
     const template = sops.find(sop => sop.id === templateId);
     if (!template) return;
 
+    const newTitle = `${template.title} (Copy)`;
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       const newSOP: SOP = {
         ...template,
         id: `sop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        title: `${template.title} (Copy)`,
+        title: newTitle,
         status: 'draft',
         isTemplate: false,
         templateOf: templateId,
@@ -1049,12 +1100,29 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
       const updated = [...sops, newSOP];
       setSOPs(updated);
       localStorage.setItem('mediamaple_sops', JSON.stringify(updated));
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'sop_imported',
+          entityType: 'sop',
+          entityId: newSOP.id,
+          entityTitle: newTitle,
+          details: {
+            sourceTemplateId: templateId,
+            sourceTemplateTitle: template.title,
+          },
+        });
+      }
       return;
     }
 
     try {
       const { error } = await supabase.from('sops').insert({
-        title: `${template.title} (Copy)`,
+        title: newTitle,
         description: template.description,
         department: template.department,
         category: template.category,
@@ -1072,6 +1140,23 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
         throw error;
       }
 
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'sop_imported',
+          entityType: 'sop',
+          entityId: templateId,
+          entityTitle: newTitle,
+          details: {
+            sourceTemplateId: templateId,
+            sourceTemplateTitle: template.title,
+          },
+        });
+      }
+
       // Reload SOPs
       await loadSOPs();
     } catch (error) {
@@ -1084,12 +1169,14 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
     const sourceSOP = sops.find(sop => sop.id === id);
     if (!sourceSOP) return;
 
+    const newTitle = `${sourceSOP.title} (Template)`;
+
     if (!useSupabase) {
       // Fallback to localStorage mode - CREATE A COPY as template, don't modify original
       const newTemplate: SOP = {
         ...sourceSOP,
         id: `sop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        title: `${sourceSOP.title} (Template)`,
+        title: newTitle,
         isTemplate: true,
         templateOf: undefined,
         createdAt: new Date().toISOString(),
@@ -1098,13 +1185,30 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
       const updated = [...sops, newTemplate];
       setSOPs(updated);
       localStorage.setItem('mediamaple_sops', JSON.stringify(updated));
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_created',
+          entityType: 'template',
+          entityId: newTemplate.id,
+          entityTitle: newTitle,
+          details: {
+            sourceSOPId: id,
+            sourceSOPTitle: sourceSOP.title,
+          },
+        });
+      }
       return;
     }
 
     try {
       // CREATE A COPY as template, don't modify original
       const { error } = await supabase.from('sops').insert({
-        title: `${sourceSOP.title} (Template)`,
+        title: newTitle,
         description: sourceSOP.description,
         department: sourceSOP.department,
         category: sourceSOP.category,
@@ -1120,6 +1224,23 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error saving as template:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_created',
+          entityType: 'template',
+          entityId: id,
+          entityTitle: newTitle,
+          details: {
+            sourceSOPId: id,
+            sourceSOPTitle: sourceSOP.title,
+          },
+        });
       }
 
       // Reload SOPs to get the new template

@@ -28,7 +28,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled
     <span
       style={{
         ...toggleStyles.knob,
-        transform: checked ? 'translateX(20px)' : 'translateX(2px)',
+        left: checked ? '27px' : '3px',
       }}
     />
   </button>
@@ -36,23 +36,25 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled
 
 const toggleStyles: { [key: string]: React.CSSProperties } = {
   switch: {
-    width: '48px',
+    width: '52px',
     height: '28px',
     borderRadius: '14px',
     border: 'none',
     position: 'relative',
     transition: 'background-color 0.2s ease',
     flexShrink: 0,
+    padding: 0,
   },
   knob: {
     position: 'absolute',
-    top: '2px',
-    width: '24px',
-    height: '24px',
-    borderRadius: '12px',
+    top: '50%',
+    marginTop: '-11px',
+    width: '22px',
+    height: '22px',
+    borderRadius: '11px',
     backgroundColor: '#FFFFFF',
-    transition: 'transform 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+    transition: 'transform 0.2s ease, left 0.2s ease',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
   },
 };
 

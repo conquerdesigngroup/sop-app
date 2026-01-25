@@ -31,18 +31,20 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Local state to track task changes within the modal
-  const [localTask, setLocalTask] = useState<JobTask | null>(initialTask);
+  // Local state to track completed steps - this is the SOURCE OF TRUTH for the modal
+  const [completedStepIds, setCompletedStepIds] = useState<string[]>([]);
 
-  // Update local task when the prop changes (e.g., modal opens with new task)
+  // Sync local state when modal opens with a new task
   useEffect(() => {
-    setLocalTask(initialTask);
+    if (initialTask) {
+      setCompletedStepIds(initialTask.completedSteps || []);
+    }
   }, [initialTask]);
 
-  if (!isOpen || !localTask) return null;
+  if (!isOpen || !initialTask) return null;
 
-  // Use localTask for display
-  const task = localTask;
+  // Use initialTask for static data, completedStepIds for dynamic progress
+  const task = initialTask;
 
   // Calendar export handlers
   const handleAddToGoogleCalendar = () => {
@@ -95,51 +97,47 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   };
 
   const assignedUsers = users.filter(u => task.assignedTo.includes(u.id));
-  const completedStepsCount = task.completedSteps.length;
+
+  // Calculate progress directly from local state - NO MEMOIZATION
+  // This recalculates on every render, which is exactly what we want
   const totalSteps = task.steps.length;
+  const completedCount = completedStepIds.filter(id =>
+    task.steps.some(step => step.id === id)
+  ).length;
+  const progressPercent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
 
+  // Handle step toggle - updates local state immediately, then persists
   const handleStepToggle = async (stepId: string) => {
-    const step = task.steps.find(s => s.id === stepId);
-    if (!step) return;
+    const isCurrentlyCompleted = completedStepIds.includes(stepId);
 
-    // Toggle the step completion
-    const updatedSteps = task.steps.map(s =>
-      s.id === stepId ? { ...s, isCompleted: !s.isCompleted } : s
-    );
-
+    // Calculate new completed steps
     let newCompletedSteps: string[];
-    if (step.isCompleted) {
-      // Unchecking - remove from completed
-      newCompletedSteps = task.completedSteps.filter(id => id !== stepId);
+    if (isCurrentlyCompleted) {
+      newCompletedSteps = completedStepIds.filter(id => id !== stepId);
     } else {
-      // Checking - add to completed
-      newCompletedSteps = [...task.completedSteps, stepId];
+      newCompletedSteps = [...completedStepIds, stepId];
     }
 
+    // Update local state IMMEDIATELY - this triggers re-render with new progress
+    setCompletedStepIds(newCompletedSteps);
+
+    // Calculate values for database update
+    const updatedSteps = task.steps.map(s =>
+      s.id === stepId ? { ...s, isCompleted: !isCurrentlyCompleted } : s
+    );
+    const newProgressPercentage = totalSteps > 0 ? Math.round((newCompletedSteps.length / totalSteps) * 100) : 0;
+
     // Update status based on progress
-    let newStatus: JobTask['status'] = task.status;
+    let newStatus: JobTask['status'];
     if (newCompletedSteps.length === 0) {
       newStatus = 'pending';
-    } else if (newCompletedSteps.length === task.steps.length) {
+    } else if (newCompletedSteps.length === totalSteps) {
       newStatus = 'completed';
-    } else if (task.status === 'pending') {
+    } else {
       newStatus = 'in-progress';
     }
 
-    // Calculate new progress percentage
-    const newProgressPercentage = Math.round((newCompletedSteps.length / task.steps.length) * 100);
-
-    // Update local state immediately for responsive UI
-    setLocalTask({
-      ...task,
-      steps: updatedSteps,
-      completedSteps: newCompletedSteps,
-      status: newStatus,
-      progressPercentage: newProgressPercentage,
-      startedAt: task.startedAt || new Date().toISOString(),
-    });
-
-    // Then persist to database
+    // Persist to database (async, but UI already updated)
     await updateJobTask(task.id, {
       steps: updatedSteps,
       completedSteps: newCompletedSteps,
@@ -276,11 +274,19 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
             <h3 style={styles.sectionTitle}>Progress</h3>
             <div style={styles.progressContainer}>
               <div style={styles.progressInfo}>
-                <span>{completedStepsCount} / {totalSteps} steps completed</span>
-                <span style={styles.progressPercent}>{task.progressPercentage}%</span>
+                <span>{completedCount} / {totalSteps} steps completed</span>
+                <span style={styles.progressPercent}>{progressPercent}%</span>
               </div>
               <div style={styles.progressBar}>
-                <div style={{ ...styles.progressFill, width: `${task.progressPercentage}%` }} />
+                <div
+                  style={{
+                    height: '100%',
+                    backgroundColor: theme.colors.primary,
+                    borderRadius: theme.borderRadius.full,
+                    transition: 'width 0.3s ease',
+                    width: `${progressPercent}%`,
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -290,28 +296,22 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
             <div style={styles.section}>
               <div style={styles.stepsHeader}>
                 <h3 style={{...styles.sectionTitle, marginBottom: 0}}>Steps</h3>
-                {completedStepsCount < totalSteps && (
+                {completedCount < totalSteps && (
                   <button
                     type="button"
                     onClick={async (e) => {
                       e.stopPropagation();
                       // Mark all steps as complete
+                      const allIds = task.steps.map(s => s.id);
                       const updatedSteps = task.steps.map(s => ({ ...s, isCompleted: true }));
-                      const allStepIds = task.steps.map(s => s.id);
 
                       // Update local state immediately
-                      setLocalTask({
-                        ...task,
-                        steps: updatedSteps,
-                        completedSteps: allStepIds,
-                        status: 'completed',
-                        progressPercentage: 100,
-                      });
+                      setCompletedStepIds(allIds);
 
                       // Persist to database
                       await updateJobTask(task.id, {
                         steps: updatedSteps,
-                        completedSteps: allStepIds,
+                        completedSteps: allIds,
                         status: 'completed',
                         progressPercentage: 100,
                       });
@@ -323,40 +323,43 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 )}
               </div>
               <div style={styles.stepsList}>
-                {task.steps.map((step, index) => (
-                  <div
-                    key={step.id}
-                    style={{
-                      ...styles.stepItem,
-                      backgroundColor: step.isCompleted ? 'rgba(16, 185, 129, 0.1)' : theme.colors.inputBackground,
-                    }}
-                    onClick={() => handleStepToggle(step.id)}
-                  >
-                    <div style={{
-                      ...styles.stepCheckbox,
-                      backgroundColor: step.isCompleted ? theme.colors.status.completed : 'transparent',
-                      borderColor: step.isCompleted ? theme.colors.status.completed : theme.colors.textSecondary,
-                    }}>
-                      {step.isCompleted && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      )}
-                    </div>
-                    <div style={styles.stepContent}>
-                      <span style={{
-                        ...styles.stepTitle,
-                        textDecoration: step.isCompleted ? 'line-through' : 'none',
-                        opacity: step.isCompleted ? 0.6 : 1,
+                {task.steps.map((step, index) => {
+                  const isChecked = completedStepIds.includes(step.id);
+                  return (
+                    <div
+                      key={step.id}
+                      style={{
+                        ...styles.stepItem,
+                        backgroundColor: isChecked ? 'rgba(16, 185, 129, 0.1)' : theme.colors.inputBackground,
+                      }}
+                      onClick={() => handleStepToggle(step.id)}
+                    >
+                      <div style={{
+                        ...styles.stepCheckbox,
+                        backgroundColor: isChecked ? theme.colors.status.completed : 'transparent',
+                        borderColor: isChecked ? theme.colors.status.completed : theme.colors.textSecondary,
                       }}>
-                        {index + 1}. {step.title}
-                      </span>
-                      {step.description && (
-                        <span style={styles.stepDescription}>{step.description}</span>
-                      )}
+                        {isChecked && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </div>
+                      <div style={styles.stepContent}>
+                        <span style={{
+                          ...styles.stepTitle,
+                          textDecoration: isChecked ? 'line-through' : 'none',
+                          opacity: isChecked ? 0.6 : 1,
+                        }}>
+                          {index + 1}. {step.title}
+                        </span>
+                        {step.description && (
+                          <span style={styles.stepDescription}>{step.description}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

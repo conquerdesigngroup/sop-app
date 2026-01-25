@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { theme } from '../theme';
 import { useEvent } from '../contexts/EventContext';
 import { useTask } from '../contexts/TaskContext';
@@ -14,6 +15,7 @@ const CalendarPage: React.FC = () => {
   const { jobTasks } = useTask();
   const { users, currentUser } = useAuth();
   const { isMobileOrTablet } = useResponsive();
+  const location = useLocation();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
@@ -25,6 +27,25 @@ const CalendarPage: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
+
+  // Handle incoming state from navigation (e.g., from Dashboard day click)
+  useEffect(() => {
+    if (location.state) {
+      const state = location.state as { openEventForm?: boolean; selectedDate?: string };
+      if (state.openEventForm) {
+        setSelectedDate(state.selectedDate);
+        setEditingEvent(null);
+        setShowEventForm(true);
+        // Navigate to the selected date's month
+        if (state.selectedDate) {
+          const date = new Date(state.selectedDate);
+          setCurrentMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+        }
+      }
+      // Clear the state to prevent re-opening on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Quick Add states
   const [quickAddDay, setQuickAddDay] = useState<number | null>(null);

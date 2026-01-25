@@ -18,8 +18,8 @@ export const isSupabaseConfigured = () => {
 };
 
 // Flag to indicate if activity_logs table exists in Supabase
-// Set to false since the table doesn't exist - prevents WebSocket errors
-export const hasActivityLogsTable = false;
+// Set to true to enable activity logging to Supabase database
+export const hasActivityLogsTable = true;
 
 // Create Supabase client only if properly configured
 // Otherwise, create a mock client to prevent crashes

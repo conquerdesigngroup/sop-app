@@ -1,9 +1,9 @@
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, memo, useMemo } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { JobTask, TaskTemplate } from '../types';
 import { theme } from '../theme';
 import { UnifiedJobTaskModal } from '../components/UnifiedJobTaskModal';
@@ -18,16 +18,22 @@ const JobTasksPage: React.FC = () => {
   const { isMobile } = useResponsive();
   const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'library'>('tasks');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [initialTemplateId, setInitialTemplateId] = useState<string | null>(null);
+  const [initialScheduledDate, setInitialScheduledDate] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'priority' | 'status' | 'name'>('date');
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+
+  const isAdmin = currentUser?.role === 'admin';
 
   // Get unique departments from job tasks
   const departments = Array.from(new Set(jobTasks.map(t => t.department)));
@@ -43,21 +49,86 @@ const JobTasksPage: React.FC = () => {
     }
   }, [searchParams, setSearchParams]);
 
+  // Handle incoming state from navigation (e.g., from Dashboard day click)
+  useEffect(() => {
+    if (location.state) {
+      const state = location.state as { openCreateModal?: boolean; selectedDate?: string };
+      if (state.openCreateModal) {
+        setInitialScheduledDate(state.selectedDate || null);
+        setShowCreateModal(true);
+      }
+      // Clear the state to prevent re-opening on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
   // Filter job tasks (exclude archived tasks)
   const filteredTasks = jobTasks.filter(task => {
     // Exclude archived tasks from the main list
     if (task.status === 'archived') return false;
-    const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         task.description.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Enhanced search: title, description, and assigned user names
+    const searchLower = searchQuery.toLowerCase();
+    const assignedUserNames = task.assignedTo
+      .map(userId => {
+        const user = users.find(u => u.id === userId);
+        return user ? `${user.firstName} ${user.lastName}`.toLowerCase() : '';
+      })
+      .join(' ');
+
+    const matchesSearch = searchQuery === '' ||
+                         task.title.toLowerCase().includes(searchLower) ||
+                         task.description.toLowerCase().includes(searchLower) ||
+                         assignedUserNames.includes(searchLower);
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
     const matchesDepartment = filterDepartment === 'all' || task.department === filterDepartment;
     return matchesSearch && matchesStatus && matchesDepartment;
   });
 
-  // Sort by scheduled date (upcoming first)
-  const sortedTasks = [...filteredTasks].sort((a, b) => {
-    return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
-  });
+  // Priority order for sorting
+  const priorityOrder: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+  const statusOrder: Record<string, number> = { overdue: 0, 'in-progress': 1, pending: 2, completed: 3 };
+
+  // Sort tasks based on selected sort option
+  const sortedTasks = useMemo(() => {
+    return [...filteredTasks].sort((a, b) => {
+      switch (sortBy) {
+        case 'priority':
+          return (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3);
+        case 'status':
+          return (statusOrder[a.status] || 3) - (statusOrder[b.status] || 3);
+        case 'name':
+          return a.title.localeCompare(b.title);
+        case 'date':
+        default:
+          return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+      }
+    });
+  }, [filteredTasks, sortBy]);
+
+  // Calculate task stats
+  const taskStats = useMemo(() => {
+    const nonArchivedTasks = jobTasks.filter(t => t.status !== 'archived');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return {
+      total: nonArchivedTasks.length,
+      pending: nonArchivedTasks.filter(t => t.status === 'pending').length,
+      inProgress: nonArchivedTasks.filter(t => t.status === 'in-progress').length,
+      completed: nonArchivedTasks.filter(t => t.status === 'completed').length,
+      overdue: nonArchivedTasks.filter(t => {
+        const taskDate = new Date(t.scheduledDate);
+        taskDate.setHours(0, 0, 0, 0);
+        return taskDate < today && t.status !== 'completed';
+      }).length,
+      dueToday: nonArchivedTasks.filter(t => {
+        const taskDate = new Date(t.scheduledDate);
+        taskDate.setHours(0, 0, 0, 0);
+        return taskDate.getTime() === today.getTime() && t.status !== 'completed';
+      }).length,
+    };
+  }, [jobTasks]);
 
   const handleCreateTask = async (
     taskData: any,
@@ -94,6 +165,7 @@ const JobTasksPage: React.FC = () => {
   const handleCloseModal = () => {
     setShowCreateModal(false);
     setInitialTemplateId(null);
+    setInitialScheduledDate(null);
   };
 
   const handleTaskClick = (task: JobTask) => {
@@ -104,6 +176,59 @@ const JobTasksPage: React.FC = () => {
   const handleCloseTaskDetail = () => {
     setShowTaskDetailModal(false);
     setSelectedTask(null);
+  };
+
+  // Bulk action handlers
+  const handleToggleSelectTask = (taskId: string) => {
+    setSelectedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAllTasks = () => {
+    if (selectedTasks.size === sortedTasks.length) {
+      setSelectedTasks(new Set());
+    } else {
+      setSelectedTasks(new Set(sortedTasks.map(t => t.id)));
+    }
+  };
+
+  const handleBulkArchive = () => {
+    if (selectedTasks.size === 0) return;
+    if (window.confirm(`Are you sure you want to archive ${selectedTasks.size} task(s)?`)) {
+      selectedTasks.forEach(taskId => {
+        archiveJobTask(taskId);
+      });
+      setSelectedTasks(new Set());
+      showToast(`${selectedTasks.size} task(s) archived`, 'success');
+    }
+  };
+
+  const handleBulkComplete = async () => {
+    if (selectedTasks.size === 0) return;
+    const count = selectedTasks.size;
+    if (window.confirm(`Mark ${count} task(s) as completed?`)) {
+      const taskIds = Array.from(selectedTasks);
+      for (let i = 0; i < taskIds.length; i++) {
+        const taskId = taskIds[i];
+        const task = jobTasks.find(t => t.id === taskId);
+        if (task) {
+          await updateJobTask(taskId, {
+            status: 'completed',
+            completedSteps: task.steps.map(s => s.id),
+            progressPercentage: 100,
+          });
+        }
+      }
+      setSelectedTasks(new Set());
+      showToast(`${count} task(s) marked as completed`, 'success');
+    }
   };
 
   return (
@@ -193,6 +318,65 @@ const JobTasksPage: React.FC = () => {
       {/* Conditional Content Based on Active Tab */}
       {activeTab === 'tasks' ? (
         <>
+          {/* Quick Stats */}
+          <div style={styles.statsBar}>
+            <div style={styles.statItem} onClick={() => setFilterStatus('all')}>
+              <span style={styles.statNumber}>{taskStats.total}</span>
+              <span style={styles.statLabel}>Total</span>
+            </div>
+            <div style={{...styles.statItem, ...styles.statWarning}} onClick={() => setFilterStatus('pending')}>
+              <span style={styles.statNumber}>{taskStats.pending}</span>
+              <span style={styles.statLabel}>Pending</span>
+            </div>
+            <div style={{...styles.statItem, ...styles.statInfo}} onClick={() => setFilterStatus('in-progress')}>
+              <span style={styles.statNumber}>{taskStats.inProgress}</span>
+              <span style={styles.statLabel}>In Progress</span>
+            </div>
+            <div style={{...styles.statItem, ...styles.statSuccess}} onClick={() => setFilterStatus('completed')}>
+              <span style={styles.statNumber}>{taskStats.completed}</span>
+              <span style={styles.statLabel}>Completed</span>
+            </div>
+            {taskStats.overdue > 0 && (
+              <div style={{...styles.statItem, ...styles.statDanger}} onClick={() => setFilterStatus('overdue')}>
+                <span style={styles.statNumber}>{taskStats.overdue}</span>
+                <span style={styles.statLabel}>Overdue</span>
+              </div>
+            )}
+            {taskStats.dueToday > 0 && (
+              <div style={{...styles.statItem, ...styles.statUrgent}}>
+                <span style={styles.statNumber}>{taskStats.dueToday}</span>
+                <span style={styles.statLabel}>Due Today</span>
+              </div>
+            )}
+          </div>
+
+          {/* Bulk Actions Bar (Admin Only) */}
+          {isAdmin && selectedTasks.size > 0 && (
+            <div style={styles.bulkActionsBar}>
+              <span style={styles.bulkSelectedText}>
+                {selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
+              </span>
+              <div style={styles.bulkButtons}>
+                <button style={styles.bulkButton} onClick={handleBulkComplete}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Mark Complete
+                </button>
+                <button style={{...styles.bulkButton, ...styles.bulkButtonDanger}} onClick={handleBulkArchive}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="21 8 21 21 3 21 3 8" />
+                    <rect x="1" y="3" width="22" height="5" />
+                  </svg>
+                  Archive
+                </button>
+                <button style={styles.bulkButtonClear} onClick={() => setSelectedTasks(new Set())}>
+                  Clear Selection
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div style={{...styles.filtersContainer, ...(isMobile && styles.filtersContainerMobile)}}>
             <div style={styles.searchContainer}>
@@ -202,7 +386,7 @@ const JobTasksPage: React.FC = () => {
               </svg>
               <input
                 type="text"
-                placeholder="Search tasks..."
+                placeholder="Search tasks or team members..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{...styles.searchInput, ...(isMobile && styles.inputMobile)}}
@@ -231,7 +415,33 @@ const JobTasksPage: React.FC = () => {
                 <option key={dept} value={dept}>{dept}</option>
               ))}
             </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'date' | 'priority' | 'status' | 'name')}
+              style={{...styles.filterSelect, ...(isMobile && styles.selectMobile)}}
+            >
+              <option value="date">Sort by Date</option>
+              <option value="priority">Sort by Priority</option>
+              <option value="status">Sort by Status</option>
+              <option value="name">Sort by Name</option>
+            </select>
           </div>
+
+          {/* Select All Checkbox for Admins */}
+          {isAdmin && sortedTasks.length > 0 && (
+            <div style={styles.selectAllRow}>
+              <label style={styles.selectAllLabel}>
+                <input
+                  type="checkbox"
+                  checked={selectedTasks.size === sortedTasks.length && sortedTasks.length > 0}
+                  onChange={handleSelectAllTasks}
+                  style={styles.selectAllCheckbox}
+                />
+                Select All ({sortedTasks.length})
+              </label>
+            </div>
+          )}
 
           {/* Job Tasks List */}
           <div style={styles.tasksList}>
@@ -251,6 +461,9 @@ const JobTasksPage: React.FC = () => {
                   task={task}
                   users={users}
                   isMobile={isMobile}
+                  isAdmin={isAdmin}
+                  isSelected={selectedTasks.has(task.id)}
+                  onToggleSelect={() => handleToggleSelectTask(task.id)}
                   onArchive={() => handleArchiveTask(task.id)}
                   onClick={() => handleTaskClick(task)}
                 />
@@ -290,6 +503,7 @@ const JobTasksPage: React.FC = () => {
         sops={sops}
         currentUserId={currentUser?.id || ''}
         initialTemplateId={initialTemplateId}
+        initialScheduledDate={initialScheduledDate}
       />
 
       {/* Task Library Import Modal */}
@@ -310,11 +524,14 @@ interface JobTaskCardProps {
   task: JobTask;
   users: any[];
   isMobile: boolean;
+  isAdmin: boolean;
+  isSelected: boolean;
+  onToggleSelect: () => void;
   onArchive: () => void;
   onClick: () => void;
 }
 
-const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, onArchive, onClick }) => {
+const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, isAdmin, isSelected, onToggleSelect, onArchive, onClick }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return theme.colors.status.success;
@@ -339,11 +556,56 @@ const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, o
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  // Calculate due date warning
+  const getDueDateWarning = () => {
+    if (task.status === 'completed') return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const taskDate = new Date(task.scheduledDate);
+    taskDate.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((taskDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return { text: 'OVERDUE', color: theme.colors.status.error, urgent: true };
+    if (diffDays === 0) return { text: 'DUE TODAY', color: theme.colors.status.warning, urgent: true };
+    if (diffDays === 1) return { text: 'DUE TOMORROW', color: theme.colors.status.warning, urgent: false };
+    return null;
+  };
+
+  const dueDateWarning = getDueDateWarning();
   const assignedUsers = users.filter(u => task.assignedTo.includes(u.id));
 
   return (
-    <div style={styles.taskCard} onClick={onClick}>
+    <div
+      style={{
+        ...styles.taskCard,
+        ...(isSelected && styles.taskCardSelected),
+        ...(dueDateWarning?.urgent && styles.taskCardUrgent),
+      }}
+      onClick={onClick}
+    >
+      {/* Due Date Warning Banner */}
+      {dueDateWarning && (
+        <div style={{...styles.dueDateBanner, backgroundColor: dueDateWarning.color}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          {dueDateWarning.text}
+        </div>
+      )}
+
       <div style={styles.taskCardHeader}>
+        {isAdmin && (
+          <div style={styles.taskCheckboxContainer} onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelect}
+              style={styles.taskCheckbox}
+            />
+          </div>
+        )}
         <div style={styles.taskCardHeaderLeft}>
           <h3 style={styles.taskCardTitle}>{task.title}</h3>
           <p style={styles.taskCardDescription}>{task.description}</p>
@@ -1325,6 +1587,153 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: theme.pageLayout.containerPadding.desktop,
     maxWidth: theme.pageLayout.maxWidth,
     margin: '0 auto',
+  },
+  // Stats Bar Styles
+  statsBar: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '24px',
+    flexWrap: 'wrap',
+  },
+  statItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '16px 24px',
+    backgroundColor: theme.colors.bg.secondary,
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minWidth: '100px',
+  },
+  statNumber: {
+    fontSize: '28px',
+    fontWeight: 700,
+    color: theme.colors.txt.primary,
+  },
+  statLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.txt.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginTop: '4px',
+  },
+  statWarning: {
+    borderColor: theme.colors.status.warning,
+  },
+  statInfo: {
+    borderColor: theme.colors.status.info,
+  },
+  statSuccess: {
+    borderColor: theme.colors.status.success,
+  },
+  statDanger: {
+    borderColor: theme.colors.status.error,
+    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+  },
+  statUrgent: {
+    borderColor: theme.colors.status.warning,
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+  },
+  // Bulk Actions Styles
+  bulkActionsBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: '16px',
+  },
+  bulkSelectedText: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#fff',
+  },
+  bulkButtons: {
+    display: 'flex',
+    gap: '8px',
+  },
+  bulkButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 14px',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    border: 'none',
+    borderRadius: theme.borderRadius.sm,
+    color: '#fff',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  bulkButtonDanger: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  bulkButtonClear: {
+    padding: '8px 14px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: theme.borderRadius.sm,
+    color: '#fff',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  // Select All Row
+  selectAllRow: {
+    display: 'flex',
+    alignItems: 'center',
+    marginBottom: '12px',
+    padding: '8px 0',
+  },
+  selectAllLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+    color: theme.colors.txt.secondary,
+    cursor: 'pointer',
+  },
+  selectAllCheckbox: {
+    width: '16px',
+    height: '16px',
+    cursor: 'pointer',
+  },
+  // Task Card Selection
+  taskCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: 'rgba(239, 35, 60, 0.05)',
+  },
+  taskCardUrgent: {
+    borderColor: theme.colors.status.error,
+  },
+  taskCheckboxContainer: {
+    marginRight: '12px',
+    display: 'flex',
+    alignItems: 'flex-start',
+  },
+  taskCheckbox: {
+    width: '18px',
+    height: '18px',
+    cursor: 'pointer',
+    marginTop: '2px',
+  },
+  // Due Date Warning Banner
+  dueDateBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    borderRadius: `${theme.borderRadius.md} ${theme.borderRadius.md} 0 0`,
+    margin: '-20px -20px 16px -20px',
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#fff',
+    letterSpacing: '0.5px',
   },
   header: {
     display: 'flex',

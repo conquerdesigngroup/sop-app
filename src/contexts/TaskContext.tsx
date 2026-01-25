@@ -3,6 +3,7 @@ import { TaskTemplate, JobTask, TaskTemplateStep, TaskStep, TaskStatus, TaskPrio
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logActivity } from '../utils/activityLogger';
+import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
 
 interface TaskContextType {
   // Task Templates (Library)
@@ -413,6 +414,17 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     }
   }, [jobTasks, useSupabase]);
 
+  // Refresh data when tab becomes visible (ensures data is fresh when users return)
+  const handleVisibilityRefresh = useCallback(() => {
+    if (useSupabase && isAuthenticated && !authLoading) {
+      console.log('[TaskContext] Tab visible - refreshing data...');
+      loadTaskTemplates();
+      loadJobTasks();
+    }
+  }, [useSupabase, isAuthenticated, authLoading, loadTaskTemplates, loadJobTasks]);
+
+  useVisibilityRefresh(handleVisibilityRefresh, 3000); // 3 second minimum between refreshes
+
   // Task Template Methods
   const addTaskTemplate = async (templateData: Omit<TaskTemplate, 'id' | 'createdAt'>) => {
     if (!useSupabase) {
@@ -423,6 +435,23 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         createdAt: new Date().toISOString(),
       };
       setTaskTemplates([...taskTemplates, newTemplate]);
+
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_created',
+          entityType: 'template',
+          entityId: newTemplate.id,
+          entityTitle: templateData.title,
+          details: {
+            department: templateData.department,
+            category: templateData.category,
+          },
+        });
+      }
       return;
     }
 
@@ -446,6 +475,23 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         throw error;
       }
 
+      // Log activity
+      if (currentUser) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_created',
+          entityType: 'template',
+          entityId: `template_${Date.now()}`,
+          entityTitle: templateData.title,
+          details: {
+            department: templateData.department,
+            category: templateData.category,
+          },
+        });
+      }
+
       await loadTaskTemplates();
     } catch (error) {
       console.error('Error adding task template:', error);
@@ -454,6 +500,8 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   };
 
   const updateTaskTemplate = async (id: string, templateData: Partial<TaskTemplate>) => {
+    const existingTemplate = taskTemplates.find(t => t.id === id);
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       setTaskTemplates(
@@ -463,6 +511,22 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
             : template
         )
       );
+
+      // Log activity
+      if (currentUser && existingTemplate) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_updated',
+          entityType: 'template',
+          entityId: id,
+          entityTitle: templateData.title || existingTemplate.title,
+          details: {
+            changedFields: Object.keys(templateData),
+          },
+        });
+      }
       return;
     }
 
@@ -489,6 +553,22 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         throw error;
       }
 
+      // Log activity
+      if (currentUser && existingTemplate) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_updated',
+          entityType: 'template',
+          entityId: id,
+          entityTitle: templateData.title || existingTemplate.title,
+          details: {
+            changedFields: Object.keys(templateData),
+          },
+        });
+      }
+
       // Update local state optimistically
       setTaskTemplates(
         taskTemplates.map((template) =>
@@ -504,9 +584,24 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   };
 
   const deleteTaskTemplate = async (id: string) => {
+    const templateToDelete = taskTemplates.find(t => t.id === id);
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       setTaskTemplates(taskTemplates.filter((template) => template.id !== id));
+
+      // Log activity
+      if (currentUser && templateToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_deleted',
+          entityType: 'template',
+          entityId: id,
+          entityTitle: templateToDelete.title,
+        });
+      }
       return;
     }
 
@@ -519,6 +614,19 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error deleting task template:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser && templateToDelete) {
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: 'template_deleted',
+          entityType: 'template',
+          entityId: id,
+          entityTitle: templateToDelete.title,
+        });
       }
 
       // Update local state
@@ -620,6 +728,17 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   };
 
   const updateJobTask = async (id: string, taskData: Partial<JobTask>) => {
+    const existingTask = jobTasks.find(t => t.id === id);
+
+    // Determine the action type based on what changed
+    const getActionType = (): 'task_updated' | 'task_completed' | 'task_step_completed' | 'task_assigned' | 'task_started' => {
+      if (taskData.status === 'completed') return 'task_completed';
+      if (taskData.completedSteps && existingTask && taskData.completedSteps.length !== existingTask.completedSteps.length) return 'task_step_completed';
+      if (taskData.assignedTo && existingTask && JSON.stringify(taskData.assignedTo) !== JSON.stringify(existingTask.assignedTo)) return 'task_assigned';
+      if (taskData.status === 'in-progress' && existingTask?.status === 'pending') return 'task_started';
+      return 'task_updated';
+    };
+
     if (!useSupabase) {
       // Fallback to localStorage mode
       setJobTasks(
@@ -646,6 +765,26 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           return task;
         })
       );
+
+      // Log activity
+      if (currentUser && existingTask) {
+        const changedFields = Object.keys(taskData).filter(key => key !== 'updatedAt');
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: getActionType(),
+          entityType: 'task',
+          entityId: id,
+          entityTitle: taskData.title || existingTask.title,
+          details: {
+            changedFields,
+            previousStatus: existingTask.status,
+            newStatus: taskData.status || existingTask.status,
+            progressPercentage: taskData.progressPercentage,
+          },
+        });
+      }
       return;
     }
 
@@ -694,6 +833,26 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error updating job task:', error);
         throw error;
+      }
+
+      // Log activity
+      if (currentUser && existingTask) {
+        const changedFields = Object.keys(taskData).filter(key => key !== 'updatedAt');
+        logActivity({
+          userId: currentUser.id,
+          userEmail: currentUser.email,
+          userName: `${currentUser.firstName} ${currentUser.lastName}`,
+          action: getActionType(),
+          entityType: 'task',
+          entityId: id,
+          entityTitle: taskData.title || existingTask.title,
+          details: {
+            changedFields,
+            previousStatus: existingTask.status,
+            newStatus: taskData.status || existingTask.status,
+            progressPercentage: taskData.progressPercentage,
+          },
+        });
       }
 
       // Update local state optimistically

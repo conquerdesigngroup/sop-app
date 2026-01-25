@@ -190,6 +190,18 @@ button:active:not(:disabled) {
   transform: scale(0.98);
 }
 
+/* Reset nav dropdown buttons to prevent stuck states */
+nav button {
+  background-color: transparent !important;
+}
+
+nav button:not([style*="background-color: rgb(239, 35, 60)"]):hover,
+nav button:not([style*="background-color: rgb(239, 35, 60)"]):focus,
+nav button:not([style*="background-color: rgb(239, 35, 60)"]):active {
+  background-color: transparent !important;
+  filter: brightness(1.1);
+}
+
 /* Explicit hover class for stronger effects */
 .btn-hover {
   transition: all 0.2s ease;
