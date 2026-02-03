@@ -23,6 +23,8 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
   const [description, setDescription] = useState(sop?.description || '');
   const [category, setCategory] = useState(sop?.category || '');
   const [isCustomCategory, setIsCustomCategory] = useState(!sop?.category || !existingCategories.includes(sop?.category || ''));
+  const [isEditingCategory, setIsEditingCategory] = useState(false);
+  const [editedCategory, setEditedCategory] = useState('');
   const [department, setDepartment] = useState(sop?.department || '');
   const [isCustomDepartment, setIsCustomDepartment] = useState(!sop?.department || !existingDepartments.includes(sop?.department || ''));
   const [icon, setIcon] = useState<IconName>(sop?.icon as IconName || 'box');
@@ -285,8 +287,10 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                       if (value === '__custom__') {
                         setIsCustomCategory(true);
                         setCategory('');
+                        setIsEditingCategory(false);
                       } else {
                         setCategory(value);
+                        setIsEditingCategory(false);
                       }
                     }}
                     style={{
@@ -294,6 +298,7 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                       ...(isMobile && styles.inputMobile),
                       flex: 1,
                     }}
+                    disabled={isEditingCategory}
                   >
                     <option value="">-- Select a category --</option>
                     {existingCategories.map(cat => (
@@ -301,23 +306,90 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
                     ))}
                     <option value="__custom__">+ Create New Category</option>
                   </select>
+                  {category && !isEditingCategory && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditedCategory(category);
+                        setIsEditingCategory(true);
+                      }}
+                      style={{
+                        padding: '10px 16px',
+                        backgroundColor: 'transparent',
+                        color: theme.colors.primary,
+                        border: `1px solid ${theme.colors.primary}`,
+                        borderRadius: theme.borderRadius.md,
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
-                {category && (
-                  <div style={{ marginTop: '8px' }}>
-                    <label style={{ ...styles.label, fontSize: '12px', color: theme.colors.txt.tertiary }}>
+                {isEditingCategory && (
+                  <div style={{ marginTop: '12px' }}>
+                    <label style={{ ...styles.label, fontSize: '12px', color: theme.colors.txt.tertiary, marginBottom: '6px' }}>
                       Edit category name (changes apply to this SOP only):
                     </label>
-                    <input
-                      type="text"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      placeholder="Edit category name"
-                      style={{
-                        ...styles.input,
-                        ...(isMobile && styles.inputMobile),
-                      }}
-                      required
-                    />
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={editedCategory}
+                        onChange={(e) => setEditedCategory(e.target.value)}
+                        placeholder="Edit category name"
+                        style={{
+                          ...styles.input,
+                          ...(isMobile && styles.inputMobile),
+                          flex: 1,
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editedCategory.trim()) {
+                            setCategory(editedCategory.trim());
+                          }
+                          setIsEditingCategory(false);
+                        }}
+                        style={{
+                          padding: '10px 16px',
+                          backgroundColor: theme.colors.primary,
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: theme.borderRadius.md,
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingCategory(false);
+                          setEditedCategory('');
+                        }}
+                        style={{
+                          padding: '10px 16px',
+                          backgroundColor: 'transparent',
+                          color: theme.colors.txt.secondary,
+                          border: `1px solid ${theme.colors.bdr.primary}`,
+                          borderRadius: theme.borderRadius.md,
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 500,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
