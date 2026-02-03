@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
+import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormButton } from '../components/FormComponents';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -62,12 +64,15 @@ const toggleStyles: { [key: string]: React.CSSProperties } = {
 const SettingsPage: React.FC = () => {
   const { currentUser, updateUser, isAdmin } = useAuth();
   const { sops } = useSOPs();
+  const { jobTasks, taskTemplates } = useTask();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
 
   const [loading, setLoading] = useState(false);
   const [exportingJSON, setExportingJSON] = useState(false);
   const [exportingCSV, setExportingCSV] = useState(false);
+  const [clearingData, setClearingData] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Notification settings from user preferences
   const [pushEnabled, setPushEnabled] = useState(
@@ -224,6 +229,62 @@ const SettingsPage: React.FC = () => {
       showToast('Failed to export SOPs', 'error');
     } finally {
       setExportingCSV(false);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    setClearingData(true);
+    try {
+      // Clear from Supabase if configured
+      if (isSupabaseConfigured() && supabase) {
+        // Delete all SOPs
+        const { error: sopsError } = await supabase
+          .from('sops')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all (neq with impossible ID)
+
+        if (sopsError) {
+          console.error('Error clearing SOPs from Supabase:', sopsError);
+        }
+
+        // Delete all job tasks
+        const { error: tasksError } = await supabase
+          .from('job_tasks')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+
+        if (tasksError) {
+          console.error('Error clearing tasks from Supabase:', tasksError);
+        }
+
+        // Delete all task templates
+        const { error: templatesError } = await supabase
+          .from('task_templates')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+
+        if (templatesError) {
+          console.error('Error clearing task templates from Supabase:', templatesError);
+        }
+      }
+
+      // Clear from localStorage
+      localStorage.setItem('mediamaple_sops', JSON.stringify([]));
+      localStorage.setItem('mediamaple_job_tasks', JSON.stringify([]));
+      localStorage.setItem('mediamaple_task_templates', JSON.stringify([]));
+
+      showToast('All SOPs and Tasks have been cleared! Reloading...', 'success');
+      setShowClearConfirm(false);
+
+      // Reload the page to ensure fresh state
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      console.error('Error clearing data:', error);
+      showToast('Failed to clear some data', 'error');
+    } finally {
+      setClearingData(false);
     }
   };
 
@@ -595,6 +656,83 @@ const SettingsPage: React.FC = () => {
                   Export JSON
                 </FormButton>
               </div>
+            </div>
+
+            {/* Clear All Data Card */}
+            <div className="card-hover-subtle" style={{ ...styles.card, borderColor: theme.colors.status.error }}>
+              <div style={styles.cardHeader}>
+                <h3 style={{ ...styles.cardTitle, color: theme.colors.status.error }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.error} strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
+                  Clear All Data
+                </h3>
+              </div>
+
+              <div style={styles.aboutInfo}>
+                <div style={styles.aboutItem}>
+                  <span style={styles.aboutLabel}>Total SOPs</span>
+                  <span style={styles.aboutValue}>{sops.length}</span>
+                </div>
+                <div style={styles.aboutItem}>
+                  <span style={styles.aboutLabel}>Total Tasks</span>
+                  <span style={styles.aboutValue}>{jobTasks.length}</span>
+                </div>
+                <div style={styles.aboutItem}>
+                  <span style={styles.aboutLabel}>Task Templates</span>
+                  <span style={styles.aboutValue}>{taskTemplates.length}</span>
+                </div>
+              </div>
+
+              <div style={{ ...styles.securityNote, marginTop: '16px', backgroundColor: 'rgba(239, 68, 68, 0.1)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.error} strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span style={{ color: theme.colors.status.error }}>
+                  WARNING: This will permanently delete ALL SOPs and Tasks. This action cannot be undone!
+                </span>
+              </div>
+
+              {!showClearConfirm ? (
+                <div style={styles.cardFooter}>
+                  <FormButton
+                    variant="danger"
+                    onClick={() => setShowClearConfirm(true)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    Clear All SOPs & Tasks
+                  </FormButton>
+                </div>
+              ) : (
+                <div style={{ ...styles.cardFooter, flexDirection: 'column', gap: '12px', alignItems: 'stretch' }}>
+                  <p style={{ color: theme.colors.status.error, fontWeight: 600, textAlign: 'center', margin: 0 }}>
+                    Are you sure? This will delete {sops.length} SOPs and {jobTasks.length} Tasks!
+                  </p>
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                    <FormButton
+                      variant="secondary"
+                      onClick={() => setShowClearConfirm(false)}
+                    >
+                      Cancel
+                    </FormButton>
+                    <FormButton
+                      variant="danger"
+                      onClick={handleClearAllData}
+                      loading={clearingData}
+                    >
+                      Yes, Delete Everything
+                    </FormButton>
+                  </div>
+                </div>
+              )}
             </div>
 
             <DataIntegrityPanel />
