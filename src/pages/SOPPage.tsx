@@ -114,8 +114,9 @@ const SOPPage: React.FC = () => {
   const departments = Array.from(new Set(currentList.map(sop => sop.department))).sort();
 
   // Calculate filter counts (for SOPs only)
+  // 'all' count excludes archived since archived SOPs are hidden from the main view
   const filterCounts = {
-    all: nonTemplateSOPs.length,
+    all: nonTemplateSOPs.filter(s => s.status !== 'archived').length,
     published: nonTemplateSOPs.filter(s => s.status === 'published').length,
     draft: nonTemplateSOPs.filter(s => s.status === 'draft').length,
     archived: nonTemplateSOPs.filter(s => s.status === 'archived').length,
@@ -139,8 +140,9 @@ const SOPPage: React.FC = () => {
     }
 
     // For SOPs, apply status filter
+    // 'all' shows published and draft, but NOT archived (archived only shows when explicitly selected)
     const matchesFilter =
-      filterView === 'all' ||
+      (filterView === 'all' && sop.status !== 'archived') ||
       (filterView === 'published' && sop.status === 'published') ||
       (filterView === 'draft' && sop.status === 'draft') ||
       (filterView === 'archived' && sop.status === 'archived');
