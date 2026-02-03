@@ -610,26 +610,24 @@ const AdminDashboard: React.FC<{
       </div>
 
       {/* Calendar */}
-      {(activeTasks.length > 0 || events.length > 0) && (
-        <TaskCalendar
-          tasks={activeTasks}
-          events={events}
-          users={users}
-          currentMonth={currentMonth}
-          setCurrentMonth={setCurrentMonth}
-          onTaskClick={setSelectedTask}
-          onEventClick={setSelectedEvent}
-          showAllUsers={true}
-          onDayClick={(date, e) => {
-            const rect = (e.target as HTMLElement).getBoundingClientRect();
-            setDayActionModal({
-              date,
-              x: rect.left + rect.width / 2,
-              y: rect.top + rect.height / 2,
-            });
-          }}
-        />
-      )}
+      <TaskCalendar
+        tasks={activeTasks}
+        events={events}
+        users={users}
+        currentMonth={currentMonth}
+        setCurrentMonth={setCurrentMonth}
+        onTaskClick={setSelectedTask}
+        onEventClick={setSelectedEvent}
+        showAllUsers={true}
+        onDayClick={(date, e) => {
+          const rect = (e.target as HTMLElement).getBoundingClientRect();
+          setDayActionModal({
+            date,
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          });
+        }}
+      />
 
       {/* Day Action Modal */}
       {dayActionModal && (
