@@ -748,10 +748,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   dropdownTrigger: {
     cursor: 'pointer',
-    background: 'none',
-    backgroundColor: 'transparent',
-    border: '2px solid transparent',
-    color: theme.colors.textSecondary,
   },
   chevron: {
     display: 'flex',
