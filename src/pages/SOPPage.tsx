@@ -73,6 +73,12 @@ const SOPPage: React.FC = () => {
     }
   }, [viewMode, deleteSOP, updateSOPStatus]);
 
+  const handleDeleteForever = useCallback((id: string) => {
+    if (window.confirm('Are you sure you want to PERMANENTLY DELETE this SOP? This action cannot be undone!')) {
+      deleteSOP(id);
+    }
+  }, [deleteSOP]);
+
   const handleView = useCallback((sop: SOP) => {
     setViewingSOP(sop);
   }, []);
@@ -503,6 +509,7 @@ const SOPPage: React.FC = () => {
                       onView={handleView}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
+                      onDeleteForever={handleDeleteForever}
                       onUseTemplate={handleUseTemplate}
                     />
                   ))}
@@ -526,6 +533,7 @@ interface SOPCardProps {
   onView: (sop: SOP) => void;
   onEdit: (sop: SOP) => void;
   onDelete: (id: string) => void;
+  onDeleteForever: (id: string) => void;
   onUseTemplate: (id: string) => void;
 }
 
@@ -537,6 +545,7 @@ const SOPCard: React.FC<SOPCardProps> = memo(({
   onView,
   onEdit,
   onDelete,
+  onDeleteForever,
   onUseTemplate,
 }) => {
   return (
@@ -607,13 +616,25 @@ const SOPCard: React.FC<SOPCardProps> = memo(({
           </button>
         )}
 
-        {isAdmin && (
+        {isAdmin && item.status !== 'archived' && (
           <button onClick={() => onDelete(item.id)} style={isMobileOrTablet ? styles.deleteButtonMobile : styles.deleteButton}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
             {!isMobileOrTablet && 'Delete'}
+          </button>
+        )}
+
+        {isAdmin && item.status === 'archived' && (
+          <button onClick={() => onDeleteForever(item.id)} style={isMobileOrTablet ? styles.deleteForeverButtonMobile : styles.deleteForeverButton}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+            {!isMobileOrTablet && 'Delete Forever'}
           </button>
         )}
       </div>
@@ -1072,6 +1093,36 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     minHeight: '44px',
     minWidth: '44px',
+  },
+  deleteForeverButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '10px 12px',
+    backgroundColor: theme.colors.error,
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontWeight: '600',
+    fontSize: '14px',
+  },
+  deleteForeverButtonMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '12px 14px',
+    backgroundColor: theme.colors.error,
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    minHeight: '44px',
+    fontWeight: '600',
   },
   emptyState: {
     textAlign: 'center',
