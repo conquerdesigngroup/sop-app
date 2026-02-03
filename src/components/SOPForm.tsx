@@ -277,29 +277,49 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
             </label>
             {existingCategories.length > 0 && !isCustomCategory ? (
               <div>
-                <select
-                  value={category}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '__custom__') {
-                      setIsCustomCategory(true);
-                      setCategory('');
-                    } else {
-                      setCategory(value);
-                    }
-                  }}
-                  style={{
-                    ...styles.input,
-                    ...(isMobile && styles.inputMobile),
-                  }}
-                  required
-                >
-                  <option value="">-- Select a category --</option>
-                  {existingCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                  <option value="__custom__">+ Create New Category</option>
-                </select>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <select
+                    value={existingCategories.includes(category) ? category : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '__custom__') {
+                        setIsCustomCategory(true);
+                        setCategory('');
+                      } else {
+                        setCategory(value);
+                      }
+                    }}
+                    style={{
+                      ...styles.input,
+                      ...(isMobile && styles.inputMobile),
+                      flex: 1,
+                    }}
+                  >
+                    <option value="">-- Select a category --</option>
+                    {existingCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    <option value="__custom__">+ Create New Category</option>
+                  </select>
+                </div>
+                {category && (
+                  <div style={{ marginTop: '8px' }}>
+                    <label style={{ ...styles.label, fontSize: '12px', color: theme.colors.txt.tertiary }}>
+                      Edit category name (changes apply to this SOP only):
+                    </label>
+                    <input
+                      type="text"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      placeholder="Edit category name"
+                      style={{
+                        ...styles.input,
+                        ...(isMobile && styles.inputMobile),
+                      }}
+                      required
+                    />
+                  </div>
+                )}
               </div>
             ) : (
               <div>
