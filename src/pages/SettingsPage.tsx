@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSOPs } from '../contexts/SOPContext';
 import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
@@ -60,10 +61,13 @@ const toggleStyles: { [key: string]: React.CSSProperties } = {
 
 const SettingsPage: React.FC = () => {
   const { currentUser, updateUser, isAdmin } = useAuth();
+  const { sops } = useSOPs();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
 
   const [loading, setLoading] = useState(false);
+  const [exportingJSON, setExportingJSON] = useState(false);
+  const [exportingCSV, setExportingCSV] = useState(false);
 
   // Notification settings from user preferences
   const [pushEnabled, setPushEnabled] = useState(
@@ -111,6 +115,115 @@ const SettingsPage: React.FC = () => {
       console.error('Error clearing cache:', error);
       showToast('Failed to clear cache', 'error');
       setCacheClearing(false);
+    }
+  };
+
+  const handleExportJSON = () => {
+    setExportingJSON(true);
+    try {
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        exportedBy: currentUser?.email || 'Unknown',
+        version: '1.0.2',
+        totalSOPs: sops.length,
+        sops: sops.map(sop => ({
+          ...sop,
+        })),
+      };
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `didc-sops-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Successfully exported ${sops.length} SOPs as JSON`, 'success');
+    } catch (error) {
+      console.error('Error exporting SOPs:', error);
+      showToast('Failed to export SOPs', 'error');
+    } finally {
+      setExportingJSON(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    setExportingCSV(true);
+    try {
+      // CSV headers
+      const headers = [
+        'ID',
+        'Title',
+        'Description',
+        'Department',
+        'Category',
+        'Status',
+        'Is Template',
+        'Tags',
+        'Step Count',
+        'Steps (Title | Description)',
+        'Created At',
+        'Created By',
+        'Updated At'
+      ];
+
+      // Escape CSV field (handle commas, quotes, newlines)
+      const escapeCSV = (field: any): string => {
+        if (field === null || field === undefined) return '';
+        const str = String(field);
+        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      // Build CSV rows
+      const rows = sops.map(sop => {
+        const stepsFormatted = sop.steps
+          .map(step => `${step.title} | ${step.description.replace(/\n/g, ' ')}`)
+          .join('; ');
+
+        return [
+          sop.id,
+          sop.title,
+          sop.description,
+          sop.department,
+          sop.category,
+          sop.status,
+          sop.isTemplate ? 'Yes' : 'No',
+          (sop.tags || []).join(', '),
+          sop.steps.length,
+          stepsFormatted,
+          sop.createdAt,
+          sop.createdBy,
+          sop.updatedAt || ''
+        ].map(escapeCSV).join(',');
+      });
+
+      // Combine headers and rows
+      const csvContent = [headers.join(','), ...rows].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `didc-sops-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Successfully exported ${sops.length} SOPs as CSV`, 'success');
+    } catch (error) {
+      console.error('Error exporting SOPs to CSV:', error);
+      showToast('Failed to export SOPs', 'error');
+    } finally {
+      setExportingCSV(false);
     }
   };
 
@@ -425,6 +538,65 @@ const SettingsPage: React.FC = () => {
               </h2>
               <span style={styles.adminBadge}>Admin Only</span>
             </div>
+
+            {/* Data Export Card */}
+            <div className="card-hover-subtle" style={styles.card}>
+              <div style={styles.cardHeader}>
+                <h3 style={styles.cardTitle}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Data Export
+                </h3>
+              </div>
+
+              <div style={styles.aboutInfo}>
+                <div style={styles.aboutItem}>
+                  <span style={styles.aboutLabel}>Total SOPs</span>
+                  <span style={styles.aboutValue}>{sops.length}</span>
+                </div>
+              </div>
+
+              <div style={{ ...styles.securityNote, marginTop: '16px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.info} strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                <span>Export all SOPs as a backup file. CSV is great for spreadsheets, JSON for full data backup.</span>
+              </div>
+
+              <div style={{ ...styles.cardFooter, gap: '12px' }}>
+                <FormButton
+                  variant="secondary"
+                  onClick={handleExportCSV}
+                  loading={exportingCSV}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                  </svg>
+                  Export CSV
+                </FormButton>
+                <FormButton
+                  variant="primary"
+                  onClick={handleExportJSON}
+                  loading={exportingJSON}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Export JSON
+                </FormButton>
+              </div>
+            </div>
+
             <DataIntegrityPanel />
           </div>
         )}
