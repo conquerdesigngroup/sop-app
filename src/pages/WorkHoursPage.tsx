@@ -2032,8 +2032,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     opacity: 0.9,
   },
   scheduleCalendarDaySelected: {
-    outline: `3px solid ${theme.colors.primary}`,
+    outline: '3px solid #FFFFFF',
     outlineOffset: '-3px',
+    boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
   },
   // Day Detail Panel styles
   dayDetailPanel: {
