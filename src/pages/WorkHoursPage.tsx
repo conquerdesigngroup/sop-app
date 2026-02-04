@@ -29,7 +29,7 @@ const WorkHoursPage: React.FC = () => {
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDateRange, setFilterDateRange] = useState<'week' | 'month' | 'all'>('week');
-  const [viewMode, setViewMode] = useState<'list' | 'summary' | 'schedule' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'summary' | 'schedule' | 'calendar'>('calendar');
 
   // Calendar state
   const [calendarMonth, setCalendarMonth] = useState(new Date());
