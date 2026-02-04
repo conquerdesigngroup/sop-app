@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { theme } from '../theme';
-import { JobTask, User } from '../types';
+import { JobTask, User, TaskComment } from '../types';
 import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import {
   generateGoogleCalendarUrlForTask,
@@ -27,6 +28,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
 }) => {
   const { updateJobTask } = useTask();
   const { showToast } = useToast();
+  const { currentUser } = useAuth();
   const { isConnected: isGoogleConnected, syncTaskToGoogle } = useGoogleCalendar();
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -34,12 +36,102 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   // Local state to track completed steps - this is the SOURCE OF TRUTH for the modal
   const [completedStepIds, setCompletedStepIds] = useState<string[]>([]);
 
+  // Comments state
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [showComments, setShowComments] = useState(true);
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
   // Sync local state when modal opens with a new task
   useEffect(() => {
     if (initialTask) {
       setCompletedStepIds(initialTask.completedSteps || []);
+      setComments(initialTask.comments || []);
     }
   }, [initialTask]);
+
+  // Scroll to bottom of comments when new comment is added
+  useEffect(() => {
+    if (commentsEndRef.current && showComments) {
+      commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [comments.length, showComments]);
+
+  // Handle adding a new comment
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !currentUser || !initialTask) return;
+
+    setIsSubmittingComment(true);
+
+    const comment: TaskComment = {
+      id: `comment-${Date.now()}`,
+      userId: currentUser.id,
+      userName: `${currentUser.firstName} ${currentUser.lastName}`,
+      text: newComment.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedComments = [...comments, comment];
+
+    // Update local state immediately
+    setComments(updatedComments);
+    setNewComment('');
+
+    try {
+      // Persist to database
+      await updateJobTask(initialTask.id, {
+        comments: updatedComments,
+      });
+      showToast('Comment added', 'success');
+    } catch (error) {
+      // Revert on error
+      setComments(comments);
+      showToast('Failed to add comment', 'error');
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  // Format comment timestamp
+  const formatCommentTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // Get user avatar initials from comment
+  const getCommentUserInitials = (comment: TaskComment) => {
+    const parts = comment.userName.split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`;
+    }
+    return comment.userName.charAt(0);
+  };
+
+  // Get avatar color based on user ID (consistent color per user)
+  const getAvatarColor = (userId: string) => {
+    const colors = [
+      theme.colors.primary,
+      theme.colors.status.info,
+      theme.colors.status.warning,
+      theme.colors.status.completed,
+      '#9333EA', // purple
+      '#EC4899', // pink
+      '#F97316', // orange
+    ];
+    const index = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
+  };
 
   if (!isOpen || !initialTask) return null;
 
@@ -363,6 +455,125 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Team Discussion / Comments */}
+          <div style={styles.section}>
+            <div
+              style={styles.commentsHeader}
+              onClick={() => setShowComments(!showComments)}
+            >
+              <div style={styles.commentsHeaderLeft}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <h3 style={{...styles.sectionTitle, marginBottom: 0}}>Team Discussion</h3>
+                {comments.length > 0 && (
+                  <span style={styles.commentCount}>{comments.length}</span>
+                )}
+              </div>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={theme.colors.textSecondary}
+                strokeWidth="2"
+                style={{
+                  transition: 'transform 0.2s',
+                  transform: showComments ? 'rotate(180deg)' : 'rotate(0deg)',
+                }}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </div>
+
+            {showComments && (
+              <div style={styles.commentsContainer}>
+                {/* Comments List */}
+                <div style={styles.commentsList}>
+                  {comments.length === 0 ? (
+                    <div style={styles.noComments}>
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                      <p>No comments yet. Start the conversation!</p>
+                    </div>
+                  ) : (
+                    comments.map((comment) => (
+                      <div key={comment.id} style={styles.commentItem}>
+                        <div
+                          style={{
+                            ...styles.commentAvatar,
+                            backgroundColor: getAvatarColor(comment.userId),
+                          }}
+                        >
+                          {getCommentUserInitials(comment)}
+                        </div>
+                        <div style={styles.commentContent}>
+                          <div style={styles.commentMeta}>
+                            <span style={styles.commentUserName}>{comment.userName}</span>
+                            <span style={styles.commentTime}>{formatCommentTime(comment.createdAt)}</span>
+                          </div>
+                          <p style={styles.commentText}>{comment.text}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <div ref={commentsEndRef} />
+                </div>
+
+                {/* Add Comment Input */}
+                {currentUser && (
+                  <div style={styles.addCommentContainer}>
+                    <div
+                      style={{
+                        ...styles.commentAvatar,
+                        backgroundColor: getAvatarColor(currentUser.id),
+                        width: '32px',
+                        height: '32px',
+                        fontSize: '11px',
+                      }}
+                    >
+                      {currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}
+                    </div>
+                    <div style={styles.commentInputWrapper}>
+                      <input
+                        type="text"
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleAddComment();
+                          }
+                        }}
+                        placeholder="Add a comment..."
+                        style={styles.commentInput}
+                        disabled={isSubmittingComment}
+                      />
+                      <button
+                        onClick={handleAddComment}
+                        disabled={!newComment.trim() || isSubmittingComment}
+                        style={{
+                          ...styles.sendButton,
+                          opacity: !newComment.trim() || isSubmittingComment ? 0.5 : 1,
+                        }}
+                      >
+                        {isSubmittingComment ? (
+                          <div style={styles.sendSpinner} />
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer with Calendar Dropdown */}
@@ -710,6 +921,154 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '16px',
     border: `2px solid ${theme.colors.border}`,
     borderTopColor: theme.colors.status.success,
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+  },
+  // Comments styles
+  commentsHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    cursor: 'pointer',
+    padding: '12px 16px',
+    backgroundColor: theme.colors.inputBackground,
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.border}`,
+    transition: 'background-color 0.2s',
+  },
+  commentsHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  commentCount: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '22px',
+    height: '22px',
+    padding: '0 6px',
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    borderRadius: theme.borderRadius.full,
+    fontSize: '12px',
+    fontWeight: 600,
+  },
+  commentsContainer: {
+    marginTop: '12px',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+  },
+  commentsList: {
+    maxHeight: '250px',
+    overflowY: 'auto',
+    padding: '12px',
+    backgroundColor: theme.colors.background,
+  },
+  noComments: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '32px 16px',
+    gap: '12px',
+    color: theme.colors.textMuted,
+    fontSize: '14px',
+    textAlign: 'center',
+  },
+  commentItem: {
+    display: 'flex',
+    gap: '12px',
+    padding: '12px',
+    marginBottom: '8px',
+    backgroundColor: theme.colors.backgroundLight,
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.border}`,
+  },
+  commentAvatar: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#FFFFFF',
+    fontSize: '12px',
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  commentContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  commentMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '4px',
+  },
+  commentUserName: {
+    fontWeight: 600,
+    fontSize: '13px',
+    color: theme.colors.textPrimary,
+  },
+  commentTime: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+  },
+  commentText: {
+    fontSize: '14px',
+    color: theme.colors.textSecondary,
+    lineHeight: 1.5,
+    margin: 0,
+    wordWrap: 'break-word',
+  },
+  addCommentContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px',
+    backgroundColor: theme.colors.backgroundLight,
+    borderTop: `1px solid ${theme.colors.border}`,
+  },
+  commentInputWrapper: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: theme.colors.inputBackground,
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.border}`,
+    padding: '4px 4px 4px 12px',
+  },
+  commentInput: {
+    flex: 1,
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: theme.colors.textPrimary,
+    fontSize: '14px',
+    outline: 'none',
+    padding: '8px 0',
+  },
+  sendButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '36px',
+    height: '36px',
+    backgroundColor: theme.colors.primary,
+    border: 'none',
+    borderRadius: theme.borderRadius.sm,
+    color: '#FFFFFF',
+    cursor: 'pointer',
+    transition: 'opacity 0.2s',
+  },
+  sendSpinner: {
+    width: '16px',
+    height: '16px',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTopColor: '#FFFFFF',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
   },
