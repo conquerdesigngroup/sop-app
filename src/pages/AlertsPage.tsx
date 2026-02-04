@@ -217,6 +217,47 @@ const AlertsPage: React.FC = () => {
     return { completed, inProgress, overdue, pending };
   }, [isAdmin, users, jobTasks]);
 
+  // Calculate upcoming deadlines for next 7 days (admin view)
+  const upcomingDeadlines = useMemo(() => {
+    if (!isAdmin) return [];
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+
+    const sevenDaysFromNow = new Date(today);
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+    const sevenDaysStr = sevenDaysFromNow.toISOString().split('T')[0];
+
+    // Get user names for display
+    const getUserNames = (userIds: string[]) => {
+      return userIds.map(id => {
+        const user = users.find(u => u.id === id);
+        return user ? `${user.firstName} ${user.lastName}` : 'Unknown';
+      });
+    };
+
+    return jobTasks
+      .filter(task =>
+        task.status !== 'archived' &&
+        task.status !== 'draft' &&
+        task.status !== 'completed' &&
+        task.scheduledDate >= todayStr &&
+        task.scheduledDate <= sevenDaysStr
+      )
+      .map(task => ({
+        id: task.id,
+        title: task.title,
+        scheduledDate: task.scheduledDate,
+        priority: task.priority,
+        status: task.status,
+        assignedUsers: getUserNames(task.assignedTo || []),
+        stepsCompleted: task.completedSteps?.length || 0,
+        totalSteps: task.steps?.length || 0,
+      }))
+      .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+  }, [isAdmin, users, jobTasks]);
+
   // Handle archive task
   const handleArchiveTask = (taskId: string, taskTitle: string) => {
     archiveJobTask(taskId);
@@ -673,6 +714,77 @@ const AlertsPage: React.FC = () => {
               <p>No active task alerts at the moment.</p>
             </div>
           )}
+
+          {/* Upcoming Deadlines Section */}
+          {upcomingDeadlines.length > 0 && (
+            <div style={styles.upcomingSection}>
+              <h3 style={styles.upcomingSectionTitle}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                Upcoming Deadlines (Next 7 Days)
+              </h3>
+              <div style={styles.upcomingTimeline}>
+                {upcomingDeadlines.map((task, index) => {
+                  const dueDate = new Date(task.scheduledDate);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const todayStr = today.toISOString().split('T')[0];
+                  const tomorrow = new Date(today);
+                  tomorrow.setDate(tomorrow.getDate() + 1);
+                  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+                  let dayLabel = dueDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                  let labelColor = theme.colors.txt.secondary;
+
+                  if (task.scheduledDate === todayStr) {
+                    dayLabel = 'Today';
+                    labelColor = theme.colors.status.warning;
+                  } else if (task.scheduledDate === tomorrowStr) {
+                    dayLabel = 'Tomorrow';
+                    labelColor = '#F59E0B';
+                  }
+
+                  return (
+                    <div key={task.id} style={styles.upcomingItem}>
+                      <div style={styles.upcomingDateColumn}>
+                        <span style={{ ...styles.upcomingDayLabel, color: labelColor }}>{dayLabel}</span>
+                      </div>
+                      <div style={styles.upcomingDot} />
+                      <div style={styles.upcomingContent}>
+                        <div style={styles.upcomingTaskTitle}>{task.title}</div>
+                        <div style={styles.upcomingMeta}>
+                          <span style={{
+                            ...styles.upcomingStatus,
+                            backgroundColor: task.status === 'in-progress'
+                              ? 'rgba(59, 130, 246, 0.1)'
+                              : 'rgba(245, 158, 11, 0.1)',
+                            color: task.status === 'in-progress'
+                              ? theme.colors.status.info
+                              : theme.colors.status.warning,
+                          }}>
+                            {task.status === 'in-progress' ? 'In Progress' : 'Pending'}
+                          </span>
+                          <span style={styles.upcomingAssigned}>
+                            {task.assignedUsers.slice(0, 2).join(', ')}
+                            {task.assignedUsers.length > 2 && ` +${task.assignedUsers.length - 2}`}
+                          </span>
+                          {task.totalSteps > 0 && (
+                            <span style={styles.upcomingSteps}>
+                              {task.stepsCompleted}/{task.totalSteps} steps
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -923,30 +1035,6 @@ const AlertsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Summary Stats */}
-      <div style={styles.summarySection}>
-        <h3 style={styles.summaryTitle}>Alert Summary</h3>
-        <div style={styles.summaryGrid}>
-          <div style={{ ...styles.summaryCard, borderColor: theme.colors.status.error }}>
-            <span style={{ ...styles.summaryValue, color: theme.colors.status.error }}>
-              {taskAlerts.filter(a => a.type === 'overdue').length}
-            </span>
-            <span style={styles.summaryLabel}>Overdue</span>
-          </div>
-          <div style={{ ...styles.summaryCard, borderColor: theme.colors.status.warning }}>
-            <span style={{ ...styles.summaryValue, color: theme.colors.status.warning }}>
-              {taskAlerts.filter(a => a.type === 'due_today').length}
-            </span>
-            <span style={styles.summaryLabel}>Due Today</span>
-          </div>
-          <div style={{ ...styles.summaryCard, borderColor: '#F59E0B' }}>
-            <span style={{ ...styles.summaryValue, color: '#F59E0B' }}>
-              {taskAlerts.filter(a => a.type === 'due_tomorrow').length}
-            </span>
-            <span style={styles.summaryLabel}>Due Tomorrow</span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 
@@ -971,20 +1059,6 @@ const AlertsPage: React.FC = () => {
         {/* Render appropriate view based on role */}
         {isAdmin ? renderAdminView() : renderTeamView()}
 
-        {/* Team members also see their alerts if they're admin */}
-        {isAdmin && taskAlerts.length > 0 && (
-          <div style={{ marginTop: theme.spacing.xl }}>
-            <div style={styles.divider} />
-            <h2 style={{ ...styles.sectionTitle, marginTop: theme.spacing.xl, marginBottom: theme.spacing.lg }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.warning} strokeWidth="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              Your Alerts
-            </h2>
-            {renderTeamView()}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1410,6 +1484,89 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     transition: 'all 0.2s',
     whiteSpace: 'nowrap' as const,
+  },
+
+  // Upcoming Deadlines Section
+  upcomingSection: {
+    marginTop: theme.spacing.xl,
+    paddingTop: theme.spacing.xl,
+    borderTop: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  upcomingSectionTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    marginBottom: theme.spacing.lg,
+  },
+  upcomingTimeline: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: theme.spacing.md,
+  },
+  upcomingItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: theme.spacing.md,
+  },
+  upcomingDateColumn: {
+    width: '100px',
+    flexShrink: 0,
+    textAlign: 'right' as const,
+    paddingRight: theme.spacing.sm,
+  },
+  upcomingDayLabel: {
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  upcomingDot: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+    backgroundColor: theme.colors.primary,
+    marginTop: '4px',
+    flexShrink: 0,
+    border: `2px solid ${theme.colors.bg.secondary}`,
+    boxShadow: `0 0 0 2px ${theme.colors.primary}`,
+  },
+  upcomingContent: {
+    flex: 1,
+    backgroundColor: theme.colors.bg.secondary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  upcomingTaskTitle: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    marginBottom: theme.spacing.xs,
+  },
+  upcomingMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap' as const,
+  },
+  upcomingStatus: {
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '2px 6px',
+    borderRadius: theme.borderRadius.sm,
+    textTransform: 'uppercase' as const,
+  },
+  upcomingAssigned: {
+    fontSize: '12px',
+    color: theme.colors.txt.tertiary,
+  },
+  upcomingSteps: {
+    fontSize: '11px',
+    color: theme.colors.txt.tertiary,
+    backgroundColor: theme.colors.bg.tertiary,
+    padding: '2px 6px',
+    borderRadius: theme.borderRadius.sm,
   },
 };
 
