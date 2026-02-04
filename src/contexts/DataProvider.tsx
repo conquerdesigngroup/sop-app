@@ -3,6 +3,7 @@ import { SOPProvider } from './SOPContext';
 import { TaskProvider } from './TaskContext';
 import { JobProvider } from './JobContext';
 import { EventProvider } from './EventContext';
+import { WorkHoursProvider } from './WorkHoursContext';
 
 /**
  * DataProvider - Combines all data-related context providers
@@ -19,7 +20,8 @@ import { EventProvider } from './EventContext';
  *   ├── SOPProvider
  *   ├── TaskProvider
  *   ├── JobProvider
- *   └── EventProvider
+ *   ├── EventProvider
+ *   └── WorkHoursProvider
  */
 interface DataProviderProps {
   children: ReactNode;
@@ -31,7 +33,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       <TaskProvider>
         <JobProvider>
           <EventProvider>
-            {children}
+            <WorkHoursProvider>
+              {children}
+            </WorkHoursProvider>
           </EventProvider>
         </JobProvider>
       </TaskProvider>

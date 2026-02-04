@@ -297,3 +297,47 @@ export interface CalendarEvent {
   createdAt: string;
   updatedAt?: string;
 }
+
+// Work Hours Types
+
+export type WorkHoursStatus = 'pending' | 'approved' | 'rejected';
+
+export interface WorkHoursEntry {
+  id: string;
+  employeeId: string;
+  workDate: string; // ISO date format (YYYY-MM-DD)
+  startTime: string; // HH:MM format (e.g., "09:00")
+  endTime: string; // HH:MM format (e.g., "17:00")
+  breakMinutes: number; // Break duration in minutes
+  totalHours: number; // Calculated total work hours (minus breaks)
+  notes?: string;
+  status: WorkHoursStatus;
+  approvedBy?: string; // Admin user ID who approved
+  approvedAt?: string; // ISO timestamp
+  createdBy: string; // User who created (can be employee or admin)
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface WorkScheduleTemplate {
+  id: string;
+  employeeId: string;
+  dayOfWeek: number; // 0-6 (Sunday-Saturday)
+  startTime: string; // Default start time
+  endTime: string; // Default end time
+  breakMinutes: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface WorkHoursSummary {
+  employeeId: string;
+  employeeName: string;
+  periodStart: string;
+  periodEnd: string;
+  totalHours: number;
+  approvedHours: number;
+  pendingHours: number;
+  daysWorked: number;
+}
