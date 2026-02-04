@@ -109,7 +109,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Initialize: Check for existing session and load users
   useEffect(() => {
     const initializeAuth = async () => {
+      console.log('[Auth] Starting initialization, useSupabase:', useSupabase);
+
       if (!useSupabase) {
+        console.log('[Auth] Using localStorage mode');
         // localStorage mode - this is a fallback/demo mode only
         // Clear any old default user data that might be cached
         const storedUsers = localStorage.getItem('mediamaple_users');
@@ -141,13 +144,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
 
+        console.log('[Auth] localStorage mode - setting loading to false');
         setLoading(false);
         return;
       }
 
       try {
-        // Check for existing Supabase session
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log('[Auth] Checking Supabase session...');
+        // Check for existing Supabase session with timeout
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Session check timeout')), 10000)
+        );
+
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        console.log('[Auth] Session check complete, has session:', !!session);
 
         if (session?.user) {
           // Fetch user profile from database
@@ -163,9 +174,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         // Load all users (for admin features)
+        console.log('[Auth] Loading users...');
         await loadUsers();
+        console.log('[Auth] Users loaded');
 
         // Set up auth state listener
+        console.log('[Auth] Setting up auth state listener...');
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event: any, session: any) => {
             if (event === 'SIGNED_IN' && session?.user) {
@@ -184,13 +198,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         );
 
+        console.log('[Auth] Initialization complete - setting loading to false');
         setLoading(false);
 
         return () => {
           subscription.unsubscribe();
         };
       } catch (error) {
-        console.error('Error initializing auth:', error);
+        console.error('[Auth] Error initializing auth:', error);
+        console.log('[Auth] Error occurred - setting loading to false');
         setLoading(false);
       }
     };
