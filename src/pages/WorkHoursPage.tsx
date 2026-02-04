@@ -25,7 +25,10 @@ const WorkHoursPage: React.FC = () => {
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDateRange, setFilterDateRange] = useState<'week' | 'month' | 'all'>('week');
-  const [viewMode, setViewMode] = useState<'list' | 'summary' | 'schedule'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'summary' | 'schedule' | 'calendar'>('list');
+
+  // Calendar state
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   // Schedule form states
   const [scheduleEmployee, setScheduleEmployee] = useState<string>(currentUser?.id || '');
@@ -40,7 +43,7 @@ const WorkHoursPage: React.FC = () => {
   const [formBreakMinutes, setFormBreakMinutes] = useState(30);
   const [formNotes, setFormNotes] = useState('');
 
-  // Calculate date range
+  // Calculate date range for work hours (past)
   const getDateRange = () => {
     const today = new Date();
     const endDate = today.toISOString().split('T')[0];
@@ -59,6 +62,36 @@ const WorkHoursPage: React.FC = () => {
         break;
       default:
         startDate = '2020-01-01';
+    }
+    return { startDate, endDate };
+  };
+
+  // Calculate date range for schedule (includes future)
+  const getScheduleDateRange = () => {
+    const today = new Date();
+    let startDate: string;
+    let endDate: string;
+
+    switch (filterDateRange) {
+      case 'week':
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        startDate = weekAgo.toISOString().split('T')[0];
+        const weekAhead = new Date(today);
+        weekAhead.setDate(weekAhead.getDate() + 14);
+        endDate = weekAhead.toISOString().split('T')[0];
+        break;
+      case 'month':
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        startDate = monthAgo.toISOString().split('T')[0];
+        const monthAhead = new Date(today);
+        monthAhead.setMonth(monthAhead.getMonth() + 1);
+        endDate = monthAhead.toISOString().split('T')[0];
+        break;
+      default:
+        startDate = '2020-01-01';
+        endDate = '2099-12-31';
     }
     return { startDate, endDate };
   };
@@ -85,9 +118,9 @@ const WorkHoursPage: React.FC = () => {
     return getAllWorkHoursSummaries(startDate, endDate);
   }, [getAllWorkHoursSummaries, filterDateRange]);
 
-  // Filter work days (schedule view)
+  // Filter work days (schedule view) - includes future dates
   const filteredWorkDays = useMemo(() => {
-    const { startDate, endDate } = getDateRange();
+    const { startDate, endDate } = getScheduleDateRange();
 
     return workDays.filter(wd => {
       // Non-admins can only see their own entries
@@ -97,7 +130,7 @@ const WorkHoursPage: React.FC = () => {
       const matchesDate = filterDateRange === 'all' || (wd.workDate >= startDate && wd.workDate <= endDate);
 
       return matchesEmployee && matchesDate;
-    }).sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime());
+    }).sort((a, b) => new Date(a.workDate).getTime() - new Date(b.workDate).getTime()); // Sort ascending (upcoming first)
   }, [workDays, filterEmployee, filterDateRange, isAdmin, currentUser]);
 
   // Group work days by date for display
@@ -125,6 +158,79 @@ const WorkHoursPage: React.FC = () => {
   };
 
   const nextTwoWeeks = getNextTwoWeeks();
+
+  // Calendar helpers
+  const getCalendarDays = () => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDay = firstDay.getDay(); // 0-6
+    const daysInMonth = lastDay.getDate();
+
+    const days: { date: string; dayNum: number; isCurrentMonth: boolean }[] = [];
+
+    // Previous month days
+    const prevMonth = new Date(year, month, 0);
+    const prevMonthDays = prevMonth.getDate();
+    for (let i = startDay - 1; i >= 0; i--) {
+      const dayNum = prevMonthDays - i;
+      const date = new Date(year, month - 1, dayNum);
+      days.push({
+        date: date.toISOString().split('T')[0],
+        dayNum,
+        isCurrentMonth: false,
+      });
+    }
+
+    // Current month days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      days.push({
+        date: date.toISOString().split('T')[0],
+        dayNum: i,
+        isCurrentMonth: true,
+      });
+    }
+
+    // Next month days to fill the grid
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      const date = new Date(year, month + 1, i);
+      days.push({
+        date: date.toISOString().split('T')[0],
+        dayNum: i,
+        isCurrentMonth: false,
+      });
+    }
+
+    return days;
+  };
+
+  const calendarDays = getCalendarDays();
+
+  // Get work days for a specific date
+  const getWorkDaysForDate = (date: string) => {
+    return workDays.filter(wd => {
+      if (!isAdmin && wd.employeeId !== currentUser?.id) return false;
+      if (filterEmployee !== 'all' && wd.employeeId !== filterEmployee) return false;
+      return wd.workDate === date;
+    });
+  };
+
+  // Navigate calendar
+  const prevMonth = () => {
+    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const goToToday = () => {
+    setCalendarMonth(new Date());
+  };
 
   // Get active employees
   const activeEmployees = useMemo(() => {
@@ -350,6 +456,15 @@ const WorkHoursPage: React.FC = () => {
               Schedule
             </button>
             <button
+              onClick={() => setViewMode('calendar')}
+              style={{
+                ...styles.toggleButton,
+                ...(viewMode === 'calendar' ? styles.toggleButtonActive : {}),
+              }}
+            >
+              Calendar
+            </button>
+            <button
               onClick={() => setViewMode('summary')}
               style={{
                 ...styles.toggleButton,
@@ -540,6 +655,100 @@ const WorkHoursPage: React.FC = () => {
                 </div>
               ))
           )}
+        </div>
+      ) : viewMode === 'calendar' ? (
+        // Calendar View
+        <div style={styles.calendarContainer}>
+          {/* Calendar Header */}
+          <div style={styles.calendarHeader}>
+            <button onClick={prevMonth} style={styles.calendarNavButton}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <div style={styles.calendarTitle}>
+              <h3 style={styles.calendarMonthTitle}>
+                {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </h3>
+              <button onClick={goToToday} style={styles.todayButton}>Today</button>
+            </div>
+            <button onClick={nextMonth} style={styles.calendarNavButton}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Calendar Grid */}
+          <div style={styles.calendarGrid}>
+            {/* Day Headers */}
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <div key={day} style={styles.calendarDayHeader}>{day}</div>
+            ))}
+
+            {/* Calendar Days */}
+            {calendarDays.map((day, index) => {
+              const dayWorkDays = getWorkDaysForDate(day.date);
+              const isToday = day.date === new Date().toISOString().split('T')[0];
+              const hasWorkDays = dayWorkDays.length > 0;
+
+              return (
+                <div
+                  key={index}
+                  style={{
+                    ...styles.calendarDay,
+                    ...(day.isCurrentMonth ? {} : styles.calendarDayOtherMonth),
+                    ...(isToday ? styles.calendarDayToday : {}),
+                  }}
+                >
+                  <span style={{
+                    ...styles.calendarDayNum,
+                    ...(isToday ? styles.calendarDayNumToday : {}),
+                  }}>
+                    {day.dayNum}
+                  </span>
+                  {hasWorkDays && (
+                    <div style={styles.calendarDayContent}>
+                      {dayWorkDays.slice(0, 3).map(wd => (
+                        <div
+                          key={wd.id}
+                          style={{
+                            ...styles.calendarWorkDay,
+                            backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
+                              wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
+                          }}
+                          title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''}`}
+                        >
+                          {getUserName(wd.employeeId).split(' ')[0]}
+                        </div>
+                      ))}
+                      {dayWorkDays.length > 3 && (
+                        <div style={styles.calendarMoreIndicator}>
+                          +{dayWorkDays.length - 3} more
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div style={styles.calendarLegend}>
+            <div style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.info }} />
+              <span>Scheduled</span>
+            </div>
+            <div style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.success }} />
+              <span>Confirmed</span>
+            </div>
+            <div style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.error }} />
+              <span>Cancelled</span>
+            </div>
+          </div>
         </div>
       ) : (
         // Summary View
@@ -1329,6 +1538,132 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     color: theme.colors.primary,
     fontWeight: 500,
+  },
+  // Calendar styles
+  calendarContainer: {
+    backgroundColor: theme.colors.bg.secondary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '24px',
+  },
+  calendarHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '24px',
+  },
+  calendarNavButton: {
+    background: 'none',
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    padding: '8px',
+    color: theme.colors.txt.primary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  calendarMonthTitle: {
+    fontSize: '20px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    margin: 0,
+  },
+  todayButton: {
+    padding: '6px 12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.txt.secondary,
+    fontSize: '13px',
+    cursor: 'pointer',
+  },
+  calendarGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '1px',
+    backgroundColor: theme.colors.bdr.primary,
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+  },
+  calendarDayHeader: {
+    backgroundColor: theme.colors.bg.tertiary,
+    padding: '12px 8px',
+    textAlign: 'center',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.txt.secondary,
+    textTransform: 'uppercase',
+  },
+  calendarDay: {
+    backgroundColor: theme.colors.bg.secondary,
+    minHeight: '100px',
+    padding: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  calendarDayOtherMonth: {
+    backgroundColor: theme.colors.bg.primary,
+    opacity: 0.5,
+  },
+  calendarDayToday: {
+    backgroundColor: theme.colors.bg.tertiary,
+  },
+  calendarDayNum: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: theme.colors.txt.secondary,
+    marginBottom: '4px',
+  },
+  calendarDayNumToday: {
+    color: theme.colors.primary,
+    fontWeight: 700,
+  },
+  calendarDayContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    flex: 1,
+  },
+  calendarWorkDay: {
+    padding: '2px 6px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '11px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  calendarMoreIndicator: {
+    fontSize: '10px',
+    color: theme.colors.txt.tertiary,
+    marginTop: '2px',
+  },
+  calendarLegend: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '24px',
+    marginTop: '20px',
+    paddingTop: '16px',
+    borderTop: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+    color: theme.colors.txt.secondary,
+  },
+  legendDot: {
+    width: '12px',
+    height: '12px',
+    borderRadius: theme.borderRadius.full,
   },
 };
 
