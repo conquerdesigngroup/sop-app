@@ -398,8 +398,9 @@ const WorkHoursPage: React.FC = () => {
       });
     }
 
-    // Next month days to fill the grid (6 rows)
-    const remaining = 42 - days.length;
+    // Next month days to fill the grid (only add if needed to complete current row)
+    const totalCells = Math.ceil(days.length / 7) * 7;
+    const remaining = totalCells - days.length;
     for (let i = 1; i <= remaining; i++) {
       const date = new Date(year, month + 1, i);
       days.push({
@@ -1713,7 +1714,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '16px 20px',
+    padding: '12px 16px',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
   modalTitle: {
@@ -1729,10 +1730,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '4px',
   },
   modalContent: {
-    padding: '16px 20px',
+    padding: '12px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
+    gap: '12px',
   },
   formGroup: {
     display: 'flex',
@@ -1935,7 +1936,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '12px',
+    marginBottom: '8px',
   },
   scheduleNavButton: {
     background: 'none',
@@ -1949,20 +1950,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
   },
   scheduleMonthTitle: {
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: 600,
     color: theme.colors.txt.primary,
   },
   scheduleCalendarGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: '3px',
-    marginBottom: '12px',
+    gap: '2px',
+    marginBottom: '10px',
   },
   scheduleCalendarDayHeader: {
-    padding: '6px 2px',
+    padding: '4px 2px',
     textAlign: 'center',
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 600,
     color: theme.colors.txt.tertiary,
     textTransform: 'uppercase',
@@ -1973,13 +1974,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.bg.tertiary,
-    border: `2px solid transparent`,
+    border: `1px solid transparent`,
     borderRadius: theme.borderRadius.sm,
     cursor: 'pointer',
     transition: 'all 0.15s',
     position: 'relative',
-    padding: '8px 4px',
-    minHeight: '40px',
+    padding: '6px 2px',
+    minHeight: '36px',
   },
   scheduleCalendarDayOther: {
     opacity: 0.3,
@@ -2008,25 +2009,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     opacity: 0.5,
   },
   scheduleCalendarDayNum: {
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: 500,
   },
   scheduleDayIndicator: {
-    fontSize: '8px',
-    marginTop: '2px',
+    fontSize: '6px',
+    marginTop: '1px',
   },
   scheduleDayNewIndicator: {
-    fontSize: '12px',
-    fontWeight: 700,
-    marginTop: '2px',
-  },
-  scheduleDayRemoveIndicator: {
     fontSize: '10px',
     fontWeight: 700,
-    marginTop: '2px',
+    marginTop: '1px',
+  },
+  scheduleDayRemoveIndicator: {
+    fontSize: '8px',
+    fontWeight: 700,
+    marginTop: '1px',
   },
   scheduleDayHoursIndicator: {
-    fontSize: '9px',
+    fontSize: '8px',
     fontWeight: 600,
     marginTop: '1px',
     opacity: 0.9,
@@ -2179,10 +2180,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   scheduleModalLegend: {
     display: 'flex',
     justifyContent: 'center',
-    gap: '16px',
-    marginBottom: '12px',
-    paddingBottom: '12px',
+    gap: '12px',
+    marginBottom: '10px',
+    paddingBottom: '10px',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+    fontSize: '12px',
   },
   changesSummary: {
     display: 'flex',
