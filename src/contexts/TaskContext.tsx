@@ -30,15 +30,12 @@ interface TaskContextType {
   createJobTaskUnified: (taskData: {
     title: string;
     description: string;
-    department: string;
-    category: string;
     priority: TaskPriority;
     estimatedDuration: number;
     steps: {
       title: string;
       description?: string;
       requiresPhoto: boolean;
-      sopId?: string;
     }[];
     scheduledDate: string;
     dueTime?: string;
@@ -46,6 +43,7 @@ interface TaskContextType {
     isRecurring?: boolean;
     recurrencePattern?: any;
     templateId?: string;
+    sopId?: string;
   }, saveAsTemplate: boolean) => Promise<void>;
   loading: boolean;
 }
@@ -1041,15 +1039,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     taskData: {
       title: string;
       description: string;
-      department: string;
-      category: string;
       priority: TaskPriority;
       estimatedDuration: number;
       steps: {
         title: string;
         description?: string;
         requiresPhoto: boolean;
-        sopId?: string;
       }[];
       scheduledDate: string;
       dueTime?: string;
@@ -1057,6 +1052,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       isRecurring?: boolean;
       recurrencePattern?: any;
       templateId?: string;
+      sopId?: string;
     },
     saveAsTemplate: boolean = false
   ): Promise<void> => {
@@ -1073,20 +1069,17 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           title: step.title,
           description: step.description || '',
           requiresPhoto: step.requiresPhoto,
-          sopId: step.sopId,
         }));
 
         const template: Omit<TaskTemplate, 'id' | 'createdAt'> = {
           title: taskData.title,
           description: taskData.description,
-          category: taskData.category,
-          department: taskData.department,
+          category: 'General',
+          department: currentUser.department || 'General',
           priority: taskData.priority,
           estimatedDuration: taskData.estimatedDuration,
           steps: templateSteps,
-          sopIds: taskData.steps
-            .filter(s => s.sopId)
-            .map(s => s.sopId!),
+          sopIds: taskData.sopId ? [taskData.sopId] : [],
           createdBy: currentUser.id,
           isRecurring: taskData.isRecurring || false,
           recurrencePattern: taskData.recurrencePattern,
@@ -1103,7 +1096,6 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         description: step.description || '',
         isCompleted: false,
         requiresPhoto: step.requiresPhoto,
-        sopId: step.sopId,
       }));
 
       const jobTask: Omit<JobTask, 'id' | 'createdAt' | 'progressPercentage'> = {
@@ -1112,8 +1104,8 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         description: taskData.description,
         assignedTo: taskData.assignedTo,
         assignedBy: currentUser.id,
-        department: taskData.department,
-        category: taskData.category,
+        department: currentUser.department || 'General',
+        category: 'General',
         scheduledDate: taskData.scheduledDate,
         dueTime: taskData.dueTime,
         estimatedDuration: taskData.estimatedDuration,
@@ -1121,9 +1113,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         priority: taskData.priority,
         steps: taskSteps,
         completedSteps: [],
-        sopIds: taskData.steps
-          .filter(s => s.sopId)
-          .map(s => s.sopId!),
+        sopIds: taskData.sopId ? [taskData.sopId] : [],
         comments: [],
         isRecurring: taskData.isRecurring,
         recurrencePattern: taskData.recurrencePattern,

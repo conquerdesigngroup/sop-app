@@ -27,6 +27,7 @@ const JobTasksPage: React.FC = () => {
   const [initialScheduledDate, setInitialScheduledDate] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<JobTask | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -135,18 +136,45 @@ const JobTasksPage: React.FC = () => {
     saveAsTemplate: boolean
   ) => {
     try {
-      await createJobTaskUnified(taskData, saveAsTemplate);
-      showToast(
-        saveAsTemplate
-          ? 'Job task created and saved as template!'
-          : 'Job task created successfully!',
-        'success'
-      );
+      if (editingTask) {
+        // Update existing task
+        await updateJobTask(editingTask.id, {
+          title: taskData.title,
+          description: taskData.description,
+          priority: taskData.priority,
+          estimatedDuration: taskData.estimatedDuration,
+          scheduledDate: taskData.scheduledDate,
+          dueTime: taskData.dueTime,
+          assignedTo: taskData.assignedTo,
+          isRecurring: taskData.isRecurring,
+          recurrencePattern: taskData.recurrencePattern,
+          sopIds: taskData.sopId ? [taskData.sopId] : [],
+          steps: taskData.steps.map((step: any, index: number) => ({
+            id: `step_${Date.now()}_${index}`,
+            order: index + 1,
+            title: step.title,
+            description: step.description || '',
+            isCompleted: false,
+            requiresPhoto: step.requiresPhoto,
+          })),
+        });
+        showToast('Job task updated successfully!', 'success');
+      } else {
+        // Create new task
+        await createJobTaskUnified(taskData, saveAsTemplate);
+        showToast(
+          saveAsTemplate
+            ? 'Job task created and saved as template!'
+            : 'Job task created successfully!',
+          'success'
+        );
+      }
       setShowCreateModal(false);
       setInitialTemplateId(null);
+      setEditingTask(null);
     } catch (error) {
-      console.error('Error creating job task:', error);
-      showToast('Failed to create job task', 'error');
+      console.error('Error creating/updating job task:', error);
+      showToast(editingTask ? 'Failed to update job task' : 'Failed to create job task', 'error');
     }
   };
 
@@ -166,6 +194,12 @@ const JobTasksPage: React.FC = () => {
     setShowCreateModal(false);
     setInitialTemplateId(null);
     setInitialScheduledDate(null);
+    setEditingTask(null);
+  };
+
+  const handleEditTask = (task: JobTask) => {
+    setEditingTask(task);
+    setShowCreateModal(true);
   };
 
   const handleTaskClick = (task: JobTask) => {
@@ -465,6 +499,7 @@ const JobTasksPage: React.FC = () => {
                   isSelected={selectedTasks.has(task.id)}
                   onToggleSelect={() => handleToggleSelectTask(task.id)}
                   onArchive={() => handleArchiveTask(task.id)}
+                  onEdit={() => handleEditTask(task)}
                   onClick={() => handleTaskClick(task)}
                 />
               ))
@@ -498,6 +533,7 @@ const JobTasksPage: React.FC = () => {
         isOpen={showCreateModal}
         onClose={handleCloseModal}
         onCreate={handleCreateTask}
+        editingTask={editingTask}
         taskTemplates={taskTemplates}
         users={users.filter(u => u.isActive)}
         sops={sops}
@@ -528,10 +564,11 @@ interface JobTaskCardProps {
   isSelected: boolean;
   onToggleSelect: () => void;
   onArchive: () => void;
+  onEdit: () => void;
   onClick: () => void;
 }
 
-const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, isAdmin, isSelected, onToggleSelect, onArchive, onClick }) => {
+const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, isAdmin, isSelected, onToggleSelect, onArchive, onEdit, onClick }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return theme.colors.status.success;
@@ -611,6 +648,21 @@ const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, i
           <p style={styles.taskCardDescription}>{task.description}</p>
         </div>
         <div style={styles.taskCardActions}>
+          {isAdmin && (
+            <button
+              style={styles.editButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              title="Edit task"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+          )}
           <button
             style={styles.archiveButton}
             onClick={(e) => {
@@ -1932,6 +1984,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  editButton: {
+    padding: theme.spacing.xs,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    border: `1px solid rgba(59, 130, 246, 0.3)`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.primary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
   },
   archiveButton: {
     padding: theme.spacing.xs,

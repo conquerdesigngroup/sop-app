@@ -32,9 +32,12 @@ const MyTasksPage: React.FC = () => {
     }
   }, [location]);
 
-  // Get tasks assigned to current user
+  // Get tasks assigned to current user (excluding archived and draft tasks)
   const myTasks = jobTasks.filter(task =>
-    currentUser && task.assignedTo.includes(currentUser.id)
+    currentUser &&
+    task.assignedTo.includes(currentUser.id) &&
+    task.status !== 'archived' &&
+    task.status !== 'draft'
   );
 
   // Filter tasks

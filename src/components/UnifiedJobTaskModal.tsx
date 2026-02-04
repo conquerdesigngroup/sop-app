@@ -10,7 +10,6 @@ interface ChecklistItem {
   title: string;
   description: string;
   requiresPhoto: boolean;
-  sopId?: string;
 }
 
 interface UnifiedJobTaskModalProps {
@@ -21,15 +20,12 @@ interface UnifiedJobTaskModalProps {
   onCreate: (taskData: {
     title: string;
     description: string;
-    department: string;
-    category: string;
     priority: TaskPriority;
     estimatedDuration: number;
     steps: {
       title: string;
       description?: string;
       requiresPhoto: boolean;
-      sopId?: string;
     }[];
     assignedTo: string[];
     scheduledDate: string;
@@ -37,6 +33,7 @@ interface UnifiedJobTaskModalProps {
     isRecurring?: boolean;
     recurrencePattern?: RecurrencePattern;
     templateId?: string;
+    sopId?: string;
   }, saveAsTemplate: boolean) => void;
   taskTemplates: TaskTemplate[];
   users: any[];
@@ -67,15 +64,12 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   // Task Details
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [department, setDepartment] = useState('');
-  const [category, setCategory] = useState('');
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [estimatedDuration, setEstimatedDuration] = useState(30);
+  const [linkedSopId, setLinkedSopId] = useState<string>('');
 
-  // Checklist Items
-  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([
-    { id: '1', title: '', description: '', requiresPhoto: false }
-  ]);
+  // Checklist Items (optional)
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
 
   // Recurrence
   const [isRecurring, setIsRecurring] = useState(false);
@@ -91,9 +85,8 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   // Save as Template
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
 
-  // Get unique departments and categories
+  // Get unique departments for user filtering
   const departments = Array.from(new Set(users.map((u: any) => u.department)));
-  const categories = ['Opening Duties', 'Closing Duties', 'Maintenance', 'Administrative', 'Cleaning', 'Safety', 'Other'];
   const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   // Filter users by department
@@ -101,19 +94,39 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     ? users
     : users.filter((u: any) => u.department === filterDepartment);
 
+  // Reset form when modal opens (for new tasks)
+  useEffect(() => {
+    if (isOpen && !editingTask && !initialTemplateId) {
+      // Reset all form state for new task creation
+      setSelectedTemplate(null);
+      setTitle('');
+      setDescription('');
+      setPriority('medium');
+      setEstimatedDuration(30);
+      setLinkedSopId('');
+      setChecklistItems([]);
+      setIsRecurring(false);
+      setRecurrenceFrequency('weekly');
+      setRecurrenceDays([]);
+      setAssignedTo([]);
+      setDueTime('');
+      setFilterDepartment('all');
+      setSaveAsTemplate(false);
+    }
+  }, [isOpen, editingTask, initialTemplateId]);
+
   // Initialize with editing task or initial template
   useEffect(() => {
     if (editingTask) {
       setTitle(editingTask.title);
       setDescription(editingTask.description);
-      setDepartment(editingTask.department);
-      setCategory(editingTask.category);
       setPriority(editingTask.priority);
       setEstimatedDuration(editingTask.estimatedDuration);
       setAssignedTo(editingTask.assignedTo);
       setScheduledDate(editingTask.scheduledDate);
       setDueTime(editingTask.dueTime || '');
       setIsRecurring(editingTask.isRecurring || false);
+      setLinkedSopId(editingTask.sopIds?.[0] || '');
       if (editingTask.recurrencePattern) {
         setRecurrenceFrequency(editingTask.recurrencePattern.frequency);
         setRecurrenceDays(editingTask.recurrencePattern.daysOfWeek || []);
@@ -125,9 +138,8 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         title: step.title,
         description: step.description || '',
         requiresPhoto: step.requiresPhoto || false,
-        sopId: step.sopId,
       }));
-      setChecklistItems(items.length > 0 ? items : [{ id: '1', title: '', description: '', requiresPhoto: false }]);
+      setChecklistItems(items);
     } else if (initialTemplateId) {
       const template = taskTemplates.find(t => t.id === initialTemplateId);
       if (template) {
@@ -151,11 +163,10 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     if (template) {
       setTitle(template.title);
       setDescription(template.description);
-      setDepartment(template.department);
-      setCategory(template.category);
       setPriority(template.priority);
       setEstimatedDuration(template.estimatedDuration);
       setIsRecurring(template.isRecurring);
+      setLinkedSopId(template.sopIds?.[0] || '');
 
       if (template.recurrencePattern) {
         setRecurrenceFrequency(template.recurrencePattern.frequency);
@@ -168,9 +179,8 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         title: step.title,
         description: step.description || '',
         requiresPhoto: step.requiresPhoto || false,
-        sopId: step.sopId,
       }));
-      setChecklistItems(items.length > 0 ? items : [{ id: '1', title: '', description: '', requiresPhoto: false }]);
+      setChecklistItems(items);
 
       // IMPORTANT: Uncheck "Save as template" when using an existing template
       // to prevent duplicating templates unintentionally
@@ -187,9 +197,13 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   };
 
   const handleSelectAll = () => {
-    // Select ALL users, not just filtered ones
-    const allUserIds = users.map((u: any) => u.id);
-    setAssignedTo(allUserIds);
+    // Select only the currently filtered/visible users
+    const filteredUserIds = filteredUsers.map((u: any) => u.id);
+    // Merge with existing selections (to preserve selections from other departments)
+    setAssignedTo(prev => {
+      const combined = new Set([...prev, ...filteredUserIds]);
+      return Array.from(combined);
+    });
   };
 
   const handleDeselectAll = () => {
@@ -207,10 +221,6 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   };
 
   const handleRemoveChecklistItem = (id: string) => {
-    if (checklistItems.length === 1) {
-      alert('At least one checklist item is required');
-      return;
-    }
     setChecklistItems(checklistItems.filter(item => item.id !== id));
   };
 
@@ -236,14 +246,6 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       alert('Please enter a task title');
       return;
     }
-    if (!department) {
-      alert('Please select a department');
-      return;
-    }
-    if (!category) {
-      alert('Please select a category');
-      return;
-    }
     if (assignedTo.length === 0) {
       alert('Please assign to at least one team member');
       return;
@@ -253,10 +255,10 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       return;
     }
 
-    // Check that all checklist items have titles
+    // Check that all checklist items have titles (if any exist)
     const invalidItems = checklistItems.filter(item => !item.title.trim());
     if (invalidItems.length > 0) {
-      alert('Please enter a title for all checklist items');
+      alert('Please enter a title for all checklist steps');
       return;
     }
 
@@ -277,15 +279,12 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       {
         title,
         description,
-        department,
-        category,
         priority,
         estimatedDuration,
         steps: checklistItems.map(item => ({
           title: item.title,
           description: item.description,
           requiresPhoto: item.requiresPhoto,
-          sopId: item.sopId,
         })),
         assignedTo,
         scheduledDate,
@@ -293,6 +292,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         isRecurring,
         recurrencePattern,
         templateId: selectedTemplate?.id,
+        sopId: linkedSopId || undefined,
       },
       saveAsTemplate
     );
@@ -327,7 +327,6 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                 templates={taskTemplates}
                 selectedTemplateId={selectedTemplate?.id || null}
                 onSelect={handleTemplateSelect}
-                department={department || undefined}
               />
             </div>
           )}
@@ -382,36 +381,21 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
               </div>
             </div>
 
-            {/* Department and Category */}
-            <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Department *</label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  required
-                  style={{...styles.select, ...(isMobile && styles.selectMobile)}}
-                >
-                  <option value="">-- Select Department --</option>
-                  {departments.map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Category *</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  required
-                  style={{...styles.select, ...(isMobile && styles.selectMobile)}}
-                >
-                  <option value="">-- Select Category --</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Link SOP (Task Level) */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Link SOP (Optional)</label>
+              <select
+                value={linkedSopId}
+                onChange={(e) => setLinkedSopId(e.target.value)}
+                style={{...styles.select, ...(isMobile && styles.selectMobile)}}
+              >
+                <option value="">-- No SOP Linked --</option>
+                {sops.map((sop: any) => (
+                  <option key={sop.id} value={sop.id}>
+                    {sop.title}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Assign to Team Members */}
@@ -511,10 +495,10 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
             </div>
           </div>
 
-          {/* Checklist Items Section */}
+          {/* Checklist Steps Section (Optional) */}
           <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
             <div style={styles.checklistHeader}>
-              <h3 style={styles.sectionTitle}>Checklist Steps</h3>
+              <h3 style={{...styles.sectionTitle, marginBottom: 0}}>Checklist Steps (Optional)</h3>
               <button
                 type="button"
                 onClick={handleAddChecklistItem}
@@ -528,12 +512,16 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
               </button>
             </div>
 
-            <div style={styles.checklistItems}>
-              {checklistItems.map((item, index) => (
-                <div key={item.id} style={styles.checklistItem}>
-                  <div style={styles.checklistItemHeader}>
-                    <span style={styles.checklistItemNumber}>Step {index + 1}</span>
-                    {checklistItems.length > 1 && (
+            {checklistItems.length === 0 ? (
+              <p style={styles.emptyStepsText}>
+                No checklist steps added. Click "Add Step" to add steps that team members can check off.
+              </p>
+            ) : (
+              <div style={styles.checklistItems}>
+                {checklistItems.map((item, index) => (
+                  <div key={item.id} style={styles.checklistItem}>
+                    <div style={styles.checklistItemHeader}>
+                      <span style={styles.checklistItemNumber}>Step {index + 1}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveChecklistItem(item.id)}
@@ -542,56 +530,39 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                       >
                         ✕
                       </button>
-                    )}
-                  </div>
+                    </div>
 
-                  <div style={styles.formGroup}>
-                    <input
-                      type="text"
-                      value={item.title}
-                      onChange={(e) => handleUpdateChecklistItem(item.id, 'title', e.target.value)}
-                      placeholder="Step title (e.g., Unlock main entrance)"
-                      required
-                      style={{...styles.input, ...(isMobile && styles.inputMobile)}}
-                    />
-                  </div>
+                    <div style={styles.formGroup}>
+                      <input
+                        type="text"
+                        value={item.title}
+                        onChange={(e) => handleUpdateChecklistItem(item.id, 'title', e.target.value)}
+                        placeholder="Step title (e.g., Unlock main entrance)"
+                        style={{...styles.input, ...(isMobile && styles.inputMobile)}}
+                      />
+                    </div>
 
-                  <div style={styles.formGroup}>
-                    <textarea
-                      value={item.description}
-                      onChange={(e) => handleUpdateChecklistItem(item.id, 'description', e.target.value)}
-                      placeholder="Step description (optional)"
-                      rows={2}
-                      style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
-                    />
-                  </div>
+                    <div style={styles.formGroup}>
+                      <textarea
+                        value={item.description}
+                        onChange={(e) => handleUpdateChecklistItem(item.id, 'description', e.target.value)}
+                        placeholder="Step description (optional)"
+                        rows={2}
+                        style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
+                      />
+                    </div>
 
-                  <div style={styles.checklistItemOptions}>
-                    <CustomCheckbox
-                      checked={item.requiresPhoto}
-                      onChange={(checked) => handleUpdateChecklistItem(item.id, 'requiresPhoto', checked)}
-                      label="Requires Photo"
-                    />
-
-                    <div style={styles.sopSelect}>
-                      <label style={styles.smallLabel}>Link SOP:</label>
-                      <select
-                        value={item.sopId || ''}
-                        onChange={(e) => handleUpdateChecklistItem(item.id, 'sopId', e.target.value || undefined)}
-                        style={styles.smallSelect}
-                      >
-                        <option value="">-- No SOP --</option>
-                        {sops.map((sop: any) => (
-                          <option key={sop.id} value={sop.id}>
-                            {sop.title} ({sop.department})
-                          </option>
-                        ))}
-                      </select>
+                    <div style={styles.checklistItemOptions}>
+                      <CustomCheckbox
+                        checked={item.requiresPhoto}
+                        onChange={(checked) => handleUpdateChecklistItem(item.id, 'requiresPhoto', checked)}
+                        label="Requires Photo"
+                      />
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Recurrence Section */}
@@ -932,10 +903,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '18px',
     cursor: 'pointer',
   },
-  sopSelect: {
-    display: 'flex',
-    alignItems: 'center',
-    flex: 1,
+  emptyStepsText: {
+    fontSize: '14px',
+    color: theme.colors.txt.tertiary,
+    fontStyle: 'italic',
+    textAlign: 'center' as const,
+    padding: '24px 16px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    margin: '16px 0 0 0',
   },
   recurrenceOptions: {
     marginTop: '16px',
