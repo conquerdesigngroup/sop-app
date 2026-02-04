@@ -21,6 +21,10 @@ const WorkHoursPage: React.FC = () => {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<WorkHoursEntry | null>(null);
 
+  // Day detail panel state (for when clicking a marked day in schedule modal)
+  const [selectedDayForDetail, setSelectedDayForDetail] = useState<string | null>(null);
+  const [showHoursForm, setShowHoursForm] = useState(false);
+
   // Filter states
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -334,6 +338,8 @@ const WorkHoursPage: React.FC = () => {
     setDatesToRemove([]);
     setScheduleNotes('');
     setScheduleModalMonth(new Date());
+    setSelectedDayForDetail(null);
+    setShowHoursForm(false);
   };
 
   // Get existing work days for the selected employee
@@ -345,6 +351,17 @@ const WorkHoursPage: React.FC = () => {
     if (!scheduleEmployee) return [];
     return getExistingWorkDaysForEmployee(scheduleEmployee).map(wd => wd.workDate);
   }, [scheduleEmployee, workDays]);
+
+  // Get work hours for a specific date and employee
+  const getWorkHoursForDateAndEmployee = (date: string, employeeId: string) => {
+    return workHours.filter(wh => wh.workDate === date && wh.employeeId === employeeId);
+  };
+
+  // Get total hours for a date
+  const getTotalHoursForDate = (date: string, employeeId: string) => {
+    const hours = getWorkHoursForDateAndEmployee(date, employeeId);
+    return hours.reduce((sum, h) => sum + h.totalHours, 0);
+  };
 
   // Get calendar days for the schedule modal
   const getScheduleModalCalendarDays = () => {
@@ -397,26 +414,80 @@ const WorkHoursPage: React.FC = () => {
 
   const scheduleModalDays = getScheduleModalCalendarDays();
 
-  // Handle date toggle in schedule modal
-  const toggleDateSelection = (date: string) => {
+  // Handle date click in schedule modal
+  const handleDayClick = (date: string) => {
     const isExisting = existingWorkDayDates.includes(date);
     const isMarkedForRemoval = datesToRemove.includes(date);
     const isNewlySelected = selectedDates.includes(date);
 
-    if (isExisting) {
-      // Toggle removal of existing day
-      if (isMarkedForRemoval) {
-        setDatesToRemove(prev => prev.filter(d => d !== date));
-      } else {
-        setDatesToRemove(prev => [...prev, date]);
-      }
+    if (isExisting && !isMarkedForRemoval) {
+      // Show detail panel for existing day
+      setSelectedDayForDetail(date);
+      setShowHoursForm(false);
+      // Pre-fill the hours form with this date
+      setFormDate(date);
+      setFormEmployee(scheduleEmployee);
+    } else if (isMarkedForRemoval) {
+      // Unmark for removal
+      setDatesToRemove(prev => prev.filter(d => d !== date));
+    } else if (isNewlySelected) {
+      // Show detail for newly selected day
+      setSelectedDayForDetail(date);
+      setShowHoursForm(false);
+      setFormDate(date);
+      setFormEmployee(scheduleEmployee);
     } else {
-      // Toggle new day selection
-      if (isNewlySelected) {
-        setSelectedDates(prev => prev.filter(d => d !== date));
-      } else {
-        setSelectedDates(prev => [...prev, date]);
-      }
+      // Add new day
+      setSelectedDates(prev => [...prev, date]);
+    }
+  };
+
+  // Remove a day (mark existing for removal or remove from new selections)
+  const handleRemoveDay = (date: string) => {
+    const isExisting = existingWorkDayDates.includes(date);
+    if (isExisting) {
+      setDatesToRemove(prev => [...prev, date]);
+    } else {
+      setSelectedDates(prev => prev.filter(d => d !== date));
+    }
+    setSelectedDayForDetail(null);
+  };
+
+  // Close day detail panel
+  const closeDayDetail = () => {
+    setSelectedDayForDetail(null);
+    setShowHoursForm(false);
+  };
+
+  // Handle adding hours from within the schedule modal
+  const handleAddHoursFromSchedule = async () => {
+    if (!formStartTime || !formEndTime) {
+      showToast('Please fill in start and end times', 'error');
+      return;
+    }
+
+    if (formStartTime >= formEndTime) {
+      showToast('End time must be after start time', 'error');
+      return;
+    }
+
+    const entryData = {
+      employeeId: scheduleEmployee,
+      workDate: selectedDayForDetail!,
+      startTime: formStartTime,
+      endTime: formEndTime,
+      breakMinutes: formBreakMinutes,
+      totalHours: calculateTotalHours(formStartTime, formEndTime, formBreakMinutes),
+      notes: formNotes || undefined,
+    };
+
+    try {
+      await addWorkHours(entryData);
+      showToast('Work hours added', 'success');
+      setShowHoursForm(false);
+      resetForm();
+    } catch (error) {
+      showToast('Failed to add work hours', 'error');
     }
   };
 
@@ -520,33 +591,21 @@ const WorkHoursPage: React.FC = () => {
         <div>
           <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Work Hours</h1>
           <p style={styles.subtitle}>
-            {isAdmin ? 'Manage team schedules and work hours' : 'Track your work hours'}
+            {isAdmin ? 'Manage team schedules and track work hours' : 'Track your schedule and work hours'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            onClick={() => { resetScheduleForm(); setShowScheduleModal(true); }}
-            style={styles.secondaryButton}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            Mark Days
-          </button>
-          <button
-            onClick={() => { resetForm(); setShowAddModal(true); }}
-            style={styles.addButton}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add Hours
-          </button>
-        </div>
+        <button
+          onClick={() => { resetScheduleForm(); setShowScheduleModal(true); }}
+          style={styles.addButton}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          Manage Schedule
+        </button>
       </div>
 
       {/* Filters */}
@@ -1022,7 +1081,7 @@ const WorkHoursPage: React.FC = () => {
         <div style={styles.modalOverlay} onClick={() => setShowScheduleModal(false)}>
           <div style={{ ...styles.modal, maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>Manage Work Schedule</h2>
+              <h2 style={styles.modalTitle}>Manage Schedule & Hours</h2>
               <button onClick={() => setShowScheduleModal(false)} style={styles.closeButton}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -1088,11 +1147,13 @@ const WorkHoursPage: React.FC = () => {
                   const isPast = new Date(day.date) < new Date(new Date().toISOString().split('T')[0]);
                   const dayOfWeek = new Date(day.date + 'T00:00:00').getDay();
                   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                  const isSelected = selectedDayForDetail === day.date;
+                  const hoursForDay = scheduleEmployee ? getTotalHoursForDate(day.date, scheduleEmployee) : 0;
 
                   return (
                     <button
                       key={index}
-                      onClick={() => day.isCurrentMonth && toggleDateSelection(day.date)}
+                      onClick={() => day.isCurrentMonth && handleDayClick(day.date)}
                       disabled={!day.isCurrentMonth}
                       style={{
                         ...styles.scheduleCalendarDay,
@@ -1103,6 +1164,7 @@ const WorkHoursPage: React.FC = () => {
                         ...(isMarkedForRemoval ? styles.scheduleCalendarDayRemove : {}),
                         ...(isNewlySelected ? styles.scheduleCalendarDayNew : {}),
                         ...(isPast && day.isCurrentMonth ? styles.scheduleCalendarDayPast : {}),
+                        ...(isSelected ? styles.scheduleCalendarDaySelected : {}),
                       }}
                     >
                       <span style={styles.scheduleCalendarDayNum}>{day.dayNum}</span>
@@ -1114,6 +1176,9 @@ const WorkHoursPage: React.FC = () => {
                       )}
                       {isNewlySelected && (
                         <span style={styles.scheduleDayNewIndicator}>+</span>
+                      )}
+                      {hoursForDay > 0 && (isExisting || isNewlySelected) && !isMarkedForRemoval && (
+                        <span style={styles.scheduleDayHoursIndicator}>{hoursForDay}h</span>
                       )}
                     </button>
                   );
@@ -1135,6 +1200,140 @@ const WorkHoursPage: React.FC = () => {
                   <span>Remove</span>
                 </div>
               </div>
+
+              {/* Day Detail Panel - Shows when clicking a scheduled/selected day */}
+              {selectedDayForDetail && (
+                <div style={styles.dayDetailPanel}>
+                  <div style={styles.dayDetailHeader}>
+                    <div>
+                      <h4 style={styles.dayDetailTitle}>{formatDate(selectedDayForDetail)}</h4>
+                      <span style={styles.dayDetailSubtitle}>
+                        {existingWorkDayDates.includes(selectedDayForDetail) ? 'Scheduled Work Day' : 'New Work Day'}
+                      </span>
+                    </div>
+                    <button onClick={closeDayDetail} style={styles.dayDetailClose}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Existing Hours for this day */}
+                  {scheduleEmployee && getWorkHoursForDateAndEmployee(selectedDayForDetail, scheduleEmployee).length > 0 && (
+                    <div style={styles.dayDetailHoursList}>
+                      <span style={styles.dayDetailHoursLabel}>Logged Hours:</span>
+                      {getWorkHoursForDateAndEmployee(selectedDayForDetail, scheduleEmployee).map(wh => (
+                        <div key={wh.id} style={styles.dayDetailHoursItem}>
+                          <span>{formatTime(wh.startTime)} - {formatTime(wh.endTime)}</span>
+                          <span style={styles.dayDetailHoursValue}>{wh.totalHours}h</span>
+                        </div>
+                      ))}
+                      <div style={styles.dayDetailHoursTotal}>
+                        <span>Total:</span>
+                        <span style={styles.dayDetailHoursTotalValue}>
+                          {getTotalHoursForDate(selectedDayForDetail, scheduleEmployee)}h
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Add Hours Form */}
+                  {showHoursForm ? (
+                    <div style={styles.dayDetailForm}>
+                      <div style={styles.formRow}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.label}>Start Time</label>
+                          <input
+                            type="time"
+                            value={formStartTime}
+                            onChange={(e) => setFormStartTime(e.target.value)}
+                            style={styles.input}
+                          />
+                        </div>
+                        <div style={styles.formGroup}>
+                          <label style={styles.label}>End Time</label>
+                          <input
+                            type="time"
+                            value={formEndTime}
+                            onChange={(e) => setFormEndTime(e.target.value)}
+                            style={styles.input}
+                          />
+                        </div>
+                      </div>
+                      <div style={styles.formGroup}>
+                        <label style={styles.label}>Break (minutes)</label>
+                        <input
+                          type="number"
+                          value={formBreakMinutes}
+                          onChange={(e) => setFormBreakMinutes(Number(e.target.value))}
+                          min={0}
+                          max={120}
+                          style={styles.input}
+                        />
+                      </div>
+                      <div style={styles.hoursPreview}>
+                        <span>Total Hours:</span>
+                        <span style={styles.hoursPreviewValue}>
+                          {calculateTotalHours(formStartTime, formEndTime, formBreakMinutes)}
+                        </span>
+                      </div>
+                      <div style={styles.formGroup}>
+                        <label style={styles.label}>Notes (optional)</label>
+                        <input
+                          type="text"
+                          value={formNotes}
+                          onChange={(e) => setFormNotes(e.target.value)}
+                          placeholder="Add any notes..."
+                          style={styles.input}
+                        />
+                      </div>
+                      <div style={styles.dayDetailFormActions}>
+                        <button
+                          onClick={() => setShowHoursForm(false)}
+                          style={styles.dayDetailCancelBtn}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleAddHoursFromSchedule}
+                          style={styles.dayDetailSaveBtn}
+                        >
+                          Add Hours
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={styles.dayDetailActions}>
+                      <button
+                        onClick={() => {
+                          resetForm();
+                          setFormDate(selectedDayForDetail);
+                          setFormEmployee(scheduleEmployee);
+                          setShowHoursForm(true);
+                        }}
+                        style={styles.dayDetailAddHoursBtn}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        Add Hours
+                      </button>
+                      <button
+                        onClick={() => handleRemoveDay(selectedDayForDetail)}
+                        style={styles.dayDetailRemoveBtn}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                        {existingWorkDayDates.includes(selectedDayForDetail) ? 'Remove Day' : 'Unselect Day'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Summary of Changes */}
               {(selectedDates.length > 0 || datesToRemove.length > 0) && (
@@ -1825,6 +2024,156 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '10px',
     fontWeight: 700,
     marginTop: '2px',
+  },
+  scheduleDayHoursIndicator: {
+    fontSize: '9px',
+    fontWeight: 600,
+    marginTop: '1px',
+    opacity: 0.9,
+  },
+  scheduleCalendarDaySelected: {
+    outline: `3px solid ${theme.colors.primary}`,
+    outlineOffset: '-3px',
+  },
+  // Day Detail Panel styles
+  dayDetailPanel: {
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    padding: '16px',
+    marginBottom: '16px',
+    border: `2px solid ${theme.colors.bdr.secondary}`,
+  },
+  dayDetailHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '16px',
+  },
+  dayDetailTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    margin: 0,
+  },
+  dayDetailSubtitle: {
+    fontSize: '12px',
+    color: theme.colors.txt.tertiary,
+  },
+  dayDetailClose: {
+    background: 'none',
+    border: 'none',
+    color: theme.colors.txt.tertiary,
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayDetailHoursList: {
+    backgroundColor: theme.colors.bg.secondary,
+    borderRadius: theme.borderRadius.sm,
+    padding: '12px',
+    marginBottom: '16px',
+  },
+  dayDetailHoursLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.txt.secondary,
+    marginBottom: '8px',
+    display: 'block',
+  },
+  dayDetailHoursItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '6px 0',
+    fontSize: '14px',
+    color: theme.colors.txt.primary,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  dayDetailHoursValue: {
+    fontWeight: 600,
+    color: theme.colors.primary,
+  },
+  dayDetailHoursTotal: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  dayDetailHoursTotalValue: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: theme.colors.primary,
+  },
+  dayDetailActions: {
+    display: 'flex',
+    gap: '12px',
+  },
+  dayDetailAddHoursBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '10px 16px',
+    backgroundColor: theme.colors.primary,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    color: '#FFFFFF',
+    fontSize: '14px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  dayDetailRemoveBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '10px 16px',
+    backgroundColor: 'transparent',
+    border: `2px solid ${theme.colors.status.error}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.status.error,
+    fontSize: '14px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  dayDetailForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  dayDetailFormActions: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '8px',
+  },
+  dayDetailCancelBtn: {
+    flex: 1,
+    padding: '10px 16px',
+    backgroundColor: 'transparent',
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.secondary,
+    fontSize: '14px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  dayDetailSaveBtn: {
+    flex: 1,
+    padding: '10px 16px',
+    backgroundColor: theme.colors.status.success,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    color: '#FFFFFF',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   scheduleModalLegend: {
     display: 'flex',

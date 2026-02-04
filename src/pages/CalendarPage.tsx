@@ -4,15 +4,20 @@ import { theme } from '../theme';
 import { useEvent } from '../contexts/EventContext';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useWorkHours } from '../contexts/WorkHoursContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { CalendarEvent, JobTask } from '../types';
+import { CalendarEvent, JobTask, WorkHoursEntry } from '../types';
 import EventFormModal from '../components/EventFormModal';
 import EventDetailModal from '../components/EventDetailModal';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 
+// View type for calendar filtering
+type CalendarViewType = 'all' | 'events' | 'tasks' | 'hours';
+
 const CalendarPage: React.FC = () => {
   const { events, addEvent, updateEvent, deleteEvent, tags } = useEvent();
   const { jobTasks } = useTask();
+  const { workHours } = useWorkHours();
   const { users, currentUser } = useAuth();
   const { isMobileOrTablet } = useResponsive();
   const location = useLocation();
@@ -57,6 +62,8 @@ const CalendarPage: React.FC = () => {
   const [filterColor, setFilterColor] = useState<string | ''>('');
   const [filterAttendee, setFilterAttendee] = useState<string | ''>('');
   const [filterTag, setFilterTag] = useState<string | ''>('');
+  const [calendarViewType, setCalendarViewType] = useState<CalendarViewType>('all');
+  const [selectedWorkHours, setSelectedWorkHours] = useState<WorkHoursEntry | null>(null);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -121,8 +128,13 @@ const CalendarPage: React.FC = () => {
       return (a.dueTime || '').localeCompare(b.dueTime || '');
     });
 
-    return { events: todaysEvents, tasks: todaysTasks };
-  }, [events, jobTasks, today]);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const todaysWorkHours = workHours.filter(wh => wh.workDate === todayStr).sort((a, b) => {
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    });
+
+    return { events: todaysEvents, tasks: todaysTasks, workHours: todaysWorkHours };
+  }, [events, jobTasks, workHours, today]);
 
   // Focus quick add input when opened
   useEffect(() => {
@@ -156,6 +168,26 @@ const CalendarPage: React.FC = () => {
       taskDate.setHours(0, 0, 0, 0);
       return taskDate.getTime() === date.getTime();
     });
+  };
+
+  // Get work hours for a specific date
+  const getWorkHoursForDate = (day: number) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return workHours.filter(wh => wh.workDate === dateStr);
+  };
+
+  // Get user name from ID
+  const getUserName = (userId: string): string => {
+    const user = users.find(u => u.id === userId);
+    return user ? `${user.firstName} ${user.lastName}` : 'Unknown';
+  };
+
+  // Format hours display (e.g., "8h 30m")
+  const formatHoursDisplay = (hours: number): string => {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
   };
 
   // Navigation
@@ -404,6 +436,48 @@ const CalendarPage: React.FC = () => {
         </button>
       </div>
 
+      {/* View Type Toggle - Events, Tasks, Hours, All */}
+      <div style={styles.viewTypeToggle}>
+        <button
+          onClick={() => setCalendarViewType('all')}
+          style={calendarViewType === 'all' ? styles.viewTypeButtonActive : styles.viewTypeButton}
+        >
+          All
+        </button>
+        <button
+          onClick={() => setCalendarViewType('events')}
+          style={calendarViewType === 'events' ? styles.viewTypeButtonActive : styles.viewTypeButton}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          Events
+        </button>
+        <button
+          onClick={() => setCalendarViewType('tasks')}
+          style={calendarViewType === 'tasks' ? styles.viewTypeButtonActive : styles.viewTypeButton}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          Tasks
+        </button>
+        <button
+          onClick={() => setCalendarViewType('hours')}
+          style={calendarViewType === 'hours' ? styles.viewTypeButtonActive : styles.viewTypeButton}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          Hours
+        </button>
+      </div>
+
       {/* Search and Filter Bar */}
       <div style={styles.searchFilterBar}>
         <div style={styles.searchBox}>
@@ -563,12 +637,12 @@ const CalendarPage: React.FC = () => {
                 Today's Agenda
               </h3>
 
-              {todaysItems.events.length === 0 && todaysItems.tasks.length === 0 ? (
-                <p style={styles.agendaEmpty}>No events or tasks today</p>
+              {todaysItems.events.length === 0 && todaysItems.tasks.length === 0 && todaysItems.workHours.length === 0 ? (
+                <p style={styles.agendaEmpty}>No events, tasks, or work hours today</p>
               ) : (
                 <div style={styles.agendaList}>
                   {/* Today's Events */}
-                  {todaysItems.events.map(event => (
+                  {(calendarViewType === 'all' || calendarViewType === 'events') && todaysItems.events.map(event => (
                     <div
                       key={event.id}
                       style={{
@@ -592,7 +666,7 @@ const CalendarPage: React.FC = () => {
                   ))}
 
                   {/* Today's Tasks (red with initials) */}
-                  {todaysItems.tasks.map(task => (
+                  {(calendarViewType === 'all' || calendarViewType === 'tasks') && todaysItems.tasks.map(task => (
                     <div
                       key={task.id}
                       style={{
@@ -616,6 +690,28 @@ const CalendarPage: React.FC = () => {
                           <span style={{ ...styles.taskInitials, marginRight: '6px', backgroundColor: theme.colors.primary }}>{getTaskInitials(task)}</span>
                         )}
                         {task.title}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Today's Work Hours (green) */}
+                  {(calendarViewType === 'all' || calendarViewType === 'hours') && todaysItems.workHours.map(wh => (
+                    <div
+                      key={wh.id}
+                      style={{
+                        ...styles.agendaItem,
+                        borderLeftColor: '#10B981',
+                      }}
+                      onClick={() => setSelectedWorkHours(wh)}
+                    >
+                      <div style={styles.agendaItemTime}>
+                        {wh.startTime} - {wh.endTime}
+                      </div>
+                      <div style={styles.agendaItemTitle}>
+                        <span style={{ ...styles.taskInitials, marginRight: '6px', backgroundColor: '#10B981' }}>
+                          {getUserInitials(wh.employeeId)}
+                        </span>
+                        {formatHoursDisplay(wh.totalHours)}
                       </div>
                     </div>
                   ))}
@@ -896,11 +992,13 @@ const CalendarPage: React.FC = () => {
             {/* Days of month */}
             {Array.from({ length: daysInMonth }).map((_, index) => {
               const day = index + 1;
-              const eventsForDay = getEventsForDate(day);
-              const tasksForDay = getTasksForDate(day);
+              const eventsForDay = (calendarViewType === 'all' || calendarViewType === 'events') ? getEventsForDate(day) : [];
+              const tasksForDay = (calendarViewType === 'all' || calendarViewType === 'tasks') ? getTasksForDate(day) : [];
+              const workHoursForDay = (calendarViewType === 'all' || calendarViewType === 'hours') ? getWorkHoursForDate(day) : [];
               const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
-              const totalItems = eventsForDay.length + tasksForDay.length;
+              const totalItems = eventsForDay.length + tasksForDay.length + workHoursForDay.length;
               const maxVisible = isMobileOrTablet ? 2 : 3;
+              let visibleCount = 0;
 
               return (
                 <CalendarDayCell
@@ -953,51 +1051,83 @@ const CalendarPage: React.FC = () => {
 
                   <div style={isMobileOrTablet ? styles.itemsListMobile : styles.itemsList}>
                     {/* Events first (colored left border) */}
-                    {eventsForDay.slice(0, maxVisible).map(event => (
-                      <div
-                        key={event.id}
-                        style={{
-                          ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem),
-                          borderLeftColor: event.color,
-                        }}
-                        onClick={(e) => handleEventClick(event, e)}
-                        title={event.title}
-                      >
-                        {!isMobileOrTablet && event.isRecurring && (
-                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
-                            <polyline points="23 4 23 10 17 10" />
-                            <polyline points="1 20 1 14 7 14" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                          </svg>
-                        )}
-                        <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{event.title}</span>
-                      </div>
-                    ))}
+                    {eventsForDay.slice(0, maxVisible).map(event => {
+                      visibleCount++;
+                      return (
+                        <div
+                          key={event.id}
+                          style={{
+                            ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem),
+                            borderLeftColor: event.color,
+                          }}
+                          onClick={(e) => handleEventClick(event, e)}
+                          title={event.title}
+                        >
+                          {!isMobileOrTablet && event.isRecurring && (
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
+                              <polyline points="23 4 23 10 17 10" />
+                              <polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                          )}
+                          <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{event.title}</span>
+                        </div>
+                      );
+                    })}
 
                     {/* Tasks (red left border with user initials) */}
-                    {tasksForDay.slice(0, Math.max(0, maxVisible - eventsForDay.length)).map(task => (
-                      <div
-                        key={task.id}
-                        style={{
-                          ...(isMobileOrTablet ? styles.taskItemMobile : styles.taskItem),
-                          borderLeftColor: theme.colors.primary,
-                        }}
-                        onClick={(e) => handleTaskClick(task, e)}
-                        title={task.title}
-                      >
-                        {!isMobileOrTablet && task.isRecurring && (
-                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
-                            <polyline points="23 4 23 10 17 10" />
-                            <polyline points="1 20 1 14 7 14" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                          </svg>
-                        )}
-                        {getTaskInitials(task) && (
-                          <span style={isMobileOrTablet ? styles.taskInitialsMobile : styles.taskInitials}>{getTaskInitials(task)}</span>
-                        )}
-                        <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{task.title}</span>
-                      </div>
-                    ))}
+                    {tasksForDay.slice(0, Math.max(0, maxVisible - eventsForDay.length)).map(task => {
+                      visibleCount++;
+                      return (
+                        <div
+                          key={task.id}
+                          style={{
+                            ...(isMobileOrTablet ? styles.taskItemMobile : styles.taskItem),
+                            borderLeftColor: theme.colors.primary,
+                          }}
+                          onClick={(e) => handleTaskClick(task, e)}
+                          title={task.title}
+                        >
+                          {!isMobileOrTablet && task.isRecurring && (
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
+                              <polyline points="23 4 23 10 17 10" />
+                              <polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                          )}
+                          {getTaskInitials(task) && (
+                            <span style={isMobileOrTablet ? styles.taskInitialsMobile : styles.taskInitials}>{getTaskInitials(task)}</span>
+                          )}
+                          <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{task.title}</span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Work Hours (green left border) */}
+                    {workHoursForDay.slice(0, Math.max(0, maxVisible - eventsForDay.length - tasksForDay.length)).map(wh => {
+                      visibleCount++;
+                      return (
+                        <div
+                          key={wh.id}
+                          style={{
+                            ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem),
+                            borderLeftColor: '#10B981',
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedWorkHours(wh);
+                          }}
+                          title={`${getUserName(wh.employeeId)}: ${formatHoursDisplay(wh.totalHours)}`}
+                        >
+                          <span style={isMobileOrTablet ? styles.taskInitialsMobile : { ...styles.taskInitials, backgroundColor: '#10B981' }}>
+                            {getUserInitials(wh.employeeId)}
+                          </span>
+                          <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>
+                            {formatHoursDisplay(wh.totalHours)}
+                          </span>
+                        </div>
+                      );
+                    })}
 
                     {/* More indicator */}
                     {totalItems > maxVisible && (
@@ -1263,6 +1393,10 @@ const CalendarPage: React.FC = () => {
           <span style={styles.legendText}>Tasks</span>
         </div>
         <div style={styles.legendItem}>
+          <div style={{ ...styles.legendColor, backgroundColor: '#10B981' }} />
+          <span style={styles.legendText}>Work Hours</span>
+        </div>
+        <div style={styles.legendItem}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
             <polyline points="23 4 23 10 17 10" />
             <polyline points="1 20 1 14 7 14" />
@@ -1301,6 +1435,73 @@ const CalendarPage: React.FC = () => {
         task={selectedTask}
         users={users}
       />
+
+      {/* Work Hours Detail Modal */}
+      {selectedWorkHours && (
+        <div style={styles.modalOverlay} onClick={() => setSelectedWorkHours(null)}>
+          <div style={styles.workHoursModal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.workHoursModalHeader}>
+              <div style={styles.workHoursModalTitle}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                Work Hours
+              </div>
+              <button style={styles.workHoursModalClose} onClick={() => setSelectedWorkHours(null)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div style={styles.workHoursModalContent}>
+              <div style={styles.workHoursModalRow}>
+                <span style={styles.workHoursModalLabel}>Employee</span>
+                <span style={styles.workHoursModalValue}>{getUserName(selectedWorkHours.employeeId)}</span>
+              </div>
+              <div style={styles.workHoursModalRow}>
+                <span style={styles.workHoursModalLabel}>Date</span>
+                <span style={styles.workHoursModalValue}>
+                  {new Date(selectedWorkHours.workDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </span>
+              </div>
+              <div style={styles.workHoursModalRow}>
+                <span style={styles.workHoursModalLabel}>Time</span>
+                <span style={styles.workHoursModalValue}>{selectedWorkHours.startTime} - {selectedWorkHours.endTime}</span>
+              </div>
+              <div style={styles.workHoursModalRow}>
+                <span style={styles.workHoursModalLabel}>Break</span>
+                <span style={styles.workHoursModalValue}>{selectedWorkHours.breakMinutes} minutes</span>
+              </div>
+              <div style={styles.workHoursModalRow}>
+                <span style={styles.workHoursModalLabel}>Total Hours</span>
+                <span style={{ ...styles.workHoursModalValue, fontWeight: 700, color: '#10B981' }}>
+                  {formatHoursDisplay(selectedWorkHours.totalHours)}
+                </span>
+              </div>
+              <div style={styles.workHoursModalRow}>
+                <span style={styles.workHoursModalLabel}>Status</span>
+                <span style={{
+                  ...styles.workHoursStatusBadge,
+                  backgroundColor: selectedWorkHours.status === 'approved' ? 'rgba(16, 185, 129, 0.2)' :
+                                   selectedWorkHours.status === 'rejected' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                  color: selectedWorkHours.status === 'approved' ? '#10B981' :
+                         selectedWorkHours.status === 'rejected' ? '#EF4444' : '#F59E0B',
+                }}>
+                  {selectedWorkHours.status.charAt(0).toUpperCase() + selectedWorkHours.status.slice(1)}
+                </span>
+              </div>
+              {selectedWorkHours.notes && (
+                <div style={styles.workHoursModalRow}>
+                  <span style={styles.workHoursModalLabel}>Notes</span>
+                  <span style={styles.workHoursModalValue}>{selectedWorkHours.notes}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1354,6 +1555,40 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     fontWeight: 700,
     whiteSpace: 'nowrap',
+  },
+  viewTypeToggle: {
+    display: 'flex',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    marginBottom: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  viewTypeButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 16px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: theme.colors.textSecondary,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  viewTypeButtonActive: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 16px',
+    backgroundColor: theme.colors.primary,
+    border: 'none',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#FFFFFF',
+    cursor: 'pointer',
   },
   controls: {
     display: 'flex',
@@ -2429,6 +2664,80 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '11px',
     color: theme.colors.textSecondary,
     marginTop: '2px',
+  },
+  // Work Hours Modal styles
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  workHoursModal: {
+    backgroundColor: theme.colors.bg.secondary,
+    borderRadius: theme.borderRadius.lg,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    maxWidth: '400px',
+    width: '90%',
+    boxShadow: theme.shadows.xl,
+  },
+  workHoursModalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 20px',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  workHoursModalTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '18px',
+    fontWeight: 700,
+    color: theme.colors.textPrimary,
+  },
+  workHoursModalClose: {
+    background: 'none',
+    border: 'none',
+    color: theme.colors.textSecondary,
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.borderRadius.sm,
+    transition: 'all 0.2s',
+  },
+  workHoursModalContent: {
+    padding: '20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  workHoursModalRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  workHoursModalLabel: {
+    fontSize: '14px',
+    color: theme.colors.textSecondary,
+  },
+  workHoursModalValue: {
+    fontSize: '14px',
+    color: theme.colors.textPrimary,
+    fontWeight: 500,
+  },
+  workHoursStatusBadge: {
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: 600,
   },
 };
 
