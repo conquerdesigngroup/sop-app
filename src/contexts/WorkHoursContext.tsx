@@ -169,7 +169,7 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     if (!useSupabase) return;
 
     const channel = supabase
-      .channel('work_hours_changes')
+      .channel('work_data_changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'work_hours' },
@@ -181,6 +181,20 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
             .order('work_date', { ascending: false });
           if (data) {
             setWorkHours(data.map(mapSupabaseWorkHours));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'work_days' },
+        async () => {
+          // Reload work days when changes detected
+          const { data } = await supabase
+            .from('work_days')
+            .select('*')
+            .order('work_date', { ascending: false });
+          if (data) {
+            setWorkDays(data.map(mapSupabaseWorkDay));
           }
         }
       )
@@ -406,7 +420,10 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, [currentUser, useSupabase]);
 
   const addWorkDays = useCallback(async (employeeId: string, dates: string[], notes?: string) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.error('No current user - cannot add work days');
+      throw new Error('No current user');
+    }
 
     const newWorkDays: WorkDay[] = dates.map(date => ({
       id: generateId('wd'),
@@ -419,25 +436,29 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     }));
 
     if (useSupabase) {
-      try {
-        const insertData = newWorkDays.map(wd => ({
-          employee_id: wd.employeeId,
-          work_date: wd.workDate,
-          status: wd.status,
-          notes: wd.notes,
-          created_by: wd.createdBy,
-        }));
+      const insertData = newWorkDays.map(wd => ({
+        employee_id: wd.employeeId,
+        work_date: wd.workDate,
+        status: wd.status,
+        notes: wd.notes,
+        created_by: wd.createdBy,
+      }));
 
-        const { data, error } = await supabase
-          .from('work_days')
-          .insert(insertData)
-          .select();
+      console.log('Inserting work days to Supabase:', insertData);
 
-        if (data && !error) {
-          setWorkDays(prev => [...data.map(mapSupabaseWorkDay), ...prev]);
-        }
-      } catch (error) {
-        console.error('Error adding work days:', error);
+      const { data, error } = await supabase
+        .from('work_days')
+        .insert(insertData)
+        .select();
+
+      if (error) {
+        console.error('Supabase error adding work days:', error);
+        throw error;
+      }
+
+      if (data) {
+        console.log('Work days added successfully:', data);
+        setWorkDays(prev => [...data.map(mapSupabaseWorkDay), ...prev]);
       }
     } else {
       setWorkDays(prev => [...newWorkDays, ...prev]);

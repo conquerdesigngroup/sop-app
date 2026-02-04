@@ -351,12 +351,16 @@ const WorkHoursPage: React.FC = () => {
     }
 
     try {
+      console.log('Adding work days for employee:', scheduleEmployee, 'dates:', selectedDates);
       await addWorkDays(scheduleEmployee, selectedDates, scheduleNotes || undefined);
       showToast(`${selectedDates.length} working day(s) added`, 'success');
       setShowScheduleModal(false);
       resetScheduleForm();
-    } catch (error) {
-      showToast('Failed to add working days', 'error');
+      // Switch to calendar view to show the added days
+      setViewMode('calendar');
+    } catch (error: any) {
+      console.error('Failed to add working days:', error);
+      showToast(`Failed to add working days: ${error?.message || 'Unknown error'}`, 'error');
     }
   };
 
