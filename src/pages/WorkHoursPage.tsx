@@ -3,27 +3,34 @@ import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkHours, calculateTotalHours } from '../contexts/WorkHoursContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { WorkHoursEntry, User } from '../types';
+import { WorkHoursEntry, WorkDay } from '../types';
 import { useToast } from '../contexts/ToastContext';
-
-// Generate unique ID
-const generateId = () => `wh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const WorkHoursPage: React.FC = () => {
   const { currentUser, users, isAdmin } = useAuth();
-  const { workHours, addWorkHours, updateWorkHours, deleteWorkHours, approveWorkHours, rejectWorkHours, getAllWorkHoursSummaries } = useWorkHours();
+  const {
+    workHours, addWorkHours, updateWorkHours, deleteWorkHours,
+    approveWorkHours, rejectWorkHours, getAllWorkHoursSummaries,
+    workDays, addWorkDays, deleteWorkDay, getWorkDaysByDateRange
+  } = useWorkHours();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<WorkHoursEntry | null>(null);
 
   // Filter states
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDateRange, setFilterDateRange] = useState<'week' | 'month' | 'all'>('week');
-  const [viewMode, setViewMode] = useState<'list' | 'summary'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'summary' | 'schedule'>('list');
+
+  // Schedule form states
+  const [scheduleEmployee, setScheduleEmployee] = useState<string>(currentUser?.id || '');
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [scheduleNotes, setScheduleNotes] = useState('');
 
   // Form states
   const [formEmployee, setFormEmployee] = useState<string>(currentUser?.id || '');
@@ -77,6 +84,47 @@ const WorkHoursPage: React.FC = () => {
     const { startDate, endDate } = getDateRange();
     return getAllWorkHoursSummaries(startDate, endDate);
   }, [getAllWorkHoursSummaries, filterDateRange]);
+
+  // Filter work days (schedule view)
+  const filteredWorkDays = useMemo(() => {
+    const { startDate, endDate } = getDateRange();
+
+    return workDays.filter(wd => {
+      // Non-admins can only see their own entries
+      if (!isAdmin && wd.employeeId !== currentUser?.id) return false;
+
+      const matchesEmployee = filterEmployee === 'all' || wd.employeeId === filterEmployee;
+      const matchesDate = filterDateRange === 'all' || (wd.workDate >= startDate && wd.workDate <= endDate);
+
+      return matchesEmployee && matchesDate;
+    }).sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime());
+  }, [workDays, filterEmployee, filterDateRange, isAdmin, currentUser]);
+
+  // Group work days by date for display
+  const workDaysByDate = useMemo(() => {
+    const grouped: { [date: string]: WorkDay[] } = {};
+    filteredWorkDays.forEach(wd => {
+      if (!grouped[wd.workDate]) {
+        grouped[wd.workDate] = [];
+      }
+      grouped[wd.workDate].push(wd);
+    });
+    return grouped;
+  }, [filteredWorkDays]);
+
+  // Get next 14 days for quick date selection
+  const getNextTwoWeeks = () => {
+    const dates: string[] = [];
+    const today = new Date();
+    for (let i = 0; i < 14; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      dates.push(date.toISOString().split('T')[0]);
+    }
+    return dates;
+  };
+
+  const nextTwoWeeks = getNextTwoWeeks();
 
   // Get active employees
   const activeEmployees = useMemo(() => {
@@ -171,6 +219,54 @@ const WorkHoursPage: React.FC = () => {
     showToast('Work hours rejected', 'error');
   };
 
+  // Schedule modal handlers
+  const resetScheduleForm = () => {
+    setScheduleEmployee(currentUser?.id || '');
+    setSelectedDates([]);
+    setScheduleNotes('');
+  };
+
+  const toggleDateSelection = (date: string) => {
+    setSelectedDates(prev =>
+      prev.includes(date)
+        ? prev.filter(d => d !== date)
+        : [...prev, date]
+    );
+  };
+
+  const handleAddSchedule = async () => {
+    if (!scheduleEmployee) {
+      showToast('Please select an employee', 'error');
+      return;
+    }
+    if (selectedDates.length === 0) {
+      showToast('Please select at least one day', 'error');
+      return;
+    }
+
+    try {
+      await addWorkDays(scheduleEmployee, selectedDates, scheduleNotes || undefined);
+      showToast(`${selectedDates.length} working day(s) added`, 'success');
+      setShowScheduleModal(false);
+      resetScheduleForm();
+    } catch (error) {
+      showToast('Failed to add working days', 'error');
+    }
+  };
+
+  const handleDeleteWorkDay = async (id: string) => {
+    if (window.confirm('Remove this working day?')) {
+      await deleteWorkDay(id);
+      showToast('Working day removed', 'success');
+    }
+  };
+
+  // Get day name
+  const getDayName = (dateStr: string) => {
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+  };
+
   // Format date
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr + 'T00:00:00');
@@ -204,16 +300,30 @@ const WorkHoursPage: React.FC = () => {
             {isAdmin ? 'Manage team schedules and work hours' : 'Track your work hours'}
           </p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowAddModal(true); }}
-          style={styles.addButton}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add Hours
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => { resetScheduleForm(); setShowScheduleModal(true); }}
+            style={styles.secondaryButton}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            Mark Days
+          </button>
+          <button
+            onClick={() => { resetForm(); setShowAddModal(true); }}
+            style={styles.addButton}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add Hours
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -228,7 +338,16 @@ const WorkHoursPage: React.FC = () => {
                 ...(viewMode === 'list' ? styles.toggleButtonActive : {}),
               }}
             >
-              List
+              Hours
+            </button>
+            <button
+              onClick={() => setViewMode('schedule')}
+              style={{
+                ...styles.toggleButton,
+                ...(viewMode === 'schedule' ? styles.toggleButtonActive : {}),
+              }}
+            >
+              Schedule
             </button>
             <button
               onClick={() => setViewMode('summary')}
@@ -362,6 +481,64 @@ const WorkHoursPage: React.FC = () => {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      ) : viewMode === 'schedule' ? (
+        // Schedule View (Working Days)
+        <div style={styles.listContainer}>
+          {filteredWorkDays.length === 0 ? (
+            <div style={styles.emptyState}>
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <h3>No scheduled days found</h3>
+              <p>Click "Mark Days" to add working days</p>
+            </div>
+          ) : (
+            Object.entries(workDaysByDate)
+              .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
+              .map(([date, days]) => (
+                <div key={date} style={styles.scheduleDateGroup}>
+                  <div style={styles.scheduleDateHeader}>
+                    <span style={styles.scheduleDateTitle}>{formatDate(date)}</span>
+                    <span style={styles.scheduleCount}>{days.length} {days.length === 1 ? 'person' : 'people'}</span>
+                  </div>
+                  <div style={styles.scheduleEmployeeList}>
+                    {days.map(day => (
+                      <div key={day.id} style={styles.scheduleEmployeeCard}>
+                        <div style={styles.scheduleEmployeeInfo}>
+                          <div style={styles.scheduleEmployeeName}>{getUserName(day.employeeId)}</div>
+                          {day.notes && <div style={styles.scheduleNotes}>{day.notes}</div>}
+                        </div>
+                        <div style={styles.scheduleActions}>
+                          <span style={{
+                            ...styles.scheduleStatusBadge,
+                            backgroundColor: day.status === 'confirmed' ? theme.colors.status.success :
+                              day.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info
+                          }}>
+                            {day.status}
+                          </span>
+                          {(isAdmin || day.employeeId === currentUser?.id) && (
+                            <button
+                              onClick={() => handleDeleteWorkDay(day.id)}
+                              style={styles.scheduleDeleteBtn}
+                              title="Remove"
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
           )}
         </div>
       ) : (
@@ -513,6 +690,98 @@ const WorkHoursPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Schedule Modal (Mark Working Days) */}
+      {showScheduleModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowScheduleModal(false)}>
+          <div style={{ ...styles.modal, maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h2 style={styles.modalTitle}>Mark Working Days</h2>
+              <button onClick={() => setShowScheduleModal(false)} style={styles.closeButton}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div style={styles.modalContent}>
+              {/* Employee Selection (Admin only) */}
+              {isAdmin && (
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Employee</label>
+                  <select
+                    value={scheduleEmployee}
+                    onChange={(e) => setScheduleEmployee(e.target.value)}
+                    style={styles.input}
+                  >
+                    <option value="">Select employee...</option>
+                    {activeEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.firstName} {emp.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Date Selection */}
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Select Days (next 2 weeks)</label>
+                <div style={styles.dateGrid}>
+                  {nextTwoWeeks.map(date => {
+                    const isSelected = selectedDates.includes(date);
+                    const dayName = getDayName(date);
+                    const dayNum = new Date(date + 'T00:00:00').getDate();
+                    const isWeekend = ['Sat', 'Sun'].includes(dayName);
+
+                    return (
+                      <button
+                        key={date}
+                        onClick={() => toggleDateSelection(date)}
+                        style={{
+                          ...styles.dateButton,
+                          ...(isSelected ? styles.dateButtonSelected : {}),
+                          ...(isWeekend && !isSelected ? styles.dateButtonWeekend : {}),
+                        }}
+                      >
+                        <span style={styles.dateDayName}>{dayName}</span>
+                        <span style={styles.dateDayNum}>{dayNum}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedDates.length > 0 && (
+                  <div style={styles.selectedCount}>
+                    {selectedDates.length} day{selectedDates.length !== 1 ? 's' : ''} selected
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Notes (optional)</label>
+                <input
+                  type="text"
+                  value={scheduleNotes}
+                  onChange={(e) => setScheduleNotes(e.target.value)}
+                  placeholder="e.g., Morning shift, Remote work..."
+                  style={styles.input}
+                />
+              </div>
+            </div>
+
+            <div style={styles.modalFooter}>
+              <button onClick={() => setShowScheduleModal(false)} style={styles.cancelButton}>
+                Cancel
+              </button>
+              <button onClick={handleAddSchedule} style={styles.saveButton}>
+                Add {selectedDates.length > 0 ? `${selectedDates.length} Day${selectedDates.length !== 1 ? 's' : ''}` : 'Days'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -554,6 +823,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.primary,
     color: '#FFFFFF',
     border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '15px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  secondaryButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 24px',
+    backgroundColor: theme.colors.bg.tertiary,
+    color: theme.colors.txt.primary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',
     fontWeight: 600,
@@ -928,6 +1210,125 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '15px',
     fontWeight: 600,
     cursor: 'pointer',
+  },
+  // Schedule view styles
+  scheduleDateGroup: {
+    backgroundColor: theme.colors.bg.secondary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: '16px',
+    overflow: 'hidden',
+  },
+  scheduleDateHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 20px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  scheduleDateTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  scheduleCount: {
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+  },
+  scheduleEmployeeList: {
+    padding: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  scheduleEmployeeCard: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+  },
+  scheduleEmployeeInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  scheduleEmployeeName: {
+    fontSize: '15px',
+    fontWeight: 500,
+    color: theme.colors.txt.primary,
+  },
+  scheduleNotes: {
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+  },
+  scheduleActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  scheduleStatusBadge: {
+    padding: '4px 10px',
+    borderRadius: theme.borderRadius.full,
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+  },
+  scheduleDeleteBtn: {
+    background: 'none',
+    border: 'none',
+    color: theme.colors.txt.tertiary,
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Date picker grid styles
+  dateGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '8px',
+  },
+  dateButton: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '12px 8px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  dateButtonSelected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: '#FFFFFF',
+  },
+  dateButtonWeekend: {
+    opacity: 0.6,
+  },
+  dateDayName: {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: 'inherit',
+    textTransform: 'uppercase',
+  },
+  dateDayNum: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: 'inherit',
+  },
+  selectedCount: {
+    marginTop: '12px',
+    fontSize: '14px',
+    color: theme.colors.primary,
+    fontWeight: 500,
   },
 };
 

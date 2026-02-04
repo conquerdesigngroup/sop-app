@@ -341,3 +341,18 @@ export interface WorkHoursSummary {
   pendingHours: number;
   daysWorked: number;
 }
+
+// Working Days Types (simple day marking without hours)
+
+export type WorkDayStatus = 'scheduled' | 'confirmed' | 'cancelled';
+
+export interface WorkDay {
+  id: string;
+  employeeId: string;
+  workDate: string; // ISO date format (YYYY-MM-DD)
+  status: WorkDayStatus;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}

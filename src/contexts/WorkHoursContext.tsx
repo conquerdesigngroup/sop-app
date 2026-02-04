@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
-import { WorkHoursEntry, WorkHoursSummary, User } from '../types';
+import { WorkHoursEntry, WorkHoursSummary, WorkDay } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -16,16 +16,39 @@ interface WorkHoursContextType {
   getWorkHoursByDateRange: (startDate: string, endDate: string) => WorkHoursEntry[];
   getWorkHoursSummary: (employeeId: string, startDate: string, endDate: string) => WorkHoursSummary | null;
   getAllWorkHoursSummaries: (startDate: string, endDate: string) => WorkHoursSummary[];
+  // Working Days (simple day marking)
+  workDays: WorkDay[];
+  addWorkDay: (employeeId: string, date: string, notes?: string) => Promise<void>;
+  addWorkDays: (employeeId: string, dates: string[], notes?: string) => Promise<void>;
+  updateWorkDay: (id: string, updates: Partial<WorkDay>) => Promise<void>;
+  deleteWorkDay: (id: string) => Promise<void>;
+  getWorkDaysByEmployee: (employeeId: string) => WorkDay[];
+  getWorkDaysByDateRange: (startDate: string, endDate: string) => WorkDay[];
   loading: boolean;
 }
 
 const WorkHoursContext = createContext<WorkHoursContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'sop_app_work_hours';
+const WORK_DAYS_STORAGE_KEY = 'sop_app_work_days';
 
 // Generate unique ID
-const generateId = () => {
-  return `wh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const generateId = (prefix: string = 'wh') => {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Map Supabase data to WorkDay type
+const mapSupabaseWorkDay = (dbEntry: any): WorkDay => {
+  return {
+    id: dbEntry.id,
+    employeeId: dbEntry.employee_id,
+    workDate: dbEntry.work_date,
+    status: dbEntry.status,
+    notes: dbEntry.notes,
+    createdBy: dbEntry.created_by,
+    createdAt: dbEntry.created_at,
+    updatedAt: dbEntry.updated_at,
+  };
 };
 
 // Calculate total hours from start/end times and break
@@ -80,49 +103,66 @@ const mapToSupabase = (entry: Partial<WorkHoursEntry>) => {
 
 export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [workHours, setWorkHours] = useState<WorkHoursEntry[]>([]);
+  const [workDays, setWorkDays] = useState<WorkDay[]>([]);
   const [loading, setLoading] = useState(true);
   const { currentUser, users } = useAuth();
   const useSupabase = isSupabaseConfigured();
 
-  // Load work hours
+  // Load work hours and work days
   useEffect(() => {
-    const loadWorkHours = async () => {
+    const loadData = async () => {
       if (useSupabase) {
         try {
-          const { data, error } = await supabase
+          // Load work hours
+          const { data: hoursData, error: hoursError } = await supabase
             .from('work_hours')
             .select('*')
             .order('work_date', { ascending: false });
 
-          if (data && !error) {
-            setWorkHours(data.map(mapSupabaseWorkHours));
+          if (hoursData && !hoursError) {
+            setWorkHours(hoursData.map(mapSupabaseWorkHours));
+          }
+
+          // Load work days
+          const { data: daysData, error: daysError } = await supabase
+            .from('work_days')
+            .select('*')
+            .order('work_date', { ascending: false });
+
+          if (daysData && !daysError) {
+            setWorkDays(daysData.map(mapSupabaseWorkDay));
           }
         } catch (error) {
-          console.error('Error loading work hours:', error);
+          console.error('Error loading work data:', error);
         }
       } else {
         // localStorage fallback
         try {
-          const stored = localStorage.getItem(STORAGE_KEY);
-          if (stored) {
-            setWorkHours(JSON.parse(stored));
+          const storedHours = localStorage.getItem(STORAGE_KEY);
+          if (storedHours) {
+            setWorkHours(JSON.parse(storedHours));
+          }
+          const storedDays = localStorage.getItem(WORK_DAYS_STORAGE_KEY);
+          if (storedDays) {
+            setWorkDays(JSON.parse(storedDays));
           }
         } catch (error) {
-          console.error('Error loading work hours from localStorage:', error);
+          console.error('Error loading work data from localStorage:', error);
         }
       }
       setLoading(false);
     };
 
-    loadWorkHours();
+    loadData();
   }, [useSupabase]);
 
   // Save to localStorage when using localStorage mode
   useEffect(() => {
     if (!loading && !useSupabase) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(workHours));
+      localStorage.setItem(WORK_DAYS_STORAGE_KEY, JSON.stringify(workDays));
     }
-  }, [workHours, loading, useSupabase]);
+  }, [workHours, workDays, loading, useSupabase]);
 
   // Subscribe to real-time changes if using Supabase
   useEffect(() => {
@@ -325,6 +365,140 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
       .sort((a, b) => b.totalHours - a.totalHours);
   }, [workHours, getWorkHoursSummary]);
 
+  // ==================== WORK DAYS FUNCTIONS ====================
+
+  const addWorkDay = useCallback(async (employeeId: string, date: string, notes?: string) => {
+    if (!currentUser) return;
+
+    const newWorkDay: WorkDay = {
+      id: generateId('wd'),
+      employeeId,
+      workDate: date,
+      status: 'scheduled',
+      notes,
+      createdBy: currentUser.id,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (useSupabase) {
+      try {
+        const { data, error } = await supabase
+          .from('work_days')
+          .insert([{
+            employee_id: newWorkDay.employeeId,
+            work_date: newWorkDay.workDate,
+            status: newWorkDay.status,
+            notes: newWorkDay.notes,
+            created_by: newWorkDay.createdBy,
+          }])
+          .select()
+          .single();
+
+        if (data && !error) {
+          setWorkDays(prev => [mapSupabaseWorkDay(data), ...prev]);
+        }
+      } catch (error) {
+        console.error('Error adding work day:', error);
+      }
+    } else {
+      setWorkDays(prev => [newWorkDay, ...prev]);
+    }
+  }, [currentUser, useSupabase]);
+
+  const addWorkDays = useCallback(async (employeeId: string, dates: string[], notes?: string) => {
+    if (!currentUser) return;
+
+    const newWorkDays: WorkDay[] = dates.map(date => ({
+      id: generateId('wd'),
+      employeeId,
+      workDate: date,
+      status: 'scheduled' as const,
+      notes,
+      createdBy: currentUser.id,
+      createdAt: new Date().toISOString(),
+    }));
+
+    if (useSupabase) {
+      try {
+        const insertData = newWorkDays.map(wd => ({
+          employee_id: wd.employeeId,
+          work_date: wd.workDate,
+          status: wd.status,
+          notes: wd.notes,
+          created_by: wd.createdBy,
+        }));
+
+        const { data, error } = await supabase
+          .from('work_days')
+          .insert(insertData)
+          .select();
+
+        if (data && !error) {
+          setWorkDays(prev => [...data.map(mapSupabaseWorkDay), ...prev]);
+        }
+      } catch (error) {
+        console.error('Error adding work days:', error);
+      }
+    } else {
+      setWorkDays(prev => [...newWorkDays, ...prev]);
+    }
+  }, [currentUser, useSupabase]);
+
+  const updateWorkDay = useCallback(async (id: string, updates: Partial<WorkDay>) => {
+    if (useSupabase) {
+      try {
+        const mapped: any = {};
+        if (updates.status !== undefined) mapped.status = updates.status;
+        if (updates.notes !== undefined) mapped.notes = updates.notes;
+        mapped.updated_at = new Date().toISOString();
+
+        const { error } = await supabase
+          .from('work_days')
+          .update(mapped)
+          .eq('id', id);
+
+        if (!error) {
+          setWorkDays(prev => prev.map(wd =>
+            wd.id === id ? { ...wd, ...updates, updatedAt: new Date().toISOString() } : wd
+          ));
+        }
+      } catch (error) {
+        console.error('Error updating work day:', error);
+      }
+    } else {
+      setWorkDays(prev => prev.map(wd =>
+        wd.id === id ? { ...wd, ...updates, updatedAt: new Date().toISOString() } : wd
+      ));
+    }
+  }, [useSupabase]);
+
+  const deleteWorkDay = useCallback(async (id: string) => {
+    if (useSupabase) {
+      try {
+        const { error } = await supabase
+          .from('work_days')
+          .delete()
+          .eq('id', id);
+
+        if (!error) {
+          setWorkDays(prev => prev.filter(wd => wd.id !== id));
+        }
+      } catch (error) {
+        console.error('Error deleting work day:', error);
+      }
+    } else {
+      setWorkDays(prev => prev.filter(wd => wd.id !== id));
+    }
+  }, [useSupabase]);
+
+  const getWorkDaysByEmployee = useCallback((employeeId: string) => {
+    return workDays.filter(wd => wd.employeeId === employeeId);
+  }, [workDays]);
+
+  const getWorkDaysByDateRange = useCallback((startDate: string, endDate: string) => {
+    return workDays.filter(wd => wd.workDate >= startDate && wd.workDate <= endDate);
+  }, [workDays]);
+
   const value = useMemo(() => ({
     workHours,
     addWorkHours,
@@ -338,6 +512,14 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     getWorkHoursByDateRange,
     getWorkHoursSummary,
     getAllWorkHoursSummaries,
+    // Work Days
+    workDays,
+    addWorkDay,
+    addWorkDays,
+    updateWorkDay,
+    deleteWorkDay,
+    getWorkDaysByEmployee,
+    getWorkDaysByDateRange,
     loading,
   }), [
     workHours,
@@ -352,6 +534,13 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     getWorkHoursByDateRange,
     getWorkHoursSummary,
     getAllWorkHoursSummaries,
+    workDays,
+    addWorkDay,
+    addWorkDays,
+    updateWorkDay,
+    deleteWorkDay,
+    getWorkDaysByEmployee,
+    getWorkDaysByDateRange,
     loading,
   ]);
 
