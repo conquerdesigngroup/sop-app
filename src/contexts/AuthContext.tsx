@@ -151,13 +151,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       try {
         console.log('[Auth] Checking Supabase session...');
-        // Check for existing Supabase session with timeout
+        // Check for existing Supabase session with shorter timeout (5 seconds)
         const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Session check timeout')), 10000)
+        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+          setTimeout(() => {
+            console.log('[Auth] Session check timed out - continuing without session');
+            resolve({ data: { session: null } });
+          }, 5000)
         );
 
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        const result = await Promise.race([sessionPromise, timeoutPromise]);
+        const session = result?.data?.session;
         console.log('[Auth] Session check complete, has session:', !!session);
 
         if (session?.user) {

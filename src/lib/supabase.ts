@@ -42,26 +42,34 @@ export const hasActivityLogsTable = true;
 let supabaseClient: SupabaseClient | null = null;
 
 if (isSupabaseConfigured()) {
-  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-    db: {
-      schema: 'public',
-    },
-    global: {
-      headers: {
-        'x-application-name': 'sop-app',
+  try {
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'sop-app-auth', // Custom storage key to avoid conflicts
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
       },
-    },
-    realtime: {
-      params: {
-        eventsPerSecond: 10,
+      db: {
+        schema: 'public',
       },
-    },
-  });
+      global: {
+        headers: {
+          'x-application-name': 'sop-app',
+        },
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    });
+    console.log('[SOP App] Supabase client created successfully');
+  } catch (error) {
+    console.error('[SOP App] Error creating Supabase client:', error);
+    supabaseClient = null;
+  }
 }
 
 // Export the client (will be null if not configured)
