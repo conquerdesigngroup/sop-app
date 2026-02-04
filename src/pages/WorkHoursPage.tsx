@@ -1713,7 +1713,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '24px',
+    padding: '16px 20px',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
   modalTitle: {
@@ -1729,10 +1729,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '4px',
   },
   modalContent: {
-    padding: '24px',
+    padding: '16px 20px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
+    gap: '16px',
   },
   formGroup: {
     display: 'flex',
@@ -1935,7 +1935,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '16px',
+    marginBottom: '12px',
   },
   scheduleNavButton: {
     background: 'none',
@@ -1956,19 +1956,18 @@ const styles: { [key: string]: React.CSSProperties } = {
   scheduleCalendarGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: '4px',
-    marginBottom: '16px',
+    gap: '3px',
+    marginBottom: '12px',
   },
   scheduleCalendarDayHeader: {
-    padding: '8px 4px',
+    padding: '6px 2px',
     textAlign: 'center',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 600,
     color: theme.colors.txt.tertiary,
     textTransform: 'uppercase',
   },
   scheduleCalendarDay: {
-    aspectRatio: '1',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -1979,7 +1978,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     transition: 'all 0.15s',
     position: 'relative',
-    minHeight: '50px',
+    padding: '8px 4px',
+    minHeight: '40px',
   },
   scheduleCalendarDayOther: {
     opacity: 0.3,
@@ -2179,9 +2179,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   scheduleModalLegend: {
     display: 'flex',
     justifyContent: 'center',
-    gap: '20px',
-    marginBottom: '16px',
-    paddingBottom: '16px',
+    gap: '16px',
+    marginBottom: '12px',
+    paddingBottom: '12px',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
   changesSummary: {
