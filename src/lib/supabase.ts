@@ -53,3 +53,4 @@ export const supabase = supabaseClient as any;
 
 // Export types for TypeScript
 export type { User as SupabaseUser, Session as SupabaseSession } from '@supabase/supabase-js';
+// Force rebuild Tue Feb  3 22:32:39 PST 2026
