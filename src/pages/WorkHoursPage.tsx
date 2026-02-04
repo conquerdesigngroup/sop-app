@@ -33,7 +33,9 @@ const WorkHoursPage: React.FC = () => {
   // Schedule form states
   const [scheduleEmployee, setScheduleEmployee] = useState<string>(currentUser?.id || '');
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [datesToRemove, setDatesToRemove] = useState<string[]>([]);
   const [scheduleNotes, setScheduleNotes] = useState('');
+  const [scheduleModalMonth, setScheduleModalMonth] = useState(new Date());
 
   // Form states
   const [formEmployee, setFormEmployee] = useState<string>(currentUser?.id || '');
@@ -329,15 +331,102 @@ const WorkHoursPage: React.FC = () => {
   const resetScheduleForm = () => {
     setScheduleEmployee(currentUser?.id || '');
     setSelectedDates([]);
+    setDatesToRemove([]);
     setScheduleNotes('');
+    setScheduleModalMonth(new Date());
   };
 
+  // Get existing work days for the selected employee
+  const getExistingWorkDaysForEmployee = (employeeId: string) => {
+    return workDays.filter(wd => wd.employeeId === employeeId && wd.status !== 'cancelled');
+  };
+
+  const existingWorkDayDates = useMemo(() => {
+    if (!scheduleEmployee) return [];
+    return getExistingWorkDaysForEmployee(scheduleEmployee).map(wd => wd.workDate);
+  }, [scheduleEmployee, workDays]);
+
+  // Get calendar days for the schedule modal
+  const getScheduleModalCalendarDays = () => {
+    const year = scheduleModalMonth.getFullYear();
+    const month = scheduleModalMonth.getMonth();
+
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDay = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+
+    const days: { date: string; dayNum: number; isCurrentMonth: boolean }[] = [];
+
+    // Previous month days
+    const prevMonthLastDay = new Date(year, month, 0);
+    const prevMonthDays = prevMonthLastDay.getDate();
+    for (let i = startDay - 1; i >= 0; i--) {
+      const dayNum = prevMonthDays - i;
+      const date = new Date(year, month - 1, dayNum);
+      days.push({
+        date: date.toISOString().split('T')[0],
+        dayNum,
+        isCurrentMonth: false,
+      });
+    }
+
+    // Current month days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      days.push({
+        date: date.toISOString().split('T')[0],
+        dayNum: i,
+        isCurrentMonth: true,
+      });
+    }
+
+    // Next month days to fill the grid (6 rows)
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      const date = new Date(year, month + 1, i);
+      days.push({
+        date: date.toISOString().split('T')[0],
+        dayNum: i,
+        isCurrentMonth: false,
+      });
+    }
+
+    return days;
+  };
+
+  const scheduleModalDays = getScheduleModalCalendarDays();
+
+  // Handle date toggle in schedule modal
   const toggleDateSelection = (date: string) => {
-    setSelectedDates(prev =>
-      prev.includes(date)
-        ? prev.filter(d => d !== date)
-        : [...prev, date]
-    );
+    const isExisting = existingWorkDayDates.includes(date);
+    const isMarkedForRemoval = datesToRemove.includes(date);
+    const isNewlySelected = selectedDates.includes(date);
+
+    if (isExisting) {
+      // Toggle removal of existing day
+      if (isMarkedForRemoval) {
+        setDatesToRemove(prev => prev.filter(d => d !== date));
+      } else {
+        setDatesToRemove(prev => [...prev, date]);
+      }
+    } else {
+      // Toggle new day selection
+      if (isNewlySelected) {
+        setSelectedDates(prev => prev.filter(d => d !== date));
+      } else {
+        setSelectedDates(prev => [...prev, date]);
+      }
+    }
+  };
+
+  // Navigate schedule modal calendar
+  const prevScheduleMonth = () => {
+    setScheduleModalMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const nextScheduleMonth = () => {
+    setScheduleModalMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
   const handleAddSchedule = async () => {
@@ -345,22 +434,46 @@ const WorkHoursPage: React.FC = () => {
       showToast('Please select an employee', 'error');
       return;
     }
-    if (selectedDates.length === 0) {
-      showToast('Please select at least one day', 'error');
+    if (selectedDates.length === 0 && datesToRemove.length === 0) {
+      showToast('Please select days to add or remove', 'error');
       return;
     }
 
     try {
-      console.log('Adding work days for employee:', scheduleEmployee, 'dates:', selectedDates);
-      await addWorkDays(scheduleEmployee, selectedDates, scheduleNotes || undefined);
-      showToast(`${selectedDates.length} working day(s) added`, 'success');
+      let addedCount = 0;
+      let removedCount = 0;
+
+      // Remove days marked for removal
+      if (datesToRemove.length > 0) {
+        const existingDays = getExistingWorkDaysForEmployee(scheduleEmployee);
+        for (const date of datesToRemove) {
+          const dayToRemove = existingDays.find(wd => wd.workDate === date);
+          if (dayToRemove) {
+            await deleteWorkDay(dayToRemove.id);
+            removedCount++;
+          }
+        }
+      }
+
+      // Add new days
+      if (selectedDates.length > 0) {
+        await addWorkDays(scheduleEmployee, selectedDates, scheduleNotes || undefined);
+        addedCount = selectedDates.length;
+      }
+
+      // Show appropriate message
+      const messages: string[] = [];
+      if (addedCount > 0) messages.push(`${addedCount} day${addedCount !== 1 ? 's' : ''} added`);
+      if (removedCount > 0) messages.push(`${removedCount} day${removedCount !== 1 ? 's' : ''} removed`);
+      showToast(messages.join(', '), 'success');
+
       setShowScheduleModal(false);
       resetScheduleForm();
-      // Switch to calendar view to show the added days
+      // Switch to calendar view to show the changes
       setViewMode('calendar');
     } catch (error: any) {
-      console.error('Failed to add working days:', error);
-      showToast(`Failed to add working days: ${error?.message || 'Unknown error'}`, 'error');
+      console.error('Failed to update schedule:', error);
+      showToast(`Failed to update schedule: ${error?.message || 'Unknown error'}`, 'error');
     }
   };
 
@@ -907,9 +1020,9 @@ const WorkHoursPage: React.FC = () => {
       {/* Schedule Modal (Mark Working Days) */}
       {showScheduleModal && (
         <div style={styles.modalOverlay} onClick={() => setShowScheduleModal(false)}>
-          <div style={{ ...styles.modal, maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+          <div style={{ ...styles.modal, maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>Mark Working Days</h2>
+              <h2 style={styles.modalTitle}>Manage Work Schedule</h2>
               <button onClick={() => setShowScheduleModal(false)} style={styles.closeButton}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -925,7 +1038,11 @@ const WorkHoursPage: React.FC = () => {
                   <label style={styles.label}>Employee</label>
                   <select
                     value={scheduleEmployee}
-                    onChange={(e) => setScheduleEmployee(e.target.value)}
+                    onChange={(e) => {
+                      setScheduleEmployee(e.target.value);
+                      setSelectedDates([]);
+                      setDatesToRemove([]);
+                    }}
                     style={styles.input}
                   >
                     <option value="">Select employee...</option>
@@ -938,42 +1055,106 @@ const WorkHoursPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Date Selection */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Select Days (next 2 weeks)</label>
-                <div style={styles.dateGrid}>
-                  {nextTwoWeeks.map(date => {
-                    const isSelected = selectedDates.includes(date);
-                    const dayName = getDayName(date);
-                    const dayNum = new Date(date + 'T00:00:00').getDate();
-                    const isWeekend = ['Sat', 'Sun'].includes(dayName);
-
-                    return (
-                      <button
-                        key={date}
-                        onClick={() => toggleDateSelection(date)}
-                        style={{
-                          ...styles.dateButton,
-                          ...(isSelected ? styles.dateButtonSelected : {}),
-                          ...(isWeekend && !isSelected ? styles.dateButtonWeekend : {}),
-                        }}
-                      >
-                        <span style={styles.dateDayName}>{dayName}</span>
-                        <span style={styles.dateDayNum}>{dayNum}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {selectedDates.length > 0 && (
-                  <div style={styles.selectedCount}>
-                    {selectedDates.length} day{selectedDates.length !== 1 ? 's' : ''} selected
-                  </div>
-                )}
+              {/* Calendar Navigation */}
+              <div style={styles.scheduleCalendarHeader}>
+                <button onClick={prevScheduleMonth} style={styles.scheduleNavButton}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
+                <span style={styles.scheduleMonthTitle}>
+                  {scheduleModalMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </span>
+                <button onClick={nextScheduleMonth} style={styles.scheduleNavButton}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
               </div>
+
+              {/* Calendar Grid */}
+              <div style={styles.scheduleCalendarGrid}>
+                {/* Day Headers */}
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} style={styles.scheduleCalendarDayHeader}>{day}</div>
+                ))}
+
+                {/* Calendar Days */}
+                {scheduleModalDays.map((day, index) => {
+                  const isExisting = existingWorkDayDates.includes(day.date);
+                  const isMarkedForRemoval = datesToRemove.includes(day.date);
+                  const isNewlySelected = selectedDates.includes(day.date);
+                  const isToday = day.date === new Date().toISOString().split('T')[0];
+                  const isPast = new Date(day.date) < new Date(new Date().toISOString().split('T')[0]);
+                  const dayOfWeek = new Date(day.date + 'T00:00:00').getDay();
+                  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => day.isCurrentMonth && toggleDateSelection(day.date)}
+                      disabled={!day.isCurrentMonth}
+                      style={{
+                        ...styles.scheduleCalendarDay,
+                        ...(day.isCurrentMonth ? {} : styles.scheduleCalendarDayOther),
+                        ...(isToday ? styles.scheduleCalendarDayToday : {}),
+                        ...(isWeekend && day.isCurrentMonth ? styles.scheduleCalendarDayWeekend : {}),
+                        ...(isExisting && !isMarkedForRemoval ? styles.scheduleCalendarDayExisting : {}),
+                        ...(isMarkedForRemoval ? styles.scheduleCalendarDayRemove : {}),
+                        ...(isNewlySelected ? styles.scheduleCalendarDayNew : {}),
+                        ...(isPast && day.isCurrentMonth ? styles.scheduleCalendarDayPast : {}),
+                      }}
+                    >
+                      <span style={styles.scheduleCalendarDayNum}>{day.dayNum}</span>
+                      {isExisting && !isMarkedForRemoval && (
+                        <span style={styles.scheduleDayIndicator}>●</span>
+                      )}
+                      {isMarkedForRemoval && (
+                        <span style={styles.scheduleDayRemoveIndicator}>✕</span>
+                      )}
+                      {isNewlySelected && (
+                        <span style={styles.scheduleDayNewIndicator}>+</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div style={styles.scheduleModalLegend}>
+                <div style={styles.legendItem}>
+                  <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.info }} />
+                  <span>Scheduled</span>
+                </div>
+                <div style={styles.legendItem}>
+                  <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.success }} />
+                  <span>Add</span>
+                </div>
+                <div style={styles.legendItem}>
+                  <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.error }} />
+                  <span>Remove</span>
+                </div>
+              </div>
+
+              {/* Summary of Changes */}
+              {(selectedDates.length > 0 || datesToRemove.length > 0) && (
+                <div style={styles.changesSummary}>
+                  {selectedDates.length > 0 && (
+                    <span style={styles.addingSummary}>
+                      +{selectedDates.length} day{selectedDates.length !== 1 ? 's' : ''} to add
+                    </span>
+                  )}
+                  {datesToRemove.length > 0 && (
+                    <span style={styles.removingSummary}>
+                      -{datesToRemove.length} day{datesToRemove.length !== 1 ? 's' : ''} to remove
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Notes */}
               <div style={styles.formGroup}>
-                <label style={styles.label}>Notes (optional)</label>
+                <label style={styles.label}>Notes for new days (optional)</label>
                 <input
                   type="text"
                   value={scheduleNotes}
@@ -985,11 +1166,18 @@ const WorkHoursPage: React.FC = () => {
             </div>
 
             <div style={styles.modalFooter}>
-              <button onClick={() => setShowScheduleModal(false)} style={styles.cancelButton}>
+              <button onClick={() => { setShowScheduleModal(false); resetScheduleForm(); }} style={styles.cancelButton}>
                 Cancel
               </button>
-              <button onClick={handleAddSchedule} style={styles.saveButton}>
-                Add {selectedDates.length > 0 ? `${selectedDates.length} Day${selectedDates.length !== 1 ? 's' : ''}` : 'Days'}
+              <button
+                onClick={handleAddSchedule}
+                style={{
+                  ...styles.saveButton,
+                  opacity: (selectedDates.length === 0 && datesToRemove.length === 0) ? 0.5 : 1,
+                }}
+                disabled={selectedDates.length === 0 && datesToRemove.length === 0}
+              >
+                Save Changes
               </button>
             </div>
           </div>
@@ -1542,6 +1730,123 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     color: theme.colors.primary,
     fontWeight: 500,
+  },
+  // Schedule Modal Calendar styles
+  scheduleCalendarHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '16px',
+  },
+  scheduleNavButton: {
+    background: 'none',
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.sm,
+    padding: '8px',
+    color: theme.colors.txt.primary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scheduleMonthTitle: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  scheduleCalendarGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '4px',
+    marginBottom: '16px',
+  },
+  scheduleCalendarDayHeader: {
+    padding: '8px 4px',
+    textAlign: 'center',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.txt.tertiary,
+    textTransform: 'uppercase',
+  },
+  scheduleCalendarDay: {
+    aspectRatio: '1',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `2px solid transparent`,
+    borderRadius: theme.borderRadius.sm,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+    position: 'relative',
+    minHeight: '50px',
+  },
+  scheduleCalendarDayOther: {
+    opacity: 0.3,
+    cursor: 'default',
+  },
+  scheduleCalendarDayToday: {
+    borderColor: theme.colors.primary,
+  },
+  scheduleCalendarDayWeekend: {
+    backgroundColor: theme.colors.bg.primary,
+  },
+  scheduleCalendarDayExisting: {
+    backgroundColor: theme.colors.status.info,
+    color: '#FFFFFF',
+  },
+  scheduleCalendarDayNew: {
+    backgroundColor: theme.colors.status.success,
+    color: '#FFFFFF',
+  },
+  scheduleCalendarDayRemove: {
+    backgroundColor: theme.colors.status.error,
+    color: '#FFFFFF',
+    opacity: 0.8,
+  },
+  scheduleCalendarDayPast: {
+    opacity: 0.5,
+  },
+  scheduleCalendarDayNum: {
+    fontSize: '14px',
+    fontWeight: 500,
+  },
+  scheduleDayIndicator: {
+    fontSize: '8px',
+    marginTop: '2px',
+  },
+  scheduleDayNewIndicator: {
+    fontSize: '12px',
+    fontWeight: 700,
+    marginTop: '2px',
+  },
+  scheduleDayRemoveIndicator: {
+    fontSize: '10px',
+    fontWeight: 700,
+    marginTop: '2px',
+  },
+  scheduleModalLegend: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '20px',
+    marginBottom: '16px',
+    paddingBottom: '16px',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  changesSummary: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '16px',
+    marginBottom: '16px',
+    fontSize: '14px',
+    fontWeight: 500,
+  },
+  addingSummary: {
+    color: theme.colors.status.success,
+  },
+  removingSummary: {
+    color: theme.colors.status.error,
   },
   // Calendar styles
   calendarContainer: {
