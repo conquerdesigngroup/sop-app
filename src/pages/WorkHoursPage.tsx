@@ -10,7 +10,6 @@ const WorkHoursPage: React.FC = () => {
   const { currentUser, users, isAdmin } = useAuth();
   const {
     workHours, addWorkHours, updateWorkHours, deleteWorkHours,
-    approveWorkHours, rejectWorkHours, getAllWorkHoursSummaries,
     workDays, addWorkDays, deleteWorkDay, getWorkDaysByDateRange
   } = useWorkHours();
   const { showToast } = useToast();
@@ -30,7 +29,6 @@ const WorkHoursPage: React.FC = () => {
 
   // Filter states
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDateRange, setFilterDateRange] = useState<'week' | 'month' | 'all'>('week');
   const [viewMode, setViewMode] = useState<'list' | 'schedule' | 'calendar'>('calendar');
 
@@ -44,6 +42,16 @@ const WorkHoursPage: React.FC = () => {
   const [datesToRemove, setDatesToRemove] = useState<string[]>([]);
   const [scheduleNotes, setScheduleNotes] = useState('');
   const [scheduleModalMonth, setScheduleModalMonth] = useState(new Date());
+  const [recurringDays, setRecurringDays] = useState<number[]>([]); // 0=Sun, 1=Mon, etc.
+
+  // Schedule templates
+  const scheduleTemplates = [
+    { label: 'Mon-Fri', days: [1, 2, 3, 4, 5] },
+    { label: 'Mon-Sat', days: [1, 2, 3, 4, 5, 6] },
+    { label: 'Weekends', days: [0, 6] },
+    { label: 'MWF', days: [1, 3, 5] },
+    { label: 'Tue-Thu', days: [2, 4] },
+  ];
 
   // Form states
   const [formEmployee, setFormEmployee] = useState<string>(currentUser?.id || '');
@@ -124,18 +132,11 @@ const WorkHoursPage: React.FC = () => {
       if (!isAdmin && wh.employeeId !== currentUser?.id) return false;
 
       const matchesEmployee = filterEmployee === 'all' || wh.employeeId === filterEmployee;
-      const matchesStatus = filterStatus === 'all' || wh.status === filterStatus;
       const matchesDate = filterDateRange === 'all' || (wh.workDate >= startDate && wh.workDate <= endDate);
 
-      return matchesEmployee && matchesStatus && matchesDate;
+      return matchesEmployee && matchesDate;
     }).sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime());
-  }, [workHours, filterEmployee, filterStatus, filterDateRange, isAdmin, currentUser]);
-
-  // Get summaries
-  const summaries = useMemo(() => {
-    const { startDate, endDate } = getDateRange();
-    return getAllWorkHoursSummaries(startDate, endDate);
-  }, [getAllWorkHoursSummaries, filterDateRange]);
+  }, [workHours, filterEmployee, filterDateRange, isAdmin, currentUser]);
 
   // Filter work days (schedule view) - includes future dates
   const filteredWorkDays = useMemo(() => {
@@ -328,6 +329,41 @@ const WorkHoursPage: React.FC = () => {
     setEditingEntry(null);
   };
 
+  // Get last work hours entry for employee (for copy feature)
+  const getLastWorkHoursEntry = (employeeId: string) => {
+    const employeeEntries = workHours
+      .filter(wh => wh.employeeId === employeeId)
+      .sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime());
+    return employeeEntries.length > 0 ? employeeEntries[0] : null;
+  };
+
+  // Copy previous hours to form
+  const copyPreviousHours = () => {
+    const lastEntry = getLastWorkHoursEntry(formEmployee);
+    if (lastEntry) {
+      setFormStartTime(lastEntry.startTime);
+      setFormEndTime(lastEntry.endTime);
+      setFormBreakMinutes(lastEntry.breakMinutes);
+      showToast('Copied from your last entry', 'success');
+    } else {
+      showToast('No previous hours found to copy', 'error');
+    }
+  };
+
+  // Time presets
+  const timePresets = [
+    { label: '9-5', start: '09:00', end: '17:00', break: 30 },
+    { label: '8-4', start: '08:00', end: '16:00', break: 30 },
+    { label: '8-5', start: '08:00', end: '17:00', break: 60 },
+    { label: '10-6', start: '10:00', end: '18:00', break: 30 },
+  ];
+
+  const applyTimePreset = (preset: typeof timePresets[0]) => {
+    setFormStartTime(preset.start);
+    setFormEndTime(preset.end);
+    setFormBreakMinutes(preset.break);
+  };
+
   // Open edit modal
   const openEditModal = (entry: WorkHoursEntry) => {
     setEditingEntry(entry);
@@ -386,17 +422,6 @@ const WorkHoursPage: React.FC = () => {
     }
   };
 
-  // Handle approve/reject
-  const handleApprove = async (id: string) => {
-    await approveWorkHours(id);
-    showToast('Work hours approved', 'success');
-  };
-
-  const handleReject = async (id: string) => {
-    await rejectWorkHours(id);
-    showToast('Work hours rejected', 'error');
-  };
-
   // Schedule modal handlers
   const resetScheduleForm = () => {
     setScheduleEmployee(currentUser?.id || '');
@@ -406,6 +431,41 @@ const WorkHoursPage: React.FC = () => {
     setScheduleModalMonth(new Date());
     setSelectedDayForDetail(null);
     setShowHoursForm(false);
+    setRecurringDays([]);
+  };
+
+  // Apply schedule template - selects all matching days in current month view
+  const applyScheduleTemplate = (dayNumbers: number[]) => {
+    const year = scheduleModalMonth.getFullYear();
+    const month = scheduleModalMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const newDates: string[] = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayOfWeek = date.getDay();
+
+      // Only add future dates that match the template and aren't already scheduled
+      if (dayNumbers.includes(dayOfWeek) &&
+          date >= new Date(new Date().toISOString().split('T')[0]) &&
+          !existingWorkDayDates.includes(dateStr)) {
+        newDates.push(dateStr);
+      }
+    }
+
+    setSelectedDates(prev => Array.from(new Set([...prev, ...newDates])));
+    setRecurringDays(dayNumbers);
+    showToast(`Selected ${newDates.length} days`, 'success');
+  };
+
+  // Toggle recurring day
+  const toggleRecurringDay = (dayNum: number) => {
+    setRecurringDays(prev =>
+      prev.includes(dayNum)
+        ? prev.filter(d => d !== dayNum)
+        : [...prev, dayNum]
+    );
   };
 
   // Get existing work days for the selected employee
@@ -646,15 +706,6 @@ const WorkHoursPage: React.FC = () => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
-  // Get status color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return theme.colors.status.success;
-      case 'rejected': return theme.colors.status.error;
-      default: return theme.colors.status.warning;
-    }
-  };
-
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
       {/* Header */}
@@ -743,17 +794,6 @@ const WorkHoursPage: React.FC = () => {
             </select>
           )}
 
-          {/* Status Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
         </div>
       </div>
 
@@ -774,16 +814,13 @@ const WorkHoursPage: React.FC = () => {
               <div key={entry.id} style={styles.entryCard}>
                 <div style={styles.entryHeader}>
                   <div style={styles.entryDate}>{formatDate(entry.workDate)}</div>
-                  <span style={{ ...styles.statusBadge, backgroundColor: getStatusColor(entry.status) }}>
-                    {entry.status}
-                  </span>
+                  {isAdmin && (
+                    <div style={styles.employeeName}>{getUserName(entry.employeeId)}</div>
+                  )}
                 </div>
 
                 <div style={styles.entryContent}>
                   <div style={styles.entryInfo}>
-                    {isAdmin && (
-                      <div style={styles.employeeName}>{getUserName(entry.employeeId)}</div>
-                    )}
                     <div style={styles.timeRange}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
@@ -812,25 +849,13 @@ const WorkHoursPage: React.FC = () => {
 
                 <div style={styles.entryActions}>
                   {/* Edit/Delete buttons */}
-                  {(isAdmin || entry.employeeId === currentUser?.id) && entry.status === 'pending' && (
+                  {(isAdmin || entry.employeeId === currentUser?.id) && (
                     <>
                       <button onClick={() => openEditModal(entry)} style={styles.actionButton}>
                         Edit
                       </button>
                       <button onClick={() => handleDelete(entry.id)} style={styles.deleteButton}>
                         Delete
-                      </button>
-                    </>
-                  )}
-
-                  {/* Approve/Reject buttons (Admin only) */}
-                  {isAdmin && entry.status === 'pending' && (
-                    <>
-                      <button onClick={() => handleApprove(entry.id)} style={styles.approveButton}>
-                        Approve
-                      </button>
-                      <button onClick={() => handleReject(entry.id)} style={styles.rejectButton}>
-                        Reject
                       </button>
                     </>
                   )}
@@ -965,14 +990,20 @@ const WorkHoursPage: React.FC = () => {
                     ...(isToday ? { borderColor: theme.colors.primary } : {}),
                   }}>
                     {dayWorkDays.length === 0 ? (
-                      <div style={styles.dayViewEmpty}>
+                      <div
+                        style={styles.dayViewEmpty}
+                        onClick={() => {
+                          resetForm();
+                          setFormDate(dateStr);
+                          setShowAddModal(true);
+                        }}
+                      >
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="16" />
+                          <line x1="8" y1="12" x2="16" y2="12" />
                         </svg>
-                        <p>No scheduled work for this day</p>
+                        <p>Click to add hours for this day</p>
                       </div>
                     ) : (
                       <div style={styles.dayViewEntries}>
@@ -1039,7 +1070,16 @@ const WorkHoursPage: React.FC = () => {
                       </div>
                       <div style={styles.weekViewDayContent}>
                         {dayWorkDays.length === 0 ? (
-                          <div style={styles.weekViewEmpty}>-</div>
+                          <div
+                            style={styles.weekViewEmpty}
+                            onClick={() => {
+                              resetForm();
+                              setFormDate(day.date);
+                              setShowAddModal(true);
+                            }}
+                          >
+                            <span style={styles.weekViewAddBtn}>+ Add</span>
+                          </div>
                         ) : (
                           dayWorkDays.map(wd => {
                             const employeeHours = getWorkHoursForDateAndEmployee(day.date, wd.employeeId);
@@ -1090,11 +1130,20 @@ const WorkHoursPage: React.FC = () => {
               return (
                 <div
                   key={index}
+                  onClick={() => {
+                    if (day.isCurrentMonth && !hasWorkDays) {
+                      resetForm();
+                      setFormDate(day.date);
+                      setShowAddModal(true);
+                    }
+                  }}
                   style={{
                     ...(isMobileOrTablet ? styles.calendarDayMobile : styles.calendarDay),
                     ...(day.isCurrentMonth ? {} : styles.calendarDayOtherMonth),
                     ...(isToday ? styles.calendarDayToday : {}),
+                    ...(day.isCurrentMonth && !hasWorkDays ? { cursor: 'pointer' } : {}),
                   }}
+                  title={day.isCurrentMonth && !hasWorkDays ? 'Click to add hours' : undefined}
                 >
                   <span style={{
                     ...styles.calendarDayNum,
@@ -1204,6 +1253,36 @@ const WorkHoursPage: React.FC = () => {
                 />
               </div>
 
+              {/* Quick Actions */}
+              {!editingEntry && (
+                <div style={styles.quickActions}>
+                  <button
+                    type="button"
+                    onClick={copyPreviousHours}
+                    style={styles.quickActionBtn}
+                    title="Copy times from your last entry"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    Copy Last
+                  </button>
+                  <div style={styles.presetDivider}>|</div>
+                  {timePresets.map((preset, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => applyTimePreset(preset)}
+                      style={styles.presetBtn}
+                      title={`${preset.start.replace(':00', '')} - ${preset.end.replace(':00', '')} (${preset.break}min break)`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Time Row */}
               <div style={styles.formRow}>
                 <div style={styles.formGroup}>
@@ -1309,6 +1388,55 @@ const WorkHoursPage: React.FC = () => {
                   </select>
                 </div>
               )}
+
+              {/* Quick Schedule Templates */}
+              <div style={styles.scheduleTemplates}>
+                <span style={styles.scheduleTemplatesLabel}>Quick select:</span>
+                {scheduleTemplates.map((template, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => applyScheduleTemplate(template.days)}
+                    style={{
+                      ...styles.scheduleTemplateBtn,
+                      ...(JSON.stringify(recurringDays.sort()) === JSON.stringify(template.days.sort())
+                        ? styles.scheduleTemplateBtnActive
+                        : {}),
+                    }}
+                  >
+                    {template.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Recurring Days Toggle */}
+              <div style={styles.recurringDaysContainer}>
+                <span style={styles.recurringDaysLabel}>Select by day of week:</span>
+                <div style={styles.recurringDaysGrid}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        toggleRecurringDay(i);
+                        // Also apply the selection
+                        const newDays = recurringDays.includes(i)
+                          ? recurringDays.filter(d => d !== i)
+                          : [...recurringDays, i];
+                        if (newDays.length > 0) {
+                          applyScheduleTemplate(newDays);
+                        }
+                      }}
+                      style={{
+                        ...styles.recurringDayBtn,
+                        ...(recurringDays.includes(i) ? styles.recurringDayBtnActive : {}),
+                      }}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Calendar Navigation */}
               <div style={styles.scheduleCalendarHeader}>
@@ -2178,6 +2306,43 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 700,
     color: theme.colors.primary,
   },
+  quickActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: '4px',
+    flexWrap: 'wrap',
+  },
+  quickActionBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.secondary,
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  presetDivider: {
+    color: theme.colors.bdr.primary,
+    fontSize: '16px',
+  },
+  presetBtn: {
+    padding: '6px 10px',
+    backgroundColor: 'transparent',
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.secondary,
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
   modalFooter: {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -2323,6 +2488,70 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     color: theme.colors.primary,
     fontWeight: 500,
+  },
+  // Schedule Templates styles
+  scheduleTemplates: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: '12px',
+    flexWrap: 'wrap',
+  },
+  scheduleTemplatesLabel: {
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+    marginRight: '4px',
+  },
+  scheduleTemplateBtn: {
+    padding: '6px 12px',
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.secondary,
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  scheduleTemplateBtnActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: '#FFFFFF',
+  },
+  recurringDaysContainer: {
+    padding: '12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: '16px',
+  },
+  recurringDaysLabel: {
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+    marginBottom: '8px',
+    display: 'block',
+  },
+  recurringDaysGrid: {
+    display: 'flex',
+    gap: '6px',
+  },
+  recurringDayBtn: {
+    flex: 1,
+    padding: '8px 4px',
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.txt.secondary,
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  recurringDayBtnActive: {
+    backgroundColor: theme.colors.status.success,
+    borderColor: theme.colors.status.success,
+    color: '#FFFFFF',
   },
   // Schedule Modal Calendar styles
   scheduleCalendarHeader: {
@@ -2824,6 +3053,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '48px 24px',
     textAlign: 'center',
     color: theme.colors.txt.tertiary,
+    cursor: 'pointer',
+    borderRadius: theme.borderRadius.md,
+    transition: 'background-color 0.2s',
   },
   dayViewEntries: {
     display: 'flex',
@@ -2936,6 +3168,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.txt.tertiary,
     fontSize: '13px',
     paddingTop: '20px',
+    cursor: 'pointer',
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weekViewAddBtn: {
+    padding: '6px 12px',
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px dashed ${theme.colors.bdr.secondary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.tertiary,
+    fontSize: '12px',
+    fontWeight: 500,
   },
   weekViewEntry: {
     padding: '8px 10px',
