@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useTask } from '../contexts/TaskContext';
+import { useTask, TASK_COMPLETE_MARKER } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useToast } from '../contexts/ToastContext';
@@ -32,20 +32,31 @@ const MyTasksPage: React.FC = () => {
 
   // Quick complete task (mark all steps as done)
   const handleQuickComplete = useCallback((task: JobTask) => {
-    const allStepIds = task.steps.map(s => s.id);
-    const updatedSteps = task.steps.map(s => ({
-      ...s,
-      isCompleted: true,
-      completedAt: new Date().toISOString(),
-    }));
+    if (task.steps.length === 0) {
+      // Task without steps - use the special marker
+      updateJobTask(task.id, {
+        completedSteps: [TASK_COMPLETE_MARKER],
+        status: 'completed',
+        progressPercentage: 100,
+        completedAt: new Date().toISOString(),
+      });
+    } else {
+      // Task with steps - mark all steps complete
+      const allStepIds = task.steps.map(s => s.id);
+      const updatedSteps = task.steps.map(s => ({
+        ...s,
+        isCompleted: true,
+        completedAt: new Date().toISOString(),
+      }));
 
-    updateJobTask(task.id, {
-      steps: updatedSteps,
-      completedSteps: allStepIds,
-      status: 'completed',
-      progressPercentage: 100,
-      completedAt: new Date().toISOString(),
-    });
+      updateJobTask(task.id, {
+        steps: updatedSteps,
+        completedSteps: allStepIds,
+        status: 'completed',
+        progressPercentage: 100,
+        completedAt: new Date().toISOString(),
+      });
+    }
 
     showSuccess(`"${task.title}" marked as complete!`);
   }, [updateJobTask, showSuccess]);
@@ -163,6 +174,39 @@ const MyTasksPage: React.FC = () => {
     }
   };
 
+  // Toggle completion for tasks without steps
+  const handleNoStepsToggle = (task: JobTask) => {
+    const isCurrentlyComplete = task.completedSteps.includes(TASK_COMPLETE_MARKER);
+
+    if (isCurrentlyComplete) {
+      // Unmark as complete
+      updateJobTask(task.id, {
+        completedSteps: [],
+        status: 'pending',
+        progressPercentage: 0,
+        completedAt: undefined,
+      });
+    } else {
+      // Mark as complete
+      updateJobTask(task.id, {
+        completedSteps: [TASK_COMPLETE_MARKER],
+        status: 'completed',
+        progressPercentage: 100,
+        completedAt: new Date().toISOString(),
+      });
+    }
+
+    // Update selected task if open
+    if (selectedTask?.id === task.id) {
+      setSelectedTask({
+        ...task,
+        completedSteps: isCurrentlyComplete ? [] : [TASK_COMPLETE_MARKER],
+        status: isCurrentlyComplete ? 'pending' : 'completed',
+        progressPercentage: isCurrentlyComplete ? 0 : 100,
+      });
+    }
+  };
+
   // Get today's tasks count
   const todayTasksCount = myTasks.filter(task => {
     const today = new Date().toISOString().split('T')[0];
@@ -253,6 +297,7 @@ const MyTasksPage: React.FC = () => {
                     task={task}
                     onClick={() => handleTaskClick(task)}
                     onStepToggle={(stepId) => handleStepToggle(task, stepId)}
+                    onNoStepsToggle={() => handleNoStepsToggle(task)}
                     isMobileOrTablet={isMobileOrTablet}
                   />
                 </SwipeableListItem>
@@ -262,6 +307,7 @@ const MyTasksPage: React.FC = () => {
                   task={task}
                   onClick={() => handleTaskClick(task)}
                   onStepToggle={(stepId) => handleStepToggle(task, stepId)}
+                  onNoStepsToggle={() => handleNoStepsToggle(task)}
                   isMobileOrTablet={isMobileOrTablet}
                 />
               )
@@ -277,6 +323,7 @@ const MyTasksPage: React.FC = () => {
           sops={sops}
           onClose={handleCloseDetail}
           onStepToggle={(stepId) => handleStepToggle(selectedTask, stepId)}
+          onNoStepsToggle={() => handleNoStepsToggle(selectedTask)}
           isMobileOrTablet={isMobileOrTablet}
         />
       )}
@@ -289,10 +336,11 @@ interface MyTaskCardProps {
   task: JobTask;
   onClick: () => void;
   onStepToggle: (stepId: string) => void;
+  onNoStepsToggle: () => void;
   isMobileOrTablet: boolean;
 }
 
-const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle, isMobileOrTablet }) => {
+const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle, onNoStepsToggle, isMobileOrTablet }) => {
   const [expanded, setExpanded] = useState(false);
 
   const getStatusColor = (status: string) => {
@@ -383,7 +431,12 @@ const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle, is
       <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
         <div style={styles.progressHeader}>
           <span style={styles.progressText}>Progress: {task.progressPercentage}%</span>
-          <span style={styles.progressSteps}>{task.completedSteps.length} / {task.steps.length} steps</span>
+          <span style={styles.progressSteps}>
+            {task.steps.length === 0
+              ? (task.progressPercentage === 100 ? 'Complete' : 'Not started')
+              : `${task.completedSteps.filter(id => id !== '__task_complete__').length} / ${task.steps.length} steps`
+            }
+          </span>
         </div>
         <div style={isMobileOrTablet ? styles.progressBarMobile : styles.progressBar}>
           <div style={{...styles.progressFill, width: `${task.progressPercentage}%`}} />
@@ -393,38 +446,68 @@ const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle, is
       {/* Expandable Steps Section */}
       {expanded && (
         <div style={styles.stepsSection}>
-          <h4 style={styles.stepsSectionTitle}>Task Steps</h4>
-          {task.steps.map((step, index) => (
-            <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxMobile : styles.stepCheckbox}>
+          {task.steps.length === 0 ? (
+            /* No steps - show single completion checkbox */
+            <label style={isMobileOrTablet ? styles.stepCheckboxMobile : styles.stepCheckbox}>
               <input
                 type="checkbox"
-                checked={step.isCompleted}
+                checked={task.progressPercentage === 100}
                 onChange={(e) => {
                   e.stopPropagation();
-                  onStepToggle(step.id);
+                  onNoStepsToggle();
                 }}
                 style={isMobileOrTablet ? styles.checkboxMobile : styles.checkbox}
               />
               <div style={styles.stepContent}>
-                <span style={{...styles.stepTitle, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
-                  {index + 1}. {step.title}
+                <span style={{
+                  ...styles.stepTitle,
+                  textDecoration: task.progressPercentage === 100 ? 'line-through' : 'none',
+                  fontWeight: 600,
+                }}>
+                  Mark Task Complete
                 </span>
-                {step.description && (
-                  <span style={styles.stepDescription}>{step.description}</span>
-                )}
-                {step.requiresPhoto && (
-                  <span style={styles.photoRequiredBadge}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                    Photo Required
-                  </span>
-                )}
+                <span style={styles.stepDescription}>
+                  This task has no individual steps. Check this box to mark the entire task as complete.
+                </span>
               </div>
             </label>
-          ))}
+          ) : (
+            /* Has steps - show step list */
+            <>
+              <h4 style={styles.stepsSectionTitle}>Task Steps</h4>
+              {task.steps.map((step, index) => (
+                <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxMobile : styles.stepCheckbox}>
+                  <input
+                    type="checkbox"
+                    checked={step.isCompleted}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      onStepToggle(step.id);
+                    }}
+                    style={isMobileOrTablet ? styles.checkboxMobile : styles.checkbox}
+                  />
+                  <div style={styles.stepContent}>
+                    <span style={{...styles.stepTitle, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
+                      {index + 1}. {step.title}
+                    </span>
+                    {step.description && (
+                      <span style={styles.stepDescription}>{step.description}</span>
+                    )}
+                    {step.requiresPhoto && (
+                      <span style={styles.photoRequiredBadge}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <polyline points="21 15 16 10 5 21" />
+                        </svg>
+                        Photo Required
+                      </span>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </>
+          )}
         </div>
       )}
 
@@ -463,18 +546,23 @@ interface TaskDetailModalProps {
   sops: any[];
   onClose: () => void;
   onStepToggle: (stepId: string) => void;
+  onNoStepsToggle: () => void;
   isMobileOrTablet: boolean;
 }
 
-const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, onStepToggle, isMobileOrTablet }) => {
+const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, onStepToggle, onNoStepsToggle, isMobileOrTablet }) => {
   const attachedSOPs = sops.filter(sop => task.sopIds.includes(sop.id));
 
-  // Calculate progress from actual completedSteps array - NOT from stored progressPercentage
+  // Calculate progress - handle tasks without steps
   const totalSteps = task.steps.length;
-  const completedCount = task.completedSteps.filter(id =>
-    task.steps.some(step => step.id === id)
-  ).length;
-  const progressPercent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
+  const hasNoSteps = totalSteps === 0;
+  const isNoStepsComplete = hasNoSteps && task.completedSteps.includes('__task_complete__');
+  const completedCount = hasNoSteps
+    ? (isNoStepsComplete ? 1 : 0)
+    : task.completedSteps.filter(id => task.steps.some(step => step.id === id)).length;
+  const progressPercent = hasNoSteps
+    ? (isNoStepsComplete ? 100 : 0)
+    : (totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -531,7 +619,12 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
             <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
               <div style={styles.progressHeader}>
                 <span style={styles.progressText}>{progressPercent}%</span>
-                <span style={styles.progressSteps}>{completedCount} / {totalSteps} steps completed</span>
+                <span style={styles.progressSteps}>
+                  {hasNoSteps
+                    ? (isNoStepsComplete ? 'Complete' : 'Not started')
+                    : `${completedCount} / ${totalSteps} steps completed`
+                  }
+                </span>
               </div>
               <div style={isMobileOrTablet ? styles.progressBarMobile : styles.progressBar}>
                 <div style={{...styles.progressFill, width: `${progressPercent}%`}} />
@@ -539,43 +632,67 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
             </div>
           </div>
 
-          {/* Steps */}
+          {/* Steps / Completion */}
           <div style={styles.modalSection}>
-            <h3 style={styles.sectionTitle}>Steps</h3>
+            <h3 style={styles.sectionTitle}>{hasNoSteps ? 'Completion' : 'Steps'}</h3>
             <div style={styles.stepsList}>
-              {task.steps.map((step, index) => (
-                <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxLargeMobile : styles.stepCheckboxLarge}>
+              {hasNoSteps ? (
+                /* No steps - show single completion checkbox */
+                <label style={isMobileOrTablet ? styles.stepCheckboxLargeMobile : styles.stepCheckboxLarge}>
                   <input
                     type="checkbox"
-                    checked={step.isCompleted}
-                    onChange={() => onStepToggle(step.id)}
+                    checked={isNoStepsComplete}
+                    onChange={onNoStepsToggle}
                     style={isMobileOrTablet ? styles.checkboxLargeMobile : styles.checkboxLarge}
                   />
                   <div style={styles.stepContentLarge}>
-                    <span style={{...styles.stepTitleLarge, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
-                      {index + 1}. {step.title}
+                    <span style={{
+                      ...styles.stepTitleLarge,
+                      textDecoration: isNoStepsComplete ? 'line-through' : 'none'
+                    }}>
+                      Mark Task Complete
                     </span>
-                    {step.description && (
-                      <span style={styles.stepDescriptionLarge}>{step.description}</span>
-                    )}
-                    {step.requiresPhoto && (
-                      <span style={styles.photoRequiredBadge}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                          <circle cx="8.5" cy="8.5" r="1.5" />
-                          <polyline points="21 15 16 10 5 21" />
-                        </svg>
-                        Photo Required
-                      </span>
-                    )}
-                    {step.isCompleted && step.completedAt && (
-                      <span style={styles.completedTime}>
-                        Completed {new Date(step.completedAt).toLocaleString()}
-                      </span>
-                    )}
+                    <span style={styles.stepDescriptionLarge}>
+                      This task has no individual steps. Check this box to mark it as complete.
+                    </span>
                   </div>
                 </label>
-              ))}
+              ) : (
+                /* Has steps - show step list */
+                task.steps.map((step, index) => (
+                  <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxLargeMobile : styles.stepCheckboxLarge}>
+                    <input
+                      type="checkbox"
+                      checked={step.isCompleted}
+                      onChange={() => onStepToggle(step.id)}
+                      style={isMobileOrTablet ? styles.checkboxLargeMobile : styles.checkboxLarge}
+                    />
+                    <div style={styles.stepContentLarge}>
+                      <span style={{...styles.stepTitleLarge, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
+                        {index + 1}. {step.title}
+                      </span>
+                      {step.description && (
+                        <span style={styles.stepDescriptionLarge}>{step.description}</span>
+                      )}
+                      {step.requiresPhoto && (
+                        <span style={styles.photoRequiredBadge}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
+                          Photo Required
+                        </span>
+                      )}
+                      {step.isCompleted && step.completedAt && (
+                        <span style={styles.completedTime}>
+                          Completed {new Date(step.completedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </label>
+                ))
+              )}
             </div>
           </div>
 

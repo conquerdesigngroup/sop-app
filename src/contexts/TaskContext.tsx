@@ -103,6 +103,9 @@ const mapSupabaseJobTask = (dbTask: any): JobTask => {
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
+// Special marker for tasks without steps that have been marked complete
+export const TASK_COMPLETE_MARKER = '__task_complete__';
+
 export const useTask = () => {
   const context = useContext(TaskContext);
   if (!context) {
@@ -645,7 +648,10 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
   // Job Task Methods
   const calculateProgress = (steps: TaskStep[], completedStepIds: string[]): number => {
-    if (steps.length === 0) return 0;
+    if (steps.length === 0) {
+      // For tasks without steps, check if marked complete via special marker
+      return completedStepIds.includes(TASK_COMPLETE_MARKER) ? 100 : 0;
+    }
     return Math.round((completedStepIds.length / steps.length) * 100);
   };
 

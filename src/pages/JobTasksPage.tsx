@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo, useMemo } from 'react';
-import { useTask } from '../contexts/TaskContext';
+import { useTask, TASK_COMPLETE_MARKER } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useResponsive } from '../hooks/useResponsive';
@@ -709,7 +709,12 @@ const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, i
       <div style={styles.progressSection}>
         <div style={styles.progressHeader}>
           <span style={styles.progressText}>Progress: {task.progressPercentage}%</span>
-          <span style={styles.progressSteps}>{task.completedSteps.length} / {task.steps.length} steps</span>
+          <span style={styles.progressSteps}>
+            {task.steps.length === 0
+              ? (task.progressPercentage === 100 ? 'Complete' : 'Not started')
+              : `${task.completedSteps.filter(id => id !== TASK_COMPLETE_MARKER).length} / ${task.steps.length} steps`
+            }
+          </span>
         </div>
         <div style={styles.progressBar}>
           <div style={{...styles.progressFill, width: `${task.progressPercentage}%`}} />
@@ -1237,6 +1242,10 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
   const [editedTask, setEditedTask] = useState<JobTask>({ ...task });
   const [isEditing, setIsEditing] = useState(false);
 
+  // Check if task has no steps
+  const hasNoSteps = editedTask.steps.length === 0;
+  const isNoStepsComplete = hasNoSteps && editedTask.completedSteps.includes(TASK_COMPLETE_MARKER);
+
   const handleToggleStep = (stepId: string) => {
     const isCompleted = editedTask.completedSteps.includes(stepId);
     const newCompletedSteps = isCompleted
@@ -1254,15 +1263,45 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
     setEditedTask(updatedTask);
   };
 
+  // Toggle completion for tasks without steps
+  const handleNoStepsToggle = () => {
+    if (isNoStepsComplete) {
+      // Unmark as complete
+      setEditedTask({
+        ...editedTask,
+        completedSteps: [],
+        status: 'pending',
+        progressPercentage: 0,
+      });
+    } else {
+      // Mark as complete
+      setEditedTask({
+        ...editedTask,
+        completedSteps: [TASK_COMPLETE_MARKER],
+        status: 'completed',
+        progressPercentage: 100,
+      });
+    }
+  };
+
   const handleMarkAllComplete = () => {
-    const allStepIds = editedTask.steps.map(s => s.id);
-    const updatedTask = {
-      ...editedTask,
-      completedSteps: allStepIds,
-      progressPercentage: 100,
-      status: 'completed' as const,
-    };
-    setEditedTask(updatedTask);
+    if (hasNoSteps) {
+      // For tasks without steps, use the marker
+      setEditedTask({
+        ...editedTask,
+        completedSteps: [TASK_COMPLETE_MARKER],
+        progressPercentage: 100,
+        status: 'completed' as const,
+      });
+    } else {
+      const allStepIds = editedTask.steps.map(s => s.id);
+      setEditedTask({
+        ...editedTask,
+        completedSteps: allStepIds,
+        progressPercentage: 100,
+        status: 'completed' as const,
+      });
+    }
   };
 
   const handleSave = () => {
@@ -1362,60 +1401,95 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
               <div style={{...styles.progressFill, width: `${editedTask.progressPercentage}%`}} />
             </div>
             <div style={{fontSize: '13px', color: theme.colors.txt.secondary, marginTop: '8px'}}>
-              {editedTask.completedSteps.length} of {editedTask.steps.length} steps completed
+              {hasNoSteps
+                ? (isNoStepsComplete ? 'Complete' : 'Not started')
+                : `${editedTask.completedSteps.filter(id => id !== TASK_COMPLETE_MARKER).length} of ${editedTask.steps.length} steps completed`
+              }
             </div>
           </div>
 
-          {/* Task Steps Checklist */}
+          {/* Task Steps Checklist / Completion */}
           <div style={styles.formGroup}>
             <div style={styles.checklistHeader}>
-              <label style={styles.label}>Task Steps</label>
-              {editedTask.completedSteps.length < editedTask.steps.length && (
+              <label style={styles.label}>{hasNoSteps ? 'Completion' : 'Task Steps'}</label>
+              {!isNoStepsComplete && editedTask.progressPercentage < 100 && (
                 <button
                   type="button"
                   onClick={handleMarkAllComplete}
                   style={styles.addItemButton}
                 >
-                  Mark All Complete
+                  Mark {hasNoSteps ? '' : 'All '}Complete
                 </button>
               )}
             </div>
 
             <div style={styles.taskStepsList}>
-              {editedTask.steps.map((step, index) => {
-                const isCompleted = editedTask.completedSteps.includes(step.id);
-                const linkedSOP = step.sopId ? sops.find(s => s.id === step.sopId) : null;
+              {hasNoSteps ? (
+                /* No steps - show single completion checkbox */
+                <div style={styles.taskStepItem}>
+                  <div style={styles.taskStepHeader}>
+                    <label style={styles.taskStepCheckbox}>
+                      <input
+                        type="checkbox"
+                        checked={isNoStepsComplete}
+                        onChange={handleNoStepsToggle}
+                        style={styles.hiddenCheckbox}
+                      />
+                      <span style={{
+                        ...styles.customCheckbox,
+                        ...(isNoStepsComplete ? styles.customCheckboxChecked : {})
+                      }}>
+                        {isNoStepsComplete && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </span>
+                      <span style={{...styles.taskStepTitle, textDecoration: isNoStepsComplete ? 'line-through' : 'none', opacity: isNoStepsComplete ? 0.6 : 1}}>
+                        Mark Task Complete
+                      </span>
+                    </label>
+                  </div>
+                  <p style={{fontSize: '13px', color: theme.colors.txt.secondary, margin: '8px 0 0 32px'}}>
+                    This task has no individual steps. Check this box to mark it as complete.
+                  </p>
+                </div>
+              ) : (
+                /* Has steps - show step list */
+                editedTask.steps.map((step, index) => {
+                  const isCompleted = editedTask.completedSteps.includes(step.id);
+                  const linkedSOP = step.sopId ? sops.find(s => s.id === step.sopId) : null;
 
-                return (
-                  <div key={step.id} style={styles.taskStepItem}>
-                    <div style={styles.taskStepHeader}>
-                      <label style={styles.taskStepCheckbox}>
-                        <input
-                          type="checkbox"
-                          checked={isCompleted}
-                          onChange={() => handleToggleStep(step.id)}
-                          style={styles.hiddenCheckbox}
-                        />
-                        <span style={{
-                          ...styles.customCheckbox,
-                          ...(isCompleted ? styles.customCheckboxChecked : {})
-                        }}>
-                          {isCompleted && (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </span>
-                        <span style={{...styles.taskStepTitle, textDecoration: isCompleted ? 'line-through' : 'none', opacity: isCompleted ? 0.6 : 1}}>
-                          {index + 1}. {step.title}
-                        </span>
-                      </label>
-                      {step.requiresPhoto && (
-                        <span style={styles.photoRequiredBadge}>
-                          📷 Photo Required
-                        </span>
-                      )}
-                    </div>
+                  return (
+                    <div key={step.id} style={styles.taskStepItem}>
+                      <div style={styles.taskStepHeader}>
+                        <label style={styles.taskStepCheckbox}>
+                          <input
+                            type="checkbox"
+                            checked={isCompleted}
+                            onChange={() => handleToggleStep(step.id)}
+                            style={styles.hiddenCheckbox}
+                          />
+                          <span style={{
+                            ...styles.customCheckbox,
+                            ...(isCompleted ? styles.customCheckboxChecked : {})
+                          }}>
+                            {isCompleted && (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </span>
+                          <span style={{...styles.taskStepTitle, textDecoration: isCompleted ? 'line-through' : 'none', opacity: isCompleted ? 0.6 : 1}}>
+                            {index + 1}. {step.title}
+                          </span>
+                        </label>
+                        {step.requiresPhoto && (
+                          <span style={styles.photoRequiredBadge}>
+                            📷 Photo Required
+                          </span>
+                        )}
+                      </div>
 
                     {step.description && (
                       <p style={styles.taskStepDescription}>{step.description}</p>
@@ -1431,8 +1505,9 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
                       </div>
                     )}
                   </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
