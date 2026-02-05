@@ -441,8 +441,12 @@ const WorkHoursPage: React.FC = () => {
       setFormDate(date);
       setFormEmployee(scheduleEmployee);
     } else {
-      // Add new day
+      // Add new day and immediately show detail panel with hours form option
       setSelectedDates(prev => [...prev, date]);
+      setSelectedDayForDetail(date);
+      setShowHoursForm(false);
+      setFormDate(date);
+      setFormEmployee(scheduleEmployee);
     }
   };
 
