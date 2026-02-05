@@ -892,6 +892,7 @@ const WorkHoursPage: React.FC = () => {
                       {dayWorkDays.slice(0, 3).map(wd => {
                         const employeeHours = getWorkHoursForDateAndEmployee(day.date, wd.employeeId);
                         const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
+                        const canEditThis = isAdmin || wd.employeeId === currentUser?.id;
                         return (
                           <div
                             key={wd.id}
@@ -905,7 +906,7 @@ const WorkHoursPage: React.FC = () => {
                                 wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
                               cursor: 'pointer',
                             }}
-                            title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''} - Click to view hours`}
+                            title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''} - Click to view${canEditThis ? '/edit' : ''} hours`}
                           >
                             {getUserName(wd.employeeId).split(' ')[0]}
                             {totalHours > 0 && <span style={styles.calendarWorkDayHours}>{totalHours}h</span>}
@@ -1420,6 +1421,7 @@ const WorkHoursPage: React.FC = () => {
               {(() => {
                 const hours = getWorkHoursForDateAndEmployee(calendarDetailModal.date, calendarDetailModal.employeeId);
                 const totalHours = hours.reduce((sum, h) => sum + h.totalHours, 0);
+                const canEdit = isAdmin || calendarDetailModal.employeeId === currentUser?.id;
 
                 if (hours.length === 0) {
                   return (
@@ -1430,7 +1432,9 @@ const WorkHoursPage: React.FC = () => {
                       </svg>
                       <p>No hours logged for this day</p>
                       <span style={styles.calendarDetailNoHoursSubtext}>
-                        This employee is scheduled but hasn't logged their work hours yet.
+                        {canEdit
+                          ? 'Click "Add Hours" below to log work hours for this day.'
+                          : 'This employee is scheduled but hasn\'t logged their work hours yet.'}
                       </span>
                     </div>
                   );
@@ -1455,6 +1459,21 @@ const WorkHoursPage: React.FC = () => {
                               </span>
                             )}
                             <span style={styles.calendarDetailHoursValue}>{wh.totalHours}h</span>
+                            {canEdit && (
+                              <button
+                                onClick={() => {
+                                  openEditModal(wh);
+                                  setCalendarDetailModal(null);
+                                }}
+                                style={styles.calendarDetailEditBtn}
+                                title="Edit"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1470,6 +1489,21 @@ const WorkHoursPage: React.FC = () => {
             </div>
 
             <div style={styles.modalFooter}>
+              {/* Show Add Hours button only if user can edit */}
+              {(isAdmin || calendarDetailModal.employeeId === currentUser?.id) && (
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setFormEmployee(calendarDetailModal.employeeId);
+                    setFormDate(calendarDetailModal.date);
+                    setCalendarDetailModal(null);
+                    setShowAddModal(true);
+                  }}
+                  style={styles.saveButton}
+                >
+                  Add Hours
+                </button>
+              )}
               <button onClick={() => setCalendarDetailModal(null)} style={styles.cancelButton}>
                 Close
               </button>
@@ -2490,6 +2524,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     fontWeight: 700,
     color: theme.colors.primary,
+  },
+  calendarDetailEditBtn: {
+    background: 'none',
+    border: 'none',
+    color: theme.colors.txt.tertiary,
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.borderRadius.sm,
+    transition: 'all 0.15s',
   },
   calendarDetailTotal: {
     display: 'flex',
