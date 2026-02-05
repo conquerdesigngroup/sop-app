@@ -1407,6 +1407,19 @@ const WorkHoursPage: React.FC = () => {
                     {template.label}
                   </button>
                 ))}
+                {(selectedDates.length > 0 || recurringDays.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDates([]);
+                      setRecurringDays([]);
+                      showToast('Selection cleared', 'success');
+                    }}
+                    style={styles.clearSelectionBtn}
+                  >
+                    Clear Selection
+                  </button>
+                )}
               </div>
 
               {/* Recurring Days Toggle */}
@@ -2519,6 +2532,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
     color: '#FFFFFF',
+  },
+  clearSelectionBtn: {
+    padding: '6px 12px',
+    backgroundColor: 'transparent',
+    border: `1px solid ${theme.colors.status.error}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.status.error,
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    marginLeft: 'auto',
   },
   recurringDaysContainer: {
     padding: '12px',
