@@ -43,6 +43,7 @@ const WorkHoursPage: React.FC = () => {
   const [scheduleNotes, setScheduleNotes] = useState('');
   const [scheduleModalMonth, setScheduleModalMonth] = useState(new Date());
   const [recurringDays, setRecurringDays] = useState<number[]>([]); // 0=Sun, 1=Mon, etc.
+  const [multiSelectRemoveMode, setMultiSelectRemoveMode] = useState(false); // Multi-select mode for removing days
 
   // Schedule templates
   const scheduleTemplates = [
@@ -457,6 +458,7 @@ const WorkHoursPage: React.FC = () => {
     setSelectedDayForDetail(null);
     setShowHoursForm(false);
     setRecurringDays([]);
+    setMultiSelectRemoveMode(false);
   };
 
   // Apply schedule template - selects all matching days in current month view
@@ -573,6 +575,20 @@ const WorkHoursPage: React.FC = () => {
     const isMarkedForRemoval = datesToRemove.includes(date);
     const isNewlySelected = selectedDates.includes(date);
 
+    // Multi-select remove mode: toggle removal status on click
+    if (multiSelectRemoveMode) {
+      if (isMarkedForRemoval) {
+        // Unmark for removal
+        setDatesToRemove(prev => prev.filter(d => d !== date));
+      } else if (isExisting) {
+        // Mark existing day for removal
+        setDatesToRemove(prev => [...prev, date]);
+      }
+      // Don't do anything for non-existing days in remove mode
+      return;
+    }
+
+    // Normal mode behavior
     if (isExisting && !isMarkedForRemoval) {
       // Show detail panel for existing day
       setSelectedDayForDetail(date);
@@ -1438,7 +1454,7 @@ const WorkHoursPage: React.FC = () => {
                     {template.label}
                   </button>
                 ))}
-                {(selectedDates.length > 0 || recurringDays.length > 0) && (
+                {(selectedDates.length > 0 || recurringDays.length > 0) && !multiSelectRemoveMode && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1451,20 +1467,32 @@ const WorkHoursPage: React.FC = () => {
                     Clear Selection
                   </button>
                 )}
-                {existingWorkDayDates.length > 0 && datesToRemove.length === 0 && (
+                {existingWorkDayDates.length > 0 && !multiSelectRemoveMode && (
                   <button
                     type="button"
                     onClick={() => {
-                      // Mark all existing scheduled days for removal
-                      setDatesToRemove(existingWorkDayDates);
-                      showToast(`${existingWorkDayDates.length} day${existingWorkDayDates.length !== 1 ? 's' : ''} marked for removal`, 'success');
+                      setMultiSelectRemoveMode(true);
+                      setSelectedDayForDetail(null);
+                      showToast('Multi-select mode: Click days to mark for removal', 'info');
                     }}
-                    style={styles.clearAllScheduledBtn}
+                    style={styles.multiSelectBtn}
                   >
-                    Clear All Scheduled
+                    Select Days to Remove
                   </button>
                 )}
-                {datesToRemove.length > 0 && (
+                {multiSelectRemoveMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMultiSelectRemoveMode(false);
+                      showToast('Multi-select mode disabled', 'success');
+                    }}
+                    style={styles.multiSelectActiveBtn}
+                  >
+                    ✓ Done Selecting ({datesToRemove.length})
+                  </button>
+                )}
+                {datesToRemove.length > 0 && !multiSelectRemoveMode && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1477,6 +1505,18 @@ const WorkHoursPage: React.FC = () => {
                   </button>
                 )}
               </div>
+
+              {/* Multi-select mode indicator */}
+              {multiSelectRemoveMode && (
+                <div style={styles.multiSelectIndicator}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  Click on scheduled days (green) to mark them for removal. Click "Done Selecting" when finished.
+                </div>
+              )}
 
               {/* Recurring Days Toggle */}
               <div style={styles.recurringDaysContainer}>
@@ -2619,6 +2659,38 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     fontWeight: 600,
     cursor: 'pointer',
+  },
+  multiSelectBtn: {
+    padding: '6px 12px',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    border: `1px solid ${theme.colors.status.warning}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.status.warning,
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  multiSelectActiveBtn: {
+    padding: '6px 12px',
+    backgroundColor: theme.colors.status.warning,
+    border: `1px solid ${theme.colors.status.warning}`,
+    borderRadius: theme.borderRadius.md,
+    color: '#000000',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  multiSelectIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    border: `1px solid ${theme.colors.status.warning}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.status.warning,
+    fontSize: '13px',
+    marginBottom: '12px',
   },
   recurringDaysContainer: {
     padding: '12px',
