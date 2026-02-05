@@ -593,18 +593,18 @@ const WorkHoursPage: React.FC = () => {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
       {/* Header */}
-      <div style={styles.header}>
+      <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
           <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Work Hours</h1>
-          <p style={styles.subtitle}>
+          <p style={isMobileOrTablet ? styles.subtitleMobile : styles.subtitle}>
             {isAdmin ? 'Manage team schedules and track work hours' : 'Track your schedule and work hours'}
           </p>
         </div>
         <button
           onClick={() => { resetScheduleForm(); setShowScheduleModal(true); }}
-          style={styles.addButton}
+          style={isMobileOrTablet ? styles.addButtonMobile : styles.addButton}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -617,14 +617,15 @@ const WorkHoursPage: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div style={styles.filtersContainer}>
-        <div style={styles.filtersRow}>
+      <div style={isMobileOrTablet ? styles.filtersContainerMobile : styles.filtersContainer}>
+        <div style={isMobileOrTablet ? styles.filtersRowMobile : styles.filtersRow}>
           {/* View Mode Toggle */}
-          <div style={styles.viewToggle}>
+          <div style={isMobileOrTablet ? styles.viewToggleMobile : styles.viewToggle}>
             <button
               onClick={() => setViewMode('list')}
               style={{
                 ...styles.toggleButton,
+                ...(isMobileOrTablet ? styles.toggleButtonMobile : {}),
                 ...(viewMode === 'list' ? styles.toggleButtonActive : {}),
               }}
             >
@@ -634,6 +635,7 @@ const WorkHoursPage: React.FC = () => {
               onClick={() => setViewMode('schedule')}
               style={{
                 ...styles.toggleButton,
+                ...(isMobileOrTablet ? styles.toggleButtonMobile : {}),
                 ...(viewMode === 'schedule' ? styles.toggleButtonActive : {}),
               }}
             >
@@ -643,6 +645,7 @@ const WorkHoursPage: React.FC = () => {
               onClick={() => setViewMode('calendar')}
               style={{
                 ...styles.toggleButton,
+                ...(isMobileOrTablet ? styles.toggleButtonMobile : {}),
                 ...(viewMode === 'calendar' ? styles.toggleButtonActive : {}),
               }}
             >
@@ -652,6 +655,7 @@ const WorkHoursPage: React.FC = () => {
               onClick={() => setViewMode('summary')}
               style={{
                 ...styles.toggleButton,
+                ...(isMobileOrTablet ? styles.toggleButtonMobile : {}),
                 ...(viewMode === 'summary' ? styles.toggleButtonActive : {}),
               }}
             >
@@ -663,7 +667,7 @@ const WorkHoursPage: React.FC = () => {
           <select
             value={filterDateRange}
             onChange={(e) => setFilterDateRange(e.target.value as 'week' | 'month' | 'all')}
-            style={styles.filterSelect}
+            style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
           >
             <option value="week">This Week</option>
             <option value="month">This Month</option>
@@ -675,7 +679,7 @@ const WorkHoursPage: React.FC = () => {
             <select
               value={filterEmployee}
               onChange={(e) => setFilterEmployee(e.target.value)}
-              style={styles.filterSelect}
+              style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
             >
               <option value="all">All Employees</option>
               {activeEmployees.map(emp => (
@@ -690,7 +694,7 @@ const WorkHoursPage: React.FC = () => {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            style={styles.filterSelect}
+            style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
@@ -842,7 +846,7 @@ const WorkHoursPage: React.FC = () => {
         </div>
       ) : viewMode === 'calendar' ? (
         // Calendar View
-        <div style={styles.calendarContainer}>
+        <div style={isMobileOrTablet ? styles.calendarContainerMobile : styles.calendarContainer}>
           {/* Calendar Header */}
           <div style={styles.calendarHeader}>
             <button onClick={prevMonth} style={styles.calendarNavButton}>
@@ -851,7 +855,7 @@ const WorkHoursPage: React.FC = () => {
               </svg>
             </button>
             <div style={styles.calendarTitle}>
-              <h3 style={styles.calendarMonthTitle}>
+              <h3 style={isMobileOrTablet ? styles.calendarMonthTitleMobile : styles.calendarMonthTitle}>
                 {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </h3>
               <button onClick={goToToday} style={styles.todayButton}>Today</button>
@@ -866,8 +870,8 @@ const WorkHoursPage: React.FC = () => {
           {/* Calendar Grid */}
           <div style={styles.calendarGrid}>
             {/* Day Headers */}
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} style={styles.calendarDayHeader}>{day}</div>
+            {(isMobileOrTablet ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((day, i) => (
+              <div key={i} style={isMobileOrTablet ? styles.calendarDayHeaderMobile : styles.calendarDayHeader}>{day}</div>
             ))}
 
             {/* Calendar Days */}
@@ -880,7 +884,7 @@ const WorkHoursPage: React.FC = () => {
                 <div
                   key={index}
                   style={{
-                    ...styles.calendarDay,
+                    ...(isMobileOrTablet ? styles.calendarDayMobile : styles.calendarDay),
                     ...(day.isCurrentMonth ? {} : styles.calendarDayOtherMonth),
                     ...(isToday ? styles.calendarDayToday : {}),
                   }}
@@ -893,7 +897,7 @@ const WorkHoursPage: React.FC = () => {
                   </span>
                   {hasWorkDays && (
                     <div style={styles.calendarDayContent}>
-                      {dayWorkDays.slice(0, 3).map(wd => {
+                      {dayWorkDays.slice(0, isMobileOrTablet ? 2 : 3).map(wd => {
                         const employeeHours = getWorkHoursForDateAndEmployee(day.date, wd.employeeId);
                         const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
                         const canEditThis = isAdmin || wd.employeeId === currentUser?.id;
@@ -905,21 +909,21 @@ const WorkHoursPage: React.FC = () => {
                               setCalendarDetailModal({ employeeId: wd.employeeId, date: day.date });
                             }}
                             style={{
-                              ...styles.calendarWorkDay,
+                              ...(isMobileOrTablet ? styles.calendarWorkDayMobile : styles.calendarWorkDay),
                               backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
                                 wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
                               cursor: 'pointer',
                             }}
                             title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''} - Click to view${canEditThis ? '/edit' : ''} hours`}
                           >
-                            {getUserName(wd.employeeId).split(' ')[0]}
+                            {isMobileOrTablet ? getUserName(wd.employeeId).split(' ')[0].substring(0, 4) : getUserName(wd.employeeId).split(' ')[0]}
                             {totalHours > 0 && <span style={styles.calendarWorkDayHours}>{totalHours}h</span>}
                           </div>
                         );
                       })}
-                      {dayWorkDays.length > 3 && (
+                      {dayWorkDays.length > (isMobileOrTablet ? 2 : 3) && (
                         <div style={styles.calendarMoreIndicator}>
-                          +{dayWorkDays.length - 3} more
+                          +{dayWorkDays.length - (isMobileOrTablet ? 2 : 3)}
                         </div>
                       )}
                     </div>
@@ -1525,6 +1529,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1200px',
     margin: '0 auto',
   },
+  containerMobile: {
+    padding: '16px',
+    maxWidth: '100%',
+    margin: '0 auto',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1532,6 +1541,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '32px',
     flexWrap: 'wrap',
     gap: '16px',
+  },
+  headerMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    marginBottom: '20px',
+    gap: '12px',
   },
   title: {
     ...theme.typography.h1,
@@ -1548,6 +1564,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.txt.secondary,
     marginTop: '8px',
   },
+  subtitleMobile: {
+    ...theme.typography.body,
+    color: theme.colors.txt.secondary,
+    marginTop: '4px',
+    fontSize: '13px',
+  },
   addButton: {
     display: 'flex',
     alignItems: 'center',
@@ -1560,6 +1582,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '15px',
     fontWeight: 600,
     cursor: 'pointer',
+  },
+  addButtonMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px 16px',
+    backgroundColor: theme.colors.primary,
+    color: '#FFFFFF',
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    width: '100%',
   },
   secondaryButton: {
     display: 'flex',
@@ -1581,17 +1618,37 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '20px',
     marginBottom: '24px',
   },
+  filtersContainerMobile: {
+    backgroundColor: theme.colors.bg.secondary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '12px',
+    marginBottom: '16px',
+  },
   filtersRow: {
     display: 'flex',
     flexWrap: 'wrap',
     gap: '12px',
     alignItems: 'center',
   },
+  filtersRowMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    alignItems: 'stretch',
+  },
   viewToggle: {
     display: 'flex',
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.md,
     padding: '4px',
+  },
+  viewToggleMobile: {
+    display: 'flex',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    padding: '3px',
+    width: '100%',
   },
   toggleButton: {
     padding: '8px 16px',
@@ -1603,6 +1660,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  toggleButtonMobile: {
+    padding: '8px 8px',
+    fontSize: '13px',
+    flex: 1,
+    textAlign: 'center',
   },
   toggleButtonActive: {
     backgroundColor: theme.colors.primary,
@@ -1617,6 +1680,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     cursor: 'pointer',
     minWidth: '150px',
+  },
+  filterSelectMobile: {
+    padding: '10px 12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.primary,
+    fontSize: '14px',
+    cursor: 'pointer',
+    width: '100%',
   },
   listContainer: {
     display: 'flex',
@@ -2342,6 +2415,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     padding: '24px',
   },
+  calendarContainerMobile: {
+    backgroundColor: theme.colors.bg.secondary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '12px',
+  },
   calendarHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -2366,6 +2445,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   calendarMonthTitle: {
     fontSize: '20px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    margin: 0,
+  },
+  calendarMonthTitleMobile: {
+    fontSize: '16px',
     fontWeight: 600,
     color: theme.colors.txt.primary,
     margin: 0,
@@ -2396,10 +2481,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.txt.secondary,
     textTransform: 'uppercase',
   },
+  calendarDayHeaderMobile: {
+    backgroundColor: theme.colors.bg.tertiary,
+    padding: '8px 2px',
+    textAlign: 'center',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: theme.colors.txt.secondary,
+    textTransform: 'uppercase',
+  },
   calendarDay: {
     backgroundColor: theme.colors.bg.secondary,
     minHeight: '100px',
     padding: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  calendarDayMobile: {
+    backgroundColor: theme.colors.bg.secondary,
+    minHeight: '70px',
+    padding: '4px',
     display: 'flex',
     flexDirection: 'column',
   },
@@ -2439,6 +2540,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: '4px',
+  },
+  calendarWorkDayMobile: {
+    padding: '2px 3px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '9px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '2px',
   },
   calendarWorkDayHours: {
     fontSize: '10px',
