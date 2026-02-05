@@ -34,7 +34,7 @@ interface UnifiedJobTaskModalProps {
     recurrencePattern?: RecurrencePattern;
     templateId?: string;
     sopId?: string;
-  }, saveAsTemplate: boolean) => void;
+  }, saveAsTemplate: boolean) => void | Promise<void>;
   taskTemplates: TaskTemplate[];
   users: any[];
   sops: any[];
@@ -85,6 +85,9 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   // Save as Template
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
 
+  // Submission state to prevent duplicates
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Get unique departments for user filtering
   const departments = Array.from(new Set(users.map((u: any) => u.department)));
   const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -112,6 +115,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setDueTime('');
       setFilterDepartment('all');
       setSaveAsTemplate(false);
+      setIsSubmitting(false);
     }
   }, [isOpen, editingTask, initialTemplateId]);
 
@@ -238,8 +242,13 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent double submission
+    if (isSubmitting) {
+      return;
+    }
 
     // Validation
     if (!title.trim()) {
@@ -268,6 +277,9 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       return;
     }
 
+    // Set submitting state to prevent duplicates
+    setIsSubmitting(true);
+
     const recurrencePattern: RecurrencePattern | undefined = isRecurring
       ? {
           frequency: recurrenceFrequency,
@@ -275,30 +287,35 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         }
       : undefined;
 
-    onCreate(
-      {
-        title,
-        description,
-        priority,
-        estimatedDuration,
-        steps: checklistItems.map(item => ({
-          title: item.title,
-          description: item.description,
-          requiresPhoto: item.requiresPhoto,
-        })),
-        assignedTo,
-        scheduledDate,
-        dueTime: dueTime || undefined,
-        isRecurring,
-        recurrencePattern,
-        templateId: selectedTemplate?.id,
-        sopId: linkedSopId || undefined,
-      },
-      saveAsTemplate
-    );
+    try {
+      await onCreate(
+        {
+          title,
+          description,
+          priority,
+          estimatedDuration,
+          steps: checklistItems.map(item => ({
+            title: item.title,
+            description: item.description,
+            requiresPhoto: item.requiresPhoto,
+          })),
+          assignedTo,
+          scheduledDate,
+          dueTime: dueTime || undefined,
+          isRecurring,
+          recurrencePattern,
+          templateId: selectedTemplate?.id,
+          sopId: linkedSopId || undefined,
+        },
+        saveAsTemplate
+      );
 
-    if (onSuccess) {
-      onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error) {
+      // Reset submitting state on error so user can try again
+      setIsSubmitting(false);
     }
   };
 
@@ -651,11 +668,24 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
 
           {/* Form Actions */}
           <div style={{...styles.modalActions, ...(isMobile && styles.modalActionsMobile)}}>
-            <button type="button" onClick={onClose} style={{...styles.cancelButton, ...(isMobile && styles.buttonMobile)}}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{...styles.cancelButton, ...(isMobile && styles.buttonMobile)}}
+              disabled={isSubmitting}
+            >
               Cancel
             </button>
-            <button type="submit" style={{...styles.saveButton, ...(isMobile && styles.buttonMobile)}}>
-              {editingTask ? 'Update Task' : 'Create Job Task'}
+            <button
+              type="submit"
+              style={{
+                ...styles.saveButton,
+                ...(isMobile && styles.buttonMobile),
+                ...(isSubmitting && { opacity: 0.6, cursor: 'not-allowed' })
+              }}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Creating...' : (editingTask ? 'Update Task' : 'Create Job Task')}
             </button>
           </div>
         </form>
