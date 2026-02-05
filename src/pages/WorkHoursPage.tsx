@@ -1053,9 +1053,14 @@ const WorkHoursPage: React.FC = () => {
                                   backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
                                     wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
                                 }}
+                                title={`${getUserName(wd.employeeId)} - ${totalHours > 0 ? totalHours + 'h' : 'No hours logged'}`}
                               >
                                 <span style={styles.weekViewEntryName}>{getUserName(wd.employeeId).split(' ')[0]}</span>
-                                {totalHours > 0 && <span style={styles.weekViewEntryHours}>{totalHours}h</span>}
+                                {totalHours > 0 ? (
+                                  <span style={styles.weekViewEntryHours}>{totalHours}h</span>
+                                ) : (
+                                  <span style={{ ...styles.weekViewEntryHours, opacity: 0.6 }}>--</span>
+                                )}
                               </div>
                             );
                           })
@@ -2888,18 +2893,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.tertiary,
     border: `1px solid ${theme.colors.bdr.primary}`,
     borderRadius: theme.borderRadius.md,
-    minHeight: '150px',
+    minHeight: '280px',
     display: 'flex',
     flexDirection: 'column',
   },
   weekViewDayToday: {
     borderColor: theme.colors.primary,
+    borderWidth: '2px',
   },
   weekViewDayHeader: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '8px',
+    padding: '12px 8px',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
   weekViewDayName: {
@@ -2909,44 +2915,54 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase',
   },
   weekViewDayNum: {
-    fontSize: '18px',
+    fontSize: '24px',
     fontWeight: 600,
     color: theme.colors.txt.primary,
+    marginTop: '4px',
   },
   weekViewDayNumToday: {
     color: theme.colors.primary,
   },
   weekViewDayContent: {
     flex: 1,
-    padding: '8px',
+    padding: '10px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '6px',
+    overflow: 'auto',
   },
   weekViewEmpty: {
     textAlign: 'center',
     color: theme.colors.txt.tertiary,
     fontSize: '13px',
+    paddingTop: '20px',
   },
   weekViewEntry: {
-    padding: '4px 8px',
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '11px',
+    padding: '8px 10px',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '13px',
     fontWeight: 500,
     color: '#FFFFFF',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     cursor: 'pointer',
+    transition: 'opacity 0.2s',
   },
   weekViewEntryName: {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    flex: 1,
   },
   weekViewEntryHours: {
-    fontWeight: 600,
+    fontWeight: 700,
     flexShrink: 0,
+    marginLeft: '8px',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    padding: '2px 6px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '12px',
   },
   // Calendar Employee Detail Modal styles
   calendarDetailDate: {
