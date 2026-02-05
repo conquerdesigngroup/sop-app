@@ -3,11 +3,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
+import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormButton } from '../components/FormComponents';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
+import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface ToggleSwitchProps {
@@ -67,12 +69,15 @@ const SettingsPage: React.FC = () => {
   const { jobTasks, taskTemplates } = useTask();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
+  const { isDark, toggleTheme } = useTheme();
+  const colors = useThemeColors();
 
   const [loading, setLoading] = useState(false);
   const [exportingJSON, setExportingJSON] = useState(false);
   const [exportingCSV, setExportingCSV] = useState(false);
   const [clearingData, setClearingData] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showDashboardSettings, setShowDashboardSettings] = useState(false);
 
   // Notification settings from user preferences
   const [pushEnabled, setPushEnabled] = useState(
@@ -443,9 +448,9 @@ const SettingsPage: React.FC = () => {
         </div>
 
         {/* Appearance Card */}
-        <div className="card-hover-subtle" style={styles.card}>
+        <div className="card-hover-subtle" style={{...styles.card, backgroundColor: colors.bg.secondary}}>
           <div style={styles.cardHeader}>
-            <h3 style={styles.cardTitle}>
+            <h3 style={{...styles.cardTitle, color: colors.txt.primary}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="5" />
                 <line x1="12" y1="1" x2="12" y2="3" />
@@ -464,27 +469,59 @@ const SettingsPage: React.FC = () => {
           <div style={styles.settingsList}>
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Dark Mode</span>
-                <span style={styles.settingDescription}>
-                  Use dark theme (currently active)
+                <span style={{...styles.settingLabel, color: colors.txt.primary}}>Dark Mode</span>
+                <span style={{...styles.settingDescription, color: colors.txt.tertiary}}>
+                  {isDark ? 'Dark theme is active' : 'Light theme is active'}
                 </span>
               </div>
-              <ToggleSwitch checked={true} onChange={() => {}} disabled />
+              <ToggleSwitch checked={isDark} onChange={toggleTheme} />
             </div>
 
-            <div style={styles.divider} />
+            <div style={{...styles.divider, backgroundColor: colors.bdr.primary}} />
 
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Compact Mode</span>
-                <span style={styles.settingDescription}>
+                <span style={{...styles.settingLabel, color: colors.txt.primary}}>Compact Mode</span>
+                <span style={{...styles.settingDescription, color: colors.txt.tertiary}}>
                   Show more content with less spacing
                 </span>
               </div>
               <ToggleSwitch checked={compactMode} onChange={setCompactMode} />
             </div>
+
+            <div style={{...styles.divider, backgroundColor: colors.bdr.primary}} />
+
+            <div style={styles.settingItem}>
+              <div style={styles.settingInfo}>
+                <span style={{...styles.settingLabel, color: colors.txt.primary}}>Customize Dashboard</span>
+                <span style={{...styles.settingDescription, color: colors.txt.tertiary}}>
+                  Choose which sections to show
+                </span>
+              </div>
+              <button
+                onClick={() => setShowDashboardSettings(true)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: colors.bg.tertiary,
+                  border: `1px solid ${colors.bdr.primary}`,
+                  borderRadius: theme.borderRadius.md,
+                  color: colors.txt.primary,
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Customize
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Dashboard Settings Modal */}
+        <DashboardSettingsModal
+          isOpen={showDashboardSettings}
+          onClose={() => setShowDashboardSettings(false)}
+        />
 
         {/* Session Card */}
         <div className="card-hover-subtle" style={styles.card}>

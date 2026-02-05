@@ -421,11 +421,13 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const addWorkDays = useCallback(async (employeeId: string, dates: string[], notes?: string) => {
     if (!currentUser) {
-      console.error('No current user - cannot add work days');
       throw new Error('No current user');
     }
 
-    const newWorkDays: WorkDay[] = dates.map(date => ({
+    // Remove duplicates from the dates array
+    const uniqueDates = Array.from(new Set(dates));
+
+    const newWorkDays: WorkDay[] = uniqueDates.map(date => ({
       id: generateId('wd'),
       employeeId,
       workDate: date,
@@ -444,24 +446,34 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         created_by: wd.createdBy,
       }));
 
-      console.log('Inserting work days to Supabase:', insertData);
-
+      // Use upsert with onConflict to ignore duplicates instead of throwing errors
+      // The unique constraint is on (employee_id, work_date)
       const { data, error } = await supabase
         .from('work_days')
-        .insert(insertData)
+        .upsert(insertData, {
+          onConflict: 'employee_id,work_date',
+          ignoreDuplicates: true
+        })
         .select();
 
       if (error) {
-        console.error('Supabase error adding work days:', error);
         throw error;
       }
 
       if (data) {
-        console.log('Work days added successfully:', data);
         setWorkDays(prev => [...data.map(mapSupabaseWorkDay), ...prev]);
       }
     } else {
-      setWorkDays(prev => [...newWorkDays, ...prev]);
+      // For localStorage, filter out any dates that already exist
+      setWorkDays(prev => {
+        const existingDates = prev
+          .filter(wd => wd.employeeId === employeeId)
+          .map(wd => wd.workDate);
+        const filteredNewWorkDays = newWorkDays.filter(
+          wd => !existingDates.includes(wd.workDate)
+        );
+        return [...filteredNewWorkDays, ...prev];
+      });
     }
   }, [currentUser, useSupabase]);
 

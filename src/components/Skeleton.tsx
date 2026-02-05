@@ -1,5 +1,6 @@
 import React from 'react';
 import { theme } from '../theme';
+import { useThemeColors } from '../contexts/ThemeContext';
 
 interface SkeletonProps {
   width?: string | number;
@@ -15,6 +16,17 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   borderRadius = theme.borderRadius.md,
   style,
 }) => {
+  // Try to use theme colors if available
+  let bgColor = theme.colors.bg.tertiary;
+  try {
+    const colors = useThemeColors();
+    if (colors) {
+      bgColor = colors.bg.tertiary;
+    }
+  } catch {
+    // Context not available, use default
+  }
+
   return (
     <div
       className="skeleton-pulse"
@@ -22,7 +34,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
         width,
         height,
         borderRadius,
-        backgroundColor: theme.colors.bg.tertiary,
+        backgroundColor: bgColor,
         ...style,
       }}
     />

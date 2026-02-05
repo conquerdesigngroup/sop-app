@@ -1,21 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
+import { useToast } from '../contexts/ToastContext';
 import { JobTask, TaskStep } from '../types';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
+import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
+import PullToRefresh from '../components/PullToRefresh';
 
 const MyTasksPage: React.FC = () => {
   const { jobTasks, updateJobTask } = useTask();
   const { currentUser } = useAuth();
   const { sops } = useSOPs();
+  const { success: showSuccess } = useToast();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Pull to refresh handler - simulates refresh with small delay
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    // Simulate refresh since data is already reactive
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setIsRefreshing(false);
+  }, []);
+
+  // Quick complete task (mark all steps as done)
+  const handleQuickComplete = useCallback((task: JobTask) => {
+    const allStepIds = task.steps.map(s => s.id);
+    const updatedSteps = task.steps.map(s => ({
+      ...s,
+      isCompleted: true,
+      completedAt: new Date().toISOString(),
+    }));
+
+    updateJobTask(task.id, {
+      steps: updatedSteps,
+      completedSteps: allStepIds,
+      status: 'completed',
+      progressPercentage: 100,
+      completedAt: new Date().toISOString(),
+    });
+
+    showSuccess(`"${task.title}" marked as complete!`);
+  }, [updateJobTask, showSuccess]);
 
   // Check if we should apply filters based on navigation state
   useEffect(() => {
@@ -189,29 +222,53 @@ const MyTasksPage: React.FC = () => {
         </select>
       </div>
 
-      {/* Tasks List */}
-      <div style={styles.tasksList}>
-        {sortedTasks.length === 0 ? (
-          <div style={styles.emptyState}>
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            <p style={styles.emptyText}>No tasks found</p>
-            <p style={styles.emptySubtext}>You're all set!</p>
-          </div>
-        ) : (
-          sortedTasks.map(task => (
-            <MyTaskCard
-              key={task.id}
-              task={task}
-              onClick={() => handleTaskClick(task)}
-              onStepToggle={(stepId) => handleStepToggle(task, stepId)}
-              isMobileOrTablet={isMobileOrTablet}
-            />
-          ))
-        )}
-      </div>
+      {/* Tasks List with Pull to Refresh */}
+      <PullToRefresh onRefresh={handleRefresh} disabled={!isMobileOrTablet}>
+        <div style={styles.tasksList}>
+          {isMobileOrTablet && (
+            <p style={styles.swipeHint}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+              Swipe right to complete
+            </p>
+          )}
+          {sortedTasks.length === 0 ? (
+            <div style={styles.emptyState}>
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                <path d="M9 11l3 3L22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+              <p style={styles.emptyText}>No tasks found</p>
+              <p style={styles.emptySubtext}>You're all set!</p>
+            </div>
+          ) : (
+            sortedTasks.map(task => (
+              isMobileOrTablet && task.status !== 'completed' ? (
+                <SwipeableListItem
+                  key={task.id}
+                  leftAction={createSwipeAction.complete(() => handleQuickComplete(task))}
+                >
+                  <MyTaskCard
+                    task={task}
+                    onClick={() => handleTaskClick(task)}
+                    onStepToggle={(stepId) => handleStepToggle(task, stepId)}
+                    isMobileOrTablet={isMobileOrTablet}
+                  />
+                </SwipeableListItem>
+              ) : (
+                <MyTaskCard
+                  key={task.id}
+                  task={task}
+                  onClick={() => handleTaskClick(task)}
+                  onStepToggle={(stepId) => handleStepToggle(task, stepId)}
+                  isMobileOrTablet={isMobileOrTablet}
+                />
+              )
+            ))
+          )}
+        </div>
+      </PullToRefresh>
 
       {/* Task Detail Modal */}
       {selectedTask && (
@@ -619,6 +676,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     gap: theme.spacing.lg,
+  },
+  swipeHint: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    fontSize: '12px',
+    color: theme.colors.txt.tertiary,
+    marginBottom: theme.spacing.sm,
+    padding: theme.spacing.xs,
   },
   emptyState: {
     display: 'flex',

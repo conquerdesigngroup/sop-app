@@ -2,13 +2,17 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { ThemeProvider, useTheme, useThemeColors } from './contexts/ThemeContext';
 import { ActivityLogProvider } from './contexts/ActivityLogContext';
 import { DataProvider } from './contexts/DataProvider';
+import { DashboardSettingsProvider } from './contexts/DashboardSettingsContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navigation from './components/Navigation';
+import BottomNavigation from './components/BottomNavigation';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
 import { theme } from './theme';
+import { useResponsive } from './hooks/useResponsive';
 import './App.css';
 
 // Lazy load page components for code splitting
@@ -28,30 +32,46 @@ const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 
-// Page loading fallback - simple centered spinner
-const PageLoadingFallback: React.FC = () => (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '60vh',
-    backgroundColor: theme.colors.background,
-  }}>
+// Page loading fallback - simple centered spinner (theme-aware)
+const PageLoadingFallback: React.FC = () => {
+  // Try to use theme context, fallback to dark colors if not available
+  let bgColor = theme.colors.background;
+  let borderColor = theme.colors.bg.tertiary;
+
+  try {
+    const themeContext = useThemeColors();
+    if (themeContext) {
+      bgColor = themeContext.bg.primary;
+      borderColor = themeContext.bg.tertiary;
+    }
+  } catch {
+    // Context not available yet, use defaults
+  }
+
+  return (
     <div style={{
-      width: '40px',
-      height: '40px',
-      border: `3px solid ${theme.colors.bg.tertiary}`,
-      borderTopColor: theme.colors.primary,
-      borderRadius: '50%',
-      animation: 'spin 0.8s linear infinite',
-    }} />
-    <style>{`
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    `}</style>
-  </div>
-);
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '60vh',
+      backgroundColor: bgColor,
+    }}>
+      <div style={{
+        width: '40px',
+        height: '40px',
+        border: `3px solid ${borderColor}`,
+        borderTopColor: theme.colors.primary,
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite',
+      }} />
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+};
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactElement; adminOnly?: boolean }> = ({
@@ -95,9 +115,20 @@ const PublicRoute: React.FC<{ children: React.ReactElement }> = ({ children }) =
 // App Content (needs to be inside AuthProvider to use useAuth)
 const AppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { isMobileOrTablet } = useResponsive();
+  const colors = useThemeColors();
 
   return (
-    <div className="App" style={{ backgroundColor: '#000000', minHeight: '100vh' }}>
+    <div
+      className="App"
+      style={{
+        backgroundColor: colors.bg.primary,
+        minHeight: '100vh',
+        // Add padding bottom for bottom nav on mobile
+        paddingBottom: isAuthenticated && isMobileOrTablet ? '70px' : 0,
+        transition: 'background-color 0.3s ease',
+      }}
+    >
       {isAuthenticated && <Navigation />}
       <Suspense fallback={<PageLoadingFallback />}>
         <Routes>
@@ -217,6 +248,8 @@ const AppContent: React.FC = () => {
           />
         </Routes>
       </Suspense>
+      {/* Bottom Navigation for Mobile */}
+      {isAuthenticated && isMobileOrTablet && <BottomNavigation />}
       <OfflineIndicator />
       <SessionExpiryModal />
     </div>
@@ -242,17 +275,21 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <AuthProvider>
-          <ActivityLogProvider>
-            <DataProvider>
-              <Router>
-                <AppContent />
-              </Router>
-            </DataProvider>
-          </ActivityLogProvider>
-        </AuthProvider>
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <ActivityLogProvider>
+              <DataProvider>
+                <DashboardSettingsProvider>
+                  <Router>
+                    <AppContent />
+                  </Router>
+                </DashboardSettingsProvider>
+              </DataProvider>
+            </ActivityLogProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

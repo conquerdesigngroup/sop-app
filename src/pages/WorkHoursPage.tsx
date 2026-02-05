@@ -471,10 +471,11 @@ const WorkHoursPage: React.FC = () => {
       const dateStr = date.toISOString().split('T')[0];
       const dayOfWeek = date.getDay();
 
-      // Only add future dates that match the template and aren't already scheduled
+      // Only add future dates that match the template and aren't already scheduled or selected
       if (dayNumbers.includes(dayOfWeek) &&
           date >= new Date(new Date().toISOString().split('T')[0]) &&
-          !existingWorkDayDates.includes(dateStr)) {
+          !existingWorkDayDates.includes(dateStr) &&
+          !selectedDates.includes(dateStr)) {
         newDates.push(dateStr);
       }
     }
@@ -590,7 +591,8 @@ const WorkHoursPage: React.FC = () => {
       setFormEmployee(scheduleEmployee);
     } else {
       // Add new day and immediately show detail panel with hours form option
-      setSelectedDates(prev => [...prev, date]);
+      // Use Set to ensure no duplicates
+      setSelectedDates(prev => Array.from(new Set([...prev, date])));
       setSelectedDayForDetail(date);
       setShowHoursForm(false);
       setFormDate(date);
@@ -682,10 +684,24 @@ const WorkHoursPage: React.FC = () => {
         }
       }
 
-      // Add new days
+      // Add new days - filter out any dates that already exist in the database
       if (selectedDates.length > 0) {
-        await addWorkDays(scheduleEmployee, selectedDates, scheduleNotes || undefined);
-        addedCount = selectedDates.length;
+        // Get fresh list of existing dates for this employee to ensure we have current data
+        const currentExistingDates = getExistingWorkDaysForEmployee(scheduleEmployee).map(wd => wd.workDate);
+
+        // Filter out any dates that already exist in the database
+        const datesToAdd = selectedDates.filter(date => !currentExistingDates.includes(date));
+
+        if (datesToAdd.length > 0) {
+          await addWorkDays(scheduleEmployee, datesToAdd, scheduleNotes || undefined);
+          addedCount = datesToAdd.length;
+        }
+
+        // Log if any duplicates were skipped
+        const skippedCount = selectedDates.length - datesToAdd.length;
+        if (skippedCount > 0) {
+          console.log(`Skipped ${skippedCount} dates that already exist in the database`);
+        }
       }
 
       // Show appropriate message
@@ -982,20 +998,20 @@ const WorkHoursPage: React.FC = () => {
           </div>
 
           {/* Calendar Header */}
-          <div style={styles.calendarHeader}>
-            <button onClick={prevPeriod} style={styles.calendarNavButton}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <div style={isMobileOrTablet ? styles.calendarHeaderMobile : styles.calendarHeader}>
+            <button onClick={prevPeriod} style={isMobileOrTablet ? styles.calendarNavButtonMobile : styles.calendarNavButton}>
+              <svg width={isMobileOrTablet ? "16" : "20"} height={isMobileOrTablet ? "16" : "20"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
-            <div style={styles.calendarTitle}>
+            <div style={isMobileOrTablet ? styles.calendarTitleMobile : styles.calendarTitle}>
               <h3 style={isMobileOrTablet ? styles.calendarMonthTitleMobile : styles.calendarMonthTitle}>
                 {getCalendarTitle()}
               </h3>
               <button onClick={goToToday} style={styles.todayButton}>Today</button>
             </div>
-            <button onClick={nextPeriod} style={styles.calendarNavButton}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button onClick={nextPeriod} style={isMobileOrTablet ? styles.calendarNavButtonMobile : styles.calendarNavButton}>
+              <svg width={isMobileOrTablet ? "16" : "20"} height={isMobileOrTablet ? "16" : "20"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
@@ -1003,7 +1019,7 @@ const WorkHoursPage: React.FC = () => {
 
           {/* Day View */}
           {calendarViewMode === 'day' && (
-            <div style={styles.dayViewContainer}>
+            <div style={isMobileOrTablet ? styles.dayViewContainerMobile : styles.dayViewContainer}>
               {(() => {
                 const dateStr = calendarMonth.toISOString().split('T')[0];
                 const dayWorkDays = getWorkDaysForDate(dateStr);
@@ -1011,24 +1027,19 @@ const WorkHoursPage: React.FC = () => {
 
                 return (
                   <div style={{
-                    ...styles.dayViewCard,
+                    ...(isMobileOrTablet ? styles.dayViewCardMobile : styles.dayViewCard),
                     ...(isToday ? { borderColor: theme.colors.primary } : {}),
                   }}>
                     {dayWorkDays.length === 0 ? (
-                      <div
-                        style={styles.dayViewEmpty}
-                        onClick={() => {
-                          resetForm();
-                          setFormDate(dateStr);
-                          setShowAddModal(true);
-                        }}
-                      >
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                      <div style={isMobileOrTablet ? styles.dayViewEmptyMobile : styles.dayViewEmpty}>
+                        <svg width={isMobileOrTablet ? "40" : "48"} height={isMobileOrTablet ? "40" : "48"} viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
                           <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="8" x2="12" y2="16" />
-                          <line x1="8" y1="12" x2="16" y2="12" />
+                          <polyline points="12 6 12 12 16 14" />
                         </svg>
-                        <p>Click to add hours for this day</p>
+                        <p style={{ fontSize: isMobileOrTablet ? '14px' : '16px', margin: '12px 0 4px' }}>No one scheduled</p>
+                        <span style={{ fontSize: isMobileOrTablet ? '12px' : '13px', color: theme.colors.txt.tertiary }}>
+                          Use "Manage Schedule" to add employees to this day
+                        </span>
                       </div>
                     ) : (
                       <div style={styles.dayViewEntries}>
@@ -1089,33 +1100,26 @@ const WorkHoursPage: React.FC = () => {
 
           {/* Week View */}
           {calendarViewMode === 'week' && (
-            <div style={styles.weekViewContainer}>
-              <div style={styles.weekViewGrid}>
+            <div style={isMobileOrTablet ? styles.weekViewContainerMobile : styles.weekViewContainer}>
+              <div style={isMobileOrTablet ? styles.weekViewGridMobile : styles.weekViewGrid}>
                 {weekDays.map((day, index) => {
                   const dayWorkDays = getWorkDaysForDate(day.date);
                   return (
                     <div key={index} style={{
-                      ...styles.weekViewDay,
+                      ...(isMobileOrTablet ? styles.weekViewDayMobile : styles.weekViewDay),
                       ...(day.isToday ? styles.weekViewDayToday : {}),
                     }}>
-                      <div style={styles.weekViewDayHeader}>
-                        <span style={styles.weekViewDayName}>{day.dayName}</span>
+                      <div style={isMobileOrTablet ? styles.weekViewDayHeaderMobile : styles.weekViewDayHeader}>
+                        <span style={isMobileOrTablet ? styles.weekViewDayNameMobile : styles.weekViewDayName}>{day.dayName}</span>
                         <span style={{
-                          ...styles.weekViewDayNum,
+                          ...(isMobileOrTablet ? styles.weekViewDayNumMobile : styles.weekViewDayNum),
                           ...(day.isToday ? styles.weekViewDayNumToday : {}),
                         }}>{day.dayNum}</span>
                       </div>
-                      <div style={styles.weekViewDayContent}>
+                      <div style={isMobileOrTablet ? styles.weekViewDayContentMobile : styles.weekViewDayContent}>
                         {dayWorkDays.length === 0 ? (
-                          <div
-                            style={styles.weekViewEmpty}
-                            onClick={() => {
-                              resetForm();
-                              setFormDate(day.date);
-                              setShowAddModal(true);
-                            }}
-                          >
-                            <span style={styles.weekViewAddBtn}>+ Add</span>
+                          <div style={isMobileOrTablet ? styles.weekViewEmptyMobile : styles.weekViewEmpty}>
+                            <span style={{ color: theme.colors.txt.tertiary, fontSize: isMobileOrTablet ? '10px' : '12px' }}>—</span>
                           </div>
                         ) : (
                           dayWorkDays.map(wd => {
@@ -1126,16 +1130,18 @@ const WorkHoursPage: React.FC = () => {
                                 key={wd.id}
                                 onClick={() => setCalendarDetailModal({ employeeId: wd.employeeId, date: day.date })}
                                 style={{
-                                  ...styles.weekViewEntry,
+                                  ...(isMobileOrTablet ? styles.weekViewEntryMobile : styles.weekViewEntry),
                                   backgroundColor: getUserColor(wd.employeeId),
                                 }}
                                 title={`${getUserName(wd.employeeId)} - ${totalHours > 0 ? totalHours + 'h' : 'No hours logged'}`}
                               >
-                                <span style={styles.weekViewEntryName}>{getUserName(wd.employeeId).split(' ')[0]}</span>
+                                <span style={isMobileOrTablet ? styles.weekViewEntryNameMobile : styles.weekViewEntryName}>
+                                  {isMobileOrTablet ? getUserName(wd.employeeId).split(' ')[0].charAt(0) + '.' : getUserName(wd.employeeId).split(' ')[0]}
+                                </span>
                                 {totalHours > 0 ? (
-                                  <span style={styles.weekViewEntryHours}>{totalHours}h</span>
+                                  <span style={isMobileOrTablet ? styles.weekViewEntryHoursMobile : styles.weekViewEntryHours}>{totalHours}h</span>
                                 ) : (
-                                  <span style={{ ...styles.weekViewEntryHours, opacity: 0.6 }}>--</span>
+                                  <span style={{ ...(isMobileOrTablet ? styles.weekViewEntryHoursMobile : styles.weekViewEntryHours), opacity: 0.6 }}>--</span>
                                 )}
                               </div>
                             );
@@ -1166,20 +1172,11 @@ const WorkHoursPage: React.FC = () => {
               return (
                 <div
                   key={index}
-                  onClick={() => {
-                    if (day.isCurrentMonth && !hasWorkDays) {
-                      resetForm();
-                      setFormDate(day.date);
-                      setShowAddModal(true);
-                    }
-                  }}
                   style={{
                     ...(isMobileOrTablet ? styles.calendarDayMobile : styles.calendarDay),
                     ...(day.isCurrentMonth ? {} : styles.calendarDayOtherMonth),
                     ...(isToday ? styles.calendarDayToday : {}),
-                    ...(day.isCurrentMonth && !hasWorkDays ? { cursor: 'pointer' } : {}),
                   }}
-                  title={day.isCurrentMonth && !hasWorkDays ? 'Click to add hours' : undefined}
                 >
                   <span style={{
                     ...styles.calendarDayNum,
@@ -2934,6 +2931,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     marginBottom: '24px',
   },
+  calendarHeaderMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '16px',
+    gap: '8px',
+  },
   calendarNavButton: {
     background: 'none',
     border: `2px solid ${theme.colors.bdr.primary}`,
@@ -2945,10 +2949,30 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  calendarNavButtonMobile: {
+    background: 'none',
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.sm,
+    padding: '6px',
+    color: theme.colors.txt.primary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   calendarTitle: {
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
+  },
+  calendarTitleMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '6px',
+    flex: 1,
+    minWidth: 0,
   },
   calendarMonthTitle: {
     fontSize: '20px',
@@ -3101,12 +3125,22 @@ const styles: { [key: string]: React.CSSProperties } = {
   dayViewContainer: {
     marginTop: '16px',
   },
+  dayViewContainerMobile: {
+    marginTop: '12px',
+  },
   dayViewCard: {
     backgroundColor: theme.colors.bg.tertiary,
     border: `2px solid ${theme.colors.bdr.primary}`,
     borderRadius: theme.borderRadius.lg,
     padding: '24px',
     minHeight: '200px',
+  },
+  dayViewCardMobile: {
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '16px',
+    minHeight: '150px',
   },
   dayViewEmpty: {
     display: 'flex',
@@ -3116,9 +3150,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '48px 24px',
     textAlign: 'center',
     color: theme.colors.txt.tertiary,
-    cursor: 'pointer',
     borderRadius: theme.borderRadius.md,
-    transition: 'background-color 0.2s',
+  },
+  dayViewEmptyMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '32px 16px',
+    textAlign: 'center',
+    color: theme.colors.txt.tertiary,
+    borderRadius: theme.borderRadius.md,
   },
   dayViewEntries: {
     display: 'flex',
@@ -3179,16 +3221,36 @@ const styles: { [key: string]: React.CSSProperties } = {
   weekViewContainer: {
     marginTop: '16px',
   },
+  weekViewContainerMobile: {
+    marginTop: '12px',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    paddingBottom: '8px',
+  },
   weekViewGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, 1fr)',
     gap: '8px',
+  },
+  weekViewGridMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, minmax(80px, 1fr))',
+    gap: '6px',
+    minWidth: '600px',
   },
   weekViewDay: {
     backgroundColor: theme.colors.bg.tertiary,
     border: `1px solid ${theme.colors.bdr.primary}`,
     borderRadius: theme.borderRadius.md,
     minHeight: '280px',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  weekViewDayMobile: {
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    minHeight: '200px',
     display: 'flex',
     flexDirection: 'column',
   },
@@ -3203,8 +3265,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '12px 8px',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
+  weekViewDayHeaderMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '8px 4px',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
   weekViewDayName: {
     fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.txt.tertiary,
+    textTransform: 'uppercase',
+  },
+  weekViewDayNameMobile: {
+    fontSize: '10px',
     fontWeight: 600,
     color: theme.colors.txt.tertiary,
     textTransform: 'uppercase',
@@ -3214,6 +3289,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     color: theme.colors.txt.primary,
     marginTop: '4px',
+  },
+  weekViewDayNumMobile: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    marginTop: '2px',
   },
   weekViewDayNumToday: {
     color: theme.colors.primary,
@@ -3226,12 +3307,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '6px',
     overflow: 'auto',
   },
+  weekViewDayContentMobile: {
+    flex: 1,
+    padding: '6px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    overflow: 'auto',
+  },
   weekViewEmpty: {
     textAlign: 'center',
     color: theme.colors.txt.tertiary,
     fontSize: '13px',
     paddingTop: '20px',
-    cursor: 'pointer',
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weekViewEmptyMobile: {
+    textAlign: 'center',
+    color: theme.colors.txt.tertiary,
+    fontSize: '11px',
+    paddingTop: '16px',
     flex: 1,
     display: 'flex',
     alignItems: 'center',
@@ -3246,10 +3344,31 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     fontWeight: 500,
   },
+  weekViewAddBtnMobile: {
+    padding: '4px 8px',
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px dashed ${theme.colors.bdr.secondary}`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.txt.tertiary,
+    fontSize: '10px',
+    fontWeight: 500,
+  },
   weekViewEntry: {
     padding: '8px 10px',
     borderRadius: theme.borderRadius.md,
     fontSize: '13px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    cursor: 'pointer',
+    transition: 'opacity 0.2s',
+  },
+  weekViewEntryMobile: {
+    padding: '6px 8px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '11px',
     fontWeight: 500,
     color: '#FFFFFF',
     display: 'flex',
@@ -3264,6 +3383,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
     flex: 1,
   },
+  weekViewEntryNameMobile: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    flex: 1,
+    fontSize: '10px',
+  },
   weekViewEntryHours: {
     fontWeight: 700,
     flexShrink: 0,
@@ -3272,6 +3398,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '2px 6px',
     borderRadius: theme.borderRadius.sm,
     fontSize: '12px',
+  },
+  weekViewEntryHoursMobile: {
+    fontWeight: 700,
+    flexShrink: 0,
+    marginLeft: '4px',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    padding: '1px 4px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '10px',
   },
   // Calendar Employee Detail Modal styles
   calendarDetailDate: {

@@ -4,18 +4,20 @@ import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { useEvent } from '../contexts/EventContext';
+import { useWorkHours } from '../contexts/WorkHoursContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { DashboardSkeleton } from '../components/Skeleton';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 import EventDetailModal from '../components/EventDetailModal';
-import { JobTask, User, CalendarEvent } from '../types';
+import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 
 const Dashboard: React.FC = () => {
   const { sops, loading: sopsLoading } = useSOPs();
   const { isAdmin, currentUser, users } = useAuth();
   const { jobTasks, loading: tasksLoading } = useTask();
   const { events } = useEvent();
+  const { workDays } = useWorkHours();
   const navigate = useNavigate();
   const { isMobileOrTablet } = useResponsive();
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -54,6 +56,7 @@ const Dashboard: React.FC = () => {
       jobTasks={jobTasks}
       events={events}
       users={users}
+      workDays={workDays}
       currentMonth={currentMonth}
       setCurrentMonth={setCurrentMonth}
       selectedTask={selectedTask}
@@ -436,12 +439,139 @@ const TeamMemberDashboard: React.FC<{
   );
 };
 
+// 7-Day Schedule Snapshot Component
+const ScheduleSnapshot: React.FC<{
+  workDays: WorkDay[];
+  users: User[];
+  navigate: ReturnType<typeof useNavigate>;
+}> = ({ workDays, users, navigate }) => {
+  const { isMobileOrTablet } = useResponsive();
+
+  // Get the next 7 days starting from today
+  const getNext7Days = () => {
+    const days: { date: string; dayName: string; dayNum: number; isToday: boolean }[] = [];
+    const today = new Date();
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      days.push({
+        date: dateStr,
+        dayName: dayNames[date.getDay()],
+        dayNum: date.getDate(),
+        isToday: i === 0,
+      });
+    }
+    return days;
+  };
+
+  const next7Days = getNext7Days();
+
+  // Get scheduled employees for a specific date
+  const getScheduledForDate = (dateStr: string) => {
+    return workDays
+      .filter(wd => wd.workDate === dateStr && wd.status !== 'cancelled')
+      .map(wd => {
+        const user = users.find(u => u.id === wd.employeeId);
+        return user ? { ...wd, user } : null;
+      })
+      .filter((item): item is { user: User } & WorkDay => item !== null);
+  };
+
+  // Get user color based on alphabetical order
+  const getUserColor = (userId: string) => {
+    const colors = [
+      '#10B981', // emerald
+      '#F59E0B', // amber
+      '#8B5CF6', // violet
+      '#EC4899', // pink
+      '#06B6D4', // cyan
+      '#EF4444', // red
+      '#3B82F6', // blue
+      '#84CC16', // lime
+    ];
+    const sortedUsers = [...users].sort((a, b) =>
+      `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+    );
+    const userIndex = sortedUsers.findIndex(u => u.id === userId);
+    return colors[userIndex % colors.length];
+  };
+
+  return (
+    <div style={styles.scheduleSnapshotContainer}>
+      <div style={styles.sectionHeader}>
+        <h3 style={styles.sectionTitle}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px', verticalAlign: 'middle' }}>
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          7-Day Schedule
+        </h3>
+        <button onClick={() => navigate('/hours')} style={styles.viewAllBtn}>View All</button>
+      </div>
+
+      <div style={isMobileOrTablet ? styles.scheduleGridMobile : styles.scheduleGrid}>
+        {next7Days.map((day) => {
+          const scheduled = getScheduledForDate(day.date);
+          return (
+            <div
+              key={day.date}
+              style={{
+                ...styles.scheduleDayCard,
+                ...(day.isToday ? styles.scheduleDayToday : {}),
+              }}
+            >
+              <div style={styles.scheduleDayHeader}>
+                <span style={styles.scheduleDayName}>{day.dayName}</span>
+                <span style={{
+                  ...styles.scheduleDayNum,
+                  ...(day.isToday ? styles.scheduleDayNumToday : {}),
+                }}>{day.dayNum}</span>
+              </div>
+              <div style={styles.scheduleDayContent}>
+                {scheduled.length === 0 ? (
+                  <span style={styles.scheduleNoOne}>—</span>
+                ) : (
+                  scheduled.slice(0, isMobileOrTablet ? 3 : 4).map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        ...styles.scheduleUserPill,
+                        backgroundColor: getUserColor(item.employeeId),
+                      }}
+                      title={`${item.user.firstName} ${item.user.lastName}`}
+                    >
+                      {isMobileOrTablet
+                        ? `${item.user.firstName.charAt(0)}.`
+                        : item.user.firstName.split(' ')[0]
+                      }
+                    </div>
+                  ))
+                )}
+                {scheduled.length > (isMobileOrTablet ? 3 : 4) && (
+                  <span style={styles.scheduleMore}>+{scheduled.length - (isMobileOrTablet ? 3 : 4)}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // Admin Dashboard
 const AdminDashboard: React.FC<{
   sops: any[];
   jobTasks: JobTask[];
   events: CalendarEvent[];
   users: User[];
+  workDays: WorkDay[];
   currentMonth: Date;
   setCurrentMonth: (date: Date) => void;
   selectedTask: JobTask | null;
@@ -451,7 +581,7 @@ const AdminDashboard: React.FC<{
   dayActionModal: { date: Date; x: number; y: number } | null;
   setDayActionModal: (modal: { date: Date; x: number; y: number } | null) => void;
   navigate: ReturnType<typeof useNavigate>;
-}> = ({ sops, jobTasks, events, users, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, dayActionModal, setDayActionModal, navigate }) => {
+}> = ({ sops, jobTasks, events, users, workDays, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, dayActionModal, setDayActionModal, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
 
   // SOP Stats
@@ -557,57 +687,34 @@ const AdminDashboard: React.FC<{
         </div>
       )}
 
-      {/* Content Grid: Recent SOPs + Categories */}
-      <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
-        {/* Recent SOPs */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h3 style={styles.sectionTitle}>Recent SOPs</h3>
-            <button onClick={() => navigate('/sop')} style={styles.viewAllBtn}>View All</button>
-          </div>
-          {recentSOPs.length === 0 ? (
-            <p style={styles.emptyText}>No SOPs created yet</p>
-          ) : (
-            <div style={styles.recentList}>
-              {recentSOPs.map(sop => (
-                <div key={sop.id} style={styles.recentItem} onClick={() => navigate('/sop')}>
-                  <div style={styles.recentItemHeader}>
-                    <span style={styles.recentItemTitle}>{sop.title}</span>
-                    <span style={styles.recentItemCategory}>{sop.category}</span>
-                  </div>
-                  <div style={styles.recentItemMeta}>
-                    <span>{sop.steps.length} steps</span>
-                    <span>{new Date(sop.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Recent SOPs */}
+      <div style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <h3 style={styles.sectionTitle}>Recent SOPs</h3>
+          <button onClick={() => navigate('/sop')} style={styles.viewAllBtn}>View All</button>
         </div>
-
-        {/* Categories */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h3 style={styles.sectionTitle}>Categories</h3>
-          </div>
-          {categoryStats.length === 0 ? (
-            <p style={styles.emptyText}>No categories yet</p>
-          ) : (
-            <div style={styles.categoryList}>
-              {categoryStats.slice(0, 6).map((category, index) => (
-                <div
-                  key={index}
-                  style={styles.categoryItem}
-                  onClick={() => navigate('/sop', { state: { expandCategory: category.name } })}
-                >
-                  <span style={styles.categoryName}>{category.name}</span>
-                  <span style={styles.categoryCount}>{category.count}</span>
+        {recentSOPs.length === 0 ? (
+          <p style={styles.emptyText}>No SOPs created yet</p>
+        ) : (
+          <div style={styles.recentList}>
+            {recentSOPs.map(sop => (
+              <div key={sop.id} style={styles.recentItem} onClick={() => navigate('/sop')}>
+                <div style={styles.recentItemHeader}>
+                  <span style={styles.recentItemTitle}>{sop.title}</span>
+                  <span style={styles.recentItemCategory}>{sop.category}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <div style={styles.recentItemMeta}>
+                  <span>{sop.steps.length} steps</span>
+                  <span>{new Date(sop.createdAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* 7-Day Schedule Snapshot */}
+      <ScheduleSnapshot workDays={workDays} users={users} navigate={navigate} />
 
       {/* Calendar */}
       <TaskCalendar
@@ -1384,6 +1491,84 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '10px',
     color: theme.colors.txt.secondary,
     fontWeight: 600,
+  },
+
+  // 7-Day Schedule Snapshot
+  scheduleSnapshotContainer: {
+    marginBottom: theme.spacing.lg,
+  },
+  scheduleGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '8px',
+  },
+  scheduleGridMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '4px',
+  },
+  scheduleDayCard: {
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    padding: '8px',
+    minHeight: '100px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  scheduleDayToday: {
+    borderColor: theme.colors.primary,
+    borderWidth: '2px',
+  },
+  scheduleDayHeader: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    marginBottom: '8px',
+    paddingBottom: '6px',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  scheduleDayName: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: theme.colors.txt.tertiary,
+    textTransform: 'uppercase' as const,
+  },
+  scheduleDayNum: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  scheduleDayNumToday: {
+    color: theme.colors.primary,
+  },
+  scheduleDayContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+    alignItems: 'center',
+  },
+  scheduleNoOne: {
+    color: theme.colors.txt.tertiary,
+    fontSize: '12px',
+  },
+  scheduleUserPill: {
+    padding: '3px 8px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '11px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    width: '100%',
+    textAlign: 'center' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  scheduleMore: {
+    fontSize: '10px',
+    color: theme.colors.txt.tertiary,
+    fontWeight: 500,
   },
 };
 

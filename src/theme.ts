@@ -1,4 +1,51 @@
 // Theme constants for SOP App
+// Light mode color palette
+export const lightColors = {
+  bg: {
+    primary: '#F5F5F7',     // Light gray background
+    secondary: '#FFFFFF',    // White cards
+    tertiary: '#F0F0F2',     // Input backgrounds
+    dark: '#E5E5E7',         // Darker areas
+  },
+  txt: {
+    primary: '#1A1A1A',      // Dark text
+    secondary: '#4A4A4A',    // Secondary text
+    tertiary: '#6B6B6B',     // Muted text
+  },
+  bdr: {
+    primary: '#E0E0E2',      // Standard borders
+    secondary: '#D0D0D2',    // Hover borders
+  },
+  shadow: 'rgba(0, 0, 0, 0.1)',
+  overlay: 'rgba(0, 0, 0, 0.5)',
+};
+
+// Dark mode color palette (current)
+export const darkColors = {
+  bg: {
+    primary: '#0D0D0D',
+    secondary: '#1A1A1A',
+    tertiary: '#242424',
+    dark: '#000000',
+  },
+  txt: {
+    primary: '#F2F2F2',
+    secondary: '#D0D0D0',
+    tertiary: '#8B8B8B',
+  },
+  bdr: {
+    primary: '#2A2A2A',
+    secondary: '#3A3A3A',
+  },
+  shadow: 'rgba(0, 0, 0, 0.8)',
+  overlay: 'rgba(0, 0, 0, 0.8)',
+};
+
+// Function to get theme colors based on mode
+export const getThemeColors = (mode: 'dark' | 'light') => {
+  return mode === 'light' ? lightColors : darkColors;
+};
+
 export const theme = {
   colors: {
     // Accent colors - Crimson

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 
@@ -104,6 +105,8 @@ const Navigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, logout, isAdmin } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+  const colors = useThemeColors();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -246,6 +249,7 @@ const Navigation: React.FC = () => {
       to={item.path}
       style={{
         ...styles.navLink,
+        color: isPathActive(item.path) ? colors.txt.primary : colors.txt.secondary,
         ...(isPathActive(item.path) ? styles.navLinkActive : {}),
       }}
     >
@@ -269,6 +273,7 @@ const Navigation: React.FC = () => {
           style={{
             ...styles.navLink,
             ...styles.dropdownTrigger,
+            color: isActive ? colors.txt.primary : colors.txt.secondary,
             ...(isActive ? styles.navLinkActive : {}),
           }}
         >
@@ -283,13 +288,14 @@ const Navigation: React.FC = () => {
         </button>
 
         {isOpen && (
-          <div style={styles.dropdownMenu}>
+          <div style={{...styles.dropdownMenu, backgroundColor: colors.bg.secondary, borderColor: colors.bdr.primary}}>
             {group.items.map(item => (
               <Link
                 key={item.path}
                 to={item.path}
                 style={{
                   ...styles.dropdownItem,
+                  color: isPathActive(item.path) ? colors.txt.primary : colors.txt.secondary,
                   ...(isPathActive(item.path) ? styles.dropdownItemActive : {}),
                 }}
               >
@@ -304,14 +310,18 @@ const Navigation: React.FC = () => {
   };
 
   return (
-    <nav style={styles.nav}>
+    <nav style={{
+      ...styles.nav,
+      backgroundColor: colors.bg.secondary,
+      borderBottomColor: colors.bdr.primary,
+    }}>
       <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
         {/* Mobile/Tablet Layout */}
         {isMobileOrTablet && (
           <>
             {/* Hamburger Menu Button */}
             <button
-              style={styles.hamburger}
+              style={{...styles.hamburger, color: colors.txt.primary}}
               onClick={() => setShowMobileMenu(!showMobileMenu)}
               aria-label="Toggle menu"
             >
@@ -360,10 +370,10 @@ const Navigation: React.FC = () => {
                   style={styles.mobileOverlay}
                   onClick={() => setShowMobileMenu(false)}
                 />
-                <div className="bottom-sheet-enter" style={styles.mobileMenu}>
+                <div className="bottom-sheet-enter" style={{...styles.mobileMenu, backgroundColor: colors.bg.secondary, borderTopColor: colors.bdr.secondary}}>
                   {/* Drag handle indicator */}
                   <div style={styles.dragHandle}>
-                    <div style={styles.dragHandleBar} />
+                    <div style={{...styles.dragHandleBar, backgroundColor: colors.bdr.secondary}} />
                   </div>
                   <div style={styles.mobileMenuContent}>
                     {flatNavItems.map((item, index) => (
@@ -373,6 +383,7 @@ const Navigation: React.FC = () => {
                         className="list-item-enter"
                         style={{
                           ...styles.mobileNavLink,
+                          color: location.pathname === item.path ? colors.txt.primary : colors.txt.secondary,
                           ...(location.pathname === item.path ? styles.mobileNavLinkActive : {}),
                           animationDelay: `${index * 0.05}s`,
                           opacity: 0,
@@ -396,18 +407,18 @@ const Navigation: React.FC = () => {
 
             {/* User Menu (Mobile) */}
             {showUserMenu && (
-              <div data-user-menu className="modal-content" style={styles.userMenuMobile}>
-                <div style={styles.userInfoMobile}>
-                  <div style={styles.userNameMobile}>
+              <div data-user-menu className="modal-content" style={{...styles.userMenuMobile, backgroundColor: colors.bg.secondary, borderColor: colors.bdr.primary}}>
+                <div style={{...styles.userInfoMobile, borderBottomColor: colors.bdr.primary}}>
+                  <div style={{...styles.userNameMobile, color: colors.txt.primary}}>
                     {currentUser?.firstName} {currentUser?.lastName}
                   </div>
-                  <div style={styles.userRoleMobile}>
+                  <div style={{...styles.userRoleMobile, color: colors.txt.secondary}}>
                     {currentUser?.role === 'admin' ? 'Admin' : 'Team Member'}
                   </div>
                 </div>
-                <div style={styles.menuDivider} />
+                <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
                 <div
-                  style={styles.userMenuItem}
+                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
                   onClick={() => navigate('/profile')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -417,7 +428,7 @@ const Navigation: React.FC = () => {
                   Profile
                 </div>
                 <div
-                  style={styles.userMenuItem}
+                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
                   onClick={() => navigate('/settings')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -426,7 +437,35 @@ const Navigation: React.FC = () => {
                   </svg>
                   Settings
                 </div>
-                <div style={styles.menuDivider} />
+                <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
+                {/* Theme Toggle */}
+                <div
+                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTheme();
+                  }}
+                >
+                  {isDark ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="5" />
+                      <line x1="12" y1="1" x2="12" y2="3" />
+                      <line x1="12" y1="21" x2="12" y2="23" />
+                      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                      <line x1="1" y1="12" x2="3" y2="12" />
+                      <line x1="21" y1="12" x2="23" y2="12" />
+                      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                  )}
+                  {isDark ? 'Light Mode' : 'Dark Mode'}
+                </div>
+                <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
                 <div
                   style={styles.userMenuItemLogout}
                   onClick={handleLogout}
@@ -468,7 +507,7 @@ const Navigation: React.FC = () => {
             <div style={styles.userSection}>
               <div
                 data-user-button
-                style={styles.userButton}
+                style={{...styles.userButton, backgroundColor: colors.bg.tertiary, borderColor: colors.bdr.primary}}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowUserMenu(!showUserMenu);
@@ -478,10 +517,10 @@ const Navigation: React.FC = () => {
                   {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
                 </div>
                 <div style={styles.userInfo}>
-                  <div style={styles.userName}>
+                  <div style={{...styles.userName, color: colors.txt.primary}}>
                     {currentUser?.firstName} {currentUser?.lastName}
                   </div>
-                  <div style={styles.userRole}>
+                  <div style={{...styles.userRole, color: colors.txt.secondary}}>
                     {currentUser?.role === 'admin' ? 'Admin' : 'Team Member'}
                   </div>
                 </div>
@@ -490,7 +529,7 @@ const Navigation: React.FC = () => {
                   height="16"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="currentColor"
+                  stroke={colors.txt.secondary}
                   strokeWidth="2"
                   style={{
                     transform: showUserMenu ? 'rotate(180deg)' : 'rotate(0deg)',
@@ -502,9 +541,9 @@ const Navigation: React.FC = () => {
               </div>
 
               {showUserMenu && (
-                <div data-user-menu className="modal-content" style={styles.userMenu}>
+                <div data-user-menu className="modal-content" style={{...styles.userMenu, backgroundColor: colors.bg.secondary, borderColor: colors.bdr.primary}}>
                   <div
-                    style={styles.userMenuItem}
+                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
                     onClick={() => navigate('/profile')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -514,7 +553,7 @@ const Navigation: React.FC = () => {
                     Profile
                   </div>
                   <div
-                    style={styles.userMenuItem}
+                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
                     onClick={() => navigate('/settings')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -523,7 +562,35 @@ const Navigation: React.FC = () => {
                     </svg>
                     Settings
                   </div>
-                  <div style={styles.menuDivider} />
+                  <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
+                  {/* Theme Toggle */}
+                  <div
+                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleTheme();
+                    }}
+                  >
+                    {isDark ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="5" />
+                        <line x1="12" y1="1" x2="12" y2="3" />
+                        <line x1="12" y1="21" x2="12" y2="23" />
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                        <line x1="1" y1="12" x2="3" y2="12" />
+                        <line x1="21" y1="12" x2="23" y2="12" />
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                      </svg>
+                    )}
+                    {isDark ? 'Light Mode' : 'Dark Mode'}
+                  </div>
+                  <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
                   <div
                     style={styles.userMenuItemLogout}
                     onClick={handleLogout}
