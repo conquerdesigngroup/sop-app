@@ -25,6 +25,9 @@ const WorkHoursPage: React.FC = () => {
   const [selectedDayForDetail, setSelectedDayForDetail] = useState<string | null>(null);
   const [showHoursForm, setShowHoursForm] = useState(false);
 
+  // Calendar day detail modal (for viewing employee hours on main calendar)
+  const [calendarDetailModal, setCalendarDetailModal] = useState<{ employeeId: string; date: string } | null>(null);
+
   // Filter states
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -886,19 +889,29 @@ const WorkHoursPage: React.FC = () => {
                   </span>
                   {hasWorkDays && (
                     <div style={styles.calendarDayContent}>
-                      {dayWorkDays.slice(0, 3).map(wd => (
-                        <div
-                          key={wd.id}
-                          style={{
-                            ...styles.calendarWorkDay,
-                            backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
-                              wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
-                          }}
-                          title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''}`}
-                        >
-                          {getUserName(wd.employeeId).split(' ')[0]}
-                        </div>
-                      ))}
+                      {dayWorkDays.slice(0, 3).map(wd => {
+                        const employeeHours = getWorkHoursForDateAndEmployee(day.date, wd.employeeId);
+                        const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
+                        return (
+                          <div
+                            key={wd.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCalendarDetailModal({ employeeId: wd.employeeId, date: day.date });
+                            }}
+                            style={{
+                              ...styles.calendarWorkDay,
+                              backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
+                                wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
+                              cursor: 'pointer',
+                            }}
+                            title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''} - Click to view hours`}
+                          >
+                            {getUserName(wd.employeeId).split(' ')[0]}
+                            {totalHours > 0 && <span style={styles.calendarWorkDayHours}>{totalHours}h</span>}
+                          </div>
+                        );
+                      })}
                       {dayWorkDays.length > 3 && (
                         <div style={styles.calendarMoreIndicator}>
                           +{dayWorkDays.length - 3} more
@@ -1378,6 +1391,87 @@ const WorkHoursPage: React.FC = () => {
                 disabled={selectedDates.length === 0 && datesToRemove.length === 0}
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calendar Employee Hours Detail Modal */}
+      {calendarDetailModal && (
+        <div style={styles.modalOverlay} onClick={() => setCalendarDetailModal(null)}>
+          <div style={{ ...styles.modal, maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h2 style={styles.modalTitle}>{getUserName(calendarDetailModal.employeeId)}</h2>
+              <button onClick={() => setCalendarDetailModal(null)} style={styles.closeButton}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div style={styles.modalContent}>
+              <div style={styles.calendarDetailDate}>
+                {formatDate(calendarDetailModal.date)}
+              </div>
+
+              {/* Work Hours for this employee on this day */}
+              {(() => {
+                const hours = getWorkHoursForDateAndEmployee(calendarDetailModal.date, calendarDetailModal.employeeId);
+                const totalHours = hours.reduce((sum, h) => sum + h.totalHours, 0);
+
+                if (hours.length === 0) {
+                  return (
+                    <div style={styles.calendarDetailNoHours}>
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      <p>No hours logged for this day</p>
+                      <span style={styles.calendarDetailNoHoursSubtext}>
+                        This employee is scheduled but hasn't logged their work hours yet.
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <div style={styles.calendarDetailHoursList}>
+                      {hours.map(wh => (
+                        <div key={wh.id} style={styles.calendarDetailHoursItem}>
+                          <div style={styles.calendarDetailHoursTime}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            {formatTime(wh.startTime)} - {formatTime(wh.endTime)}
+                          </div>
+                          <div style={styles.calendarDetailHoursInfo}>
+                            {wh.breakMinutes > 0 && (
+                              <span style={styles.calendarDetailBreak}>
+                                {wh.breakMinutes}min break
+                              </span>
+                            )}
+                            <span style={styles.calendarDetailHoursValue}>{wh.totalHours}h</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={styles.calendarDetailTotal}>
+                      <span>Total Hours</span>
+                      <span style={styles.calendarDetailTotalValue}>{totalHours}h</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div style={styles.modalFooter}>
+              <button onClick={() => setCalendarDetailModal(null)} style={styles.cancelButton}>
+                Close
               </button>
             </div>
           </div>
@@ -2303,6 +2397,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  calendarWorkDayHours: {
+    fontSize: '10px',
+    opacity: 0.9,
+    fontWeight: 600,
   },
   calendarMoreIndicator: {
     fontSize: '10px',
@@ -2328,6 +2431,83 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '12px',
     height: '12px',
     borderRadius: theme.borderRadius.full,
+  },
+  // Calendar Employee Detail Modal styles
+  calendarDetailDate: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    textAlign: 'center',
+    padding: '12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: '16px',
+  },
+  calendarDetailNoHours: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '32px 16px',
+    textAlign: 'center',
+    color: theme.colors.txt.tertiary,
+  },
+  calendarDetailNoHoursSubtext: {
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+    marginTop: '8px',
+  },
+  calendarDetailHoursList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  calendarDetailHoursItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+  },
+  calendarDetailHoursTime: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    color: theme.colors.txt.primary,
+  },
+  calendarDetailHoursInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  calendarDetailBreak: {
+    fontSize: '12px',
+    color: theme.colors.txt.tertiary,
+  },
+  calendarDetailHoursValue: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: theme.colors.primary,
+  },
+  calendarDetailTotal: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px',
+    marginTop: '16px',
+    backgroundColor: theme.colors.bg.tertiary,
+    borderRadius: theme.borderRadius.md,
+    borderTop: `2px solid ${theme.colors.primary}`,
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  calendarDetailTotalValue: {
+    fontSize: '24px',
+    fontWeight: 700,
+    color: theme.colors.primary,
   },
 };
 
