@@ -52,25 +52,34 @@ const WorkHoursPage: React.FC = () => {
   const [formBreakMinutes, setFormBreakMinutes] = useState(30);
   const [formNotes, setFormNotes] = useState('');
 
-  // Calculate date range for work hours (past)
+  // Calculate date range for work hours (includes today and some future for flexibility)
   const getDateRange = () => {
     const today = new Date();
-    const endDate = today.toISOString().split('T')[0];
     let startDate: string;
+    let endDate: string;
 
     switch (filterDateRange) {
       case 'week':
         const weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
         startDate = weekAgo.toISOString().split('T')[0];
+        // Include a week ahead for recently scheduled work
+        const weekAhead = new Date(today);
+        weekAhead.setDate(weekAhead.getDate() + 7);
+        endDate = weekAhead.toISOString().split('T')[0];
         break;
       case 'month':
         const monthAgo = new Date(today);
         monthAgo.setMonth(monthAgo.getMonth() - 1);
         startDate = monthAgo.toISOString().split('T')[0];
+        // Include a month ahead
+        const monthAhead = new Date(today);
+        monthAhead.setMonth(monthAhead.getMonth() + 1);
+        endDate = monthAhead.toISOString().split('T')[0];
         break;
       default:
         startDate = '2020-01-01';
+        endDate = '2099-12-31';
     }
     return { startDate, endDate };
   };
@@ -1249,7 +1258,22 @@ const WorkHoursPage: React.FC = () => {
                       {getWorkHoursForDateAndEmployee(selectedDayForDetail, scheduleEmployee).map(wh => (
                         <div key={wh.id} style={styles.dayDetailHoursItem}>
                           <span>{formatTime(wh.startTime)} - {formatTime(wh.endTime)}</span>
-                          <span style={styles.dayDetailHoursValue}>{wh.totalHours}h</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={styles.dayDetailHoursValue}>{wh.totalHours}h</span>
+                            <button
+                              onClick={() => {
+                                openEditModal(wh);
+                                setShowScheduleModal(false);
+                              }}
+                              style={styles.dayDetailEditBtn}
+                              title="Edit hours"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       ))}
                       <div style={styles.dayDetailHoursTotal}>
@@ -1322,7 +1346,7 @@ const WorkHoursPage: React.FC = () => {
                           onClick={handleAddHoursFromSchedule}
                           style={styles.dayDetailSaveBtn}
                         >
-                          Add Hours
+                          Save Hours
                         </button>
                       </div>
                     </div>
@@ -2318,6 +2342,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '16px',
     fontWeight: 700,
     color: theme.colors.primary,
+  },
+  dayDetailEditBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '4px',
+    backgroundColor: 'transparent',
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.sm,
+    color: theme.colors.txt.secondary,
+    cursor: 'pointer',
   },
   dayDetailActions: {
     display: 'flex',
