@@ -32,10 +32,11 @@ const WorkHoursPage: React.FC = () => {
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDateRange, setFilterDateRange] = useState<'week' | 'month' | 'all'>('week');
-  const [viewMode, setViewMode] = useState<'list' | 'summary' | 'schedule' | 'calendar'>('calendar');
+  const [viewMode, setViewMode] = useState<'list' | 'schedule' | 'calendar'>('calendar');
 
   // Calendar state
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [calendarViewMode, setCalendarViewMode] = useState<'day' | 'week' | 'month'>('month');
 
   // Schedule form states
   const [scheduleEmployee, setScheduleEmployee] = useState<string>(currentUser?.id || '');
@@ -237,17 +238,70 @@ const WorkHoursPage: React.FC = () => {
     });
   };
 
-  // Navigate calendar
-  const prevMonth = () => {
-    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  // Navigate calendar based on view mode
+  const prevPeriod = () => {
+    if (calendarViewMode === 'day') {
+      setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 1));
+    } else if (calendarViewMode === 'week') {
+      setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7));
+    } else {
+      setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    }
   };
 
-  const nextMonth = () => {
-    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  const nextPeriod = () => {
+    if (calendarViewMode === 'day') {
+      setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 1));
+    } else if (calendarViewMode === 'week') {
+      setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7));
+    } else {
+      setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    }
   };
 
   const goToToday = () => {
     setCalendarMonth(new Date());
+  };
+
+  // Get week days for the current week
+  const getWeekDays = () => {
+    const current = new Date(calendarMonth);
+    const dayOfWeek = current.getDay();
+    const startOfWeek = new Date(current);
+    startOfWeek.setDate(current.getDate() - dayOfWeek);
+
+    const days: { date: string; dayNum: number; dayName: string; isToday: boolean }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      const today = new Date();
+      days.push({
+        date: date.toISOString().split('T')[0],
+        dayNum: date.getDate(),
+        dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        isToday: date.toDateString() === today.toDateString(),
+      });
+    }
+    return days;
+  };
+
+  const weekDays = getWeekDays();
+
+  // Get calendar title based on view mode
+  const getCalendarTitle = () => {
+    if (calendarViewMode === 'day') {
+      return calendarMonth.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    } else if (calendarViewMode === 'week') {
+      const start = weekDays[0];
+      const end = weekDays[6];
+      const startDate = new Date(start.date);
+      const endDate = new Date(end.date);
+      if (startDate.getMonth() === endDate.getMonth()) {
+        return `${startDate.toLocaleDateString('en-US', { month: 'long' })} ${start.dayNum} - ${end.dayNum}, ${endDate.getFullYear()}`;
+      }
+      return `${startDate.toLocaleDateString('en-US', { month: 'short' })} ${start.dayNum} - ${endDate.toLocaleDateString('en-US', { month: 'short' })} ${end.dayNum}, ${endDate.getFullYear()}`;
+    }
+    return calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
   // Get active employees
@@ -660,16 +714,6 @@ const WorkHoursPage: React.FC = () => {
             >
               Calendar
             </button>
-            <button
-              onClick={() => setViewMode('summary')}
-              style={{
-                ...styles.toggleButton,
-                ...(isMobileOrTablet ? styles.toggleButtonMobile : {}),
-                ...(viewMode === 'summary' ? styles.toggleButtonActive : {}),
-              }}
-            >
-              Summary
-            </button>
           </div>
 
           {/* Date Range Filter */}
@@ -853,30 +897,179 @@ const WorkHoursPage: React.FC = () => {
               ))
           )}
         </div>
-      ) : viewMode === 'calendar' ? (
+      ) : (
         // Calendar View
         <div style={isMobileOrTablet ? styles.calendarContainerMobile : styles.calendarContainer}>
+          {/* Calendar View Mode Toggle */}
+          <div style={styles.calendarViewToggle}>
+            <button
+              onClick={() => setCalendarViewMode('day')}
+              style={{
+                ...styles.calendarViewToggleBtn,
+                ...(calendarViewMode === 'day' ? styles.calendarViewToggleBtnActive : {}),
+              }}
+            >
+              Day
+            </button>
+            <button
+              onClick={() => setCalendarViewMode('week')}
+              style={{
+                ...styles.calendarViewToggleBtn,
+                ...(calendarViewMode === 'week' ? styles.calendarViewToggleBtnActive : {}),
+              }}
+            >
+              Week
+            </button>
+            <button
+              onClick={() => setCalendarViewMode('month')}
+              style={{
+                ...styles.calendarViewToggleBtn,
+                ...(calendarViewMode === 'month' ? styles.calendarViewToggleBtnActive : {}),
+              }}
+            >
+              Month
+            </button>
+          </div>
+
           {/* Calendar Header */}
           <div style={styles.calendarHeader}>
-            <button onClick={prevMonth} style={styles.calendarNavButton}>
+            <button onClick={prevPeriod} style={styles.calendarNavButton}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
             <div style={styles.calendarTitle}>
               <h3 style={isMobileOrTablet ? styles.calendarMonthTitleMobile : styles.calendarMonthTitle}>
-                {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                {getCalendarTitle()}
               </h3>
               <button onClick={goToToday} style={styles.todayButton}>Today</button>
             </div>
-            <button onClick={nextMonth} style={styles.calendarNavButton}>
+            <button onClick={nextPeriod} style={styles.calendarNavButton}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
           </div>
 
-          {/* Calendar Grid */}
+          {/* Day View */}
+          {calendarViewMode === 'day' && (
+            <div style={styles.dayViewContainer}>
+              {(() => {
+                const dateStr = calendarMonth.toISOString().split('T')[0];
+                const dayWorkDays = getWorkDaysForDate(dateStr);
+                const isToday = dateStr === new Date().toISOString().split('T')[0];
+
+                return (
+                  <div style={{
+                    ...styles.dayViewCard,
+                    ...(isToday ? { borderColor: theme.colors.primary } : {}),
+                  }}>
+                    {dayWorkDays.length === 0 ? (
+                      <div style={styles.dayViewEmpty}>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                        <p>No scheduled work for this day</p>
+                      </div>
+                    ) : (
+                      <div style={styles.dayViewEntries}>
+                        {dayWorkDays.map(wd => {
+                          const employeeHours = getWorkHoursForDateAndEmployee(dateStr, wd.employeeId);
+                          const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
+                          return (
+                            <div
+                              key={wd.id}
+                              onClick={() => setCalendarDetailModal({ employeeId: wd.employeeId, date: dateStr })}
+                              style={styles.dayViewEntry}
+                            >
+                              <div style={styles.dayViewEntryHeader}>
+                                <span style={styles.dayViewEntryName}>{getUserName(wd.employeeId)}</span>
+                                <span style={{
+                                  ...styles.dayViewEntryStatus,
+                                  backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
+                                    wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
+                                }}>
+                                  {wd.status}
+                                </span>
+                              </div>
+                              {employeeHours.length > 0 ? (
+                                <div style={styles.dayViewEntryDetails}>
+                                  {employeeHours.map(h => (
+                                    <div key={h.id} style={styles.dayViewEntryTime}>
+                                      {formatTime(h.startTime)} - {formatTime(h.endTime)}
+                                      {h.breakMinutes > 0 && <span style={styles.dayViewEntryBreak}>({h.breakMinutes}min break)</span>}
+                                    </div>
+                                  ))}
+                                  <div style={styles.dayViewEntryTotal}>{totalHours}h total</div>
+                                </div>
+                              ) : (
+                                <div style={styles.dayViewEntryNoHours}>No hours logged yet</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Week View */}
+          {calendarViewMode === 'week' && (
+            <div style={styles.weekViewContainer}>
+              <div style={styles.weekViewGrid}>
+                {weekDays.map((day, index) => {
+                  const dayWorkDays = getWorkDaysForDate(day.date);
+                  return (
+                    <div key={index} style={{
+                      ...styles.weekViewDay,
+                      ...(day.isToday ? styles.weekViewDayToday : {}),
+                    }}>
+                      <div style={styles.weekViewDayHeader}>
+                        <span style={styles.weekViewDayName}>{day.dayName}</span>
+                        <span style={{
+                          ...styles.weekViewDayNum,
+                          ...(day.isToday ? styles.weekViewDayNumToday : {}),
+                        }}>{day.dayNum}</span>
+                      </div>
+                      <div style={styles.weekViewDayContent}>
+                        {dayWorkDays.length === 0 ? (
+                          <div style={styles.weekViewEmpty}>-</div>
+                        ) : (
+                          dayWorkDays.map(wd => {
+                            const employeeHours = getWorkHoursForDateAndEmployee(day.date, wd.employeeId);
+                            const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
+                            return (
+                              <div
+                                key={wd.id}
+                                onClick={() => setCalendarDetailModal({ employeeId: wd.employeeId, date: day.date })}
+                                style={{
+                                  ...styles.weekViewEntry,
+                                  backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
+                                    wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
+                                }}
+                              >
+                                <span style={styles.weekViewEntryName}>{getUserName(wd.employeeId).split(' ')[0]}</span>
+                                {totalHours > 0 && <span style={styles.weekViewEntryHours}>{totalHours}h</span>}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Month View (original calendar grid) */}
+          {calendarViewMode === 'month' && (
           <div style={styles.calendarGrid}>
             {/* Day Headers */}
             {(isMobileOrTablet ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((day, i) => (
@@ -941,6 +1134,7 @@ const WorkHoursPage: React.FC = () => {
               );
             })}
           </div>
+          )}
 
           {/* Legend */}
           <div style={styles.calendarLegend}>
@@ -957,41 +1151,6 @@ const WorkHoursPage: React.FC = () => {
               <span>Cancelled</span>
             </div>
           </div>
-        </div>
-      ) : (
-        // Summary View
-        <div style={styles.summaryContainer}>
-          {summaries.length === 0 ? (
-            <div style={styles.emptyState}>
-              <h3>No data for this period</h3>
-            </div>
-          ) : (
-            summaries.map(summary => (
-              <div key={summary.employeeId} style={styles.summaryCard}>
-                <div style={styles.summaryHeader}>
-                  <div style={styles.summaryName}>{summary.employeeName}</div>
-                  <div style={styles.summaryTotal}>
-                    <span style={styles.totalValue}>{summary.totalHours}</span>
-                    <span style={styles.totalLabel}>total hours</span>
-                  </div>
-                </div>
-                <div style={styles.summaryStats}>
-                  <div style={styles.statItem}>
-                    <span style={styles.statValue}>{summary.daysWorked}</span>
-                    <span style={styles.statLabel}>days</span>
-                  </div>
-                  <div style={styles.statItem}>
-                    <span style={{ ...styles.statValue, color: theme.colors.status.success }}>{summary.approvedHours}</span>
-                    <span style={styles.statLabel}>approved</span>
-                  </div>
-                  <div style={styles.statItem}>
-                    <span style={{ ...styles.statValue, color: theme.colors.status.warning }}>{summary.pendingHours}</span>
-                    <span style={styles.statLabel}>pending</span>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
         </div>
       )}
 
@@ -2456,6 +2615,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     padding: '12px',
   },
+  calendarViewToggle: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBottom: '16px',
+    gap: '4px',
+  },
+  calendarViewToggleBtn: {
+    padding: '6px 16px',
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.secondary,
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  calendarViewToggleBtnActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: '#FFFFFF',
+  },
   calendarHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -2619,6 +2799,154 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '12px',
     height: '12px',
     borderRadius: theme.borderRadius.full,
+  },
+  // Day View styles
+  dayViewContainer: {
+    marginTop: '16px',
+  },
+  dayViewCard: {
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    padding: '24px',
+    minHeight: '200px',
+  },
+  dayViewEmpty: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '48px 24px',
+    textAlign: 'center',
+    color: theme.colors.txt.tertiary,
+  },
+  dayViewEntries: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  dayViewEntry: {
+    backgroundColor: theme.colors.bg.secondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    padding: '16px',
+    cursor: 'pointer',
+  },
+  dayViewEntryHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px',
+  },
+  dayViewEntryName: {
+    fontSize: '16px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  dayViewEntryStatus: {
+    padding: '4px 10px',
+    borderRadius: theme.borderRadius.full,
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+  },
+  dayViewEntryDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  dayViewEntryTime: {
+    fontSize: '14px',
+    color: theme.colors.txt.secondary,
+  },
+  dayViewEntryBreak: {
+    marginLeft: '8px',
+    color: theme.colors.txt.tertiary,
+  },
+  dayViewEntryTotal: {
+    marginTop: '8px',
+    fontSize: '15px',
+    fontWeight: 600,
+    color: theme.colors.primary,
+  },
+  dayViewEntryNoHours: {
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+    fontStyle: 'italic',
+  },
+  // Week View styles
+  weekViewContainer: {
+    marginTop: '16px',
+  },
+  weekViewGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    gap: '8px',
+  },
+  weekViewDay: {
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    minHeight: '150px',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  weekViewDayToday: {
+    borderColor: theme.colors.primary,
+  },
+  weekViewDayHeader: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '8px',
+    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  weekViewDayName: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.txt.tertiary,
+    textTransform: 'uppercase',
+  },
+  weekViewDayNum: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  weekViewDayNumToday: {
+    color: theme.colors.primary,
+  },
+  weekViewDayContent: {
+    flex: 1,
+    padding: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  weekViewEmpty: {
+    textAlign: 'center',
+    color: theme.colors.txt.tertiary,
+    fontSize: '13px',
+  },
+  weekViewEntry: {
+    padding: '4px 8px',
+    borderRadius: theme.borderRadius.sm,
+    fontSize: '11px',
+    fontWeight: 500,
+    color: '#FFFFFF',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    cursor: 'pointer',
+  },
+  weekViewEntryName: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  weekViewEntryHours: {
+    fontWeight: 600,
+    flexShrink: 0,
   },
   // Calendar Employee Detail Modal styles
   calendarDetailDate: {
