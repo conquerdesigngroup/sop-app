@@ -1451,6 +1451,31 @@ const WorkHoursPage: React.FC = () => {
                     Clear Selection
                   </button>
                 )}
+                {existingWorkDayDates.length > 0 && datesToRemove.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Mark all existing scheduled days for removal
+                      setDatesToRemove(existingWorkDayDates);
+                      showToast(`${existingWorkDayDates.length} day${existingWorkDayDates.length !== 1 ? 's' : ''} marked for removal`, 'success');
+                    }}
+                    style={styles.clearAllScheduledBtn}
+                  >
+                    Clear All Scheduled
+                  </button>
+                )}
+                {datesToRemove.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDatesToRemove([]);
+                      showToast('Removal undone', 'success');
+                    }}
+                    style={styles.undoRemovalBtn}
+                  >
+                    Undo Removal ({datesToRemove.length})
+                  </button>
+                )}
               </div>
 
               {/* Recurring Days Toggle */}
@@ -2574,6 +2599,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     cursor: 'pointer',
     marginLeft: 'auto',
+  },
+  clearAllScheduledBtn: {
+    padding: '6px 12px',
+    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    border: `1px solid ${theme.colors.status.error}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.status.error,
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  undoRemovalBtn: {
+    padding: '6px 12px',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    border: `1px solid ${theme.colors.status.info}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.status.info,
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   recurringDaysContainer: {
     padding: '12px',
