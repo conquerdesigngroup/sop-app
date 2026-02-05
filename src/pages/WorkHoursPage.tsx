@@ -312,6 +312,31 @@ const WorkHoursPage: React.FC = () => {
     );
   }, [users]);
 
+  // Employee colors - distinct colors for each employee
+  const employeeColors = [
+    '#3B82F6', // Blue
+    '#10B981', // Green
+    '#F59E0B', // Amber
+    '#8B5CF6', // Purple
+    '#EC4899', // Pink
+    '#06B6D4', // Cyan
+    '#F97316', // Orange
+    '#6366F1', // Indigo
+    '#14B8A6', // Teal
+    '#EF4444', // Red
+    '#84CC16', // Lime
+    '#A855F7', // Violet
+  ];
+
+  // Get consistent color for a user based on their position in the sorted list
+  const getUserColor = (userId: string) => {
+    const sortedUsers = [...users].sort((a, b) =>
+      `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+    );
+    const index = sortedUsers.findIndex(u => u.id === userId);
+    return employeeColors[index % employeeColors.length];
+  };
+
   // Get user name
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId);
@@ -1014,17 +1039,29 @@ const WorkHoursPage: React.FC = () => {
                             <div
                               key={wd.id}
                               onClick={() => setCalendarDetailModal({ employeeId: wd.employeeId, date: dateStr })}
-                              style={styles.dayViewEntry}
+                              style={{
+                                ...styles.dayViewEntry,
+                                borderLeft: `4px solid ${getUserColor(wd.employeeId)}`,
+                              }}
                             >
                               <div style={styles.dayViewEntryHeader}>
-                                <span style={styles.dayViewEntryName}>{getUserName(wd.employeeId)}</span>
-                                <span style={{
-                                  ...styles.dayViewEntryStatus,
-                                  backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
-                                    wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
-                                }}>
-                                  {wd.status}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{
+                                    width: '10px',
+                                    height: '10px',
+                                    borderRadius: '50%',
+                                    backgroundColor: getUserColor(wd.employeeId),
+                                  }} />
+                                  <span style={styles.dayViewEntryName}>{getUserName(wd.employeeId)}</span>
+                                </div>
+                                {totalHours > 0 && (
+                                  <span style={{
+                                    ...styles.dayViewEntryStatus,
+                                    backgroundColor: getUserColor(wd.employeeId),
+                                  }}>
+                                    {totalHours}h
+                                  </span>
+                                )}
                               </div>
                               {employeeHours.length > 0 ? (
                                 <div style={styles.dayViewEntryDetails}>
@@ -1090,8 +1127,7 @@ const WorkHoursPage: React.FC = () => {
                                 onClick={() => setCalendarDetailModal({ employeeId: wd.employeeId, date: day.date })}
                                 style={{
                                   ...styles.weekViewEntry,
-                                  backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
-                                    wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
+                                  backgroundColor: getUserColor(wd.employeeId),
                                 }}
                                 title={`${getUserName(wd.employeeId)} - ${totalHours > 0 ? totalHours + 'h' : 'No hours logged'}`}
                               >
@@ -1166,8 +1202,7 @@ const WorkHoursPage: React.FC = () => {
                             }}
                             style={{
                               ...(isMobileOrTablet ? styles.calendarWorkDayMobile : styles.calendarWorkDay),
-                              backgroundColor: wd.status === 'confirmed' ? theme.colors.status.success :
-                                wd.status === 'cancelled' ? theme.colors.status.error : theme.colors.status.info,
+                              backgroundColor: getUserColor(wd.employeeId),
                               cursor: 'pointer',
                             }}
                             title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''} - Click to view${canEditThis ? '/edit' : ''} hours`}
@@ -1190,20 +1225,19 @@ const WorkHoursPage: React.FC = () => {
           </div>
           )}
 
-          {/* Legend */}
+          {/* Employee Color Legend */}
           <div style={styles.calendarLegend}>
-            <div style={styles.legendItem}>
-              <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.info }} />
-              <span>Scheduled</span>
-            </div>
-            <div style={styles.legendItem}>
-              <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.success }} />
-              <span>Confirmed</span>
-            </div>
-            <div style={styles.legendItem}>
-              <span style={{ ...styles.legendDot, backgroundColor: theme.colors.status.error }} />
-              <span>Cancelled</span>
-            </div>
+            {activeEmployees.slice(0, 6).map(emp => (
+              <div key={emp.id} style={styles.legendItem}>
+                <span style={{ ...styles.legendDot, backgroundColor: getUserColor(emp.id) }} />
+                <span>{emp.firstName}</span>
+              </div>
+            ))}
+            {activeEmployees.length > 6 && (
+              <div style={styles.legendItem}>
+                <span style={styles.legendMore}>+{activeEmployees.length - 6} more</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3057,6 +3091,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '12px',
     height: '12px',
     borderRadius: theme.borderRadius.full,
+  },
+  legendMore: {
+    fontSize: '12px',
+    color: theme.colors.txt.tertiary,
+    fontStyle: 'italic',
   },
   // Day View styles
   dayViewContainer: {
