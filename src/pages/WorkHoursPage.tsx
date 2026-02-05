@@ -1973,7 +1973,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.bg.tertiary,
+    backgroundColor: '#333333',
     border: `1px solid transparent`,
     borderRadius: theme.borderRadius.sm,
     cursor: 'pointer',
@@ -1981,6 +1981,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'relative',
     padding: '6px 2px',
     minHeight: '36px',
+    color: '#FFFFFF',
   },
   scheduleCalendarDayOther: {
     opacity: 0.3,
@@ -1988,9 +1989,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   scheduleCalendarDayToday: {
     borderColor: theme.colors.primary,
+    borderWidth: '2px',
   },
   scheduleCalendarDayWeekend: {
-    backgroundColor: theme.colors.bg.primary,
+    // Same as regular days - no different color
   },
   scheduleCalendarDayExisting: {
     backgroundColor: theme.colors.status.info,
@@ -2011,6 +2013,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   scheduleCalendarDayNum: {
     fontSize: '13px',
     fontWeight: 500,
+    color: '#FFFFFF',
   },
   scheduleDayIndicator: {
     fontSize: '6px',
