@@ -38,11 +38,11 @@ export const CustomCheckbox: React.FC<CustomCheckboxProps> = ({
     let backgroundColor = 'transparent';
 
     if (checked) {
-      borderColor = theme.colors.primary; // #EF233C
+      borderColor = theme.colors.primary; // #E2144F
       backgroundColor = theme.colors.primary;
 
       if (isHovered && !disabled) {
-        backgroundColor = theme.colors.primaryHover; // #FF2E47
+        backgroundColor = theme.colors.primaryHover; // #FF2D6B
         borderColor = theme.colors.primaryHover;
       }
     } else if (isHovered && !disabled) {
@@ -60,7 +60,7 @@ export const CustomCheckbox: React.FC<CustomCheckboxProps> = ({
       flexShrink: 0,
       cursor: disabled ? 'not-allowed' : 'pointer',
       opacity: disabled ? 0.5 : 1,
-      outline: isFocused && !disabled ? `2px solid rgba(239, 35, 60, 0.3)` : 'none',
+      outline: isFocused && !disabled ? `2px solid rgba(226, 20, 79, 0.3)` : 'none',
       outlineOffset: '2px',
     };
   };

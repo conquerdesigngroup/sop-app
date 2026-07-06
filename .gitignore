@@ -28,3 +28,7 @@ yarn-error.log*
 
 # Local Netlify folder
 .netlify
+
+# environment files (never commit secrets)
+.env
+.env*

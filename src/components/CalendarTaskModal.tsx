@@ -314,7 +314,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
           <div style={styles.section}>
             <div style={styles.infoGrid}>
               <div style={styles.infoItem}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                   <line x1="16" y1="2" x2="16" y2="6" />
                   <line x1="8" y1="2" x2="8" y2="6" />
@@ -323,21 +323,21 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 <span style={styles.infoText}>{formatDate(task.scheduledDate)}</span>
               </div>
               <div style={styles.infoItem}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="12 6 12 12 16 14" />
                 </svg>
                 <span style={styles.infoText}>{formatTime(task.dueTime)}</span>
               </div>
               <div style={styles.infoItem}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                   <path d="M12 2L2 7l10 5 10-5-10-5z" />
                   <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
                 </svg>
                 <span style={styles.infoText}>{task.department} - {task.category}</span>
               </div>
               <div style={styles.infoItem}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="12 6 12 12 16 14" />
                 </svg>
@@ -476,9 +476,9 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 height="20"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke={theme.colors.textSecondary}
                 strokeWidth="2"
                 style={{
+                  stroke: theme.colors.textSecondary,
                   transition: 'transform 0.2s',
                   transform: showComments ? 'rotate(180deg)' : 'rotate(0deg)',
                 }}
@@ -493,7 +493,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 <div style={styles.commentsList}>
                   {comments.length === 0 ? (
                     <div style={styles.noComments}>
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="1.5">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textMuted }} strokeWidth="1.5">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                       </svg>
                       <p>No comments yet. Start the conversation!</p>

@@ -194,7 +194,7 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={theme.colors.bg.tertiary}
+          style={{ stroke: theme.colors.bg.tertiary }}
           strokeWidth={strokeWidth}
         />
         {/* Progress circle */}

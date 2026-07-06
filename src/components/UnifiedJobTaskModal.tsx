@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../contexts/ToastContext';
 import { JobTask, TaskTemplate, TaskPriority, RecurrencePattern } from '../types';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
@@ -57,6 +58,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   initialScheduledDate = null,
 }) => {
   const { isMobile } = useResponsive();
+  const { error: showError } = useToast();
 
   // Template Selection
   const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
@@ -252,28 +254,28 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
 
     // Validation
     if (!title.trim()) {
-      alert('Please enter a task title');
+      showError('Please enter a task title');
       return;
     }
     if (assignedTo.length === 0) {
-      alert('Please assign to at least one team member');
+      showError('Please assign to at least one team member');
       return;
     }
     if (!scheduledDate) {
-      alert('Please select a scheduled date');
+      showError('Please select a scheduled date');
       return;
     }
 
     // Check that all checklist items have titles (if any exist)
     const invalidItems = checklistItems.filter(item => !item.title.trim());
     if (invalidItems.length > 0) {
-      alert('Please enter a title for all checklist steps');
+      showError('Please enter a title for all checklist steps');
       return;
     }
 
     // Validate recurrence
     if (isRecurring && recurrenceFrequency !== 'daily' && recurrenceDays.length === 0) {
-      alert('Please select at least one day for recurring tasks');
+      showError('Please select at least one day for recurring tasks');
       return;
     }
 

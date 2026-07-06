@@ -882,15 +882,15 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
 
     try {
       const updateData: any = {};
-      if (sopData.title) updateData.title = sopData.title;
-      if (sopData.description) updateData.description = sopData.description;
-      if (sopData.department) updateData.department = sopData.department;
-      if (sopData.category) updateData.category = sopData.category;
+      if (sopData.title !== undefined) updateData.title = sopData.title;
+      if (sopData.description !== undefined) updateData.description = sopData.description;
+      if (sopData.department !== undefined) updateData.department = sopData.department;
+      if (sopData.category !== undefined) updateData.category = sopData.category;
       if (sopData.icon !== undefined) updateData.icon = sopData.icon;
       if (sopData.imageUrl !== undefined) updateData.image_url = sopData.imageUrl;
-      if (sopData.steps) updateData.steps = sopData.steps;
-      if (sopData.tags) updateData.tags = sopData.tags;
-      if (sopData.status) updateData.status = sopData.status;
+      if (sopData.steps !== undefined) updateData.steps = sopData.steps;
+      if (sopData.tags !== undefined) updateData.tags = sopData.tags;
+      if (sopData.status !== undefined) updateData.status = sopData.status;
       if (sopData.isTemplate !== undefined) updateData.is_template = sopData.isTemplate;
 
       const { error } = await supabase

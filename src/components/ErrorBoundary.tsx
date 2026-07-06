@@ -207,7 +207,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '15px',
     fontWeight: '700',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',

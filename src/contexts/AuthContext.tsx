@@ -182,11 +182,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         await loadUsers();
         console.log('[Auth] Users loaded');
 
-        // Set up auth state listener
-        console.log('[Auth] Setting up auth state listener...');
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (event: any, session: any) => {
-            if (event === 'SIGNED_IN' && session?.user) {
+        console.log('[Auth] Initialization complete - setting loading to false');
+        setLoading(false);
+      } catch (error) {
+        console.error('[Auth] Error initializing auth:', error);
+        console.log('[Auth] Error occurred - setting loading to false');
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    // Auth state listener — registered in the effect body (not inside the async
+    // init function) so the unsubscribe cleanup actually runs on unmount.
+    // TOKEN_REFRESHED/USER_UPDATED keep the profile in sync after refreshes.
+    //
+    // IMPORTANT: the callback runs while supabase-js holds the per-origin
+    // `lock:sop-app-auth` web lock. Awaiting any supabase call here (which
+    // itself waits on that lock) deadlocks the whole origin — every tab of
+    // the app hangs on a spinner. Dispatch async work via setTimeout so it
+    // runs after the lock is released.
+    let subscription: { unsubscribe: () => void } | null = null;
+    if (useSupabase) {
+      const { data } = supabase.auth.onAuthStateChange(
+        (event: any, session: any) => {
+          if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+            setTimeout(async () => {
               const { data: profile } = await supabase
                 .from('profiles')
                 .select('*')
@@ -196,26 +217,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               if (profile) {
                 setCurrentUser(mapProfileToUser(profile, session.user));
               }
-            } else if (event === 'SIGNED_OUT') {
-              setCurrentUser(null);
-            }
+            }, 0);
+          } else if (event === 'SIGNED_OUT') {
+            setCurrentUser(null);
           }
-        );
+        }
+      );
+      subscription = data.subscription;
+    }
 
-        console.log('[Auth] Initialization complete - setting loading to false');
-        setLoading(false);
-
-        return () => {
-          subscription.unsubscribe();
-        };
-      } catch (error) {
-        console.error('[Auth] Error initializing auth:', error);
-        console.log('[Auth] Error occurred - setting loading to false');
-        setLoading(false);
-      }
+    return () => {
+      subscription?.unsubscribe();
     };
-
-    initializeAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useSupabase]);
 
@@ -302,7 +315,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .eq('id', data.user.id)
           .single();
 
-        // If no profile found by ID, try by email (for migrated users)
+        // If no profile found by ID, fall back to an email lookup (for migrated
+        // users). Note: we intentionally do NOT rewrite the profile's primary key
+        // here — the id column is an FK to auth.users and referenced by other
+        // tables; fixing mismatched ids is a one-time server-side migration.
         if (!profile || profileError) {
           console.log('Profile not found by ID, trying by email...');
           const { data: profileByEmail, error: emailError } = await supabase
@@ -312,16 +328,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             .single();
 
           if (profileByEmail && !emailError) {
-            // Update the profile to use the correct auth user ID
-            const { error: updateError } = await supabase
-              .from('profiles')
-              .update({ id: data.user.id })
-              .eq('email', data.user.email);
-
-            if (!updateError) {
-              profile = { ...profileByEmail, id: data.user.id };
-              profileError = null;
-            }
+            profile = profileByEmail;
+            profileError = null;
           }
         }
 
@@ -560,13 +568,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       // Update profile in database
       const updateData: any = {};
-      if (userData.firstName) updateData.first_name = userData.firstName;
-      if (userData.lastName) updateData.last_name = userData.lastName;
-      if (userData.role) updateData.role = userData.role;
-      if (userData.department) updateData.department = userData.department;
+      if (userData.firstName !== undefined) updateData.first_name = userData.firstName;
+      if (userData.lastName !== undefined) updateData.last_name = userData.lastName;
+      if (userData.role !== undefined) updateData.role = userData.role;
+      if (userData.department !== undefined) updateData.department = userData.department;
       if (userData.isActive !== undefined) updateData.is_active = userData.isActive;
       if (userData.avatar !== undefined) updateData.avatar_url = userData.avatar;
-      if (userData.notificationPreferences) {
+      if (userData.notificationPreferences !== undefined) {
         updateData.notification_preferences = userData.notificationPreferences;
       }
 
@@ -689,7 +697,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       // Update local state
-      setUsers(users.filter((user) => user.id !== id));
+      setUsers(prev => prev.filter((user) => user.id !== id));
     } catch (error) {
       console.error('Error deleting user:', error);
       throw error;

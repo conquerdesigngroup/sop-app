@@ -11,10 +11,10 @@ import { SwipeableListItem, createSwipeAction } from '../components/SwipeableLis
 import PullToRefresh from '../components/PullToRefresh';
 
 const MyTasksPage: React.FC = () => {
-  const { jobTasks, updateJobTask } = useTask();
+  const { jobTasks, updateJobTask, refreshTasks } = useTask();
   const { currentUser } = useAuth();
   const { sops } = useSOPs();
-  const { success: showSuccess } = useToast();
+  const { success: showSuccess, error: showError } = useToast();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
@@ -22,44 +22,51 @@ const MyTasksPage: React.FC = () => {
   const [filterDate, setFilterDate] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Pull to refresh handler - simulates refresh with small delay
+  // Pull to refresh handler - refetches tasks from the server
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    // Simulate refresh since data is already reactive
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsRefreshing(false);
-  }, []);
+    try {
+      await refreshTasks();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshTasks]);
 
   // Quick complete task (mark all steps as done)
-  const handleQuickComplete = useCallback((task: JobTask) => {
-    if (task.steps.length === 0) {
-      // Task without steps - use the special marker
-      updateJobTask(task.id, {
-        completedSteps: [TASK_COMPLETE_MARKER],
-        status: 'completed',
-        progressPercentage: 100,
-        completedAt: new Date().toISOString(),
-      });
-    } else {
-      // Task with steps - mark all steps complete
-      const allStepIds = task.steps.map(s => s.id);
-      const updatedSteps = task.steps.map(s => ({
-        ...s,
-        isCompleted: true,
-        completedAt: new Date().toISOString(),
-      }));
+  const handleQuickComplete = useCallback(async (task: JobTask) => {
+    try {
+      if (task.steps.length === 0) {
+        // Task without steps - use the special marker
+        await updateJobTask(task.id, {
+          completedSteps: [TASK_COMPLETE_MARKER],
+          status: 'completed',
+          progressPercentage: 100,
+          completedAt: new Date().toISOString(),
+        });
+      } else {
+        // Task with steps - mark all steps complete
+        const allStepIds = task.steps.map(s => s.id);
+        const updatedSteps = task.steps.map(s => ({
+          ...s,
+          isCompleted: true,
+          completedAt: new Date().toISOString(),
+        }));
 
-      updateJobTask(task.id, {
-        steps: updatedSteps,
-        completedSteps: allStepIds,
-        status: 'completed',
-        progressPercentage: 100,
-        completedAt: new Date().toISOString(),
-      });
+        await updateJobTask(task.id, {
+          steps: updatedSteps,
+          completedSteps: allStepIds,
+          status: 'completed',
+          progressPercentage: 100,
+          completedAt: new Date().toISOString(),
+        });
+      }
+
+      showSuccess(`"${task.title}" marked as complete!`);
+    } catch (error) {
+      console.error('Failed to complete task:', error);
+      showError('Could not save the change. Check your connection and try again.');
     }
-
-    showSuccess(`"${task.title}" marked as complete!`);
-  }, [updateJobTask, showSuccess]);
+  }, [updateJobTask, showSuccess, showError]);
 
   // Check if we should apply filters based on navigation state
   useEffect(() => {
@@ -84,9 +91,20 @@ const MyTasksPage: React.FC = () => {
     task.status !== 'draft'
   );
 
+  // A task is overdue if its date has passed and it isn't completed —
+  // computed here so the filter works even before the server-side sweep runs
+  const isTaskOverdue = (task: JobTask) => {
+    const today = new Date().toISOString().split('T')[0];
+    return task.scheduledDate < today && task.status !== 'completed';
+  };
+
   // Filter tasks
   const filteredTasks = myTasks.filter(task => {
-    const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
+    const matchesStatus =
+      filterStatus === 'all' ||
+      (filterStatus === 'overdue'
+        ? task.status === 'overdue' || isTaskOverdue(task)
+        : task.status === filterStatus);
 
     if (filterDate === 'today') {
       const today = new Date().toISOString().split('T')[0];
@@ -159,6 +177,9 @@ const MyTasksPage: React.FC = () => {
       status: newStatus,
       progressPercentage: newProgressPercentage,
       startedAt: task.startedAt || new Date().toISOString(),
+    }).catch((error) => {
+      console.error('Failed to save step change:', error);
+      showError('Could not save the change. Check your connection and try again.');
     });
 
     // Update selected task if it's open
@@ -178,6 +199,11 @@ const MyTasksPage: React.FC = () => {
   const handleNoStepsToggle = (task: JobTask) => {
     const isCurrentlyComplete = task.completedSteps.includes(TASK_COMPLETE_MARKER);
 
+    const reportSaveError = (error: unknown) => {
+      console.error('Failed to save task change:', error);
+      showError('Could not save the change. Check your connection and try again.');
+    };
+
     if (isCurrentlyComplete) {
       // Unmark as complete
       updateJobTask(task.id, {
@@ -185,7 +211,7 @@ const MyTasksPage: React.FC = () => {
         status: 'pending',
         progressPercentage: 0,
         completedAt: undefined,
-      });
+      }).catch(reportSaveError);
     } else {
       // Mark as complete
       updateJobTask(task.id, {
@@ -193,7 +219,7 @@ const MyTasksPage: React.FC = () => {
         status: 'completed',
         progressPercentage: 100,
         completedAt: new Date().toISOString(),
-      });
+      }).catch(reportSaveError);
     }
 
     // Update selected task if open
@@ -279,7 +305,7 @@ const MyTasksPage: React.FC = () => {
           )}
           {sortedTasks.length === 0 ? (
             <div style={styles.emptyState}>
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                 <path d="M9 11l3 3L22 4" />
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
               </svg>

@@ -421,7 +421,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   sidebarStepNumberCompleted: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
   },
   sidebarStepNumberActive: {
     borderColor: theme.colors.primary,
@@ -502,7 +502,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   completeButtonActive: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
   },
   stepTitle: {
     fontSize: '28px',
@@ -602,13 +602,13 @@ const styles: { [key: string]: React.CSSProperties } = {
   navButtonNext: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     justifyContent: 'center',
   },
   navButtonNextMobile: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     justifyContent: 'center',
   },
   // Embedded styles

@@ -368,7 +368,7 @@ const AlertsPage: React.FC = () => {
   const getAlertBgColor = (type: TaskAlert['type']) => {
     switch (type) {
       case 'overdue':
-        return 'rgba(239, 35, 60, 0.1)';
+        return 'rgba(226, 20, 79, 0.1)';
       case 'due_today':
         return 'rgba(245, 158, 11, 0.1)';
       case 'due_tomorrow':
@@ -509,7 +509,7 @@ const AlertsPage: React.FC = () => {
             <span style={{
               ...styles.priorityBadge,
               backgroundColor: alert.priority === 'high' || alert.priority === 'urgent'
-                ? 'rgba(239, 35, 60, 0.1)'
+                ? 'rgba(226, 20, 79, 0.1)'
                 : 'rgba(107, 114, 128, 0.1)',
               color: alert.priority === 'high' || alert.priority === 'urgent'
                 ? theme.colors.status.error
@@ -806,7 +806,7 @@ const AlertsPage: React.FC = () => {
 
           {adminTaskAlerts.completed.length === 0 ? (
             <div style={styles.emptyState}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                 <polyline points="21 8 21 21 3 21 3 8" />
                 <rect x="1" y="3" width="22" height="5" />
                 <line x1="10" y1="12" x2="14" y2="12" />
@@ -840,7 +840,7 @@ const AlertsPage: React.FC = () => {
 
           {teamMemberProgress.length === 0 ? (
             <div style={styles.emptyState}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
               </svg>
@@ -867,7 +867,7 @@ const AlertsPage: React.FC = () => {
                           cy="25"
                           r="20"
                           fill="none"
-                          stroke={theme.colors.bg.tertiary}
+                          style={{ stroke: theme.colors.bg.tertiary }}
                           strokeWidth="4"
                         />
                         <circle
@@ -1002,7 +1002,7 @@ const AlertsPage: React.FC = () => {
                     <span style={{
                       ...styles.priorityBadge,
                       backgroundColor: alert.priority === 'high' || alert.priority === 'urgent'
-                        ? 'rgba(239, 35, 60, 0.1)'
+                        ? 'rgba(226, 20, 79, 0.1)'
                         : 'rgba(245, 158, 11, 0.1)',
                       color: alert.priority === 'high' || alert.priority === 'urgent'
                         ? theme.colors.status.error
@@ -1109,7 +1109,7 @@ const styles: Record<string, React.CSSProperties> = {
   alertCount: {
     fontSize: '14px',
     color: theme.colors.status.error,
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     padding: `${theme.spacing.xs} ${theme.spacing.md}`,
     borderRadius: theme.borderRadius.md,
     fontWeight: 600,

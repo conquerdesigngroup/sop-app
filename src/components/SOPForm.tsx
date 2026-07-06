@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useToast } from '../contexts/ToastContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { theme } from '../theme';
 import { SOP, SOPStep, SOPStatus } from '../types';
@@ -12,6 +13,7 @@ interface SOPFormProps {
 }
 
 const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
+  const { error: showError } = useToast();
   const { addSOP, updateSOP, saveAsTemplate, sops } = useSOPs();
   const { isMobile, isMobileOrTablet } = useResponsive();
 
@@ -58,7 +60,7 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
 
   const removeStep = (index: number) => {
     if (steps.length === 1) {
-      alert('You must have at least one step');
+      showError('You must have at least one step');
       return;
     }
     const newSteps = steps.filter((_, i) => i !== index);
@@ -104,12 +106,12 @@ const SOPForm: React.FC<SOPFormProps> = ({ sop, onClose }) => {
 
   const handleSave = (status: SOPStatus, isTemplate: boolean = false) => {
     if (!title.trim() || !description.trim() || !department.trim() || !category.trim()) {
-      alert('Please fill in all required fields');
+      showError('Please fill in all required fields');
       return;
     }
 
     if (steps.some(step => !step.title.trim() || !step.description.trim())) {
-      alert('All steps must have a title and description');
+      showError('All steps must have a title and description');
       return;
     }
 
@@ -754,7 +756,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   addTagButton: {
     padding: '12px 20px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -794,7 +796,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '6px',
     padding: '10px 16px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -880,7 +882,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '15px',
     fontWeight: '700',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',

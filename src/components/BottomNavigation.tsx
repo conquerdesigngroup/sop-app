@@ -113,6 +113,8 @@ const BottomNavigation: React.FC = () => {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -153,7 +155,7 @@ const BottomNavigation: React.FC = () => {
               </span>
               <span
                 style={{
-                  fontSize: '10px',
+                  fontSize: '11px',
                   fontWeight: active ? 700 : 500,
                   letterSpacing: '0.3px',
                 }}

@@ -5,6 +5,7 @@ import { useEvent } from '../contexts/EventContext';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkHours } from '../contexts/WorkHoursContext';
+import { useToast } from '../contexts/ToastContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { CalendarEvent, JobTask, WorkHoursEntry } from '../types';
 import EventFormModal from '../components/EventFormModal';
@@ -20,6 +21,7 @@ const CalendarPage: React.FC = () => {
   const { workHours } = useWorkHours();
   const { users, currentUser } = useAuth();
   const { isMobileOrTablet } = useResponsive();
+  const { success: showSuccess, error: showError } = useToast();
   const location = useLocation();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -255,18 +257,31 @@ const CalendarPage: React.FC = () => {
   };
 
   const handleSaveEvent = async (eventData: Omit<CalendarEvent, 'id' | 'createdAt' | 'createdBy'>) => {
-    if (editingEvent) {
-      await updateEvent(editingEvent.id, eventData);
-    } else {
-      await addEvent(eventData);
+    try {
+      if (editingEvent) {
+        await updateEvent(editingEvent.id, eventData);
+        showSuccess('Event updated');
+      } else {
+        await addEvent(eventData);
+        showSuccess('Event created');
+      }
+      setShowEventForm(false);
+      setEditingEvent(null);
+    } catch (error) {
+      console.error('Failed to save event:', error);
+      showError('Failed to save event. Please try again.');
     }
-    setShowEventForm(false);
-    setEditingEvent(null);
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    await deleteEvent(eventId);
-    setSelectedEvent(null);
+    try {
+      await deleteEvent(eventId);
+      setSelectedEvent(null);
+      showSuccess('Event deleted');
+    } catch (error) {
+      console.error('Failed to delete event:', error);
+      showError('Failed to delete event. Please try again.');
+    }
   };
 
   // Quick Add handlers
@@ -281,18 +296,22 @@ const CalendarPage: React.FC = () => {
     if (!quickAddTitle.trim() || quickAddDay === null) return;
 
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(quickAddDay).padStart(2, '0')}`;
-    await addEvent({
-      title: quickAddTitle.trim(),
-      description: '',
-      startDate: dateStr,
-      isAllDay: true,
-      color: '#3B82F6',
-      attendees: [],
-      isRecurring: false,
-    });
-
-    setQuickAddDay(null);
-    setQuickAddTitle('');
+    try {
+      await addEvent({
+        title: quickAddTitle.trim(),
+        description: '',
+        startDate: dateStr,
+        isAllDay: true,
+        color: '#3B82F6',
+        attendees: [],
+        isRecurring: false,
+      });
+      setQuickAddDay(null);
+      setQuickAddTitle('');
+    } catch (error) {
+      console.error('Failed to add event:', error);
+      showError('Failed to add event. Please try again.');
+    }
   };
 
   const handleQuickAddKeyDown = (e: React.KeyboardEvent) => {
@@ -481,7 +500,7 @@ const CalendarPage: React.FC = () => {
       {/* Search and Filter Bar */}
       <div style={styles.searchFilterBar}>
         <div style={styles.searchBox}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
@@ -654,7 +673,7 @@ const CalendarPage: React.FC = () => {
                       <div style={styles.agendaItemTime}>
                         {event.isAllDay ? 'All Day' : event.startTime || 'No time'}
                         {event.isRecurring && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={{ marginLeft: '4px' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ marginLeft: '4px', stroke: theme.colors.textSecondary }}>
                             <polyline points="23 4 23 10 17 10" />
                             <polyline points="1 20 1 14 7 14" />
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -678,7 +697,7 @@ const CalendarPage: React.FC = () => {
                       <div style={styles.agendaItemTime}>
                         {task.dueTime || 'No time'}
                         {task.isRecurring && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={{ marginLeft: '4px' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ marginLeft: '4px', stroke: theme.colors.textSecondary }}>
                             <polyline points="23 4 23 10 17 10" />
                             <polyline points="1 20 1 14 7 14" />
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -928,7 +947,7 @@ const CalendarPage: React.FC = () => {
                           onClick={() => setSelectedTask(task)}
                         >
                           {task.isRecurring && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={{ marginRight: '6px', flexShrink: 0 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ marginRight: '6px', flexShrink: 0, stroke: theme.colors.textSecondary }}>
                               <polyline points="23 4 23 10 17 10" />
                               <polyline points="1 20 1 14 7 14" />
                               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -954,7 +973,7 @@ const CalendarPage: React.FC = () => {
                         <div style={styles.dayTaskHeader}>
                           <span style={styles.dayTaskTime}>{task.dueTime}</span>
                           {task.isRecurring && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                               <polyline points="23 4 23 10 17 10" />
                               <polyline points="1 20 1 14 7 14" />
                               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -1064,7 +1083,7 @@ const CalendarPage: React.FC = () => {
                           title={event.title}
                         >
                           {!isMobileOrTablet && event.isRecurring && (
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.recurringIcon, stroke: theme.colors.textSecondary }}>
                               <polyline points="23 4 23 10 17 10" />
                               <polyline points="1 20 1 14 7 14" />
                               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -1089,7 +1108,7 @@ const CalendarPage: React.FC = () => {
                           title={task.title}
                         >
                           {!isMobileOrTablet && task.isRecurring && (
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.recurringIcon, stroke: theme.colors.textSecondary }}>
                               <polyline points="23 4 23 10 17 10" />
                               <polyline points="1 20 1 14 7 14" />
                               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -1297,7 +1316,7 @@ const CalendarPage: React.FC = () => {
                           }}
                         >
                           {task.isRecurring && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.recurringIcon}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.recurringIcon, stroke: theme.colors.textSecondary }}>
                               <polyline points="23 4 23 10 17 10" />
                               <polyline points="1 20 1 14 7 14" />
                               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -1364,7 +1383,7 @@ const CalendarPage: React.FC = () => {
                           )}
                           <span style={styles.weekTaskTitle}>{task.title}</span>
                           {task.isRecurring && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={{ marginLeft: 'auto' }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ marginLeft: 'auto', stroke: theme.colors.textSecondary }}>
                               <polyline points="23 4 23 10 17 10" />
                               <polyline points="1 20 1 14 7 14" />
                               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -1397,7 +1416,7 @@ const CalendarPage: React.FC = () => {
           <span style={styles.legendText}>Work Hours</span>
         </div>
         <div style={styles.legendItem}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
             <polyline points="23 4 23 10 17 10" />
             <polyline points="1 20 1 14 7 14" />
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -2531,7 +2550,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     left: 0,
     right: 0,
     height: '1px',
-    backgroundColor: `${theme.colors.bdr.primary}50`,
+    backgroundColor: theme.colors.bdr.primary,
+    opacity: 0.5,
   },
   dayEventPositioned: {
     position: 'absolute',

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../contexts/ToastContext';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
@@ -21,6 +22,7 @@ interface ChecklistItem {
 }
 
 const JobTaskForm: React.FC<JobTaskFormProps> = ({ template, existingTask, onClose }) => {
+  const { error: showError } = useToast();
   const { addJobTask, updateJobTask } = useTask();
   const { users, currentUser } = useAuth();
   const { sops } = useSOPs();
@@ -101,7 +103,7 @@ const JobTaskForm: React.FC<JobTaskFormProps> = ({ template, existingTask, onClo
 
   const handleRemoveChecklistItem = (id: string) => {
     if (checklistItems.length === 1) {
-      alert('At least one checklist item is required');
+      showError('At least one checklist item is required');
       return;
     }
     setChecklistItems(checklistItems.filter(item => item.id !== id));
@@ -132,30 +134,30 @@ const JobTaskForm: React.FC<JobTaskFormProps> = ({ template, existingTask, onClo
 
     // Validation
     if (!title.trim()) {
-      alert('Please enter a task title');
+      showError('Please enter a task title');
       return;
     }
     if (!department) {
-      alert('Please select a department');
+      showError('Please select a department');
       return;
     }
     if (!category) {
-      alert('Please select a category');
+      showError('Please select a category');
       return;
     }
     if (assignedTo.length === 0) {
-      alert('Please assign to at least one team member');
+      showError('Please assign to at least one team member');
       return;
     }
     if (!scheduledDate) {
-      alert('Please select a scheduled date');
+      showError('Please select a scheduled date');
       return;
     }
 
     // Check that all checklist items have titles
     const invalidItems = checklistItems.filter(item => !item.title.trim());
     if (invalidItems.length > 0) {
-      alert('Please enter a title for all checklist items');
+      showError('Please enter a title for all checklist items');
       return;
     }
 
@@ -203,7 +205,7 @@ const JobTaskForm: React.FC<JobTaskFormProps> = ({ template, existingTask, onClo
   const handleSaveAsDraft = async () => {
     // Simple validation for drafts - only require title
     if (!title.trim()) {
-      alert('Please enter a task title');
+      showError('Please enter a task title');
       return;
     }
 
@@ -705,7 +707,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '6px',
     padding: '10px 20px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -863,7 +865,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '36px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -928,7 +930,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   saveButton: {
     padding: '14px 32px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',

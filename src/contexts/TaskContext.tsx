@@ -45,6 +45,7 @@ interface TaskContextType {
     templateId?: string;
     sopId?: string;
   }, saveAsTemplate: boolean) => Promise<void>;
+  refreshTasks: () => Promise<void>;
   loading: boolean;
 }
 
@@ -308,6 +309,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     }
   }, [useSupabase]);
 
+  // Manual refresh (e.g. pull-to-refresh) — reloads templates and tasks
+  const refreshTasks = useCallback(async () => {
+    if (!useSupabase) return;
+    await Promise.all([loadTaskTemplates(), loadJobTasks()]);
+  }, [useSupabase, loadTaskTemplates, loadJobTasks]);
+
   // Initialize: Load data from Supabase or localStorage (only after auth is ready)
   useEffect(() => {
     // Wait for auth to finish loading before fetching data
@@ -435,7 +442,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         id: `template_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         createdAt: new Date().toISOString(),
       };
-      setTaskTemplates([...taskTemplates, newTemplate]);
+      setTaskTemplates(prev => [...prev, newTemplate]);
 
       // Log activity
       if (currentUser) {
@@ -506,7 +513,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     if (!useSupabase) {
       // Fallback to localStorage mode
       setTaskTemplates(
-        taskTemplates.map((template) =>
+        prev => prev.map((template) =>
           template.id === id
             ? { ...template, ...templateData, updatedAt: new Date().toISOString() }
             : template
@@ -572,7 +579,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
       // Update local state optimistically
       setTaskTemplates(
-        taskTemplates.map((template) =>
+        prev => prev.map((template) =>
           template.id === id
             ? { ...template, ...templateData, updatedAt: new Date().toISOString() }
             : template
@@ -589,7 +596,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
     if (!useSupabase) {
       // Fallback to localStorage mode
-      setTaskTemplates(taskTemplates.filter((template) => template.id !== id));
+      setTaskTemplates(prev => prev.filter((template) => template.id !== id));
 
       // Log activity
       if (currentUser && templateToDelete) {
@@ -631,7 +638,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       }
 
       // Update local state
-      setTaskTemplates(taskTemplates.filter((template) => template.id !== id));
+      setTaskTemplates(prev => prev.filter((template) => template.id !== id));
     } catch (error) {
       console.error('Error deleting task template:', error);
       throw error;
@@ -666,7 +673,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         createdAt: new Date().toISOString(),
         progressPercentage,
       };
-      setJobTasks([...jobTasks, newTask]);
+      setJobTasks(prev => [...prev, newTask]);
 
       // Log activity
       if (currentUser) {
@@ -746,7 +753,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     if (!useSupabase) {
       // Fallback to localStorage mode
       setJobTasks(
-        jobTasks.map((task) => {
+        prev => prev.map((task) => {
           if (task.id === id) {
             const updatedTask = { ...task, ...taskData, updatedAt: new Date().toISOString() };
 
@@ -795,25 +802,25 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     try {
       // Build update data
       const updateData: any = { updated_at: new Date().toISOString() };
-      if (taskData.title) updateData.title = taskData.title;
-      if (taskData.description) updateData.description = taskData.description;
-      if (taskData.assignedTo) updateData.assigned_to = taskData.assignedTo;
-      if (taskData.department) updateData.department = taskData.department;
-      if (taskData.category) updateData.category = taskData.category;
-      if (taskData.scheduledDate) updateData.scheduled_date = taskData.scheduledDate;
-      if (taskData.dueTime) updateData.due_time = taskData.dueTime;
-      if (taskData.estimatedDuration) updateData.estimated_duration = taskData.estimatedDuration;
-      if (taskData.status) updateData.status = taskData.status;
-      if (taskData.priority) updateData.priority = taskData.priority;
-      if (taskData.steps) updateData.steps = taskData.steps;
-      if (taskData.completedSteps) updateData.completed_steps = taskData.completedSteps;
-      if (taskData.sopIds) updateData.sop_ids = taskData.sopIds;
-      if (taskData.startedAt) updateData.started_at = taskData.startedAt;
-      if (taskData.completedAt) updateData.completed_at = taskData.completedAt;
-      if (taskData.completedBy) updateData.completed_by = taskData.completedBy;
-      if (taskData.completionNotes) updateData.completion_notes = taskData.completionNotes;
-      if (taskData.completionPhotos) updateData.completion_photos = taskData.completionPhotos;
-      if (taskData.comments) updateData.comments = taskData.comments;
+      if (taskData.title !== undefined) updateData.title = taskData.title;
+      if (taskData.description !== undefined) updateData.description = taskData.description;
+      if (taskData.assignedTo !== undefined) updateData.assigned_to = taskData.assignedTo;
+      if (taskData.department !== undefined) updateData.department = taskData.department;
+      if (taskData.category !== undefined) updateData.category = taskData.category;
+      if (taskData.scheduledDate !== undefined) updateData.scheduled_date = taskData.scheduledDate;
+      if (taskData.dueTime !== undefined) updateData.due_time = taskData.dueTime;
+      if (taskData.estimatedDuration !== undefined) updateData.estimated_duration = taskData.estimatedDuration;
+      if (taskData.status !== undefined) updateData.status = taskData.status;
+      if (taskData.priority !== undefined) updateData.priority = taskData.priority;
+      if (taskData.steps !== undefined) updateData.steps = taskData.steps;
+      if (taskData.completedSteps !== undefined) updateData.completed_steps = taskData.completedSteps;
+      if (taskData.sopIds !== undefined) updateData.sop_ids = taskData.sopIds;
+      if (taskData.startedAt !== undefined) updateData.started_at = taskData.startedAt;
+      if (taskData.completedAt !== undefined) updateData.completed_at = taskData.completedAt;
+      if (taskData.completedBy !== undefined) updateData.completed_by = taskData.completedBy;
+      if (taskData.completionNotes !== undefined) updateData.completion_notes = taskData.completionNotes;
+      if (taskData.completionPhotos !== undefined) updateData.completion_photos = taskData.completionPhotos;
+      if (taskData.comments !== undefined) updateData.comments = taskData.comments;
 
       // Calculate progress if steps or completedSteps changed
       const currentTask = jobTasks.find(t => t.id === id);
@@ -861,7 +868,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
       // Update local state optimistically
       setJobTasks(
-        jobTasks.map((task) => {
+        prev => prev.map((task) => {
           if (task.id === id) {
             const updatedTask = { ...task, ...taskData, updatedAt: new Date().toISOString() };
 
@@ -895,7 +902,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
     if (!useSupabase) {
       // Fallback to localStorage mode
-      setJobTasks(jobTasks.filter((task) => task.id !== id));
+      setJobTasks(prev => prev.filter((task) => task.id !== id));
 
       // Log activity
       if (currentUser && taskToDelete) {
@@ -937,7 +944,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       }
 
       // Update local state
-      setJobTasks(jobTasks.filter((task) => task.id !== id));
+      setJobTasks(prev => prev.filter((task) => task.id !== id));
     } catch (error) {
       console.error('Error deleting job task:', error);
       throw error;
@@ -1163,6 +1170,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     updateTaskProgress,
     createJobTaskFromTemplate,
     createJobTaskUnified,
+    refreshTasks,
     loading,
   };
 

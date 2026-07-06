@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { applyThemeMode, getThemeColors } from '../theme';
 
 export type ThemeMode = 'dark' | 'light';
 
@@ -34,13 +35,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, mode);
 
-    // Update CSS custom properties on document root
+    // Update CSS custom properties on document root — this is what re-themes
+    // every inline style that references theme.colors.* (they resolve to var()s)
     const root = document.documentElement;
     root.setAttribute('data-theme', mode);
+    applyThemeMode(mode);
 
     // Update body background
-    document.body.style.backgroundColor = mode === 'dark' ? '#0D0D0D' : '#F5F5F7';
-    document.body.style.color = mode === 'dark' ? '#F2F2F2' : '#1A1A1A';
+    const colors = getThemeColors(mode);
+    document.body.style.backgroundColor = colors.bg.primary;
+    document.body.style.color = colors.txt.primary;
   }, [mode]);
 
   const toggleTheme = useCallback(() => {

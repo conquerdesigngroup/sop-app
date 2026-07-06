@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 
 interface ImageUploadProps {
@@ -8,6 +9,7 @@ interface ImageUploadProps {
 }
 
 const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, label }) => {
+  const { error: showError } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = useState(value || '');
   const [isUrlMode, setIsUrlMode] = useState(true);
@@ -19,13 +21,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, label }) => 
 
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+      showError('File size must be less than 5MB');
       return;
     }
 
     // Check file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      showError('Please select an image file');
       return;
     }
 
@@ -40,12 +42,12 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, label }) => 
         setIsUploading(false);
       };
       reader.onerror = () => {
-        alert('Error reading file');
+        showError('Error reading file');
         setIsUploading(false);
       };
       reader.readAsDataURL(file);
     } catch (error) {
-      alert('Error uploading file');
+      showError('Error uploading file');
       setIsUploading(false);
     }
   };
@@ -180,7 +182,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   modeButtonActive: {
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     borderColor: theme.colors.primary,
   },
   urlContainer: {
@@ -200,7 +202,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   applyButton: {
     padding: '12px 20px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -220,7 +222,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   uploadButton: {
     padding: '12px 24px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',

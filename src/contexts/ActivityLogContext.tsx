@@ -225,8 +225,13 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
           query = query.ilike('action', `%${options.action}%`);
         }
         if (options.searchQuery) {
-          // Search across multiple fields using OR
-          query = query.or(`user_name.ilike.%${options.searchQuery}%,entity_title.ilike.%${options.searchQuery}%,action.ilike.%${options.searchQuery}%`);
+          // Search across multiple fields using OR.
+          // Strip PostgREST filter metacharacters — a raw comma or paren in the
+          // query would break out of the .or() filter expression.
+          const q = options.searchQuery.replace(/[,()%\\]/g, ' ').trim();
+          if (q) {
+            query = query.or(`user_name.ilike.%${q}%,entity_title.ilike.%${q}%,action.ilike.%${q}%`);
+          }
         }
         if (options.startDate) {
           query = query.gte('created_at', options.startDate);
@@ -321,7 +326,10 @@ export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ childr
           query = query.ilike('action', `%${currentFilters.action}%`);
         }
         if (currentFilters.searchQuery) {
-          query = query.or(`user_name.ilike.%${currentFilters.searchQuery}%,entity_title.ilike.%${currentFilters.searchQuery}%,action.ilike.%${currentFilters.searchQuery}%`);
+          const q = currentFilters.searchQuery.replace(/[,()%\\]/g, ' ').trim();
+          if (q) {
+            query = query.or(`user_name.ilike.%${q}%,entity_title.ilike.%${q}%,action.ilike.%${q}%`);
+          }
         }
         if (currentFilters.startDate) {
           query = query.gte('created_at', currentFilters.startDate);

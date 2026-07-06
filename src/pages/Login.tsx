@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useResponsive } from '../hooks/useResponsive';
+import { useTheme } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { CustomCheckbox } from '../components/CustomCheckbox';
 
@@ -15,6 +16,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
   const { isMobile, isMobileOrTablet } = useResponsive();
+  const { isDark } = useTheme();
 
   // Load remembered email on mount
   useEffect(() => {
@@ -80,11 +82,11 @@ const Login: React.FC = () => {
   return (
     <div style={responsiveStyles.container}>
       <div style={responsiveStyles.loginCard}>
-        {/* Logo */}
+        {/* Logo — DIDC brand mark, per-background variant (never recolored) */}
         <div style={styles.logoContainer}>
           <img
-            src="/logo.png"
-            alt="Dancing Images"
+            src={isDark ? '/brand/logos/didc-outline-white.svg' : '/brand/logos/didc-outline.svg'}
+            alt="Dancing Images Dance Center"
             style={responsiveStyles.logo}
           />
         </div>
@@ -255,7 +257,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: theme.spacing.lg,
   },
   errorBox: {
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     border: `1px solid ${theme.colors.status.error}`,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
@@ -286,7 +288,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   input: {
     width: '100%',
-    padding: `${theme.spacing.md} ${theme.spacing.md}`,
+    // Longhand (not shorthand `padding`) so passwordInput can override
+    // paddingRight without React's conflicting-style warning
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    paddingLeft: theme.spacing.md,
+    paddingRight: theme.spacing.md,
     backgroundColor: theme.colors.bg.tertiary,
     border: `1px solid ${theme.colors.bdr.primary}`,
     borderRadius: theme.borderRadius.md,
@@ -298,7 +305,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   inputMobile: {
     fontSize: '16px', // Prevents iOS zoom on focus
-    padding: `${theme.spacing.md} ${theme.spacing.sm}`,
+    paddingLeft: theme.spacing.sm,
+    paddingRight: theme.spacing.sm,
   },
   passwordContainer: {
     position: 'relative',
@@ -356,7 +364,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     padding: `${theme.spacing.md} ${theme.spacing.lg}`,
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',

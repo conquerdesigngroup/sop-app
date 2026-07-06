@@ -170,7 +170,7 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
         totalTasksCount: totalCount,
         progressPercentage: percentage,
       };
-      setJobs([...jobs, newJob]);
+      setJobs(prev => [...prev, newJob]);
       return;
     }
 
@@ -208,12 +208,12 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
     if (!useSupabase) {
       // Fallback to localStorage mode
       setJobs(
-        jobs.map((job) => {
+        prev => prev.map((job) => {
           if (job.id === id) {
             const updatedJob = { ...job, ...jobData, updatedAt: new Date().toISOString() };
 
             // Recalculate progress if tasks changed
-            if (jobData.tasks) {
+            if (jobData.tasks !== undefined) {
               const { completedCount, totalCount, percentage } = calculateJobProgress(jobData.tasks);
               updatedJob.completedTasksCount = completedCount;
               updatedJob.totalTasksCount = totalCount;
@@ -241,15 +241,15 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
     try {
       // Build update data
       const updateData: any = { updated_at: new Date().toISOString() };
-      if (jobData.title) updateData.title = jobData.title;
-      if (jobData.description) updateData.description = jobData.description;
-      if (jobData.assignedTo) updateData.assigned_to = jobData.assignedTo;
-      if (jobData.department) updateData.department = jobData.department;
-      if (jobData.scheduledDate) updateData.scheduled_date = jobData.scheduledDate;
-      if (jobData.dueTime) updateData.due_time = jobData.dueTime;
-      if (jobData.status) updateData.status = jobData.status;
-      if (jobData.priority) updateData.priority = jobData.priority;
-      if (jobData.tasks) {
+      if (jobData.title !== undefined) updateData.title = jobData.title;
+      if (jobData.description !== undefined) updateData.description = jobData.description;
+      if (jobData.assignedTo !== undefined) updateData.assigned_to = jobData.assignedTo;
+      if (jobData.department !== undefined) updateData.department = jobData.department;
+      if (jobData.scheduledDate !== undefined) updateData.scheduled_date = jobData.scheduledDate;
+      if (jobData.dueTime !== undefined) updateData.due_time = jobData.dueTime;
+      if (jobData.status !== undefined) updateData.status = jobData.status;
+      if (jobData.priority !== undefined) updateData.priority = jobData.priority;
+      if (jobData.tasks !== undefined) {
         updateData.tasks = jobData.tasks;
 
         // Recalculate progress
@@ -271,11 +271,11 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
           }
         }
       }
-      if (jobData.startedAt) updateData.started_at = jobData.startedAt;
-      if (jobData.completedAt) updateData.completed_at = jobData.completedAt;
-      if (jobData.completedBy) updateData.completed_by = jobData.completedBy;
-      if (jobData.completionNotes) updateData.completion_notes = jobData.completionNotes;
-      if (jobData.comments) updateData.comments = jobData.comments;
+      if (jobData.startedAt !== undefined) updateData.started_at = jobData.startedAt;
+      if (jobData.completedAt !== undefined) updateData.completed_at = jobData.completedAt;
+      if (jobData.completedBy !== undefined) updateData.completed_by = jobData.completedBy;
+      if (jobData.completionNotes !== undefined) updateData.completion_notes = jobData.completionNotes;
+      if (jobData.comments !== undefined) updateData.comments = jobData.comments;
 
       const { error } = await supabase
         .from('jobs')
@@ -289,12 +289,12 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
 
       // Update local state optimistically
       setJobs(
-        jobs.map((job) => {
+        prev => prev.map((job) => {
           if (job.id === id) {
             const updatedJob = { ...job, ...jobData, updatedAt: new Date().toISOString() };
 
             // Recalculate progress if tasks changed
-            if (jobData.tasks) {
+            if (jobData.tasks !== undefined) {
               const { completedCount, totalCount, percentage } = calculateJobProgress(jobData.tasks);
               updatedJob.completedTasksCount = completedCount;
               updatedJob.totalTasksCount = totalCount;
@@ -324,7 +324,7 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
   const deleteJob = async (id: string) => {
     if (!useSupabase) {
       // Fallback to localStorage mode
-      setJobs(jobs.filter((job) => job.id !== id));
+      setJobs(prev => prev.filter((job) => job.id !== id));
       return;
     }
 
@@ -340,7 +340,7 @@ export const JobProvider: React.FC<JobProviderProps> = ({ children }) => {
       }
 
       // Update local state
-      setJobs(jobs.filter((job) => job.id !== id));
+      setJobs(prev => prev.filter((job) => job.id !== id));
     } catch (error) {
       console.error('Error deleting job:', error);
       throw error;

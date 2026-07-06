@@ -169,7 +169,7 @@ const ArchivePage: React.FC = () => {
                 height="64"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke={theme.colors.textMuted}
+                style={{ stroke: theme.colors.textMuted }}
                 strokeWidth="1.5"
               >
                 <path d="M21 8v13H3V8" />
@@ -411,7 +411,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   tabActive: {
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
   },
   searchContainer: {
     position: 'relative',

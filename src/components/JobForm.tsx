@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../contexts/ToastContext';
 import { Task, TaskPriority, TaskStep } from '../types';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +10,7 @@ interface JobFormProps {
 }
 
 const JobForm: React.FC<JobFormProps> = ({ onClose }) => {
+  const { error: showError } = useToast();
   const { currentUser } = useAuth();
   const { jobTasks, taskTemplates } = useTask();
   const { addJob } = useJob();
@@ -214,7 +216,7 @@ const JobForm: React.FC<JobFormProps> = ({ onClose }) => {
     e.preventDefault();
 
     if (!title.trim() || !scheduledDate || selectedTemplateIds.size === 0) {
-      alert('Please fill in all required fields and select at least one task');
+      showError('Please fill in all required fields and select at least one task');
       return;
     }
 
@@ -262,7 +264,7 @@ const JobForm: React.FC<JobFormProps> = ({ onClose }) => {
       onClose();
     } catch (error) {
       console.error('Error creating job:', error);
-      alert('Failed to create job');
+      showError('Failed to create job');
     }
   };
 
@@ -441,7 +443,7 @@ const JobForm: React.FC<JobFormProps> = ({ onClose }) => {
     primaryButton: {
       flex: 1,
       padding: '12px 24px',
-      backgroundColor: '#dc2626',
+      backgroundColor: '#FF2D6B',
       color: '#ffffff',
       border: 'none',
       borderRadius: '6px',
@@ -654,8 +656,8 @@ const JobForm: React.FC<JobFormProps> = ({ onClose }) => {
       whiteSpace: 'nowrap' as const,
     },
     filterButtonActive: {
-      backgroundColor: '#dc2626',
-      borderColor: '#dc2626',
+      backgroundColor: '#FF2D6B',
+      borderColor: '#FF2D6B',
       color: '#ffffff',
     },
   };
@@ -809,7 +811,7 @@ const JobForm: React.FC<JobFormProps> = ({ onClose }) => {
                         padding: '12px',
                         marginBottom: '6px',
                         backgroundColor: isSelected ? '#1a1a1a' : 'transparent',
-                        border: `1px solid ${isSelected ? '#dc2626' : '#2a2a2a'}`,
+                        border: `1px solid ${isSelected ? '#FF2D6B' : '#2a2a2a'}`,
                         borderRadius: '6px',
                         cursor: 'pointer',
                         transition: 'all 0.2s',
@@ -837,7 +839,7 @@ const JobForm: React.FC<JobFormProps> = ({ onClose }) => {
                           <span>•</span>
                           <span style={{
                             color:
-                              template.priority === 'urgent' ? '#dc2626' :
+                              template.priority === 'urgent' ? '#FF2D6B' :
                               template.priority === 'high' ? '#ea580c' :
                               template.priority === 'medium' ? '#2563eb' :
                               '#16a34a',

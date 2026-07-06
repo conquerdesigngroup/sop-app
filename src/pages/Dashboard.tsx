@@ -279,6 +279,7 @@ const TeamMemberDashboard: React.FC<{
   navigate: ReturnType<typeof useNavigate>;
 }> = ({ currentUser, jobTasks, events, users, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
+  const { deleteEvent } = useEvent();
   const myTasks = jobTasks.filter(task => task.assignedTo.includes(currentUser.id));
 
   const today = new Date();
@@ -434,7 +435,14 @@ const TeamMemberDashboard: React.FC<{
 
       {/* Modals */}
       <CalendarTaskModal isOpen={selectedTask !== null} onClose={() => setSelectedTask(null)} task={selectedTask} users={users} />
-      <EventDetailModal isOpen={selectedEvent !== null} onClose={() => setSelectedEvent(null)} event={selectedEvent} users={users} onEdit={() => {}} onDelete={() => {}} />
+      <EventDetailModal
+        isOpen={selectedEvent !== null}
+        onClose={() => setSelectedEvent(null)}
+        event={selectedEvent}
+        users={users}
+        onEdit={() => { setSelectedEvent(null); navigate('/calendar'); }}
+        onDelete={async (eventId) => { await deleteEvent(eventId); setSelectedEvent(null); }}
+      />
     </div>
   );
 };
@@ -583,6 +591,7 @@ const AdminDashboard: React.FC<{
   navigate: ReturnType<typeof useNavigate>;
 }> = ({ sops, jobTasks, events, users, workDays, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, dayActionModal, setDayActionModal, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
+  const { deleteEvent } = useEvent();
 
   // SOP Stats
   const publishedSOPs = sops.filter(s => s.status === 'published' && !s.isTemplate).length;
@@ -757,7 +766,14 @@ const AdminDashboard: React.FC<{
 
       {/* Modals */}
       <CalendarTaskModal isOpen={selectedTask !== null} onClose={() => setSelectedTask(null)} task={selectedTask} users={users} />
-      <EventDetailModal isOpen={selectedEvent !== null} onClose={() => setSelectedEvent(null)} event={selectedEvent} users={users} onEdit={() => {}} onDelete={() => {}} />
+      <EventDetailModal
+        isOpen={selectedEvent !== null}
+        onClose={() => setSelectedEvent(null)}
+        event={selectedEvent}
+        users={users}
+        onEdit={() => { setSelectedEvent(null); navigate('/calendar'); }}
+        onDelete={async (eventId) => { await deleteEvent(eventId); setSelectedEvent(null); }}
+      />
     </div>
   );
 };

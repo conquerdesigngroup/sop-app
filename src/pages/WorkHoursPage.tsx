@@ -5,6 +5,7 @@ import { useWorkHours, calculateTotalHours } from '../contexts/WorkHoursContext'
 import { useResponsive } from '../hooks/useResponsive';
 import { WorkHoursEntry, WorkDay } from '../types';
 import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../hooks/useConfirm';
 
 const WorkHoursPage: React.FC = () => {
   const { currentUser, users, isAdmin } = useAuth();
@@ -14,6 +15,7 @@ const WorkHoursPage: React.FC = () => {
   } = useWorkHours();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
+  const { confirm, confirmDialog } = useConfirm();
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -442,9 +444,19 @@ const WorkHoursPage: React.FC = () => {
 
   // Handle delete
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this entry?')) {
+    const confirmed = await confirm({
+      title: 'Delete this entry?',
+      message: 'The logged hours will be removed. This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
       await deleteWorkHours(id);
       showToast('Work hours deleted', 'success');
+    } catch (error) {
+      console.error('Failed to delete work hours:', error);
+      showToast('Failed to delete work hours', 'error');
     }
   };
 
@@ -737,9 +749,19 @@ const WorkHoursPage: React.FC = () => {
   };
 
   const handleDeleteWorkDay = async (id: string) => {
-    if (window.confirm('Remove this working day?')) {
+    const confirmed = await confirm({
+      title: 'Remove this working day?',
+      message: 'The day will be removed from the schedule.',
+      confirmLabel: 'Remove',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+    try {
       await deleteWorkDay(id);
       showToast('Working day removed', 'success');
+    } catch (error) {
+      console.error('Failed to remove working day:', error);
+      showToast('Failed to remove working day', 'error');
     }
   };
 
@@ -859,7 +881,7 @@ const WorkHoursPage: React.FC = () => {
         <div style={styles.listContainer}>
           {filteredWorkHours.length === 0 ? (
             <div style={styles.emptyState}>
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
@@ -879,7 +901,7 @@ const WorkHoursPage: React.FC = () => {
                 <div style={styles.entryContent}>
                   <div style={styles.entryInfo}>
                     <div style={styles.timeRange}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
                         <polyline points="12 6 12 12 16 14" />
                       </svg>
@@ -926,7 +948,7 @@ const WorkHoursPage: React.FC = () => {
         <div style={styles.listContainer}>
           {filteredWorkDays.length === 0 ? (
             <div style={styles.emptyState}>
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                 <line x1="16" y1="2" x2="16" y2="6" />
                 <line x1="8" y1="2" x2="8" y2="6" />
@@ -1048,7 +1070,7 @@ const WorkHoursPage: React.FC = () => {
                   }}>
                     {dayWorkDays.length === 0 ? (
                       <div style={isMobileOrTablet ? styles.dayViewEmptyMobile : styles.dayViewEmpty}>
-                        <svg width={isMobileOrTablet ? "40" : "48"} height={isMobileOrTablet ? "40" : "48"} viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                        <svg width={isMobileOrTablet ? "40" : "48"} height={isMobileOrTablet ? "40" : "48"} viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                           <circle cx="12" cy="12" r="10" />
                           <polyline points="12 6 12 12 16 14" />
                         </svg>
@@ -1859,7 +1881,7 @@ const WorkHoursPage: React.FC = () => {
                 if (hours.length === 0) {
                   return (
                     <div style={styles.calendarDetailNoHours}>
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                         <circle cx="12" cy="12" r="10" />
                         <polyline points="12 6 12 12 16 14" />
                       </svg>
@@ -1879,7 +1901,7 @@ const WorkHoursPage: React.FC = () => {
                       {hours.map(wh => (
                         <div key={wh.id} style={styles.calendarDetailHoursItem}>
                           <div style={styles.calendarDetailHoursTime}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="2">
                               <circle cx="12" cy="12" r="10" />
                               <polyline points="12 6 12 12 16 14" />
                             </svg>
@@ -1944,6 +1966,7 @@ const WorkHoursPage: React.FC = () => {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 };
@@ -2642,7 +2665,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   clearAllScheduledBtn: {
     padding: '6px 12px',
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     border: `1px solid ${theme.colors.status.error}`,
     borderRadius: theme.borderRadius.md,
     color: theme.colors.status.error,

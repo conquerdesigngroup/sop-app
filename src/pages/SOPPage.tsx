@@ -10,6 +10,7 @@ import SOPImport from '../components/SOPImport';
 import { equipmentIcons, IconName } from '../components/IconSelector';
 import { useResponsive } from '../hooks/useResponsive';
 import { SOPPageSkeleton } from '../components/Skeleton';
+import { useConfirm } from '../hooks/useConfirm';
 
 type FilterView = 'all' | 'published' | 'draft' | 'archived';
 type ViewMode = 'sops' | 'templates';
@@ -19,6 +20,7 @@ const SOPPage: React.FC = () => {
   const { isAdmin } = useAuth();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
+  const { confirm, confirmDialog } = useConfirm();
   const [viewMode, setViewMode] = useState<ViewMode>('sops');
   const [showForm, setShowForm] = useState(false);
   const [editingSOP, setEditingSOP] = useState<SOP | null>(null);
@@ -59,25 +61,37 @@ const SOPPage: React.FC = () => {
     setShowForm(true);
   }, []);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     if (viewMode === 'templates') {
       // Templates are permanently deleted
-      if (window.confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
-        deleteSOP(id);
-      }
+      const confirmed = await confirm({
+        title: 'Delete this template?',
+        message: 'This action cannot be undone.',
+        confirmLabel: 'Delete',
+        variant: 'danger',
+      });
+      if (confirmed) deleteSOP(id);
     } else {
       // SOPs are archived instead of deleted
-      if (window.confirm('Are you sure you want to archive this SOP?')) {
-        updateSOPStatus(id, 'archived');
-      }
+      const confirmed = await confirm({
+        title: 'Archive this SOP?',
+        message: 'You can restore it from the Archived filter at any time.',
+        confirmLabel: 'Archive',
+        variant: 'warning',
+      });
+      if (confirmed) updateSOPStatus(id, 'archived');
     }
-  }, [viewMode, deleteSOP, updateSOPStatus]);
+  }, [viewMode, deleteSOP, updateSOPStatus, confirm]);
 
-  const handleDeleteForever = useCallback((id: string) => {
-    if (window.confirm('Are you sure you want to PERMANENTLY DELETE this SOP? This action cannot be undone!')) {
-      deleteSOP(id);
-    }
-  }, [deleteSOP]);
+  const handleDeleteForever = useCallback(async (id: string) => {
+    const confirmed = await confirm({
+      title: 'Permanently delete this SOP?',
+      message: 'This will remove the SOP forever. This action cannot be undone.',
+      confirmLabel: 'Delete forever',
+      variant: 'danger',
+    });
+    if (confirmed) deleteSOP(id);
+  }, [deleteSOP, confirm]);
 
   const handleView = useCallback((sop: SOP) => {
     setViewingSOP(sop);
@@ -192,16 +206,20 @@ const SOPPage: React.FC = () => {
     setViewingSOP(null);
   };
 
-  const handleArchive = (id: string) => {
+  const handleArchive = async (id: string) => {
     const sop = sops.find(s => s.id === id);
     if (!sop) return;
 
     if (sop.status === 'archived') {
       updateSOPStatus(id, 'published');
     } else {
-      if (window.confirm('Are you sure you want to archive this SOP?')) {
-        updateSOPStatus(id, 'archived');
-      }
+      const confirmed = await confirm({
+        title: 'Archive this SOP?',
+        message: 'You can restore it from the Archived filter at any time.',
+        confirmLabel: 'Archive',
+        variant: 'warning',
+      });
+      if (confirmed) updateSOPStatus(id, 'archived');
     }
   };
 
@@ -401,7 +419,7 @@ const SOPPage: React.FC = () => {
 
       <div style={isMobileOrTablet ? styles.controlsMobile : styles.controls}>
         <div style={isMobileOrTablet ? styles.searchContainerMobile : styles.searchContainer}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textMuted} strokeWidth="2" style={styles.searchIcon}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.searchIcon, stroke: theme.colors.textMuted }}>
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
@@ -431,9 +449,8 @@ const SOPPage: React.FC = () => {
             height="64"
             viewBox="0 0 24 24"
             fill="none"
-            stroke={theme.colors.textMuted}
             strokeWidth="1.5"
-            style={{ marginBottom: '16px' }}
+            style={{ stroke: theme.colors.textMuted, marginBottom: '16px' }}
           >
             {viewMode === 'templates' ? (
               <>
@@ -520,6 +537,7 @@ const SOPPage: React.FC = () => {
         </div>
       )}
     </div>
+    {confirmDialog}
     </>
   );
 };
@@ -691,7 +709,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     ...theme.components.button.base,
     ...theme.components.button.sizes.md,
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     fontWeight: 700,
     whiteSpace: 'nowrap',
   },
@@ -699,7 +717,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     ...theme.components.button.base,
     ...theme.components.button.sizes.md,
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     fontWeight: 700,
     flex: 1,
   },
@@ -1010,7 +1028,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '6px',
     padding: '10px 16px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -1026,7 +1044,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '6px',
     padding: '12px 16px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -1144,7 +1162,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   emptyButton: {
     padding: '14px 28px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',
@@ -1199,7 +1217,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   filterTabActive: {
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
   },
   filterCount: {
@@ -1323,7 +1341,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
     transform: 'translateY(-2px)',
-    boxShadow: '0 4px 12px rgba(239, 35, 60, 0.4)',
+    boxShadow: '0 4px 12px rgba(226, 20, 79, 0.4)',
   },
 };
 

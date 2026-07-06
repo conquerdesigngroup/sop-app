@@ -705,7 +705,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'background-color 0.15s ease',
   },
   previewItemSelected: {
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
   },
   checkbox: {
     width: '20px',

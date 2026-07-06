@@ -5,11 +5,15 @@ import { TaskTemplate } from '../types';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import TaskLibraryImport from '../components/TaskLibraryImport';
+import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../hooks/useConfirm';
 
 const TaskLibraryPage: React.FC = () => {
   const navigate = useNavigate();
   const { taskTemplates, deleteTaskTemplate } = useTask();
   const { isMobile, isMobileOrTablet } = useResponsive();
+  const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirm();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -37,9 +41,20 @@ const TaskLibraryPage: React.FC = () => {
     return acc;
   }, {} as Record<string, TaskTemplate[]>);
 
-  const handleDeleteTemplate = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this task template? This cannot be undone.')) {
-      deleteTaskTemplate(id);
+  const handleDeleteTemplate = async (id: string) => {
+    const confirmed = await confirm({
+      title: 'Delete this template?',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await deleteTaskTemplate(id);
+      showToast('Template deleted', 'success');
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      showToast('Failed to delete template', 'error');
     }
   };
 
@@ -132,7 +147,7 @@ const TaskLibraryPage: React.FC = () => {
       {/* Search and Controls */}
       <div style={{...styles.controls, ...(isMobile ? styles.controlsMobile : {})}}>
         <div style={{...styles.searchContainer, ...(isMobile ? styles.searchContainerMobile : {})}}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="2" style={styles.searchIcon}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.searchIcon, stroke: theme.colors.txt.tertiary }}>
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
@@ -174,7 +189,7 @@ const TaskLibraryPage: React.FC = () => {
       {/* Templates by Category */}
       {filteredTemplates.length === 0 ? (
         <div style={styles.emptyState}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
           </svg>
@@ -244,6 +259,7 @@ const TaskLibraryPage: React.FC = () => {
           // Templates will auto-reload via context
         }}
       />
+      {confirmDialog}
     </div>
   );
 };
@@ -270,7 +286,7 @@ const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({ template, onDelete,
     <div style={{...styles.card, ...(isMobile ? styles.cardMobile : {})}}>
       <div style={{...styles.cardHeader, ...(isMobile ? styles.cardHeaderMobile : {})}}>
         <div style={{...styles.cardBadges, ...(isMobile ? styles.cardBadgesMobile : {})}}>
-          <span style={{...styles.badge, backgroundColor: 'rgba(239, 35, 60, 0.15)', color: theme.colors.primary}}>
+          <span style={{...styles.badge, backgroundColor: 'rgba(226, 20, 79, 0.15)', color: theme.colors.primary}}>
             {template.department}
           </span>
           <span style={{...styles.badge, backgroundColor: 'rgba(33, 150, 243, 0.15)', color: theme.colors.status.info}}>
@@ -372,7 +388,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
     padding: '14px 24px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',
@@ -408,7 +424,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
     transform: 'translateY(-2px)',
-    boxShadow: '0 4px 12px rgba(239, 35, 60, 0.4)',
+    boxShadow: '0 4px 12px rgba(226, 20, 79, 0.4)',
   },
   controls: {
     display: 'flex',
@@ -520,7 +536,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     fontWeight: '600',
     color: theme.colors.textMuted,
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     padding: '4px 12px',
     borderRadius: theme.borderRadius.full,
   },
@@ -550,7 +566,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   emptyButton: {
     padding: '14px 28px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',
@@ -673,8 +689,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     gap: theme.spacing.xs,
     padding: theme.spacing.sm,
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
-    border: `1px solid rgba(239, 35, 60, 0.3)`,
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    border: `1px solid rgba(226, 20, 79, 0.3)`,
     borderRadius: theme.borderRadius.md,
     color: theme.colors.status.error,
     fontSize: '14px',
@@ -821,7 +837,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   dayButtonActive: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
   },
   sopsList: {
     display: 'flex',
@@ -853,7 +869,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '32px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -904,8 +920,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   stepActionButtonDelete: {
     width: '28px',
     height: '28px',
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
-    border: `1px solid rgba(239, 35, 60, 0.3)`,
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    border: `1px solid rgba(226, 20, 79, 0.3)`,
     borderRadius: theme.borderRadius.sm,
     color: theme.colors.status.error,
     fontSize: '20px',
@@ -935,7 +951,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   addStepButton: {
     padding: theme.spacing.sm,
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -963,7 +979,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   saveButton: {
     padding: `${theme.spacing.md} ${theme.spacing.xl}`,
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',

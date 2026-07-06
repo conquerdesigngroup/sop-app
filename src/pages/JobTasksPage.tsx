@@ -8,6 +8,7 @@ import { JobTask, TaskTemplate } from '../types';
 import { theme } from '../theme';
 import { UnifiedJobTaskModal } from '../components/UnifiedJobTaskModal';
 import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../hooks/useConfirm';
 import TaskLibraryImport from '../components/TaskLibraryImport';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 
@@ -17,6 +18,7 @@ const JobTasksPage: React.FC = () => {
   const { sops } = useSOPs();
   const { isMobile } = useResponsive();
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
 
@@ -81,7 +83,15 @@ const JobTasksPage: React.FC = () => {
                          task.title.toLowerCase().includes(searchLower) ||
                          task.description.toLowerCase().includes(searchLower) ||
                          assignedUserNames.includes(searchLower);
-    const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
+    // Overdue is computed client-side (date passed + not completed) so the
+    // stat card and filter agree, even before the background sweep updates status
+    const isOverdue = task.scheduledDate < new Date().toISOString().split('T')[0] &&
+                      task.status !== 'completed';
+    const matchesStatus =
+      filterStatus === 'all' ||
+      (filterStatus === 'overdue'
+        ? task.status === 'overdue' || isOverdue
+        : task.status === filterStatus);
     const matchesDepartment = filterDepartment === 'all' || task.department === filterDepartment;
     return matchesSearch && matchesStatus && matchesDepartment;
   });
@@ -178,15 +188,37 @@ const JobTasksPage: React.FC = () => {
     }
   };
 
-  const handleArchiveTask = (id: string) => {
-    if (window.confirm('Are you sure you want to archive this job task? You can restore it later from the Archive page.')) {
-      archiveJobTask(id);
+  const handleArchiveTask = async (id: string) => {
+    const confirmed = await confirm({
+      title: 'Archive this task?',
+      message: 'You can restore it later from the Archive page.',
+      confirmLabel: 'Archive',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+    try {
+      await archiveJobTask(id);
+      showToast('Task archived', 'success');
+    } catch (error) {
+      console.error('Error archiving task:', error);
+      showToast('Failed to archive task', 'error');
     }
   };
 
-  const handleDeleteTask = (id: string) => {
-    if (window.confirm('Are you sure you want to permanently delete this job task? This action cannot be undone.')) {
-      deleteJobTask(id);
+  const handleDeleteTask = async (id: string) => {
+    const confirmed = await confirm({
+      title: 'Permanently delete this task?',
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await deleteJobTask(id);
+      showToast('Task deleted', 'success');
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      showToast('Failed to delete task', 'error');
     }
   };
 
@@ -233,21 +265,37 @@ const JobTasksPage: React.FC = () => {
     }
   };
 
-  const handleBulkArchive = () => {
+  const handleBulkArchive = async () => {
     if (selectedTasks.size === 0) return;
-    if (window.confirm(`Are you sure you want to archive ${selectedTasks.size} task(s)?`)) {
-      selectedTasks.forEach(taskId => {
-        archiveJobTask(taskId);
-      });
+    const count = selectedTasks.size;
+    const confirmed = await confirm({
+      title: `Archive ${count} task(s)?`,
+      message: 'You can restore them later from the Archive page.',
+      confirmLabel: 'Archive',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+    try {
+      await Promise.all(Array.from(selectedTasks).map(taskId => archiveJobTask(taskId)));
       setSelectedTasks(new Set());
-      showToast(`${selectedTasks.size} task(s) archived`, 'success');
+      showToast(`${count} task(s) archived`, 'success');
+    } catch (error) {
+      console.error('Error archiving tasks:', error);
+      showToast('Some tasks could not be archived', 'error');
     }
   };
 
   const handleBulkComplete = async () => {
     if (selectedTasks.size === 0) return;
     const count = selectedTasks.size;
-    if (window.confirm(`Mark ${count} task(s) as completed?`)) {
+    const confirmed = await confirm({
+      title: `Mark ${count} task(s) as completed?`,
+      message: 'All steps on the selected tasks will be marked as done.',
+      confirmLabel: 'Complete',
+      variant: 'info',
+    });
+    if (!confirmed) return;
+    try {
       const taskIds = Array.from(selectedTasks);
       for (let i = 0; i < taskIds.length; i++) {
         const taskId = taskIds[i];
@@ -262,6 +310,9 @@ const JobTasksPage: React.FC = () => {
       }
       setSelectedTasks(new Set());
       showToast(`${count} task(s) marked as completed`, 'success');
+    } catch (error) {
+      console.error('Error completing tasks:', error);
+      showToast('Some tasks could not be completed', 'error');
     }
   };
 
@@ -481,7 +532,7 @@ const JobTasksPage: React.FC = () => {
           <div style={styles.tasksList}>
             {sortedTasks.length === 0 ? (
               <div style={styles.emptyState}>
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
                   <path d="M9 11l3 3L22 4" />
                   <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                 </svg>
@@ -551,6 +602,8 @@ const JobTasksPage: React.FC = () => {
           showToast('Task templates imported successfully', 'success');
         }}
       />
+
+      {confirmDialog}
     </div>
   );
 };
@@ -815,6 +868,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
   sops,
   currentUserId,
 }) => {
+  const { showToast } = useToast();
   // Task Details
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -872,7 +926,7 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
 
   const handleRemoveChecklistItem = (id: string) => {
     if (checklistItems.length === 1) {
-      alert('At least one checklist item is required');
+      showToast('At least one checklist item is required', 'error');
       return;
     }
     setChecklistItems(checklistItems.filter(item => item.id !== id));
@@ -889,30 +943,30 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
 
     // Validation
     if (!title.trim()) {
-      alert('Please enter a task title');
+      showToast('Please enter a task title', 'error');
       return;
     }
     if (!department) {
-      alert('Please select a department');
+      showToast('Please select a department', 'error');
       return;
     }
     if (!category) {
-      alert('Please select a category');
+      showToast('Please select a category', 'error');
       return;
     }
     if (assignedTo.length === 0) {
-      alert('Please assign to at least one team member');
+      showToast('Please assign to at least one team member', 'error');
       return;
     }
     if (!scheduledDate) {
-      alert('Please select a scheduled date');
+      showToast('Please select a scheduled date', 'error');
       return;
     }
 
     // Check that all checklist items have titles
     const invalidItems = checklistItems.filter(item => !item.title.trim());
     if (invalidItems.length > 0) {
-      alert('Please enter a title for all checklist items');
+      showToast('Please enter a title for all checklist items', 'error');
       return;
     }
 
@@ -1612,7 +1666,7 @@ const TaskLibraryTab: React.FC<TaskLibraryTabProps> = ({ taskTemplates, isMobile
       {/* Templates Grid */}
       {filteredTemplates.length === 0 ? (
         <div style={styles.emptyState}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
           </svg>
@@ -1758,7 +1812,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   statDanger: {
     borderColor: theme.colors.status.error,
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
   },
   statUrgent: {
     borderColor: theme.colors.status.warning,
@@ -1832,7 +1886,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   // Task Card Selection
   taskCardSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: 'rgba(239, 35, 60, 0.05)',
+    backgroundColor: 'rgba(226, 20, 79, 0.05)',
   },
   taskCardUrgent: {
     borderColor: theme.colors.status.error,
@@ -1910,7 +1964,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
     padding: '14px 24px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',
@@ -2051,8 +2105,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   deleteButton: {
     padding: theme.spacing.xs,
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
-    border: `1px solid rgba(239, 35, 60, 0.3)`,
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    border: `1px solid rgba(226, 20, 79, 0.3)`,
     borderRadius: theme.borderRadius.sm,
     color: theme.colors.status.error,
     cursor: 'pointer',
@@ -2112,7 +2166,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   departmentBadge: {
     padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-    backgroundColor: 'rgba(239, 35, 60, 0.15)',
+    backgroundColor: 'rgba(226, 20, 79, 0.15)',
     color: theme.colors.primary,
     borderRadius: theme.borderRadius.sm,
     fontSize: '11px',
@@ -2182,7 +2236,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '24px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2448,7 +2502,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '32px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2474,7 +2528,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     color: theme.colors.primary,
     padding: theme.spacing.sm,
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     borderRadius: theme.borderRadius.md,
     textAlign: 'center',
   },
@@ -2499,7 +2553,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   saveButton: {
     padding: `${theme.spacing.md} ${theme.spacing.xl}`,
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',
@@ -2531,7 +2585,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '6px',
     padding: '10px 16px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
@@ -2672,7 +2726,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginLeft: '34px',
     marginTop: theme.spacing.xs,
     padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-    backgroundColor: 'rgba(239, 35, 60, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     borderRadius: theme.borderRadius.sm,
     width: 'fit-content',
   },
@@ -2886,7 +2940,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   useTemplateButton: {
     padding: `${theme.spacing.md} ${theme.spacing.lg}`,
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',

@@ -6,11 +6,13 @@ import { theme } from '../theme';
 import { User, UserRole } from '../types';
 import { DEFAULT_DEPARTMENTS, USER_ROLES, SUCCESS_MESSAGES, ERROR_MESSAGES } from '../constants';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { useConfirm } from '../hooks/useConfirm';
 
 const TeamManagementPage: React.FC = () => {
   const { users, addUser, updateUser, deleteUser, currentUser } = useAuth();
   const { success, error } = useToast();
   const { isMobile, isTablet, isMobileOrTablet } = useResponsive();
+  const { confirm, confirmDialog } = useConfirm();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
@@ -134,12 +136,8 @@ const TeamManagementPage: React.FC = () => {
           isActive: formData.isActive,
         };
 
-        // Note: Password updates for other users require admin API access
-        // which is not available in client-side Supabase
-        if (formData.password) {
-          updateData.password = formData.password;
-        }
-
+        // Password changes for other users require the Supabase admin API,
+        // so the edit form intentionally has no password field.
         await updateUser(editingUser.id, updateData);
         success('User updated successfully');
         handleCloseModal();
@@ -181,32 +179,54 @@ const TeamManagementPage: React.FC = () => {
     }
   };
 
-  const handleDeactivateUser = (user: User) => {
+  const handleDeactivateUser = async (user: User) => {
     if (user.id === currentUser?.id) {
       error('You cannot deactivate your own account');
       return;
     }
 
-    if (window.confirm(`Are you sure you want to deactivate ${user.firstName} ${user.lastName}?`)) {
-      updateUser(user.id, { isActive: false });
+    const confirmed = await confirm({
+      title: `Deactivate ${user.firstName} ${user.lastName}?`,
+      message: 'They will lose access until reactivated.',
+      confirmLabel: 'Deactivate',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+    try {
+      await updateUser(user.id, { isActive: false });
       success('User deactivated successfully');
+    } catch (err: any) {
+      error(err.message || 'Failed to deactivate user');
     }
   };
 
-  const handleActivateUser = (user: User) => {
-    updateUser(user.id, { isActive: true });
-    success('User activated successfully');
+  const handleActivateUser = async (user: User) => {
+    try {
+      await updateUser(user.id, { isActive: true });
+      success('User activated successfully');
+    } catch (err: any) {
+      error(err.message || 'Failed to activate user');
+    }
   };
 
-  const handleDeleteUser = (user: User) => {
+  const handleDeleteUser = async (user: User) => {
     if (user.id === currentUser?.id) {
       error('You cannot delete your own account');
       return;
     }
 
-    if (window.confirm(`Are you sure you want to permanently delete ${user.firstName} ${user.lastName}? This action cannot be undone.`)) {
-      deleteUser(user.id);
+    const confirmed = await confirm({
+      title: `Permanently delete ${user.firstName} ${user.lastName}?`,
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await deleteUser(user.id);
       success('User deleted successfully');
+    } catch (err: any) {
+      error(err.message || 'Failed to delete user');
     }
   };
 
@@ -260,7 +280,7 @@ const TeamManagementPage: React.FC = () => {
           ...styles.searchContainer,
           ...(isMobile && styles.searchContainerMobile),
         }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2" style={styles.searchIcon}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.searchIcon, stroke: theme.colors.textSecondary }}>
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
@@ -345,7 +365,7 @@ const TeamManagementPage: React.FC = () => {
         <div>
           {filteredUsers.length === 0 ? (
             <div style={styles.emptyState}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -468,7 +488,7 @@ const TeamManagementPage: React.FC = () => {
               {filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={styles.emptyState}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.colors.textSecondary} strokeWidth="2">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                       <circle cx="9" cy="7" r="4" />
                       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -766,6 +786,7 @@ const TeamManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 };
@@ -813,7 +834,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
     padding: '14px 24px',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     fontSize: '15px',
@@ -964,7 +985,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '40px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1225,7 +1246,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '15px',
     fontWeight: '700',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',

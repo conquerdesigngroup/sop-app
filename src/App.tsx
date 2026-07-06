@@ -32,46 +32,31 @@ const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 
-// Page loading fallback - simple centered spinner (theme-aware)
-const PageLoadingFallback: React.FC = () => {
-  // Try to use theme context, fallback to dark colors if not available
-  let bgColor = theme.colors.background;
-  let borderColor = theme.colors.bg.tertiary;
-
-  try {
-    const themeContext = useThemeColors();
-    if (themeContext) {
-      bgColor = themeContext.bg.primary;
-      borderColor = themeContext.bg.tertiary;
-    }
-  } catch {
-    // Context not available yet, use defaults
-  }
-
-  return (
+// Page loading fallback - simple centered spinner.
+// theme.colors resolve to CSS variables, so this is theme-aware automatically.
+const PageLoadingFallback: React.FC = () => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '60vh',
+    backgroundColor: theme.colors.bg.primary,
+  }}>
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '60vh',
-      backgroundColor: bgColor,
-    }}>
-      <div style={{
-        width: '40px',
-        height: '40px',
-        border: `3px solid ${borderColor}`,
-        borderTopColor: theme.colors.primary,
-        borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-      }} />
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
-};
+      width: '40px',
+      height: '40px',
+      border: `3px solid ${theme.colors.bg.tertiary}`,
+      borderTopColor: theme.colors.primary,
+      borderRadius: '50%',
+      animation: 'spin 0.8s linear infinite',
+    }} />
+    <style>{`
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    `}</style>
+  </div>
+);
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactElement; adminOnly?: boolean }> = ({
@@ -246,6 +231,8 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          {/* Catch-all: unknown URLs land on the dashboard (or login via its guard) */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Suspense>
       {/* Bottom Navigation for Mobile */}

@@ -357,6 +357,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(({
       {value && onClear && (
         <button
           type="button"
+          aria-label="Clear search"
           onClick={onClear}
           style={{
             position: 'absolute',
@@ -427,7 +428,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({
     outline: 'none',
     cursor: disabled ? 'not-allowed' : 'pointer',
     appearance: 'none',
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D0D0D0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+    // #8B8B8B is legible on both dark and light input backgrounds
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B8B8B' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
     backgroundRepeat: 'no-repeat',
     backgroundPosition: 'right 14px center',
     opacity: disabled ? 0.6 : 1,
@@ -582,6 +584,16 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen]);
 
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const getMaxWidth = () => {
@@ -593,6 +605,9 @@ export const Modal: React.FC<ModalProps> = ({
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         style={{
           ...modalStyle,
           maxWidth: getMaxWidth(),
@@ -603,7 +618,7 @@ export const Modal: React.FC<ModalProps> = ({
           <div style={modalHeaderStyle}>
             {title && <h2 style={modalTitleStyle}>{title}</h2>}
             {showCloseButton && (
-              <IconButton variant="ghost" size="sm" onClick={onClose}>
+              <IconButton variant="ghost" size="sm" onClick={onClose} aria-label="Close dialog">
                 <CloseIcon size={20} />
               </IconButton>
             )}
@@ -1038,7 +1053,7 @@ const overlayStyle: React.CSSProperties = {
   left: 0,
   right: 0,
   bottom: 0,
-  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  backgroundColor: 'var(--c-overlay, rgba(0, 0, 0, 0.8))',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

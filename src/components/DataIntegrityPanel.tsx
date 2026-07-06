@@ -257,7 +257,7 @@ const DataIntegrityPanel: React.FC = () => {
 
       {!result && !isRunning && (
         <div style={styles.emptyState}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke={theme.colors.txt.tertiary} strokeWidth="1.5">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
           <h4>Run Integrity Checks</h4>

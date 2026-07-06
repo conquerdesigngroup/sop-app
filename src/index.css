@@ -1,3 +1,32 @@
+/* Theme palette — DIDC brand tokens (see public/brand/tokens.json).
+   Defaults are the dark palette; ThemeProvider overrides these on <html>
+   when the user switches modes (see src/theme.ts applyThemeMode).
+   electric #E2144F = accent (keep to ~5% of any view), void #0B0B0D = page bg,
+   panel #161618 = cards, panel2 #1E1E21 = elevated, chalk #F4F4F5, smoke #9A9AA4 */
+:root {
+  --c-electric: #E2144F;
+  --c-electric-2: #FF2D6B;
+  --c-bg-primary: #0B0B0D;
+  --c-bg-secondary: #161618;
+  --c-bg-tertiary: #1E1E21;
+  --c-bg-dark: #000000;
+  --c-txt-primary: #F4F4F5;
+  --c-txt-secondary: #C9C9D1;
+  --c-txt-tertiary: #9A9AA4;
+  --c-bdr-primary: #26262B;
+  --c-bdr-secondary: #36363D;
+  --c-shadow: rgba(0, 0, 0, 0.8);
+  --c-overlay: rgba(0, 0, 0, 0.8);
+  --c-hover-tint: rgba(255, 255, 255, 0.05);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.7);
+  --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.8);
+  --font-display: 'Kanit', 'Barlow', sans-serif;
+  --font-body: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Roboto Mono', monospace;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -13,19 +42,32 @@ html {
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #000000;
-  color: #FFFFFF;
+  background-color: var(--c-bg-primary);
+  color: var(--c-txt-primary);
   /* Prevent horizontal scroll */
   overflow-x: hidden;
 }
 
+/* Brand display face: Kanit ExtraBold Italic, uppercase, for all headlines */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
 code {
-  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-family: var(--font-mono);
+}
+
+/* Brand logos are supplied per-background (assets in public/brand/logos/);
+   components pick the white or ink variant via useTheme — no filters needed.
+   Legacy /logo.png fallback: invert in light mode so it stays visible. */
+[data-theme="light"] img[src="/logo.png"] {
+  filter: invert(1);
 }
 
 /* Responsive utility classes */
@@ -132,7 +174,7 @@ html {
 
 /* Improved tap highlight */
 * {
-  -webkit-tap-highlight-color: rgba(239, 35, 60, 0.2);
+  -webkit-tap-highlight-color: rgba(226, 20, 79, 0.2);
 }
 
 /* Safe area padding for notched devices */
@@ -143,9 +185,10 @@ html {
   }
 }
 
-/* Better focus states for keyboard navigation */
+/* Better focus states for keyboard navigation.
+   !important so it wins over inline `outline: none` in component styles. */
 *:focus-visible {
-  outline: 2px solid #EF233C;
+  outline: 2px solid #E2144F !important;
   outline-offset: 2px;
 }
 
@@ -195,9 +238,9 @@ nav button {
   background-color: transparent !important;
 }
 
-nav button:not([style*="background-color: rgb(239, 35, 60)"]):hover,
-nav button:not([style*="background-color: rgb(239, 35, 60)"]):focus,
-nav button:not([style*="background-color: rgb(239, 35, 60)"]):active {
+nav button:not([style*="background-color: rgb(226, 20, 79)"]):hover,
+nav button:not([style*="background-color: rgb(226, 20, 79)"]):focus,
+nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
   background-color: transparent !important;
   filter: brightness(1.1);
 }
@@ -219,25 +262,25 @@ nav button:not([style*="background-color: rgb(239, 35, 60)"]):active {
 
 /* Primary button hover */
 .btn-primary:hover:not(:disabled) {
-  background-color: #d91e35 !important;
-  box-shadow: 0 4px 16px rgba(239, 35, 60, 0.4);
+  background-color: #FF2D6B !important;
+  box-shadow: 0 4px 16px rgba(226, 20, 79, 0.4);
 }
 
 /* Secondary button hover */
 .btn-secondary:hover:not(:disabled) {
-  border-color: #3A3A3A !important;
-  background-color: #242424 !important;
+  border-color: var(--c-bdr-secondary) !important;
+  background-color: var(--c-bg-tertiary) !important;
 }
 
 /* Ghost button hover */
 .btn-ghost:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: var(--c-hover-tint) !important;
 }
 
 /* Danger/Delete button hover */
 .btn-danger:hover:not(:disabled) {
-  background-color: #dc2626 !important;
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
+  background-color: #FF2D6B !important;
+  box-shadow: 0 4px 16px rgba(226, 20, 79, 0.4);
 }
 
 /* ============================================
@@ -249,8 +292,8 @@ nav button:not([style*="background-color: rgb(239, 35, 60)"]):active {
 
 .card-hover:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  border-color: #3A3A3A;
+  box-shadow: var(--shadow-lg);
+  border-color: var(--c-bdr-secondary);
 }
 
 /* Subtle card hover for clickable items */
@@ -259,14 +302,14 @@ nav button:not([style*="background-color: rgb(239, 35, 60)"]):active {
 }
 
 .card-hover-subtle:hover {
-  background-color: #1F1F1F;
-  border-color: #3A3A3A;
+  background-color: var(--c-bg-tertiary);
+  border-color: var(--c-bdr-secondary);
 }
 
 /* Card with glow effect */
 .card-hover-glow:hover {
-  box-shadow: 0 0 20px rgba(239, 35, 60, 0.15);
-  border-color: rgba(239, 35, 60, 0.3);
+  box-shadow: 0 0 20px rgba(226, 20, 79, 0.15);
+  border-color: rgba(226, 20, 79, 0.3);
 }
 
 /* ============================================

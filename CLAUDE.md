@@ -185,30 +185,48 @@ src/
 
 ## 🎨 Theme Quick Reference
 
-### Colors
+### How theming works (IMPORTANT)
+`theme.colors.bg/txt/bdr/*` values are **CSS variables** (e.g. `var(--c-bg-primary, #0D0D0D)`),
+not raw hex. ThemeProvider sets the variables on `<html>` when the user toggles
+dark/light mode (see `applyThemeMode` in `src/theme.ts`), so every inline style
+referencing these tokens re-themes automatically.
+
+Consequences:
+1. **Never concatenate an alpha suffix** onto these tokens (`` `${theme.colors.bdr.primary}50` `` is broken — use `opacity` or rgba).
+2. **Never pass them as SVG presentation attributes** (`stroke={theme.colors.txt.tertiary}` fails — attributes can't resolve var()). Use `style={{ stroke: ... }}` instead.
+3. On crimson/primary surfaces, hardcode `color: '#FFFFFF'` — mode-dependent text tokens flip dark in light mode and break contrast.
+4. `theme.colors.primary` and `theme.colors.status.*` remain literal hex (identical in both modes) and are safe everywhere.
+5. Use the `useConfirm` hook (`src/hooks/useConfirm.tsx`) instead of `window.confirm`, and toast errors (`useToast`) instead of `alert()`.
+
+### DIDC brand (source: public/brand/tokens.json)
+- **Fonts** (Google Fonts, linked in public/index.html): Kanit ExtraBold Italic uppercase = headlines (`theme.fonts.display`, applied globally to h1–h3), Barlow = body/UI (`theme.fonts.primary`), JetBrains Mono = specs/tags (`theme.fonts.mono`).
+- **Logos** live in `public/brand/logos/` — use `didc-outline-white.svg` on dark backgrounds, `didc-outline.svg` on light (pick via `useTheme().isDark`). Never recolor, stretch, rotate, or add effects to the marks.
+- Keep electric pink to ~5% of any view — accents (buttons, active states, focus), never fills or large surfaces.
+
+### Colors (dark-mode values shown; light mode swaps automatically)
 ```tsx
 // Backgrounds
-theme.colors.bg.primary    // #0D0D0D - Main background
-theme.colors.bg.secondary  // #1A1A1A - Cards, elevated surfaces
-theme.colors.bg.tertiary   // #242424 - Inputs, subtle areas
+theme.colors.bg.primary    // #0B0B0D "void" - Main background
+theme.colors.bg.secondary  // #161618 "panel" - Cards, elevated surfaces
+theme.colors.bg.tertiary   // #1E1E21 "panel2" - Inputs, subtle areas
 
 // Text
-theme.colors.txt.primary   // #F2F2F2 - Main text
-theme.colors.txt.secondary // #D0D0D0 - Secondary text
-theme.colors.txt.tertiary  // #8B8B8B - Muted text
+theme.colors.txt.primary   // #F4F4F5 "chalk" - Main text
+theme.colors.txt.secondary // #C9C9D1 - Secondary text
+theme.colors.txt.tertiary  // #9A9AA4 "smoke" - Muted text
 
 // Borders
-theme.colors.bdr.primary   // #2A2A2A - Standard borders
-theme.colors.bdr.secondary // #3A3A3A - Hover/active borders
+theme.colors.bdr.primary   // #26262B - Standard borders
+theme.colors.bdr.secondary // #36363D - Hover/active borders
 
 // Status
 theme.colors.status.success  // #10B981 - Green
 theme.colors.status.warning  // #F59E0B - Amber
-theme.colors.status.error    // #EF233C - Red
+theme.colors.status.error    // #E2144F - Electric
 theme.colors.status.info     // #3B82F6 - Blue
 
 // Brand
-theme.colors.primary       // #EF233C - Crimson
+theme.colors.primary       // #E2144F "electric" - DIDC brand accent (keep to ~5% of any view)
 ```
 
 ### Spacing

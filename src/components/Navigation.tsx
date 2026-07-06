@@ -107,6 +107,8 @@ const Navigation: React.FC = () => {
   const { currentUser, logout, isAdmin } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const colors = useThemeColors();
+  // DIDC brand marks: white outline on dark backgrounds, ink outline on light
+  const brandLogo = isDark ? '/brand/logos/didc-outline-white.svg' : '/brand/logos/didc-outline.svg';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -344,8 +346,8 @@ const Navigation: React.FC = () => {
             {/* Center Logo */}
             <Link to="/dashboard" style={styles.centerLogoMobile}>
               <img
-                src="/logo.png"
-                alt="Dancing Images Logo"
+                src={brandLogo}
+                alt="Dancing Images Dance Center"
                 style={styles.logoImageMobile}
               />
             </Link>
@@ -489,8 +491,8 @@ const Navigation: React.FC = () => {
             <div style={styles.leftSection}>
               <Link to="/dashboard" style={styles.logoContainer}>
                 <img
-                  src="/logo.png"
-                  alt="Dancing Images Logo"
+                  src={brandLogo}
+                  alt="Dancing Images Dance Center"
                   style={styles.logoImage}
                 />
               </Link>
@@ -669,7 +671,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '36px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -740,7 +742,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   mobileNavLinkActive: {
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
   },
   userMenuMobile: {
@@ -808,7 +810,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   navLinkActive: {
     backgroundColor: theme.colors.primary,
-    color: theme.colors.background,
+    color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
   },
   navIcon: {
@@ -858,7 +860,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   dropdownItemActive: {
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
   },
   dropdownIcon: {
     display: 'flex',
@@ -889,7 +891,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '32px',
     borderRadius: '50%',
     backgroundColor: theme.colors.primary,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

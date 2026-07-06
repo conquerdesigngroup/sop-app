@@ -1,41 +1,45 @@
 // Theme constants for SOP App
-// Light mode color palette
+// Palettes follow the DIDC brand guide (public/brand/tokens.json):
+// electric #E2144F (accent), void #0B0B0D (page bg), panel #161618 (cards),
+// panel2 #1E1E21 (elevated), ink #111111, chalk #F4F4F5, smoke #9A9AA4.
+
+// Light mode color palette (chalk surfaces, ink text)
 export const lightColors = {
   bg: {
-    primary: '#F5F5F7',     // Light gray background
+    primary: '#F4F4F5',      // Chalk — light surface
     secondary: '#FFFFFF',    // White cards
-    tertiary: '#F0F0F2',     // Input backgrounds
-    dark: '#E5E5E7',         // Darker areas
+    tertiary: '#ECECEE',     // Input backgrounds
+    dark: '#E4E4E7',         // Darker areas
   },
   txt: {
-    primary: '#1A1A1A',      // Dark text
-    secondary: '#4A4A4A',    // Secondary text
-    tertiary: '#6B6B6B',     // Muted text
+    primary: '#111111',      // Ink — brand black
+    secondary: '#3F3F46',    // Secondary text
+    tertiary: '#71717A',     // Muted text
   },
   bdr: {
-    primary: '#E0E0E2',      // Standard borders
-    secondary: '#D0D0D2',    // Hover borders
+    primary: '#E0E0E4',      // Standard borders
+    secondary: '#CFCFD6',    // Hover borders
   },
-  shadow: 'rgba(0, 0, 0, 0.1)',
-  overlay: 'rgba(0, 0, 0, 0.5)',
+  shadow: 'rgba(17, 17, 17, 0.1)',
+  overlay: 'rgba(17, 17, 17, 0.5)',
 };
 
-// Dark mode color palette (current)
+// Dark mode color palette (brand default: void / panel / panel2)
 export const darkColors = {
   bg: {
-    primary: '#0D0D0D',
-    secondary: '#1A1A1A',
-    tertiary: '#242424',
+    primary: '#0B0B0D',      // Void — page background
+    secondary: '#161618',    // Panel — card surface
+    tertiary: '#1E1E21',     // Panel2 — elevated surface / inputs
     dark: '#000000',
   },
   txt: {
-    primary: '#F2F2F2',
-    secondary: '#D0D0D0',
-    tertiary: '#8B8B8B',
+    primary: '#F4F4F5',      // Chalk
+    secondary: '#C9C9D1',    // Between chalk and smoke
+    tertiary: '#9A9AA4',     // Smoke — muted text
   },
   bdr: {
-    primary: '#2A2A2A',
-    secondary: '#3A3A3A',
+    primary: '#26262B',
+    secondary: '#36363D',
   },
   shadow: 'rgba(0, 0, 0, 0.8)',
   overlay: 'rgba(0, 0, 0, 0.8)',
@@ -46,33 +50,70 @@ export const getThemeColors = (mode: 'dark' | 'light') => {
   return mode === 'light' ? lightColors : darkColors;
 };
 
+/**
+ * Applies the palette for the given mode as CSS custom properties on <html>.
+ * The static `theme` object below references these variables, so every
+ * inline style using theme.colors.* re-themes instantly on mode change.
+ * Called by ThemeProvider whenever the mode changes.
+ */
+export const applyThemeMode = (mode: 'dark' | 'light') => {
+  const c = getThemeColors(mode);
+  const root = document.documentElement;
+  root.style.setProperty('--c-bg-primary', c.bg.primary);
+  root.style.setProperty('--c-bg-secondary', c.bg.secondary);
+  root.style.setProperty('--c-bg-tertiary', c.bg.tertiary);
+  root.style.setProperty('--c-bg-dark', c.bg.dark);
+  root.style.setProperty('--c-txt-primary', c.txt.primary);
+  root.style.setProperty('--c-txt-secondary', c.txt.secondary);
+  root.style.setProperty('--c-txt-tertiary', c.txt.tertiary);
+  root.style.setProperty('--c-bdr-primary', c.bdr.primary);
+  root.style.setProperty('--c-bdr-secondary', c.bdr.secondary);
+  root.style.setProperty('--c-shadow', c.shadow);
+  root.style.setProperty('--c-overlay', c.overlay);
+  root.style.setProperty(
+    '--c-hover-tint',
+    mode === 'light' ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)'
+  );
+
+  // Shadows are much softer in light mode
+  const s = mode === 'light'
+    ? { sm: '0.08', md: '0.10', lg: '0.12', xl: '0.16' }
+    : { sm: '0.5', md: '0.6', lg: '0.7', xl: '0.8' };
+  root.style.setProperty('--shadow-sm', `0 2px 4px rgba(0, 0, 0, ${s.sm})`);
+  root.style.setProperty('--shadow-md', `0 4px 8px rgba(0, 0, 0, ${s.md})`);
+  root.style.setProperty('--shadow-lg', `0 8px 16px rgba(0, 0, 0, ${s.lg})`);
+  root.style.setProperty('--shadow-xl', `0 12px 24px rgba(0, 0, 0, ${s.xl})`);
+};
+
 export const theme = {
   colors: {
-    // Accent colors - Crimson
-    primary: '#EF233C',           // Crimson
-    primaryHover: '#FF2E47',      // Lighter crimson
-    primaryDark: '#D91F34',       // Darker crimson
+    // Accent colors - DIDC Electric
+    // Brand rule: keep electric to ~5% of any view — accents, not fills.
+    primary: '#E2144F',           // Electric
+    primaryHover: '#FF2D6B',      // Electric2 — pink hover / tint
+    primaryDark: '#C40E45',       // Pressed state (derived shade)
 
-    // Background colors
+    // Background colors — CSS variables set by ThemeProvider (see applyThemeMode).
+    // Fallbacks are the dark palette so anything rendered outside the provider still works.
     bg: {
-      primary: '#0D0D0D',        // Cod Gray
-      secondary: '#1A1A1A',
-      tertiary: '#242424',
-      dark: '#000000',
+      primary: 'var(--c-bg-primary, #0B0B0D)',
+      secondary: 'var(--c-bg-secondary, #161618)',
+      tertiary: 'var(--c-bg-tertiary, #1E1E21)',
+      dark: 'var(--c-bg-dark, #000000)',
     },
 
     // Text colors
     txt: {
-      primary: '#F2F2F2',       // Concrete
-      secondary: '#D0D0D0',     // Lighter gray
-      tertiary: '#8B8B8B',      // Muted gray
+      primary: 'var(--c-txt-primary, #F4F4F5)',
+      secondary: 'var(--c-txt-secondary, #C9C9D1)',
+      tertiary: 'var(--c-txt-tertiary, #9A9AA4)',
     },
 
     // Status colors - expanded for consistency
     status: {
       success: '#10B981',          // Emerald green
       warning: '#F59E0B',          // Amber
-      error: '#EF233C',            // Crimson for errors
+      error: '#E2144F',            // Electric for errors (matches brand accent)
       info: '#3B82F6',             // Blue
       pending: '#F59E0B',          // Amber (same as warning)
       inProgress: '#3B82F6',       // Blue (same as info)
@@ -91,30 +132,37 @@ export const theme = {
 
     // Border colors
     bdr: {
-      primary: '#2A2A2A',
-      secondary: '#3A3A3A',
+      primary: 'var(--c-bdr-primary, #26262B)',
+      secondary: 'var(--c-bdr-secondary, #36363D)',
     },
 
+    // Modal/backdrop overlay
+    overlay: 'var(--c-overlay, rgba(0, 0, 0, 0.8))',
+
     // Legacy flat colors (for backward compatibility with existing SOP pages)
-    background: '#0D0D0D',
-    backgroundLight: '#1A1A1A',
-    backgroundDark: '#000000',
-    textPrimary: '#F2F2F2',
-    textSecondary: '#D0D0D0',
-    textMuted: '#8B8B8B',
+    background: 'var(--c-bg-primary, #0B0B0D)',
+    backgroundLight: 'var(--c-bg-secondary, #161618)',
+    backgroundDark: 'var(--c-bg-dark, #000000)',
+    textPrimary: 'var(--c-txt-primary, #F4F4F5)',
+    textSecondary: 'var(--c-txt-secondary, #C9C9D1)',
+    textMuted: 'var(--c-txt-tertiary, #9A9AA4)',
     success: '#4CAF50',
     warning: '#FFC107',
-    error: '#EF233C',
+    error: '#E2144F',
     info: '#2196F3',
-    border: '#2A2A2A',
-    cardBackground: '#1A1A1A',
-    inputBackground: '#242424',
-    shadow: 'rgba(0, 0, 0, 0.8)',
+    border: 'var(--c-bdr-primary, #26262B)',
+    cardBackground: 'var(--c-bg-secondary, #161618)',
+    inputBackground: 'var(--c-bg-tertiary, #1E1E21)',
+    shadow: 'var(--c-shadow, rgba(0, 0, 0, 0.8))',
   },
 
+  // DIDC brand fonts (loaded via Google Fonts link in public/index.html):
+  // Kanit ExtraBold Italic = display/headlines (uppercase), Barlow = body/UI,
+  // JetBrains Mono = specs/captions/tags.
   fonts: {
-    primary: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
-    mono: "'Roboto Mono', 'Courier New', monospace",
+    display: "'Kanit', 'Barlow', -apple-system, sans-serif",
+    primary: "'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+    mono: "'JetBrains Mono', 'Roboto Mono', 'Courier New', monospace",
   },
 
   breakpoints: {
@@ -161,43 +209,68 @@ export const theme = {
   },
 
   shadows: {
-    sm: '0 2px 4px rgba(0, 0, 0, 0.5)',
-    md: '0 4px 8px rgba(0, 0, 0, 0.6)',
-    lg: '0 8px 16px rgba(0, 0, 0, 0.7)',
-    xl: '0 12px 24px rgba(0, 0, 0, 0.8)',
+    sm: 'var(--shadow-sm, 0 2px 4px rgba(0, 0, 0, 0.5))',
+    md: 'var(--shadow-md, 0 4px 8px rgba(0, 0, 0, 0.6))',
+    lg: 'var(--shadow-lg, 0 8px 16px rgba(0, 0, 0, 0.7))',
+    xl: 'var(--shadow-xl, 0 12px 24px rgba(0, 0, 0, 0.8))',
   },
 
-  // Typography scale for consistency
+  // Typography scale for consistency.
+  // Headlines use the brand display face: Kanit ExtraBold Italic, uppercase.
   typography: {
     h1: {
       fontSize: '36px',
       fontWeight: 800,
       lineHeight: 1.2,
+      fontFamily: "'Kanit', 'Barlow', sans-serif",
+      fontStyle: 'italic' as const,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.01em',
     },
     h1Mobile: {
       fontSize: '28px',
       fontWeight: 800,
       lineHeight: 1.2,
+      fontFamily: "'Kanit', 'Barlow', sans-serif",
+      fontStyle: 'italic' as const,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.01em',
     },
     h2: {
       fontSize: '28px',
-      fontWeight: 700,
+      fontWeight: 800,
       lineHeight: 1.3,
+      fontFamily: "'Kanit', 'Barlow', sans-serif",
+      fontStyle: 'italic' as const,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.01em',
     },
     h2Mobile: {
       fontSize: '24px',
-      fontWeight: 700,
+      fontWeight: 800,
       lineHeight: 1.3,
+      fontFamily: "'Kanit', 'Barlow', sans-serif",
+      fontStyle: 'italic' as const,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.01em',
     },
     h3: {
       fontSize: '22px',
       fontWeight: 700,
       lineHeight: 1.4,
+      fontFamily: "'Kanit', 'Barlow', sans-serif",
+      fontStyle: 'italic' as const,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.01em',
     },
     h3Mobile: {
       fontSize: '18px',
       fontWeight: 700,
       lineHeight: 1.4,
+      fontFamily: "'Kanit', 'Barlow', sans-serif",
+      fontStyle: 'italic' as const,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.01em',
     },
     subtitle: {
       fontSize: '16px',
@@ -294,9 +367,9 @@ export const theme = {
         fontSize: '15px',
         fontWeight: 400,
         borderRadius: '8px',
-        border: '2px solid #2A2A2A',
-        backgroundColor: '#242424',
-        color: '#F2F2F2',
+        border: '2px solid var(--c-bdr-primary, #26262B)',
+        backgroundColor: 'var(--c-bg-tertiary, #1E1E21)',
+        color: 'var(--c-txt-primary, #F4F4F5)',
         outline: 'none',
         transition: 'border-color 0.2s ease',
       },
@@ -308,8 +381,8 @@ export const theme = {
     // Card presets
     card: {
       base: {
-        backgroundColor: '#1A1A1A',
-        border: '2px solid #2A2A2A',
+        backgroundColor: 'var(--c-bg-secondary, #161618)',
+        border: '2px solid var(--c-bdr-primary, #26262B)',
         borderRadius: '12px',
         padding: '24px',
       },

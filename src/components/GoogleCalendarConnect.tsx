@@ -65,10 +65,10 @@ const GoogleCalendarConnect: React.FC<GoogleCalendarConnectProps> = ({ compact =
         <div style={styles.disconnectedHeader}>
           <div style={styles.googleIconLarge}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke={theme.colors.textMuted} strokeWidth="1.5" fill="none"/>
-              <line x1="16" y1="2" x2="16" y2="6" stroke={theme.colors.textMuted} strokeWidth="1.5"/>
-              <line x1="8" y1="2" x2="8" y2="6" stroke={theme.colors.textMuted} strokeWidth="1.5"/>
-              <line x1="3" y1="10" x2="21" y2="10" stroke={theme.colors.textMuted} strokeWidth="1.5"/>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" style={{ stroke: theme.colors.textMuted }} strokeWidth="1.5" fill="none"/>
+              <line x1="16" y1="2" x2="16" y2="6" style={{ stroke: theme.colors.textMuted }} strokeWidth="1.5"/>
+              <line x1="8" y1="2" x2="8" y2="6" style={{ stroke: theme.colors.textMuted }} strokeWidth="1.5"/>
+              <line x1="3" y1="10" x2="21" y2="10" style={{ stroke: theme.colors.textMuted }} strokeWidth="1.5"/>
             </svg>
           </div>
           {!compact && (
