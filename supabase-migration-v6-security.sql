@@ -223,9 +223,17 @@ ALTER VIEW IF EXISTS public.work_hours_summary SET (security_invoker = true);
 DROP POLICY IF EXISTS "Authenticated users can insert activity logs" ON public.activity_logs;
 DROP POLICY IF EXISTS "Allow insert for authenticated users" ON public.activity_logs;
 
+-- Live DB had differently-named permissive policies (found during apply):
+DROP POLICY IF EXISTS "Allow authenticated insert activity_logs" ON public.activity_logs;
+DROP POLICY IF EXISTS "Allow authenticated delete activity_logs" ON public.activity_logs;
+
 -- user_id is TEXT in v2-migrated DBs and UUID in fresh ones; cast both sides
 CREATE POLICY "activity_logs_insert" ON public.activity_logs
   FOR INSERT WITH CHECK (user_id::text = auth.uid()::text);
+
+-- Audit logs: only admins may delete
+CREATE POLICY "activity_logs_delete_admin" ON public.activity_logs
+  FOR DELETE USING (public.is_admin());
 
 -- ------------------------------------------------------------
 -- 6. Indexes for the array-membership checks used by policies
@@ -234,7 +242,7 @@ CREATE POLICY "activity_logs_insert" ON public.activity_logs
 CREATE INDEX IF NOT EXISTS idx_job_tasks_assigned_to ON public.job_tasks USING GIN (assigned_to);
 CREATE INDEX IF NOT EXISTS idx_jobs_assigned_to ON public.jobs USING GIN (assigned_to);
 CREATE INDEX IF NOT EXISTS idx_profiles_invited_by ON public.profiles (invited_by);
-CREATE INDEX IF NOT EXISTS idx_work_hours_employee_date ON public.work_hours (employee_id, date);
+CREATE INDEX IF NOT EXISTS idx_work_hours_employee_date ON public.work_hours (employee_id, work_date);
 
 -- ============================================================
 -- NOT COVERED BY THIS MIGRATION (requires app/infra changes):
