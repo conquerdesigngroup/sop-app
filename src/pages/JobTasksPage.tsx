@@ -12,8 +12,14 @@ import { useConfirm } from '../hooks/useConfirm';
 import TaskLibraryImport from '../components/TaskLibraryImport';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 
+// Parse a date-only string (YYYY-MM-DD) as LOCAL midnight. Bare
+// `new Date('YYYY-MM-DD')` parses as UTC midnight, which renders as the
+// previous day (and flags today's tasks overdue) in US timezones.
+const parseLocalDate = (dateString: string) =>
+  new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
+
 const JobTasksPage: React.FC = () => {
-  const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask } = useTask();
+  const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask, addTaskTemplate } = useTask();
   const { currentUser, users } = useAuth();
   const { sops } = useSOPs();
   const { isMobile } = useResponsive();
@@ -129,12 +135,12 @@ const JobTasksPage: React.FC = () => {
       inProgress: nonArchivedTasks.filter(t => t.status === 'in-progress').length,
       completed: nonArchivedTasks.filter(t => t.status === 'completed').length,
       overdue: nonArchivedTasks.filter(t => {
-        const taskDate = new Date(t.scheduledDate);
+        const taskDate = parseLocalDate(t.scheduledDate);
         taskDate.setHours(0, 0, 0, 0);
         return taskDate < today && t.status !== 'completed';
       }).length,
       dueToday: nonArchivedTasks.filter(t => {
-        const taskDate = new Date(t.scheduledDate);
+        const taskDate = parseLocalDate(t.scheduledDate);
         taskDate.setHours(0, 0, 0, 0);
         return taskDate.getTime() === today.getTime() && t.status !== 'completed';
       }).length,
@@ -151,6 +157,7 @@ const JobTasksPage: React.FC = () => {
         await updateJobTask(editingTask.id, {
           title: taskData.title,
           description: taskData.description,
+          category: taskData.category,
           priority: taskData.priority,
           estimatedDuration: taskData.estimatedDuration,
           scheduledDate: taskData.scheduledDate,
@@ -168,7 +175,36 @@ const JobTasksPage: React.FC = () => {
             requiresPhoto: step.requiresPhoto,
           })),
         });
-        showToast('Job task updated successfully!', 'success');
+
+        // Optionally save the edited task to the Task Library as a template
+        if (saveAsTemplate && currentUser) {
+          await addTaskTemplate({
+            title: taskData.title,
+            description: taskData.description,
+            category: taskData.category || 'General',
+            department: currentUser.department || 'General',
+            priority: taskData.priority,
+            estimatedDuration: taskData.estimatedDuration,
+            steps: taskData.steps.map((step: any, index: number) => ({
+              id: `step_${Date.now()}_${index}`,
+              order: index + 1,
+              title: step.title,
+              description: step.description || '',
+              requiresPhoto: step.requiresPhoto,
+            })),
+            sopIds: taskData.sopId ? [taskData.sopId] : [],
+            createdBy: currentUser.id,
+            isRecurring: taskData.isRecurring || false,
+            recurrencePattern: taskData.recurrencePattern,
+          });
+        }
+
+        showToast(
+          saveAsTemplate
+            ? 'Job task updated and saved to Task Library!'
+            : 'Job task updated successfully!',
+          'success'
+        );
       } else {
         // Create new task
         await createJobTaskUnified(taskData, saveAsTemplate);
@@ -642,7 +678,7 @@ const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, i
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = parseLocalDate(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
@@ -651,7 +687,7 @@ const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, i
     if (task.status === 'completed') return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const taskDate = new Date(task.scheduledDate);
+    const taskDate = parseLocalDate(task.scheduledDate);
     taskDate.setHours(0, 0, 0, 0);
     const diffDays = Math.ceil((taskDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 

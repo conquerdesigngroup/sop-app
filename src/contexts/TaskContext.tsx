@@ -30,6 +30,7 @@ interface TaskContextType {
   createJobTaskUnified: (taskData: {
     title: string;
     description: string;
+    category?: string;
     priority: TaskPriority;
     estimatedDuration: number;
     steps: {
@@ -1052,6 +1053,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     taskData: {
       title: string;
       description: string;
+      category?: string;
       priority: TaskPriority;
       estimatedDuration: number;
       steps: {
@@ -1087,7 +1089,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         const template: Omit<TaskTemplate, 'id' | 'createdAt'> = {
           title: taskData.title,
           description: taskData.description,
-          category: 'General',
+          category: taskData.category || 'General',
           department: currentUser.department || 'General',
           priority: taskData.priority,
           estimatedDuration: taskData.estimatedDuration,
@@ -1118,7 +1120,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         assignedTo: taskData.assignedTo,
         assignedBy: currentUser.id,
         department: currentUser.department || 'General',
-        category: 'General',
+        category: taskData.category || 'General',
         scheduledDate: taskData.scheduledDate,
         dueTime: taskData.dueTime,
         estimatedDuration: taskData.estimatedDuration,

@@ -12,6 +12,11 @@ import CalendarTaskModal from '../components/CalendarTaskModal';
 import EventDetailModal from '../components/EventDetailModal';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 
+// Parse a date-only string (YYYY-MM-DD) as LOCAL midnight — bare new Date()
+// parses it as UTC and shifts the day back in US timezones.
+const parseLocalDate = (dateString: string) =>
+  new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
+
 const Dashboard: React.FC = () => {
   const { sops, loading: sopsLoading } = useSOPs();
   const { isAdmin, currentUser, users } = useAuth();
@@ -153,7 +158,7 @@ const TaskCalendar: React.FC<{
     const date = new Date(year, month, day);
     date.setHours(0, 0, 0, 0);
     return tasks.filter(task => {
-      const taskDate = new Date(task.scheduledDate);
+      const taskDate = parseLocalDate(task.scheduledDate);
       taskDate.setHours(0, 0, 0, 0);
       return taskDate.getTime() === date.getTime();
     });
@@ -290,14 +295,14 @@ const TeamMemberDashboard: React.FC<{
   const inProgressTasks = myTasks.filter(t => t.status === 'in-progress').length;
   const completedTasks = myTasks.filter(t => t.status === 'completed').length;
   const overdueTasks = myTasks.filter(task => {
-    const taskDate = new Date(task.scheduledDate);
+    const taskDate = parseLocalDate(task.scheduledDate);
     taskDate.setHours(0, 0, 0, 0);
     return taskDate < today && task.status !== 'completed';
   });
 
   // Today's tasks
   const todayTasks = myTasks.filter(task => {
-    const taskDate = new Date(task.scheduledDate);
+    const taskDate = parseLocalDate(task.scheduledDate);
     taskDate.setHours(0, 0, 0, 0);
     return taskDate.getTime() === today.getTime();
   });
@@ -306,7 +311,7 @@ const TeamMemberDashboard: React.FC<{
   const nextWeek = new Date();
   nextWeek.setDate(nextWeek.getDate() + 7);
   const upcomingTasks = myTasks.filter(task => {
-    const taskDate = new Date(task.scheduledDate);
+    const taskDate = parseLocalDate(task.scheduledDate);
     return taskDate > today && taskDate <= nextWeek;
   });
 
@@ -390,7 +395,7 @@ const TeamMemberDashboard: React.FC<{
                   <div style={styles.taskCardHeader}>
                     <span style={styles.taskCardTitle}>{task.title}</span>
                     <span style={styles.taskCardDate}>
-                      {new Date(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {parseLocalDate(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
                 </div>
@@ -412,7 +417,7 @@ const TeamMemberDashboard: React.FC<{
                 <div style={styles.taskCardHeader}>
                   <span style={styles.taskCardTitle}>{task.title}</span>
                   <span style={{ ...styles.taskCardDate, color: theme.colors.status.overdue }}>
-                    Due: {new Date(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    Due: {parseLocalDate(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
                 </div>
               </div>
@@ -628,7 +633,7 @@ const AdminDashboard: React.FC<{
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const overdueTasks = activeTasks.filter(t => {
-    const taskDate = new Date(t.scheduledDate);
+    const taskDate = parseLocalDate(t.scheduledDate);
     taskDate.setHours(0, 0, 0, 0);
     return taskDate < today && t.status !== 'completed';
   }).length;

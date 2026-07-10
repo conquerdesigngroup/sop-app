@@ -21,6 +21,7 @@ interface UnifiedJobTaskModalProps {
   onCreate: (taskData: {
     title: string;
     description: string;
+    category: string;
     priority: TaskPriority;
     estimatedDuration: number;
     steps: {
@@ -87,8 +88,21 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   // Save as Template
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
 
+  // Category (used for grouping in the Task Library and on tasks)
+  const [category, setCategory] = useState('General');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
   // Submission state to prevent duplicates
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Existing categories from the library, plus whatever is currently selected
+  const categoryOptions = Array.from(new Set([
+    'General',
+    ...taskTemplates.map((t: TaskTemplate) => t.category),
+    ...(editingTask?.category ? [editingTask.category] : []),
+    category,
+  ].filter(Boolean))).sort();
 
   // Get unique departments for user filtering
   const departments = Array.from(new Set(users.map((u: any) => u.department)));
@@ -117,6 +131,9 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setDueTime('');
       setFilterDepartment('all');
       setSaveAsTemplate(false);
+      setCategory('General');
+      setIsAddingCategory(false);
+      setNewCategoryName('');
       setIsSubmitting(false);
     }
   }, [isOpen, editingTask, initialTemplateId]);
@@ -133,6 +150,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setDueTime(editingTask.dueTime || '');
       setIsRecurring(editingTask.isRecurring || false);
       setLinkedSopId(editingTask.sopIds?.[0] || '');
+      setCategory(editingTask.category || 'General');
       if (editingTask.recurrencePattern) {
         setRecurrenceFrequency(editingTask.recurrencePattern.frequency);
         setRecurrenceDays(editingTask.recurrencePattern.daysOfWeek || []);
@@ -173,6 +191,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setEstimatedDuration(template.estimatedDuration);
       setIsRecurring(template.isRecurring);
       setLinkedSopId(template.sopIds?.[0] || '');
+      setCategory(template.category || 'General');
 
       if (template.recurrencePattern) {
         setRecurrenceFrequency(template.recurrencePattern.frequency);
@@ -294,6 +313,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         {
           title,
           description,
+          category,
           priority,
           estimatedDuration,
           steps: checklistItems.map(item => ({
@@ -375,6 +395,75 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                 rows={3}
                 style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
               />
+            </div>
+
+            {/* Category */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Category</label>
+              {isAddingCategory ? (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="New category name (e.g., Competitions)"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const name = newCategoryName.trim();
+                        if (name) {
+                          setCategory(name);
+                          setIsAddingCategory(false);
+                          setNewCategoryName('');
+                        }
+                      } else if (e.key === 'Escape') {
+                        setIsAddingCategory(false);
+                        setNewCategoryName('');
+                      }
+                    }}
+                    style={{...styles.input, ...(isMobile && styles.inputMobile), flex: 1}}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name = newCategoryName.trim();
+                      if (name) {
+                        setCategory(name);
+                        setIsAddingCategory(false);
+                        setNewCategoryName('');
+                      }
+                    }}
+                    style={styles.selectAllButton}
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsAddingCategory(false); setNewCategoryName(''); }}
+                    style={styles.selectAllButton}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_new__') {
+                      setIsAddingCategory(true);
+                    } else {
+                      setCategory(e.target.value);
+                    }
+                  }}
+                  style={{...styles.select, ...(isMobile && styles.selectMobile)}}
+                >
+                  {categoryOptions.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  <option value="__add_new__">+ Add new category…</option>
+                </select>
+              )}
             </div>
 
             {/* Scheduled Date & Due Time */}
@@ -657,16 +746,16 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
             )}
           </div>
 
-          {/* Save to Task Library */}
-          {!editingTask && (
-            <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
-              <CustomCheckbox
-                checked={saveAsTemplate}
-                onChange={setSaveAsTemplate}
-                label="Save to Task Library for future use"
-              />
-            </div>
-          )}
+          {/* Save to Task Library — available for new AND edited tasks */}
+          <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
+            <CustomCheckbox
+              checked={saveAsTemplate}
+              onChange={setSaveAsTemplate}
+              label={editingTask
+                ? 'Also save a copy to the Task Library'
+                : 'Save to Task Library for future use'}
+            />
+          </div>
 
           {/* Form Actions */}
           <div style={{...styles.modalActions, ...(isMobile && styles.modalActionsMobile)}}>
