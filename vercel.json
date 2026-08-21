@@ -12,34 +12,43 @@
   "routes": [
     {
       "src": "/static/(.*)",
-      "headers": {
-        "cache-control": "public, max-age=31536000, immutable"
-      }
+      "headers": { "cache-control": "public, max-age=31536000, immutable" },
+      "continue": true
     },
     {
       "src": "/service-worker.js",
-      "headers": {
-        "cache-control": "public, max-age=0, must-revalidate"
-      }
+      "headers": { "cache-control": "public, max-age=0, must-revalidate" },
+      "continue": true
     },
     {
-      "src": "/(.*\\.(png|jpg|jpeg|gif|svg|ico))",
-      "headers": {
-        "cache-control": "public, max-age=0, must-revalidate"
-      }
+      "src": "/manifest.json",
+      "headers": { "cache-control": "public, max-age=0, must-revalidate" },
+      "continue": true
+    },
+    {
+      "src": "/(.*\\.(png|jpg|jpeg|gif|svg|ico|webmanifest))",
+      "headers": { "cache-control": "public, max-age=0, must-revalidate" },
+      "continue": true
+    },
+    {
+      "src": "/",
+      "headers": { "cache-control": "no-cache, no-store, must-revalidate" },
+      "continue": true
     },
     {
       "src": "/index.html",
-      "headers": {
-        "cache-control": "no-cache, no-store, must-revalidate"
-      }
+      "headers": { "cache-control": "no-cache, no-store, must-revalidate" },
+      "continue": true
     },
+
+    {
+      "handle": "filesystem"
+    },
+
     {
       "src": "/(.*)",
       "dest": "/index.html",
-      "headers": {
-        "cache-control": "no-cache, no-store, must-revalidate"
-      }
+      "headers": { "cache-control": "no-cache, no-store, must-revalidate" }
     }
   ]
 }
