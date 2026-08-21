@@ -7,12 +7,20 @@ import { User, UserRole } from '../types';
 import { DEFAULT_DEPARTMENTS, USER_ROLES, SUCCESS_MESSAGES, ERROR_MESSAGES } from '../constants';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { useConfirm } from '../hooks/useConfirm';
+import { Button, Input, Modal } from '../components/ui';
 
 const TeamManagementPage: React.FC = () => {
-  const { users, addUser, updateUser, deleteUser, currentUser } = useAuth();
+  const { users, addUser, updateUser, deleteUser, adminResetPassword, currentUser } = useAuth();
   const { success, error } = useToast();
   const { isMobile, isTablet, isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
+
+  // Admin password reset — target user, or null when the dialog is closed.
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
@@ -207,6 +215,48 @@ const TeamManagementPage: React.FC = () => {
     } catch (err: any) {
       error(err.message || 'Failed to activate user');
     }
+  };
+
+  const handleOpenReset = (user: User) => {
+    setResetTarget(user);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetError('');
+  };
+
+  /**
+   * Set another user's password directly.
+   *
+   * Goes through the admin-users Edge Function; the admin check happens there
+   * against the caller's own JWT, not here. This exists so that resetting a
+   * staff password no longer means going into the Supabase dashboard.
+   */
+  const handleConfirmReset = async () => {
+    if (!resetTarget) return;
+    setResetError('');
+
+    if (resetPassword.length < 8) {
+      setResetError('Password must be at least 8 characters');
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      setResetError('Passwords do not match');
+      return;
+    }
+
+    setResetBusy(true);
+    const result = await adminResetPassword(resetTarget.id, resetPassword);
+    setResetBusy(false);
+
+    if (!result.success) {
+      setResetError(result.error || 'Could not reset the password');
+      return;
+    }
+
+    success(`Password reset for ${resetTarget.firstName} ${resetTarget.lastName}`);
+    setResetTarget(null);
+    setResetPassword('');
+    setResetConfirm('');
   };
 
   const handleDeleteUser = async (user: User) => {
@@ -429,6 +479,16 @@ const TeamManagementPage: React.FC = () => {
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
                   </button>
+                  <button
+                    onClick={() => handleOpenReset(user)}
+                    style={{...styles.iconButton, ...styles.iconButtonMobile}}
+                    title="Reset password"
+                  >
+                    {/* Key */}
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+                    </svg>
+                  </button>
                   {user.id !== currentUser?.id && (
                     <>
                       {user.isActive !== false ? (
@@ -549,6 +609,16 @@ const TeamManagementPage: React.FC = () => {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleOpenReset(user)}
+                          style={styles.iconButton}
+                          title="Reset password"
+                        >
+                          {/* Key */}
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
                           </svg>
                         </button>
                         {user.id !== currentUser?.id && (
@@ -786,6 +856,59 @@ const TeamManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Admin password reset */}
+      <Modal
+        isOpen={resetTarget !== null}
+        onClose={() => setResetTarget(null)}
+        title="Reset password"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResetTarget(null)} disabled={resetBusy}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleConfirmReset} loading={resetBusy}>
+              Set password
+            </Button>
+          </>
+        }
+      >
+        <p style={{
+          fontFamily: theme.fonts.primary,
+          fontSize: '15px',
+          lineHeight: 1.5,
+          color: theme.colors.txt.secondary,
+          margin: '0 0 20px',
+        }}>
+          Set a new password for{' '}
+          <strong style={{ color: theme.colors.txt.primary }}>
+            {resetTarget?.firstName} {resetTarget?.lastName}
+          </strong>
+          . They can sign in with it straight away — tell them directly, and ask
+          them to change it once they are in.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <Input
+            label="New password"
+            type="password"
+            autoComplete="new-password"
+            value={resetPassword}
+            onChange={e => setResetPassword(e.target.value)}
+            disabled={resetBusy}
+          />
+          <Input
+            label="Confirm new password"
+            type="password"
+            autoComplete="new-password"
+            value={resetConfirm}
+            onChange={e => setResetConfirm(e.target.value)}
+            error={resetError || undefined}
+            disabled={resetBusy}
+          />
+        </div>
+      </Modal>
+
       {confirmDialog}
     </div>
   );

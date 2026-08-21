@@ -33,6 +33,7 @@ const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 
 // Client-facing portal — public, no account required.
 const ChooserPage = lazy(() => import('./pages/portal/ChooserPage'));
@@ -151,6 +152,12 @@ const AppContent: React.FC = () => {
         <Routes>
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/auth/callback" element={<AuthCallback />} />
+
+          {/* Where password-reset emails land. Deliberately NOT a PublicRoute:
+              the recovery token creates a session as it is consumed, so a
+              PublicRoute guard would redirect to /dashboard before the person
+              ever gets to set a new password. */}
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Front door. Public, and shown on every visit — no remembered side.
               Staff continue to /login; families go to /portal, no account. */}

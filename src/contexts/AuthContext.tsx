@@ -20,6 +20,10 @@ interface AuthContextType {
   updateUser: (id: string, userData: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  /** Admin-only: set someone else's password. Enforced server-side. */
+  adminResetPassword: (userId: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  /** Send a reset email to a signed-out user. Always reports success — see impl. */
+  requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   getUserById: (id: string) => User | undefined;
   getUsersByDepartment: (department: string) => User[];
   getUsersByRole: (role: UserRole) => User[];
@@ -433,107 +437,144 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Create auth user in Supabase
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: userData.email,
-        password: userData.password,
-        options: {
-          data: {
-            first_name: userData.firstName,
-            last_name: userData.lastName,
-            role: userData.role,
-            department: userData.department,
-          },
-          emailRedirectTo: window.location.origin,
+      // Goes through the admin-users Edge Function, NOT supabase.auth.signUp().
+      //
+      // signUp() was wrong here in two ways that both bit us:
+      //
+      //   1. It issues a session for the NEW user, so the admin doing the
+      //      creating was silently signed in as the person they just created.
+      //
+      //   2. The role was discarded. handle_new_user() hardcodes role='team'
+      //      (v6, deliberately), so the trigger always won and every account an
+      //      admin made came out a team member. The manual-insert fallback below
+      //      it only ran when the trigger had NOT created the profile — which
+      //      never happens — so the role was never corrected.
+      //
+      // Creating a user for someone else needs auth.admin.createUser, which
+      // needs the service role key, which can never ship in a CRA bundle.
+      const { data, error: fnError } = await supabase.functions.invoke('admin-users', {
+        body: {
+          action: 'create_user',
+          email: userData.email,
+          password: userData.password,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          role: userData.role,
+          department: userData.department,
         },
       });
 
-      if (authError) {
-        console.error('Error creating auth user:', authError);
-        return { success: false, error: authError.message };
-      }
-
-      // If user already exists (identities empty in some Supabase configs), handle gracefully
-      if (data.user && data.user.identities && data.user.identities.length === 0) {
-        return { success: false, error: 'A user with this email already exists' };
-      }
-
-      // Check if email confirmation is required (no session means confirmation is needed)
-      const requiresEmailConfirmation = !data.session;
-
-      if (data.user) {
-        // Wait a moment for the trigger to execute
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Check if profile was created by the trigger
-        const { data: existingProfile, error: checkError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', data.user.id)
-          .single();
-
-        // If profile doesn't exist, create it manually
-        if (!existingProfile || checkError) {
-          console.log('Profile not created by trigger, creating manually...');
-
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-              id: data.user.id,
-              email: userData.email,
-              first_name: userData.firstName,
-              last_name: userData.lastName,
-              role: userData.role,
-              department: userData.department,
-              is_active: true,
-              invited_by: currentUser?.id || null,
-              notification_preferences: userData.notificationPreferences || {
-                pushEnabled: true,
-                emailEnabled: true,
-                calendarSyncEnabled: false,
-                taskReminders: true,
-                overdueAlerts: true,
-              },
-            });
-
-          if (profileError) {
-            console.error('Error creating profile manually:', profileError);
-            // The auth user was created but profile failed
-            // This is not ideal but we can try to continue
-            console.warn('Profile creation failed. User may need admin intervention.');
-          }
+      // functions.invoke surfaces a non-2xx as an error whose body holds our
+      // message; dig it out so the user sees "already exists" rather than
+      // "Edge Function returned a non-2xx status code".
+      if (fnError) {
+        let message = fnError.message || 'Failed to create user';
+        try {
+          const body = await (fnError as any).context?.json?.();
+          if (body?.error) message = body.error;
+        } catch {
+          /* keep the generic message */
         }
+        console.error('Error creating user:', fnError);
+        return { success: false, error: message };
       }
 
-      // Log activity
-      if (currentUser && data.user) {
-        logActivity({
-          userId: currentUser.id,
-          userEmail: currentUser.email,
-          userName: `${currentUser.firstName} ${currentUser.lastName}`,
-          action: 'user_created',
-          entityType: 'user',
-          entityId: data.user.id,
-          entityTitle: `${userData.firstName} ${userData.lastName}`,
-          details: {
-            newUserEmail: userData.email,
-            newUserRole: userData.role,
-            newUserDepartment: userData.department,
-            requiresEmailConfirmation,
-          },
-        });
+      if (data?.error) {
+        return { success: false, error: data.error };
       }
 
-      // Reload users to get the latest list
+      // The function logs the activity itself, as the calling admin.
       await loadUsers();
 
-      return {
-        success: true,
-        requiresEmailConfirmation
-      };
+      // The account is created with email_confirm: true, so there is nothing to
+      // confirm — they can sign in immediately with the password given to them.
+      return { success: true, requiresEmailConfirmation: false };
     } catch (error: any) {
       console.error('Error adding user:', error);
       return { success: false, error: error.message || 'Failed to create user' };
+    }
+  };
+
+  /**
+   * Set another user's password. Admins only.
+   *
+   * Distinct from changePassword(), which only ever acts on the signed-in user
+   * and requires their current password. There was previously no way for an
+   * admin to reset someone else's, which is why it was being done by hand in
+   * the Supabase dashboard.
+   *
+   * Authorisation is enforced inside the Edge Function against the caller's own
+   * JWT — isAdmin here only decides whether to show the button.
+   */
+  const adminResetPassword = async (
+    userId: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!useSupabase) {
+      return { success: false, error: 'Password reset requires Supabase' };
+    }
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'set_password', userId, password: newPassword },
+      });
+
+      if (fnError) {
+        let message = fnError.message || 'Failed to reset password';
+        try {
+          const body = await (fnError as any).context?.json?.();
+          if (body?.error) message = body.error;
+        } catch {
+          /* keep the generic message */
+        }
+        return { success: false, error: message };
+      }
+
+      if (data?.error) return { success: false, error: data.error };
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Failed to reset password' };
+    }
+  };
+
+  /**
+   * Send a password-reset email to someone who is locked out.
+   *
+   * The explicit `redirectTo` is the point of this function. Supabase builds
+   * recovery links from the project's Site URL unless the caller overrides it,
+   * and a wrong Site URL is what sent our reset emails to a different app
+   * entirely. Passing redirectTo pins the link to whatever origin the request
+   * came from, so this flow is correct regardless of that project setting.
+   *
+   * The origin must still be on the Auth → URL Configuration → Redirect URLs
+   * allow-list, or Supabase falls back to the Site URL and the problem returns.
+   *
+   * Always reports success, even for an unknown address: telling a stranger
+   * whether an email is registered is a free user-enumeration oracle.
+   */
+  const requestPasswordReset = async (
+    email: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!useSupabase) {
+      return { success: false, error: 'Password reset requires Supabase' };
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      // Rate limiting is worth surfacing — it is actionable ("wait a minute"),
+      // unlike "no such user", which is not ours to disclose.
+      if (error && /rate|limit|too many/i.test(error.message)) {
+        return { success: false, error: 'Too many attempts. Please wait a minute and try again.' };
+      }
+
+      if (error) console.error('Password reset request failed:', error);
+      return { success: true };
+    } catch (error: any) {
+      console.error('Password reset request failed:', error);
+      return { success: true };
     }
   };
 
@@ -877,6 +918,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     updateUser,
     deleteUser,
     changePassword,
+    adminResetPassword,
+    requestPasswordReset,
     getUserById,
     getUsersByDepartment,
     getUsersByRole,

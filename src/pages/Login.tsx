@@ -13,8 +13,10 @@ const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, requestPasswordReset } = useAuth();
   const { isMobile, isMobileOrTablet } = useResponsive();
   const { isDark } = useTheme();
 
@@ -50,6 +52,36 @@ const Login: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /**
+   * Send a reset email for whatever is in the email field.
+   *
+   * requestPasswordReset pins redirectTo to this origin, which overrides the
+   * project's Site URL — the setting that was sending our reset emails to a
+   * different app entirely.
+   *
+   * The confirmation is deliberately the same whether or not the address is
+   * registered; saying "no such user" would hand any visitor a way to test
+   * which staff emails exist.
+   */
+  const handleForgotPassword = async () => {
+    setError('');
+
+    if (!email.trim()) {
+      setError('Enter your email address first, then tap "Forgot password?"');
+      return;
+    }
+
+    setResetBusy(true);
+    const result = await requestPasswordReset(email);
+    setResetBusy(false);
+
+    if (!result.success) {
+      setError(result.error || 'Could not send the reset email');
+      return;
+    }
+    setResetSent(true);
   };
 
   // Dynamic styles based on screen size
@@ -153,7 +185,7 @@ const Login: React.FC = () => {
             </div>
           </div>
 
-          {/* Remember Me Checkbox */}
+          {/* Remember Me + Forgot password */}
           <div style={styles.rememberMeContainer}>
             <CustomCheckbox
               checked={rememberMe}
@@ -161,7 +193,22 @@ const Login: React.FC = () => {
               label="Remember me"
               disabled={isLoading}
             />
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={isLoading || resetBusy}
+              style={styles.forgotLink}
+            >
+              {resetBusy ? 'Sending…' : 'Forgot password?'}
+            </button>
           </div>
+
+          {resetSent && (
+            <div style={styles.resetNotice}>
+              If an account exists for <strong>{email}</strong>, a reset link is on
+              its way. It expires shortly and can only be used once.
+            </div>
+          )}
 
           <button
             type="submit"
@@ -332,7 +379,34 @@ const styles: { [key: string]: React.CSSProperties } = {
   rememberMeContainer: {
     display: 'flex',
     alignItems: 'center',
+    // Forgot-password sits opposite the checkbox; wraps rather than crushing
+    // the two together on a narrow phone.
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
     marginTop: '-4px',
+  },
+  forgotLink: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.primary,
+    fontSize: '14px',
+    fontWeight: 600,
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
+  },
+  resetNotice: {
+    fontFamily: theme.fonts.primary,
+    fontSize: '14px',
+    lineHeight: 1.5,
+    color: theme.colors.txt.secondary,
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    padding: '12px 14px',
   },
   checkboxLabel: {
     display: 'flex',
