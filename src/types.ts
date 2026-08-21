@@ -302,6 +302,18 @@ export interface CalendarEvent {
 
 export type WorkHoursStatus = 'pending' | 'approved' | 'rejected';
 
+// Admin-managed list backing the "What did you work on?" dropdown on
+// the Hours Input page. Categories are retired (isActive = false)
+// rather than deleted, so historical entries keep their label.
+export interface WorkCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface WorkHoursEntry {
   id: string;
   employeeId: string;
@@ -309,11 +321,17 @@ export interface WorkHoursEntry {
   startTime: string; // HH:MM format (e.g., "09:00")
   endTime: string; // HH:MM format (e.g., "17:00")
   breakMinutes: number; // Break duration in minutes
-  totalHours: number; // Calculated total work hours (minus breaks)
-  notes?: string;
+  totalHours: number; // Recomputed server-side on write (migration v7)
+  // The three nullable fields below accept `null` as well as `undefined`,
+  // and the difference matters on update: mapToSupabase omits any key that
+  // is `undefined`, so passing `undefined` leaves the column as it was.
+  // Pass `null` to actually clear one.
+  categoryId?: string | null; // FK to WorkCategory; null on pre-v7 entries
+  notes?: string | null;
   status: WorkHoursStatus;
   approvedBy?: string; // Admin user ID who approved
   approvedAt?: string; // ISO timestamp
+  rejectionReason?: string | null; // Why an admin sent it back
   createdBy: string; // User who created (can be employee or admin)
   createdAt: string;
   updatedAt?: string;

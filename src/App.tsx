@@ -30,6 +30,7 @@ const ActivityLogPage = lazy(() => import('./pages/ActivityLogPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
+const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 
 // Page loading fallback - simple centered spinner.
@@ -228,6 +229,14 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <WorkHoursPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/hours-input"
+            element={
+              <ProtectedRoute>
+                <HoursInputPage />
               </ProtectedRoute>
             }
           />

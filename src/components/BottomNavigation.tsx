@@ -53,12 +53,17 @@ const BottomNavigation: React.FC = () => {
       ),
     },
     {
-      path: '/hours',
+      // Points at Hours Input, not the /hours calendar. There are only five
+      // slots down here and logging hours is the thing an employee does on a
+      // phone; the scheduling calendar stays one tap away in the main menu.
+      path: '/hours-input',
       label: 'Hours',
       icon: (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
+          <path d="M21.2 15.9A9 9 0 1 1 15.9 2.8" />
+          <polyline points="12 7 12 12 15 14" />
+          <line x1="19" y1="3" x2="19" y2="9" />
+          <line x1="16" y1="6" x2="22" y2="6" />
         </svg>
       ),
     },
