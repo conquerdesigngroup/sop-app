@@ -175,12 +175,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (profile && !error) {
             setCurrentUser(mapProfileToUser(profile, session.user));
           }
-        }
 
-        // Load all users (for admin features)
-        console.log('[Auth] Loading users...');
-        await loadUsers();
-        console.log('[Auth] Users loaded');
+          // Load all users (for admin features).
+          //
+          // Deliberately inside the session branch. This used to run
+          // unconditionally, so every logged-out visitor's browser pulled the
+          // entire staff directory — and the profiles SELECT policy was
+          // USING (true) with no TO clause, so the `anon` role actually got the
+          // rows. Migration v8 closes that at the database; this stops the app
+          // asking for something it cannot use. Login is unaffected: the
+          // SIGNED_IN handler below calls loadUsers() again once there is a
+          // session, and signInWithPassword completes before any profile read.
+          console.log('[Auth] Loading users...');
+          await loadUsers();
+          console.log('[Auth] Users loaded');
+        }
 
         console.log('[Auth] Initialization complete - setting loading to false');
         setLoading(false);

@@ -1,0 +1,168 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { theme } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useResponsive } from '../../hooks/useResponsive';
+import { portalRoutes } from '../../lib/portal';
+
+/**
+ * Shell for every parent-portal page.
+ *
+ * The portal has its own chrome. The staff Navigation and BottomNavigation are
+ * gated on `isAuthenticated`, so they stay hidden for parents on their own — but
+ * a signed-in admin previewing the portal would otherwise see staff nav bleed
+ * through, and App.tsx additionally suppresses it on /portal paths.
+ *
+ * Mobile-first: this is overwhelmingly opened on a phone, often from a home
+ * screen icon, so the header is compact and the safe-area insets are honoured.
+ * Those insets only resolve because `viewport-fit=cover` was added to
+ * public/index.html — without it env(safe-area-inset-*) evaluates to 0.
+ */
+
+interface PortalLayoutProps {
+  /** Page title. Rendered in the Kanit display face, which uppercases it. */
+  title: string;
+  subtitle?: string;
+  /**
+   * Destination for the back chevron. Omit on the portal home, which is the
+   * top of this section — the chooser is reachable from the logo instead.
+   */
+  backTo?: string;
+  children: React.ReactNode;
+}
+
+const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, children }) => {
+  const { isDark } = useTheme();
+  const { isMobileOrTablet } = useResponsive();
+
+  return (
+    <div
+      style={{
+        minHeight: '100dvh',
+        display: 'flex',
+        flexDirection: 'column',
+        // Undo .App { text-align: center } from App.css.
+        textAlign: 'left',
+      }}
+    >
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          backgroundColor: theme.colors.bg.primary,
+          borderBottom: `2px solid ${theme.colors.bdr.primary}`,
+          paddingTop: 'env(safe-area-inset-top)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: theme.pageLayout.maxWidth,
+            margin: '0 auto',
+            padding: isMobileOrTablet ? '12px 16px' : '16px 40px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          {backTo && (
+            <Link
+              to={backTo}
+              aria-label="Back"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '36px',
+                height: '36px',
+                flexShrink: 0,
+                marginLeft: '-8px',
+                borderRadius: theme.borderRadius.md,
+                color: theme.colors.txt.secondary,
+                textDecoration: 'none',
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M15 18l-6-6 6-6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Link>
+          )}
+
+          {/* The mark returns to the chooser, so a parent who picked the wrong
+              side is never stranded. */}
+          <Link to={portalRoutes.chooser} style={{ display: 'flex', flexShrink: 0 }} aria-label="DIDC home">
+            <img
+              src={isDark ? '/brand/logos/didc-outline-white.svg' : '/brand/logos/didc-outline.svg'}
+              alt="Dancing Images Dance Center"
+              style={{ height: '22px', width: 'auto' }}
+            />
+          </Link>
+
+          {/* Orientation for sub-pages, where the h1 is a program name and
+              nothing else says which half of the app you are in. Suppressed on
+              the portal home, whose own h1 already reads "Parent Portal" —
+              printing it twice just eats vertical space on a phone. */}
+          {backTo && (
+            <span
+              style={{
+                marginLeft: 'auto',
+                ...theme.typography.captionSmall,
+                fontFamily: theme.fonts.mono,
+                color: theme.colors.txt.tertiary,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Parent Portal
+            </span>
+          )}
+        </div>
+      </header>
+
+      <main
+        style={{
+          flex: 1,
+          width: '100%',
+          maxWidth: theme.pageLayout.maxWidth,
+          margin: '0 auto',
+          padding: isMobileOrTablet ? '24px 16px' : '40px',
+          paddingBottom: `calc(${isMobileOrTablet ? '24px' : '40px'} + env(safe-area-inset-bottom))`,
+        }}
+      >
+        <div style={{ marginBottom: isMobileOrTablet ? '24px' : '32px' }}>
+          <h1
+            style={{
+              ...(isMobileOrTablet ? theme.typography.h1Mobile : theme.typography.h1),
+              color: theme.colors.txt.primary,
+              margin: 0,
+            }}
+          >
+            {title}
+          </h1>
+          {subtitle && (
+            <p
+              style={{
+                ...theme.typography.subtitle,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.tertiary,
+                margin: '8px 0 0',
+              }}
+            >
+              {subtitle}
+            </p>
+          )}
+        </div>
+
+        {children}
+      </main>
+    </div>
+  );
+};
+
+export default PortalLayout;

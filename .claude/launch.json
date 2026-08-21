@@ -5,7 +5,8 @@
       "name": "sop-app",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
-      "port": 3002
+      "port": 3002,
+      "autoPort": true
     }
   ]
 }

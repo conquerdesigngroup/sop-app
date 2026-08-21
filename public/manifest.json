@@ -1,8 +1,8 @@
 {
   "short_name": "DIDC",
-  "name": "DIDC",
-  "version": "1.0.2",
-  "description": "Task management and SOP tracking for teams",
+  "name": "Dancing Images Dance Center",
+  "version": "1.0.5",
+  "description": "Staff tools and the parent portal for Dancing Images Dance Center",
   "icons": [
     {
       "src": "favicon.ico",
@@ -22,11 +22,28 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "theme_color": "#0B0B0D",
   "background_color": "#0B0B0D",
   "orientation": "portrait-primary",
-  "categories": ["productivity", "business"],
-  "prefer_related_applications": false
+  "categories": ["productivity", "business", "education"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Parent Portal",
+      "short_name": "Portal",
+      "description": "Schedules, updates and documents for dancers and parents",
+      "url": "/portal",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Staff Sign In",
+      "short_name": "Staff",
+      "description": "Tasks, SOPs, hours and scheduling",
+      "url": "/login",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
 }

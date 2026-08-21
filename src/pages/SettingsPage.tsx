@@ -134,7 +134,7 @@ const SettingsPage: React.FC = () => {
       const exportData = {
         exportDate: new Date().toISOString(),
         exportedBy: currentUser?.email || 'Unknown',
-        version: '1.0.2',
+        version: '1.0.5',
         totalSOPs: sops.length,
         sops: sops.map(sop => ({
           ...sop,
@@ -569,7 +569,7 @@ const SettingsPage: React.FC = () => {
           <div style={styles.aboutInfo}>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>Cache Version</span>
-              <span style={styles.aboutValue}>1.0.2</span>
+              <span style={styles.aboutValue}>1.0.5</span>
             </div>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>Service Worker</span>
@@ -615,7 +615,7 @@ const SettingsPage: React.FC = () => {
           <div style={styles.aboutInfo}>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>App Version</span>
-              <span style={styles.aboutValue}>1.0.2</span>
+              <span style={styles.aboutValue}>1.0.5</span>
             </div>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>Build Date</span>

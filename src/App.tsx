@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider, useTheme, useThemeColors } from './contexts/ThemeContext';
@@ -13,6 +13,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
 import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
+import { isPortalPath } from './lib/portal';
 import './App.css';
 
 // Lazy load page components for code splitting
@@ -32,6 +33,11 @@ const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
+
+// Client-facing portal — public, no account required.
+const ChooserPage = lazy(() => import('./pages/portal/ChooserPage'));
+const PortalHome = lazy(() => import('./pages/portal/PortalHome'));
+const ProgramHome = lazy(() => import('./pages/portal/ProgramHome'));
 
 // Page loading fallback - simple centered spinner.
 // theme.colors resolve to CSS variables, so this is theme-aware automatically.
@@ -98,11 +104,36 @@ const PublicRoute: React.FC<{ children: React.ReactElement }> = ({ children }) =
   return children;
 };
 
+/**
+ * Catch-all destination for unknown URLs.
+ *
+ * Waits for the session check before deciding, otherwise a signed-in user who
+ * deep-links to a mistyped path gets bounced to the chooser during the brief
+ * window where `isAuthenticated` is still false.
+ */
+const NotFoundRedirect: React.FC = () => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return <PageLoadingFallback />;
+  }
+
+  return <Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />;
+};
+
 // App Content (needs to be inside AuthProvider to use useAuth)
 const AppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const { isMobileOrTablet } = useResponsive();
   const colors = useThemeColors();
+  const { pathname } = useLocation();
+
+  // The chooser and the parent portal carry their own chrome (PortalLayout).
+  // Parents never trip this because staff nav is already gated on
+  // isAuthenticated — it exists so a signed-in admin previewing the portal
+  // doesn't get the staff header and bottom bar bleeding into it.
+  const onPortal = isPortalPath(pathname);
+  const showStaffChrome = isAuthenticated && !onPortal;
 
   return (
     <div
@@ -111,23 +142,24 @@ const AppContent: React.FC = () => {
         backgroundColor: colors.bg.primary,
         minHeight: '100vh',
         // Add padding bottom for bottom nav on mobile
-        paddingBottom: isAuthenticated && isMobileOrTablet ? '70px' : 0,
+        paddingBottom: showStaffChrome && isMobileOrTablet ? '70px' : 0,
         transition: 'background-color 0.3s ease',
       }}
     >
-      {isAuthenticated && <Navigation />}
+      {showStaffChrome && <Navigation />}
       <Suspense fallback={<PageLoadingFallback />}>
         <Routes>
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+
+          {/* Front door. Public, and shown on every visit — no remembered side.
+              Staff continue to /login; families go to /portal, no account. */}
+          <Route path="/" element={<ChooserPage />} />
+
+          {/* Parent portal. Public by design: these pages read only portal_*
+              tables, which are the sole anon-readable surface in the schema. */}
+          <Route path="/portal" element={<PortalHome />} />
+          <Route path="/portal/:program" element={<ProgramHome />} />
           <Route
             path="/dashboard"
             element={
@@ -240,12 +272,15 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             }
           />
-          {/* Catch-all: unknown URLs land on the dashboard (or login via its guard) */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Catch-all. Staff land on the dashboard; everyone else lands on the
+              chooser rather than being pushed at a staff login they have no
+              account for — a mistyped portal URL is far more likely to be a
+              parent than an employee. */}
+          <Route path="*" element={<NotFoundRedirect />} />
         </Routes>
       </Suspense>
       {/* Bottom Navigation for Mobile */}
-      {isAuthenticated && isMobileOrTablet && <BottomNavigation />}
+      {showStaffChrome && isMobileOrTablet && <BottomNavigation />}
       <OfflineIndicator />
       <SessionExpiryModal />
     </div>

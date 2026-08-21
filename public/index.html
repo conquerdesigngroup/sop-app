@@ -4,35 +4,66 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/favicon-16x16.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- favicon-16x16.png was linked here but has never existed in public/. -->
+
+    <!--
+      viewport-fit=cover is load-bearing, not decoration. App.css and index.css
+      already position against env(safe-area-inset-*), but those functions
+      resolve to 0 without it — so the safe-area handling written for notched
+      iPhones has been inert. The portal is opened from the home screen, where
+      that gap is exactly where the content would sit.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
     <!-- DIDC brand fonts: Kanit (display), Barlow (body), JetBrains Mono (specs) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,600;0,800;1,600;1,800&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
     <meta name="theme-color" content="#0B0B0D" />
-    <meta name="description" content="DIDC - Task management and SOP tracking for teams" />
+    <!-- `/` is now the public chooser, shared by staff and families, so the
+         description no longer describes only the staff half. -->
+    <meta name="description" content="Dancing Images Dance Center — staff tools and the parent portal" />
 
     <!-- Apple Touch Icon -->
     <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon.png" />
 
-    <!-- Open Graph / Facebook -->
+    <!--
+      Home-screen behaviour.
+
+      Since iOS 16.4 Safari honours the manifest's `display: standalone`, so
+      these are not what makes the app launch chromeless — manifest.json already
+      does that. They still set the status bar treatment and the name under the
+      icon, and they cover older iOS. `black-translucent` lets the app paint
+      behind the status bar, which is why the safe-area insets above matter.
+    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DIDC" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!--
+      Open Graph / Facebook
+
+      These pointed at /og-image.png, which has never existed in public/ — every
+      shared link rendered with a broken preview. Using the 512px app icon until
+      a real 1200x630 card exists; `summary` rather than `summary_large_image`
+      because the icon is square, and a large card would letterbox it.
+    -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://didc.app/" />
     <meta property="og:title" content="DIDC" />
-    <meta property="og:description" content="Task management and SOP tracking for teams" />
-    <meta property="og:image" content="https://didc.app/og-image.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Dancing Images Dance Center — staff tools and the parent portal" />
+    <meta property="og:image" content="https://didc.app/logo512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
     <meta property="og:site_name" content="DIDC" />
 
     <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:card" content="summary" />
     <meta name="twitter:url" content="https://didc.app/" />
     <meta name="twitter:title" content="DIDC" />
-    <meta name="twitter:description" content="Task management and SOP tracking for teams" />
-    <meta name="twitter:image" content="https://didc.app/og-image.png" />
+    <meta name="twitter:description" content="Dancing Images Dance Center — staff tools and the parent portal" />
+    <meta name="twitter:image" content="https://didc.app/logo512.png" />
 
     <!-- PWA Manifest -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
