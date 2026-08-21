@@ -17,6 +17,70 @@ import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 const parseLocalDate = (dateString: string) =>
   new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
 
+const ENROLLIO_PORTAL_URL = 'https://portal.enrollio.ai/login?studioId=02CXn3sR0U7KkN3DSkwZ';
+
+/**
+ * Link out to the Enrollio studio portal.
+ *
+ * An <a> rather than a <button> so it behaves like a link: middle-click,
+ * cmd-click and "open in new tab" all work, and it is announced correctly
+ * by screen readers.
+ *
+ * rel="noopener noreferrer" is not optional alongside target="_blank". Without
+ * `noopener` the opened page keeps a handle to this one through window.opener
+ * and can silently navigate it elsewhere — the tabnabbing trick used to swap a
+ * trusted tab for a fake login screen. This link lands on a real login page,
+ * which is exactly the context that gets impersonated.
+ */
+const EnrollioPortalButton: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <a
+      href={ENROLLIO_PORTAL_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: compact ? '8px 14px' : '10px 20px',
+        fontSize: compact ? '13px' : '14px',
+        fontWeight: 700,
+        fontFamily: theme.fonts.primary,
+        backgroundColor: hovered ? theme.colors.bg.secondary : theme.colors.bg.tertiary,
+        color: theme.colors.txt.primary,
+        border: `2px solid ${hovered ? theme.colors.primary : theme.colors.bdr.primary}`,
+        borderRadius: theme.borderRadius.md,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        textDecoration: 'none',
+        transition: 'background-color 0.15s, border-color 0.15s',
+      }}
+    >
+      Enrollio Portal
+      {/* Box-with-arrow: the conventional "opens in a new tab" affordance. */}
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+        <polyline points="15 3 21 3 21 9" />
+        <line x1="10" y1="14" x2="21" y2="3" />
+      </svg>
+    </a>
+  );
+};
+
 const Dashboard: React.FC = () => {
   const { sops, loading: sopsLoading } = useSOPs();
   const { isAdmin, currentUser, users } = useAuth();
@@ -318,8 +382,9 @@ const TeamMemberDashboard: React.FC<{
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
       {/* Header */}
-      <div style={styles.header}>
+      <div style={styles.headerRow}>
         <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Welcome, {currentUser.firstName}</h1>
+        <EnrollioPortalButton compact={isMobileOrTablet} />
       </div>
 
       {/* Stats Row - Compact */}
@@ -644,6 +709,7 @@ const AdminDashboard: React.FC<{
       <div style={styles.headerRow}>
         <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Dashboard</h1>
         <div style={styles.headerButtons}>
+          <EnrollioPortalButton compact={isMobileOrTablet} />
           <button onClick={() => navigate('/job-tasks', { state: { openCreateModal: true } })} style={styles.createBtnSecondary}>
             + New Task
           </button>
@@ -955,6 +1021,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     marginBottom: theme.spacing.lg,
     gap: theme.spacing.md,
+    flexWrap: 'wrap' as const,
   },
   title: {
     ...theme.typography.h1,
@@ -969,6 +1036,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   headerButtons: {
     display: 'flex',
     gap: '10px',
+    flexWrap: 'wrap' as const,
   },
   createBtn: {
     padding: '10px 20px',
