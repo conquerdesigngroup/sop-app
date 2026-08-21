@@ -28,21 +28,64 @@ serviceWorkerRegistration.register({
   onUpdate: (registration) => {
     console.log('New content available');
 
-    const waitingServiceWorker = registration.waiting;
-    if (!waitingServiceWorker) return;
-
     // Non-blocking banner: the app only reloads if the user chooses to update,
     // so nobody loses in-progress work to a forced refresh.
-    showUpdateBanner(
-      () => {
-        waitingServiceWorker.addEventListener('statechange', (event: any) => {
-          if (event.target.state === 'activated') {
-            window.location.reload();
-          }
-        });
-        waitingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+    //
+    // WHY THIS IS NOT JUST "postMessage and wait"
+    //
+    // service-worker.js calls self.skipWaiting() at the end of its install
+    // handler, so a new worker never rests in the `waiting` state — it goes
+    // installing -> activating -> activated on its own. The previous version of
+    // this code read registration.waiting, then waited for THAT worker to fire
+    // a statechange to 'activated'. By the time anyone clicked Update, the
+    // worker had already activated, no further statechange was ever coming, and
+    // the button sat on "Updating…" forever.
+    //
+    // It also bailed out entirely when registration.waiting was null, so the
+    // banner sometimes never appeared even though the page was running stale
+    // JavaScript.
+    //
+    // What actually matters here is reloading the page: the new worker is
+    // already in charge, the open tab is just still running the old bundle. So
+    // reload on whichever signal arrives first, and reload regardless if none
+    // does.
+    showUpdateBanner(() => {
+      let done = false;
+      const reload = () => {
+        if (done) return;
+        done = true;
+        window.location.reload();
+      };
+
+      const waiting = registration.waiting;
+
+      // Nothing waiting: the new worker already took over. Just reload.
+      if (!waiting) {
+        reload();
+        return;
       }
-    );
+
+      // Fires when the new worker takes control via clients.claim().
+      navigator.serviceWorker.addEventListener('controllerchange', reload, { once: true });
+
+      // Fires if the worker is still short of 'activated' when we get here.
+      waiting.addEventListener('statechange', (event: any) => {
+        if (event.target.state === 'activated') reload();
+      });
+
+      // Already past 'activated' — neither event above will ever fire.
+      if (waiting.state === 'activated') {
+        reload();
+        return;
+      }
+
+      waiting.postMessage({ type: 'SKIP_WAITING' });
+
+      // Backstop. Every path above is event-driven and every one of them can
+      // lose a race with a worker that activates itself during install. A
+      // reload is cheap and idempotent; a button stuck on "Updating…" is not.
+      window.setTimeout(reload, 2000);
+    });
   },
 });
 
@@ -68,11 +111,18 @@ function showUpdateBanner(onUpdate: () => void) {
 
   const text = document.createElement('span');
   text.textContent = 'A new version is available.';
+  // The message is the only part that should give up space; the two buttons
+  // below are fixed-width and must never be squeezed into ellipsis.
+  text.style.cssText = 'flex:1;min-width:0';
 
   const updateBtn = document.createElement('button');
   updateBtn.textContent = 'Update';
   updateBtn.style.cssText =
-    'background:#E2144F;color:#FFF;border:none;border-radius:8px;padding:8px 16px;font-weight:600;font-size:14px;cursor:pointer';
+    'background:#E2144F;color:#FFF;border:none;border-radius:8px;padding:8px 16px;' +
+    'font-weight:600;font-size:14px;cursor:pointer;' +
+    // Without these the label clipped to "Updat" at 375px, and worse once it
+    // became the longer "Updating…".
+    'flex-shrink:0;white-space:nowrap';
   updateBtn.onclick = () => {
     updateBtn.disabled = true;
     updateBtn.textContent = 'Updating…';
@@ -83,7 +133,8 @@ function showUpdateBanner(onUpdate: () => void) {
   dismissBtn.textContent = 'Later';
   dismissBtn.setAttribute('aria-label', 'Dismiss update notification');
   dismissBtn.style.cssText =
-    'background:none;color:var(--c-txt-tertiary, #8B8B8B);border:none;padding:8px 4px;font-size:14px;cursor:pointer';
+    'background:none;color:var(--c-txt-tertiary, #8B8B8B);border:none;padding:8px 4px;' +
+    'font-size:14px;cursor:pointer;flex-shrink:0;white-space:nowrap';
   dismissBtn.onclick = () => banner.remove();
 
   banner.append(text, updateBtn, dismissBtn);
