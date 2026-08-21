@@ -31,9 +31,12 @@ export const isProgramSlug = (slug: string | undefined): slug is ProgramSlug =>
 /**
  * Enrollio — billing, registration and account admin.
  *
- * TODO(tony): confirm the PARENT-facing entry point. This is the studio/staff
- * login taken from commit d63c7a5; families may need a different URL. Swapping
- * it is a one-line change here — no component references the raw string.
+ * Confirmed by the studio as the parent-facing entry point: Enrollio serves the
+ * same login for families and staff and routes by account after sign-in, so
+ * this is the same URL as the staff dashboard link in commit d63c7a5 rather
+ * than an oversight.
+ *
+ * Defined once here; no component references the raw string.
  */
 export const ENROLLIO_URL =
   'https://portal.enrollio.ai/login?studioId=02CXn3sR0U7KkN3DSkwZ';
