@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider, useTheme, useThemeColors } from './contexts/ThemeContext';
@@ -14,6 +14,7 @@ import SessionExpiryModal from './components/SessionExpiryModal';
 import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
+import { PortalProvider } from './contexts/PortalContext';
 import './App.css';
 
 // Lazy load page components for code splitting
@@ -38,7 +39,13 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 // Client-facing portal — public, no account required.
 const ChooserPage = lazy(() => import('./pages/portal/ChooserPage'));
 const PortalHome = lazy(() => import('./pages/portal/PortalHome'));
+const ProgramGate = lazy(() => import('./pages/portal/ProgramGate'));
 const ProgramHome = lazy(() => import('./pages/portal/ProgramHome'));
+const ProgramClasses = lazy(() => import('./pages/portal/ProgramClasses'));
+const ClassDetail = lazy(() => import('./pages/portal/ClassDetail'));
+const ProgramUpdates = lazy(() => import('./pages/portal/ProgramUpdates'));
+const ProgramDocuments = lazy(() => import('./pages/portal/ProgramDocuments'));
+const ProgramCalendar = lazy(() => import('./pages/portal/ProgramCalendar'));
 
 // Page loading fallback - simple centered spinner.
 // theme.colors resolve to CSS variables, so this is theme-aware automatically.
@@ -164,9 +171,25 @@ const AppContent: React.FC = () => {
           <Route path="/" element={<ChooserPage />} />
 
           {/* Parent portal. Public by design: these pages read only portal_*
-              tables, which are the sole anon-readable surface in the schema. */}
-          <Route path="/portal" element={<PortalHome />} />
-          <Route path="/portal/:program" element={<ProgramHome />} />
+              tables, which are the sole anon-readable surface in the schema.
+              PortalProvider is mounted here rather than at the app root so a
+              signed-out parent does not pay for the staff data contexts. */}
+          <Route element={<PortalProvider><Outlet /></PortalProvider>}>
+            <Route path="/portal" element={<PortalHome />} />
+
+            {/* ProgramGate is a layout route: it validates the :program slug
+                and checks the access code once, then renders whichever child
+                matched. Every page below is therefore gated without repeating
+                the check in each of them. */}
+            <Route path="/portal/:program" element={<ProgramGate />}>
+              <Route index element={<ProgramHome />} />
+              <Route path="classes" element={<ProgramClasses />} />
+              <Route path="classes/:classId" element={<ClassDetail />} />
+              <Route path="updates" element={<ProgramUpdates />} />
+              <Route path="documents" element={<ProgramDocuments />} />
+              <Route path="calendar" element={<ProgramCalendar />} />
+            </Route>
+          </Route>
           <Route
             path="/dashboard"
             element={

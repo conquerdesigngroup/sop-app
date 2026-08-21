@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
-import { portalRoutes } from '../../lib/portal';
+import { ProgramSlug, portalRoutes } from '../../lib/portal';
+import PortalBottomNav from './PortalBottomNav';
 
 /**
  * Shell for every parent-portal page.
@@ -28,12 +29,19 @@ interface PortalLayoutProps {
    * top of this section — the chooser is reachable from the logo instead.
    */
   backTo?: string;
+  /**
+   * Program this page belongs to. Shows the section tab bar on mobile.
+   * Omitted on the portal home and on the access gate, neither of which has a
+   * section to navigate within yet.
+   */
+  slug?: ProgramSlug;
   children: React.ReactNode;
 }
 
-const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, children }) => {
+const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, slug, children }) => {
   const { isDark } = useTheme();
   const { isMobileOrTablet } = useResponsive();
+  const showTabs = !!slug && isMobileOrTablet;
 
   return (
     <div
@@ -132,7 +140,11 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, ch
           maxWidth: theme.pageLayout.maxWidth,
           margin: '0 auto',
           padding: isMobileOrTablet ? '24px 16px' : '40px',
-          paddingBottom: `calc(${isMobileOrTablet ? '24px' : '40px'} + env(safe-area-inset-bottom))`,
+          // Clear the fixed tab bar (60px) when it is showing, otherwise the
+          // last card sits underneath it and looks cut off.
+          paddingBottom: showTabs
+            ? `calc(84px + env(safe-area-inset-bottom))`
+            : `calc(${isMobileOrTablet ? '24px' : '40px'} + env(safe-area-inset-bottom))`,
         }}
       >
         <div style={{ marginBottom: isMobileOrTablet ? '24px' : '32px' }}>
@@ -161,6 +173,8 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, ch
 
         {children}
       </main>
+
+      {showTabs && <PortalBottomNav slug={slug!} />}
     </div>
   );
 };

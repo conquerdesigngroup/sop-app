@@ -1,60 +1,32 @@
+import type { PortalProgramSlug } from '../types';
+
 /**
- * Parent-portal constants and route helpers.
+ * Parent-portal constants, route helpers and the access-gate flag.
  *
  * The portal is the client-facing half of the app: reachable before any login,
- * from the STAFF / TEAM chooser at `/`. Everything here is shared by the portal
- * pages and (from v9) by the staff-side authoring screens, so that a program
- * slug is defined exactly once.
+ * from the STAFF / TEAM chooser at `/`.
+ *
+ * Note what is NOT here. Program names and blurbs live in portal_programs and
+ * are fetched by PortalContext, so renaming a section is a database edit rather
+ * than a deploy. This file keeps only the slugs, because routes are typed
+ * against them and they must exist before any fetch resolves.
  */
 
-export type ProgramSlug = 'allstars' | 'academy';
+export type ProgramSlug = PortalProgramSlug;
 
-export interface PortalProgram {
-  slug: ProgramSlug;
-  /** Display name. Rendered through the Kanit display face, so it uppercases itself. */
-  name: string;
-  /** One line under the name on the portal home tiles. */
-  blurb: string;
-  /**
-   * Whether this section sits behind the shared studio access code.
-   *
-   * Both dancer programs do. Billing & Admin does not — it is an external link
-   * to Enrollio, which has its own login.
-   */
-  gated: boolean;
-}
+/** Every valid `:program` route segment. Display text comes from the database. */
+export const PROGRAM_SLUGS: readonly ProgramSlug[] = ['allstars', 'academy'] as const;
 
-export const PROGRAMS: readonly PortalProgram[] = [
-  {
-    slug: 'allstars',
-    name: 'All-Star Dancers',
-    blurb: 'Competition team schedules, updates and documents',
-    gated: true,
-  },
-  {
-    slug: 'academy',
-    name: 'Academy / TNT Dancers',
-    blurb: 'Class schedules, updates and documents',
-    gated: true,
-  },
-] as const;
-
-const PROGRAM_BY_SLUG = new Map<string, PortalProgram>(
-  PROGRAMS.map(p => [p.slug, p])
-);
+const SLUG_SET = new Set<string>(PROGRAM_SLUGS);
 
 /**
- * Resolve a `:program` route param.
+ * Narrow a `:program` route param.
  *
- * Returns null for anything unrecognised so callers can redirect rather than
- * render a section that does not exist. Never trust the URL segment directly —
- * it reaches the database as a filter value.
+ * Never pass a raw URL segment to a query — it reaches the database as a filter
+ * value. Callers redirect when this returns false.
  */
-export const getProgram = (slug: string | undefined): PortalProgram | null =>
-  (slug && PROGRAM_BY_SLUG.get(slug)) || null;
-
 export const isProgramSlug = (slug: string | undefined): slug is ProgramSlug =>
-  getProgram(slug) !== null;
+  !!slug && SLUG_SET.has(slug);
 
 /**
  * Enrollio — billing, registration and account admin.
@@ -91,14 +63,14 @@ const GATE_KEY_PREFIX = 'didc_portal_access_';
 /**
  * Remember that a visitor cleared the access code for a program.
  *
- * localStorage rather than sessionStorage: a parent adding the app to their home
- * screen should not have to re-enter the code every launch.
+ * localStorage rather than sessionStorage: a parent who adds the app to their
+ * home screen should not re-enter the code every launch.
  *
- * This is a convenience flag, not a security boundary. The code itself is
- * verified by the verify_portal_code() RPC against a bcrypt hash that never
- * leaves the database — but portal content is readable by the `anon` role, so
- * clearing this flag by hand does not protect anything. Keep private
- * information out of portal content. See the v9 migration header.
+ * This is a convenience flag, not a security boundary. The code is verified by
+ * the verify_portal_code() RPC against a bcrypt hash that never leaves the
+ * database — but portal content is readable by `anon`, so setting this flag by
+ * hand does not expose anything that was protected. Keep private information
+ * out of portal content. See the v9 migration header.
  */
 export const hasPortalAccess = (slug: ProgramSlug): boolean => {
   try {
@@ -123,4 +95,110 @@ export const revokePortalAccess = (slug: ProgramSlug): void => {
   } catch {
     /* no-op */
   }
+};
+
+// ---------------------------------------------------------------- formatting
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export const dayName = (dayOfWeek: number | null): string | null =>
+  dayOfWeek === null || dayOfWeek < 0 || dayOfWeek > 6 ? null : DAY_NAMES[dayOfWeek];
+
+/**
+ * 'HH:MM:SS' from a Postgres `time` column -> '4:30 PM'.
+ *
+ * Formatted by hand rather than through Date: building a Date from a bare time
+ * would attach today's date and drag timezone conversion into a value that has
+ * no timezone. A class at 16:30 is at 16:30 in the studio regardless.
+ */
+export const formatTime = (time: string | null): string | null => {
+  if (!time) return null;
+  const [hStr, mStr] = time.split(':');
+  const h = Number(hStr);
+  const m = Number(mStr);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+};
+
+/** "Tuesday · 4:30 PM – 5:30 PM", omitting whatever is missing. */
+export const formatClassSchedule = (
+  dayOfWeek: number | null,
+  startTime: string | null,
+  endTime: string | null
+): string | null => {
+  const day = dayName(dayOfWeek);
+  const start = formatTime(startTime);
+  const end = formatTime(endTime);
+
+  const time = start && end ? `${start} – ${end}` : start;
+  if (day && time) return `${day} · ${time}`;
+  return day || time || null;
+};
+
+// ------------------------------------------------------------------- events
+
+/**
+ * All-day events must be read in UTC, timed events in local time.
+ *
+ * portal_events.starts_at is timestamptz, so an all-day event is stored at
+ * UTC midnight — the same convention iCal uses for DATE values. Rendered with
+ * local getters, UTC midnight is the *previous evening* anywhere west of
+ * Greenwich, so "Studio closed — Thanksgiving" on Sept 30 displays as Sept 29
+ * in California. A studio-closed date on the wrong day sends families in on the
+ * wrong day, so this is not cosmetic.
+ *
+ * Timed events get the opposite treatment: a 5pm rehearsal is 5pm to everyone
+ * reading it, which is exactly what local rendering gives.
+ */
+const eventZone = (isAllDay: boolean): Pick<Intl.DateTimeFormatOptions, 'timeZone'> =>
+  isAllDay ? { timeZone: 'UTC' } : {};
+
+export const formatEventDate = (
+  iso: string,
+  isAllDay: boolean,
+  opts: Intl.DateTimeFormatOptions
+): string => new Date(iso).toLocaleDateString(undefined, { ...opts, ...eventZone(isAllDay) });
+
+export const formatEventTime = (iso: string, isAllDay: boolean): string =>
+  new Date(iso).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    ...eventZone(isAllDay),
+  });
+
+/** Day-of-month for the agenda date chip, in the event's own frame. */
+export const eventDayOfMonth = (iso: string, isAllDay: boolean): number => {
+  const d = new Date(iso);
+  return isAllDay ? d.getUTCDate() : d.getDate();
+};
+
+/** Stable YYYY-M key for grouping, in the event's own frame. */
+export const eventMonthKey = (iso: string, isAllDay: boolean): string => {
+  const d = new Date(iso);
+  return isAllDay
+    ? `${d.getUTCFullYear()}-${d.getUTCMonth()}`
+    : `${d.getFullYear()}-${d.getMonth()}`;
+};
+
+/**
+ * Midnight-today in local time, for deciding what has already passed.
+ *
+ * Compared against midnight rather than `now` so an event earlier today does
+ * not disappear while it is still happening.
+ */
+export const startOfToday = (): Date => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+// ---------------------------------------------------------------- files
+
+export const formatFileSize = (bytes: number | null): string | null => {
+  if (bytes === null || bytes < 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };

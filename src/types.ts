@@ -374,3 +374,98 @@ export interface WorkDay {
   createdAt: string;
   updatedAt?: string;
 }
+
+// ============================================================================
+// Parent Portal Types
+// ============================================================================
+//
+// These map to the portal_* tables added in migration v9 — the only tables the
+// `anon` role can read, because the portal has no login.
+//
+// Column names come back snake_case from PostgREST and are mapped by hand in
+// PortalContext, same as SOPContext and WorkHoursContext do. There is no
+// generated Supabase types file in this project.
+
+/**
+ * Slugs are a closed set because routes are typed against them and the value
+ * reaches the database as a filter. Validate with isProgramSlug() in
+ * src/lib/portal.ts rather than trusting a URL segment.
+ */
+export type PortalProgramSlug = 'allstars' | 'academy';
+
+export interface PortalProgram {
+  id: string;
+  slug: PortalProgramSlug;
+  name: string;
+  blurb: string;
+  /** False opens the section with no code at all. */
+  requiresCode: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface PortalClass {
+  id: string;
+  programId: string;
+  name: string;
+  /** 0 = Sunday, matching Date.getDay(). Null for classes with no fixed day. */
+  dayOfWeek: number | null;
+  /** 'HH:MM:SS' from a Postgres `time` column. */
+  startTime: string | null;
+  endTime: string | null;
+  level: string | null;
+  location: string | null;
+  description: string;
+  /** Display name only. Who may EDIT the class is portal_class_instructors. */
+  instructorName: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface PortalUpdate {
+  id: string;
+  programId: string;
+  /** Null means program-wide rather than tied to one class. */
+  classId: string | null;
+  title: string;
+  body: string;
+  isPinned: boolean;
+  isPublished: boolean;
+  publishedAt: string | null;
+  authorId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortalEvent {
+  id: string;
+  programId: string;
+  classId: string | null;
+  title: string;
+  description: string;
+  /** Real ISO timestamps — not the text dates used by the staff calendar. */
+  startsAt: string;
+  endsAt: string | null;
+  isAllDay: boolean;
+  location: string | null;
+  /** 'google' rows are owned by the phase-4 sync and will be overwritten. */
+  source: 'manual' | 'google';
+  isPublished: boolean;
+}
+
+export interface PortalDocument {
+  id: string;
+  programId: string;
+  classId: string | null;
+  title: string;
+  description: string;
+  category: string | null;
+  /** Object key in the private `portal-documents` bucket; read via signed URL. */
+  storagePath: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  sortOrder: number;
+  isPublished: boolean;
+  createdAt: string;
+}
