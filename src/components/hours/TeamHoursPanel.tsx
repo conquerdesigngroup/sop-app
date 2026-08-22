@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { WorkHoursEntry } from '../../types';
 import { theme } from '../../theme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,6 +9,7 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { Button, Card, Input, Badge, EmptyState, Modal, Textarea } from '../ui';
 import HoursHistoryList from './HoursHistoryList';
 import WorkCategoryManager from './WorkCategoryManager';
+import PayRatesManager from './PayRatesManager';
 import {
   PeriodPreset,
   PERIOD_LABELS,
@@ -27,6 +28,9 @@ import {
 
 const PRESETS: PeriodPreset[] = ['this-week', 'last-week', 'this-month', 'last-month', 'all'];
 
+const money = (n: number) =>
+  `$${(Number.isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 interface EmployeeRollup {
   employeeId: string;
   name: string;
@@ -38,6 +42,12 @@ interface EmployeeRollup {
   pending: number;
   rejected: number;
   days: number;
+  /** Frozen pay for approved entries. Authoritative — this is what is owed. */
+  approvedPay: number;
+  /** Pending hours priced at today's rates. An estimate, not a commitment. */
+  estimatedPendingPay: number;
+  /** Approved entries that had no rate configured, so were frozen at $0.00. */
+  missingRateCount: number;
 }
 
 /**
@@ -47,7 +57,10 @@ interface EmployeeRollup {
  */
 const TeamHoursPanel: React.FC = () => {
   const { users, currentUser } = useAuth();
-  const { workHours, getWorkCategoryName, approveWorkHours, rejectWorkHours, hasV7Schema } = useWorkHours();
+  const {
+    workHours, getWorkCategoryName, approveWorkHours, rejectWorkHours, hasV7Schema,
+    getEmployeePayRate, getPayForEntry,
+  } = useWorkHours();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirm();
   const { isMobileOrTablet } = useResponsive();
@@ -57,6 +70,7 @@ const TeamHoursPanel: React.FC = () => {
   const [customEnd, setCustomEnd] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCategories, setShowCategories] = useState(false);
+  const [showRates, setShowRates] = useState(false);
   const [rejecting, setRejecting] = useState<WorkHoursEntry | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -74,6 +88,36 @@ const TeamHoursPanel: React.FC = () => {
     }
     return resolvePeriod(preset);
   }, [usingCustom, customStart, customEnd, preset]);
+
+  /**
+   * Pay figures for one employee's entries.
+   *
+   * Approved pay comes from the frozen snapshot, never from today's rate —
+   * that is the point of freezing it. Pending pay is priced at the current
+   * rate and is only ever shown as an estimate.
+   */
+  const payFor = useCallback((entries: WorkHoursEntry[], employeeId: string) => {
+    let approvedPay = 0;
+    let estimatedPendingPay = 0;
+    let missingRateCount = 0;
+
+    entries.forEach(e => {
+      if (e.status === 'approved') {
+        const frozen = getPayForEntry(e.id);
+        approvedPay += frozen?.payAmount ?? 0;
+        if (frozen?.rateMissing) missingRateCount += 1;
+      } else if (e.status === 'pending') {
+        const rate = getEmployeePayRate(employeeId, e.categoryId);
+        estimatedPendingPay += (e.totalHours || 0) * (rate ?? 0);
+      }
+    });
+
+    return {
+      approvedPay: Math.round(approvedPay * 100) / 100,
+      estimatedPendingPay: Math.round(estimatedPendingPay * 100) / 100,
+      missingRateCount,
+    };
+  }, [getPayForEntry, getEmployeePayRate]);
 
   const rollups = useMemo<EmployeeRollup[]>(() => {
     const inPeriod = workHours.filter(e => inRange(e, range));
@@ -97,6 +141,7 @@ const TeamHoursPanel: React.FC = () => {
           pending: sumHours(entries.filter(e => e.status === 'pending')),
           rejected: sumHours(entries.filter(e => e.status === 'rejected')),
           days: countDays(entries),
+          ...payFor(entries, u.id),
         };
       });
 
@@ -120,19 +165,22 @@ const TeamHoursPanel: React.FC = () => {
           pending: sumHours(entries.filter(e => e.status === 'pending')),
           rejected: sumHours(entries.filter(e => e.status === 'rejected')),
           days: countDays(entries),
+          ...payFor(entries, employeeId),
         });
       });
     }
 
     return rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
-  }, [workHours, users, range]);
+  }, [workHours, users, range, payFor]);
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const teamTotal = useMemo(() => round2(rollups.reduce((s, r) => s + r.total, 0)), [rollups]);
   const approvedTotal = useMemo(() => round2(rollups.reduce((s, r) => s + r.approved, 0)), [rollups]);
   const pendingTotal = useMemo(() => round2(rollups.reduce((s, r) => s + r.pending, 0)), [rollups]);
   const rejectedTotal = useMemo(() => round2(rollups.reduce((s, r) => s + r.rejected, 0)), [rollups]);
-  const withHours = rollups.filter(r => r.entries.length > 0).length;
+  const approvedPayTotal = useMemo(() => round2(rollups.reduce((s, r) => s + r.approvedPay, 0)), [rollups]);
+  const estPendingPayTotal = useMemo(() => round2(rollups.reduce((s, r) => s + r.estimatedPendingPay, 0)), [rollups]);
+  const missingRateTotal = useMemo(() => rollups.reduce((s, r) => s + r.missingRateCount, 0), [rollups]);
 
   const employeeName = (id: string) =>
     rollups.find(r => r.employeeId === id)?.name || 'Unknown';
@@ -140,13 +188,23 @@ const TeamHoursPanel: React.FC = () => {
   // ---------------------------------------------------------------- actions
 
   const handleApprove = async (entry: WorkHoursEntry) => {
+    const rate = getEmployeePayRate(entry.employeeId, entry.categoryId);
+    const category = getWorkCategoryName(entry.categoryId);
+
+    // Spell out the money before locking it in — approval freezes the rate,
+    // and a missing one silently freezes at $0.00.
+    const payLine = rate === undefined
+      ? `\n\nNo rate is set for ${category ? `“${category}”` : 'this category'}, so this will lock at $0.00. Set it under “Pay rates” first if that is not what you want.`
+      : `\n\nLocks in ${money(rate)}/hr = ${money((entry.totalHours || 0) * rate)}.`;
+
     const confirmed = await confirm({
       title: 'Approve these hours?',
       message:
         `${formatDateShort(entry.workDate)} · ${formatHours(entry.totalHours)} hrs. ` +
-        'Once approved the employee can no longer edit or delete this entry.',
+        'Once approved the employee can no longer edit or delete this entry.' +
+        payLine,
       confirmLabel: 'Approve',
-      variant: 'info',
+      variant: rate === undefined ? 'warning' : 'info',
     });
     if (!confirmed) return;
 
@@ -175,11 +233,23 @@ const TeamHoursPanel: React.FC = () => {
 
   const handleExport = () => {
     const rows: (string | number)[][] = [
-      ['Employee', 'Email', 'Date', 'Time In', 'Time Out', 'Break (min)', 'Hours', 'Category', 'Status', 'Note'],
+      ['Employee', 'Email', 'Date', 'Time In', 'Time Out', 'Break (min)', 'Hours', 'Category', 'Status', 'Rate', 'Amount', 'Note'],
     ];
 
     rollups.forEach(r => {
       r.entries.forEach(e => {
+        const frozen = getPayForEntry(e.id);
+        const liveRate = getEmployeePayRate(r.employeeId, e.categoryId);
+
+        // Approved rows carry the frozen figures — those are what is owed.
+        // Anything else is priced at today's rate and marked "(est.)" so a
+        // pending line is never mistaken for a settled one.
+        const rate = e.status === 'approved' ? frozen?.rateSnapshot : liveRate;
+        const amount = e.status === 'approved'
+          ? frozen?.payAmount
+          : (e.status === 'pending' ? (e.totalHours || 0) * (liveRate ?? 0) : undefined);
+        const suffix = e.status === 'approved' ? '' : ' (est.)';
+
         rows.push([
           r.name,
           r.email,
@@ -190,6 +260,8 @@ const TeamHoursPanel: React.FC = () => {
           formatHours(e.totalHours),
           getWorkCategoryName(e.categoryId) || '',
           e.status,
+          rate === undefined ? 'no rate set' : rate.toFixed(2),
+          amount === undefined ? '' : amount.toFixed(2) + suffix,
           e.notes || '',
         ]);
       });
@@ -207,11 +279,17 @@ const TeamHoursPanel: React.FC = () => {
     // (and look like the rows do not add up). Showing all three lines makes
     // the arithmetic checkable at a glance.
     rows.push([]);
-    rows.push(['TOTAL TO PAY (approved + pending)', '', '', '', '', '', formatHours(teamTotal), '', '', '']);
-    rows.push(['  of which approved', '', '', '', '', '', formatHours(approvedTotal), '', '', '']);
-    rows.push(['  of which pending', '', '', '', '', '', formatHours(pendingTotal), '', '', '']);
+    rows.push(['TOTAL HOURS TO PAY (approved + pending)', '', '', '', '', '', formatHours(teamTotal), '', '', '', '', '']);
+    rows.push(['  of which approved', '', '', '', '', '', formatHours(approvedTotal), '', '', '', '', '']);
+    rows.push(['  of which pending', '', '', '', '', '', formatHours(pendingTotal), '', '', '', '', '']);
     if (rejectedTotal > 0) {
-      rows.push(['REJECTED (not included above)', '', '', '', '', '', formatHours(rejectedTotal), '', '', '']);
+      rows.push(['REJECTED (not included above)', '', '', '', '', '', formatHours(rejectedTotal), '', '', '', '', '']);
+    }
+    rows.push([]);
+    rows.push(['APPROVED PAY (owed)', '', '', '', '', '', '', '', '', '', approvedPayTotal.toFixed(2), '']);
+    rows.push(['ESTIMATED PENDING PAY (not yet approved)', '', '', '', '', '', '', '', '', '', estPendingPayTotal.toFixed(2), '']);
+    if (missingRateTotal > 0) {
+      rows.push([`WARNING: ${missingRateTotal} approved entr${missingRateTotal === 1 ? 'y' : 'ies'} had no rate set and were locked at 0.00`, '', '', '', '', '', '', '', '', '', '', '']);
     }
 
     downloadCSV(`hours_${range.start}_to_${range.end}.csv`, toCSV(rows));
@@ -335,19 +413,37 @@ const TeamHoursPanel: React.FC = () => {
           flexWrap: 'wrap',
           marginBottom: theme.spacing.md,
         }}>
-          {stat('To pay', formatHours(teamTotal))}
-          {stat('Approved', formatHours(approvedTotal))}
-          {stat('Pending', formatHours(pendingTotal))}
-          {rejectedTotal > 0 && stat('Rejected', formatHours(rejectedTotal))}
-          {stat('People logged', `${withHours}`)}
+          {stat('Approved pay', money(approvedPayTotal))}
+          {stat('Est. pending pay', money(estPendingPayTotal))}
+          {stat('Hours to pay', formatHours(teamTotal))}
+          {stat('Approved hrs', formatHours(approvedTotal))}
+          {stat('Pending hrs', formatHours(pendingTotal))}
+          {rejectedTotal > 0 && stat('Rejected hrs', formatHours(rejectedTotal))}
         </div>
 
         <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
           <Button variant="primary" onClick={handleExport}>Export CSV</Button>
           {hasV7Schema && (
-            <Button variant="outline" onClick={() => setShowCategories(true)}>Manage categories</Button>
+            <>
+              <Button variant="outline" onClick={() => setShowRates(true)}>Pay rates</Button>
+              <Button variant="outline" onClick={() => setShowCategories(true)}>Manage categories</Button>
+            </>
           )}
         </div>
+
+        {missingRateTotal > 0 && (
+          <div style={{
+            marginTop: theme.spacing.sm,
+            fontSize: '13px',
+            color: theme.colors.status.warning,
+            fontFamily: theme.fonts.primary,
+          }}>
+            {missingRateTotal} approved {missingRateTotal === 1 ? 'entry was' : 'entries were'} locked
+            at $0.00 because no rate was set for that person and category. Set the
+            rate under “Pay rates”, then send the entry back and re-approve it to
+            re-price.
+          </div>
+        )}
 
         {!hasV7Schema && (
           <div style={{
@@ -427,14 +523,24 @@ const TeamHoursPanel: React.FC = () => {
                   {r.pending > 0 && (
                     <Badge variant="warning" size="sm">{formatHours(r.pending)} pending</Badge>
                   )}
-                  <span style={{
-                    fontFamily: theme.fonts.mono,
-                    fontSize: '20px',
-                    fontWeight: 700,
-                    color: r.total > 0 ? theme.colors.txt.primary : theme.colors.txt.tertiary,
-                  }}>
-                    {formatHours(r.total)}
-                  </span>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{
+                      fontFamily: theme.fonts.mono,
+                      fontSize: '20px',
+                      fontWeight: 700,
+                      color: r.approvedPay > 0 ? theme.colors.txt.primary : theme.colors.txt.tertiary,
+                    }}>
+                      {money(r.approvedPay)}
+                    </div>
+                    <div style={{
+                      fontFamily: theme.fonts.mono,
+                      fontSize: '12px',
+                      color: theme.colors.txt.tertiary,
+                    }}>
+                      {formatHours(r.total)} hrs
+                      {r.estimatedPendingPay > 0 && ` · ${money(r.estimatedPendingPay)} est.`}
+                    </div>
+                  </div>
                   <span style={{
                     color: theme.colors.txt.tertiary,
                     fontSize: '12px',
@@ -451,6 +557,21 @@ const TeamHoursPanel: React.FC = () => {
                   <HoursHistoryList
                     entries={r.entries}
                     getCategoryName={getWorkCategoryName}
+                    getPayLabel={entry => {
+                      if (entry.status === 'approved') {
+                        const frozen = getPayForEntry(entry.id);
+                        if (!frozen) return undefined;
+                        return frozen.rateMissing
+                          ? { text: '$0.00 · no rate', warn: true }
+                          : { text: `${money(frozen.payAmount)} @ ${money(frozen.rateSnapshot)}/hr` };
+                      }
+                      if (entry.status === 'pending') {
+                        const rate = getEmployeePayRate(r.employeeId, entry.categoryId);
+                        if (rate === undefined) return { text: 'no rate set', warn: true };
+                        return { text: `${money((entry.totalHours || 0) * rate)} est.`, muted: true };
+                      }
+                      return undefined;
+                    }}
                     onApprove={handleApprove}
                     onReject={entry => {
                       setRejecting(entry);
@@ -508,6 +629,7 @@ const TeamHoursPanel: React.FC = () => {
       </Modal>
 
       <WorkCategoryManager isOpen={showCategories} onClose={() => setShowCategories(false)} />
+      <PayRatesManager isOpen={showRates} onClose={() => setShowRates(false)} />
       {confirmDialog}
     </>
   );

@@ -22,6 +22,14 @@ interface HoursHistoryListProps {
   onDelete?: (entry: WorkHoursEntry) => void;
   onApprove?: (entry: WorkHoursEntry) => void;
   onReject?: (entry: WorkHoursEntry) => void;
+  /**
+   * Optional money line under the hours.
+   *
+   * Only ever supplied by the admin panel. Employee-facing renders omit it,
+   * and the underlying tables are admin-only by RLS anyway, so there is no
+   * path by which an employee sees a figure here.
+   */
+  getPayLabel?: (entry: WorkHoursEntry) => { text: string; muted?: boolean; warn?: boolean } | undefined;
   emptyTitle?: string;
   emptyDescription?: string;
 }
@@ -42,6 +50,7 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
   onDelete,
   onApprove,
   onReject,
+  getPayLabel,
   emptyTitle = 'No hours logged yet',
   emptyDescription = 'Entries you log will appear here, newest first.',
 }) => {
@@ -158,14 +167,34 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
 
             {/* ---- Hours ---- */}
             <div style={{
-              fontFamily: theme.fonts.mono,
-              fontSize: '18px',
-              fontWeight: 700,
-              color: theme.colors.txt.primary,
-              minWidth: '72px',
+              minWidth: '92px',
               textAlign: isMobileOrTablet ? 'left' : 'right',
             }}>
-              {formatHours(entry.totalHours)}
+              <div style={{
+                fontFamily: theme.fonts.mono,
+                fontSize: '18px',
+                fontWeight: 700,
+                color: theme.colors.txt.primary,
+              }}>
+                {formatHours(entry.totalHours)}
+              </div>
+              {(() => {
+                const pay = getPayLabel?.(entry);
+                if (!pay) return null;
+                return (
+                  <div style={{
+                    fontFamily: theme.fonts.mono,
+                    fontSize: '12px',
+                    color: pay.warn
+                      ? theme.colors.status.warning
+                      : pay.muted
+                        ? theme.colors.txt.tertiary
+                        : theme.colors.txt.secondary,
+                  }}>
+                    {pay.text}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* ---- Actions ---- */}

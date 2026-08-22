@@ -314,6 +314,38 @@ export interface WorkCategory {
   updatedAt?: string;
 }
 
+/**
+ * What one employee is paid per hour in one category.
+ *
+ * Admin-only at the database level (migration v7 §11) — employees can
+ * neither read nor write these, including their own. Any UI touching
+ * this type must be behind an isAdmin check.
+ */
+export interface EmployeePayRate {
+  id: string;
+  employeeId: string;
+  categoryId: string;
+  hourlyRate: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * The frozen pay for one approved entry.
+ *
+ * Kept in its own admin-only table rather than on WorkHoursEntry: RLS is
+ * row-level, so an employee reading their own hours row would otherwise
+ * receive the pay columns too. See migration v7 §12.
+ */
+export interface WorkHoursPay {
+  workHoursId: string;
+  rateSnapshot: number;
+  payAmount: number;
+  /** No rate was configured for that employee+category when it was approved. */
+  rateMissing: boolean;
+  frozenAt: string;
+}
+
 export interface WorkHoursEntry {
   id: string;
   employeeId: string;

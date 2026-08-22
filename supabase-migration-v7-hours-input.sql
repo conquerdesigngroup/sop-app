@@ -359,12 +359,145 @@ END $$;
 -- -------------------------------------------------------------
 INSERT INTO public.work_categories (name, sort_order)
 SELECT * FROM (VALUES
-  ('Normal Rate', 10),
-  ('Admin',       20),
-  ('Meeting',     30),
-  ('Travel',      40)
+  ('Teach',      10),
+  ('Assist',     20),
+  ('Admin desk', 30),
+  ('Privates',   40)
 ) AS seed(name, sort_order)
 WHERE NOT EXISTS (SELECT 1 FROM public.work_categories);
+
+
+-- -------------------------------------------------------------
+-- 11. Per-employee, per-category pay rates — ADMIN ONLY
+--
+-- One rate per (employee, category): a teacher might be on one rate
+-- for Teach, another for Admin desk. Admins set them; employees can
+-- neither read nor write this table.
+--
+-- Note the RLS asymmetry against every other table here: SELECT is
+-- is_admin() too, not merely "signed in". Rates are the one thing in
+-- this schema that no employee may read, including their own.
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.employee_pay_rates (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  employee_id  TEXT NOT NULL,
+  category_id  UUID NOT NULL REFERENCES public.work_categories(id) ON DELETE CASCADE,
+  hourly_rate  NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (hourly_rate >= 0),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (employee_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_pay_rates_employee
+  ON public.employee_pay_rates(employee_id);
+
+ALTER TABLE public.employee_pay_rates ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "employee_pay_rates_admin_only" ON public.employee_pay_rates;
+CREATE POLICY "employee_pay_rates_admin_only" ON public.employee_pay_rates
+  FOR ALL USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP TRIGGER IF EXISTS employee_pay_rates_updated_at ON public.employee_pay_rates;
+CREATE TRIGGER employee_pay_rates_updated_at
+  BEFORE UPDATE ON public.employee_pay_rates
+  FOR EACH ROW EXECUTE FUNCTION update_work_hours_updated_at();
+
+
+-- -------------------------------------------------------------
+-- 12. Frozen pay per approved entry — ADMIN ONLY
+--
+-- A SEPARATE TABLE, not columns on work_hours, and that is the whole
+-- point. RLS is row-level: "work_hours_select" (v6 L177) lets an
+-- employee read their own rows, and it grants them every COLUMN of
+-- those rows. Postgres column privileges cannot help either, because
+-- admins and employees are both the `authenticated` role. So a
+-- pay_amount column on work_hours would be readable by the employee
+-- through the REST API no matter what the UI showed. Putting it here,
+-- behind is_admin(), is the only way to keep it out of their reach.
+--
+-- The rate is FROZEN on approval. Without that, editing a rate would
+-- silently re-price hours that were already checked and paid; payroll
+-- run in March must still read the same in June.
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.work_hours_pay (
+  work_hours_id UUID PRIMARY KEY REFERENCES public.work_hours(id) ON DELETE CASCADE,
+  rate_snapshot NUMERIC(10,2) NOT NULL DEFAULT 0,
+  pay_amount    NUMERIC(10,2) NOT NULL DEFAULT 0,
+  -- true when the employee had no rate configured for that category at
+  -- approval time. The amount is still 0, but this makes a forgotten
+  -- rate visible instead of silently paying nothing.
+  rate_missing  BOOLEAN NOT NULL DEFAULT false,
+  frozen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.work_hours_pay ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "work_hours_pay_admin_only" ON public.work_hours_pay;
+CREATE POLICY "work_hours_pay_admin_only" ON public.work_hours_pay
+  FOR ALL USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+/**
+ * Freeze (or release) an entry's pay as its status changes.
+ *
+ * AFTER, not BEFORE: it writes to another table keyed on work_hours.id,
+ * which does not exist yet during a BEFORE INSERT. Running AFTER also
+ * guarantees work_hours_compute_total has already settled total_hours,
+ * so there is no trigger-ordering subtlety to get wrong.
+ *
+ * SECURITY DEFINER so the lookup can read employee_pay_rates. The
+ * caller is an admin in practice — only is_admin() can set 'approved' —
+ * but relying on that would couple this to the RLS policy's wording.
+ */
+CREATE OR REPLACE FUNCTION public.work_hours_freeze_pay()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  found_rate NUMERIC(10,2);
+BEGIN
+  IF NEW.status = 'approved' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.work_hours_pay WHERE work_hours_id = NEW.id) THEN
+      -- First approval: look the rate up once and freeze it.
+      SELECT r.hourly_rate INTO found_rate
+      FROM public.employee_pay_rates r
+      WHERE r.employee_id = NEW.employee_id
+        AND r.category_id = NEW.category_id;
+
+      INSERT INTO public.work_hours_pay (work_hours_id, rate_snapshot, pay_amount, rate_missing)
+      VALUES (
+        NEW.id,
+        COALESCE(found_rate, 0),
+        ROUND(NEW.total_hours * COALESCE(found_rate, 0), 2),
+        found_rate IS NULL
+      );
+    ELSE
+      -- Already frozen. If an admin corrected the hours, re-multiply
+      -- against the SAME frozen rate — never re-look-up, or a rate
+      -- edited since approval would leak into settled history.
+      UPDATE public.work_hours_pay
+      SET pay_amount = ROUND(NEW.total_hours * rate_snapshot, 2)
+      WHERE work_hours_id = NEW.id;
+    END IF;
+  ELSE
+    -- Sent back or reverted to pending: drop the freeze so the next
+    -- approval re-prices at whatever the rate is then.
+    DELETE FROM public.work_hours_pay WHERE work_hours_id = NEW.id;
+  END IF;
+
+  RETURN NULL; -- AFTER trigger; return value is ignored
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.work_hours_freeze_pay() FROM anon;
+
+DROP TRIGGER IF EXISTS work_hours_freeze_pay ON public.work_hours;
+CREATE TRIGGER work_hours_freeze_pay
+  AFTER INSERT OR UPDATE ON public.work_hours
+  FOR EACH ROW EXECUTE FUNCTION public.work_hours_freeze_pay();
 
 
 -- =============================================================

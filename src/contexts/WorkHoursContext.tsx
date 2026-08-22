@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
-import { WorkHoursEntry, WorkHoursSummary, WorkDay, WorkCategory } from '../types';
+import { WorkHoursEntry, WorkHoursSummary, WorkDay, WorkCategory, EmployeePayRate, WorkHoursPay } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -30,6 +30,14 @@ interface WorkHoursContextType {
   updateWorkCategory: (id: string, updates: Partial<WorkCategory>) => Promise<void>;
   deleteWorkCategory: (id: string) => Promise<void>;
   getWorkCategoryName: (categoryId?: string | null) => string | undefined;
+  // Pay — ADMIN ONLY. Both tables are gated on is_admin() by RLS, so for a
+  // team member these arrays are simply empty; there is no client-side
+  // filtering to forget. Never surface any of this in employee-facing UI.
+  employeePayRates: EmployeePayRate[];
+  workHoursPay: WorkHoursPay[];
+  setEmployeePayRate: (employeeId: string, categoryId: string, hourlyRate: number) => Promise<void>;
+  getEmployeePayRate: (employeeId: string, categoryId?: string | null) => number | undefined;
+  getPayForEntry: (workHoursId: string) => WorkHoursPay | undefined;
   loading: boolean;
   /** Set when the initial fetch failed, so pages can say so instead of rendering an empty list. */
   loadError: string | null;
@@ -42,6 +50,7 @@ const WorkHoursContext = createContext<WorkHoursContextType | undefined>(undefin
 const STORAGE_KEY = 'sop_app_work_hours';
 const WORK_DAYS_STORAGE_KEY = 'sop_app_work_days';
 const WORK_CATEGORIES_STORAGE_KEY = 'sop_app_work_categories';
+const PAY_RATES_STORAGE_KEY = 'sop_app_pay_rates';
 
 /**
  * Turn a Supabase error into something a catch block can surface.
@@ -65,6 +74,23 @@ const mapSupabaseWorkCategory = (dbEntry: any): WorkCategory => ({
   isActive: dbEntry.is_active !== false,
   createdAt: dbEntry.created_at,
   updatedAt: dbEntry.updated_at,
+});
+
+const mapSupabasePayRate = (d: any): EmployeePayRate => ({
+  id: d.id,
+  employeeId: d.employee_id,
+  categoryId: d.category_id,
+  hourlyRate: Number(d.hourly_rate) || 0,
+  createdAt: d.created_at,
+  updatedAt: d.updated_at,
+});
+
+const mapSupabaseWorkHoursPay = (d: any): WorkHoursPay => ({
+  workHoursId: d.work_hours_id,
+  rateSnapshot: Number(d.rate_snapshot) || 0,
+  payAmount: Number(d.pay_amount) || 0,
+  rateMissing: d.rate_missing === true,
+  frozenAt: d.frozen_at,
 });
 
 // Generate unique ID
@@ -153,6 +179,10 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [workHours, setWorkHours] = useState<WorkHoursEntry[]>([]);
   const [workDays, setWorkDays] = useState<WorkDay[]>([]);
   const [workCategories, setWorkCategories] = useState<WorkCategory[]>([]);
+  // Admin-only. RLS returns zero rows to a team member, so an empty array
+  // here is the expected state for them, not an error.
+  const [employeePayRates, setEmployeePayRates] = useState<EmployeePayRate[]>([]);
+  const [workHoursPay, setWorkHoursPay] = useState<WorkHoursPay[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   // Whether migration v7 (work_categories, work_hours.category_id,
@@ -207,6 +237,14 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
           if (catData && !catError) {
             setWorkCategories(catData.map(mapSupabaseWorkCategory));
             setHasV7Schema(true);
+            // Pay tables. A team member gets an empty result from RLS rather
+            // than an error, so nothing here needs to branch on role.
+            const [{ data: rateData }, { data: payData }] = await Promise.all([
+              supabase.from('employee_pay_rates').select('*'),
+              supabase.from('work_hours_pay').select('*'),
+            ]);
+            if (rateData) setEmployeePayRates(rateData.map(mapSupabasePayRate));
+            if (payData) setWorkHoursPay(payData.map(mapSupabaseWorkHoursPay));
           } else if (catError) {
             // Doubles as the v7 probe: if work_categories is missing then
             // category_id and rejection_reason are missing too, and we must
@@ -217,6 +255,8 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
               catError.message
             );
             setWorkCategories([]);
+            setEmployeePayRates([]);
+            setWorkHoursPay([]);
             setHasV7Schema(false);
           }
         } catch (error: any) {
@@ -238,6 +278,10 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
           if (storedCats) {
             setWorkCategories(JSON.parse(storedCats));
           }
+          const storedRates = localStorage.getItem(PAY_RATES_STORAGE_KEY);
+          if (storedRates) {
+            setEmployeePayRates(JSON.parse(storedRates));
+          }
         } catch (error) {
           console.error('Error loading work data from localStorage:', error);
         }
@@ -258,8 +302,9 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(workHours));
       localStorage.setItem(WORK_DAYS_STORAGE_KEY, JSON.stringify(workDays));
       localStorage.setItem(WORK_CATEGORIES_STORAGE_KEY, JSON.stringify(workCategories));
+      localStorage.setItem(PAY_RATES_STORAGE_KEY, JSON.stringify(employeePayRates));
     }
-  }, [workHours, workDays, workCategories, loading, useSupabase]);
+  }, [workHours, workDays, workCategories, employeePayRates, loading, useSupabase]);
 
   // Subscribe to real-time changes if using Supabase
   useEffect(() => {
@@ -413,11 +458,42 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         wh.id === id ? mapSupabaseWorkHours(data[0]) : wh
       ));
     } else {
+      const updated = existing ? { ...existing, ...finalUpdates } : undefined;
       setWorkHours(prev => prev.map(wh =>
         wh.id === id ? { ...wh, ...finalUpdates, updatedAt: new Date().toISOString() } : wh
       ));
+
+      // localStorage mode has no database, so work_hours_freeze_pay from
+      // migration v7 §12 never runs. Mirror it here, or the fallback
+      // silently reports every approved entry as $0.00.
+      if (updated) {
+        if (updated.status === 'approved') {
+          setWorkHoursPay(prev => {
+            const already = prev.find(pp => pp.workHoursId === id);
+            if (already) {
+              // Re-multiply against the SAME frozen rate, as the trigger
+              // does — never re-look-up a rate that may have changed since.
+              return prev.map(pp => pp.workHoursId === id
+                ? { ...pp, payAmount: Math.round(updated.totalHours * pp.rateSnapshot * 100) / 100 }
+                : pp);
+            }
+            const rate = employeePayRates.find(
+              r => r.employeeId === updated.employeeId && r.categoryId === updated.categoryId
+            )?.hourlyRate;
+            return [...prev, {
+              workHoursId: id,
+              rateSnapshot: rate ?? 0,
+              payAmount: Math.round(updated.totalHours * (rate ?? 0) * 100) / 100,
+              rateMissing: rate === undefined,
+              frozenAt: new Date().toISOString(),
+            }];
+          });
+        } else {
+          setWorkHoursPay(prev => prev.filter(pp => pp.workHoursId !== id));
+        }
+      }
     }
-  }, [useSupabase, workHours, hasV7Schema]);
+  }, [useSupabase, workHours, hasV7Schema, employeePayRates]);
 
   const deleteWorkHours = useCallback(async (id: string) => {
     if (useSupabase) {
@@ -744,6 +820,66 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     await updateWorkCategory(id, { isActive: false });
   }, [updateWorkCategory]);
 
+  // ==================== PAY (ADMIN ONLY) ====================
+  // Every write below is refused by RLS for a non-admin. That is the real
+  // guard; the UI hides these controls as a courtesy, not as security.
+
+  /** Upsert one employee's rate for one category. */
+  const setEmployeePayRate = useCallback(async (
+    employeeId: string,
+    categoryId: string,
+    hourlyRate: number,
+  ) => {
+    if (!Number.isFinite(hourlyRate) || hourlyRate < 0) {
+      throw new Error('Enter a rate of 0 or more.');
+    }
+    // NUMERIC(10,2): round rather than let Postgres reject or silently
+    // truncate a third decimal place.
+    const rate = Math.round(hourlyRate * 100) / 100;
+
+    if (useSupabase) {
+      const { data, error } = await supabase
+        .from('employee_pay_rates')
+        .upsert(
+          { employee_id: employeeId, category_id: categoryId, hourly_rate: rate },
+          { onConflict: 'employee_id,category_id' }
+        )
+        .select()
+        .single();
+
+      raise(error, 'Could not save this rate');
+      if (!data) throw new Error('Could not save this rate: only admins can change pay rates.');
+
+      const mapped = mapSupabasePayRate(data);
+      setEmployeePayRates(prev => {
+        const without = prev.filter(r => !(r.employeeId === employeeId && r.categoryId === categoryId));
+        return [...without, mapped];
+      });
+    } else {
+      setEmployeePayRates(prev => {
+        const without = prev.filter(r => !(r.employeeId === employeeId && r.categoryId === categoryId));
+        return [...without, {
+          id: generateId('pr'),
+          employeeId,
+          categoryId,
+          hourlyRate: rate,
+          createdAt: new Date().toISOString(),
+        }];
+      });
+    }
+  }, [useSupabase]);
+
+  /** The configured rate, or undefined when none is set (which pays 0). */
+  const getEmployeePayRate = useCallback((employeeId: string, categoryId?: string | null) => {
+    if (!categoryId) return undefined;
+    return employeePayRates.find(r => r.employeeId === employeeId && r.categoryId === categoryId)?.hourlyRate;
+  }, [employeePayRates]);
+
+  /** Frozen pay for an approved entry; undefined while it is not approved. */
+  const getPayForEntry = useCallback((workHoursId: string) => {
+    return workHoursPay.find(p => p.workHoursId === workHoursId);
+  }, [workHoursPay]);
+
   const getWorkCategoryName = useCallback((categoryId?: string | null) => {
     if (!categoryId) return undefined;
     return workCategories.find(c => c.id === categoryId)?.name;
@@ -776,6 +912,11 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     updateWorkCategory,
     deleteWorkCategory,
     getWorkCategoryName,
+    employeePayRates,
+    workHoursPay,
+    setEmployeePayRate,
+    getEmployeePayRate,
+    getPayForEntry,
     loading,
     loadError,
     hasV7Schema,
@@ -804,6 +945,11 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     updateWorkCategory,
     deleteWorkCategory,
     getWorkCategoryName,
+    employeePayRates,
+    workHoursPay,
+    setEmployeePayRate,
+    getEmployeePayRate,
+    getPayForEntry,
     loading,
     loadError,
     hasV7Schema,
