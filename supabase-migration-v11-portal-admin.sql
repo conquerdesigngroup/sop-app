@@ -1,8 +1,15 @@
 -- =============================================================================
 -- v11 — one read-only helper for the portal manager
 --
--- STATUS: NOT YET APPLIED. Run in the Supabase SQL editor, then change this
---         header to record the date, as v7/v8/v9 do.
+-- STATUS: APPLIED to prod 2026-08-21 as v11_portal_program_has_code.
+--
+-- VERIFIED on apply, by impersonating each caller in Postgres:
+--   an admin      allstars = true, academy = true, unknown slug = false
+--   a team member refused, not answered
+--   anon          denied outright — no EXECUTE grant
+--
+-- Both programs already have a code set, so neither is in the gated-but-
+-- unreachable state this function exists to make visible.
 --
 -- Phase 3 (the staff authoring UI) is otherwise entirely client-side: v9
 -- already carries every write policy it needs. This is the one thing the
