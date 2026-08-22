@@ -286,6 +286,15 @@ export interface WorkHoursEntry {
   createdBy: string; // User who created (can be employee or admin)
   createdAt: string;
   updatedAt?: string;
+  /**
+   * True while this entry exists only in the browser's offline queue.
+   *
+   * Set by WorkHoursContext for hours logged with no connection, and never
+   * present on a row read back from Postgres. Such an entry has a
+   * client-side id rather than a UUID, so it cannot be edited, deleted or
+   * approved until it has synced.
+   */
+  pendingSync?: boolean;
 }
 
 export interface WorkScheduleTemplate {

@@ -94,7 +94,7 @@ const HoursInputPage: React.FC = () => {
     }
 
     try {
-      await addWorkHours({
+      const { queued } = await addWorkHours({
         employeeId: currentUser.id,
         workDate: values.workDate,
         startTime: values.startTime,
@@ -106,7 +106,12 @@ const HoursInputPage: React.FC = () => {
         categoryId: values.categoryId || null,
         notes: values.notes.trim() || null,
       });
-      showToast('Hours logged', 'success');
+      showToast(
+        queued
+          ? 'Saved on this device — it will submit itself when you have signal'
+          : 'Hours logged',
+        queued ? 'info' : 'success'
+      );
     } catch (error: any) {
       showToast(error?.message || 'Could not log these hours', 'error');
       // Rethrow so the form knows the save failed and keeps what was typed.

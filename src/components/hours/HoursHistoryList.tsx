@@ -39,8 +39,12 @@ interface HoursHistoryListProps {
  * RLS policy in migration v7 only permits writes to 'pending' and
  * 'rejected' rows. Hiding the buttons keeps the UI honest about that
  * rather than offering an action the database will refuse.
+ *
+ * A queued entry is locked for a different reason: it has no row yet, so
+ * its id is a client-side string and every write would address nothing.
  */
-const isLocked = (entry: WorkHoursEntry) => entry.status === 'approved';
+const isLocked = (entry: WorkHoursEntry) =>
+  entry.status === 'approved' || Boolean(entry.pendingSync);
 
 const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
   entries,
@@ -77,7 +81,13 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
         // note below has nowhere to go and the row silently loses its
         // buttons with no explanation of why.
         const wouldHaveActions = Boolean(onEdit) || Boolean(onDelete);
-        const showActions = canEdit || canDelete || Boolean(onApprove) || Boolean(onReject) || (locked && wouldHaveActions);
+        // A queued row has no database row to act on, so the admin controls
+        // are withheld too — not just the employee's edit and delete.
+        const canReview = !entry.pendingSync;
+        const showActions =
+          canEdit || canDelete ||
+          (canReview && (Boolean(onApprove) || Boolean(onReject))) ||
+          (locked && wouldHaveActions);
 
         return (
           <div
@@ -107,7 +117,9 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
                 }}>
                   {formatDateShort(entry.workDate)}
                 </span>
-                <Badge variant={status.variant} size="sm">{status.label}</Badge>
+                {entry.pendingSync
+                  ? <Badge variant="info" size="sm">Saved on this device</Badge>
+                  : <Badge variant={status.variant} size="sm">{status.label}</Badge>}
                 {getEmployeeName && (
                   <span style={{
                     fontSize: '13px',
@@ -150,6 +162,17 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
                   wordBreak: 'break-word',
                 }}>
                   {entry.notes}
+                </div>
+              )}
+
+              {entry.pendingSync && (
+                <div style={{
+                  fontSize: '13px',
+                  color: theme.colors.txt.tertiary,
+                  fontFamily: theme.fonts.primary,
+                  marginTop: theme.spacing.xs,
+                }}>
+                  Waiting for a connection &mdash; it will submit itself.
                 </div>
               )}
 
@@ -205,12 +228,12 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
                 flexShrink: 0,
                 flexWrap: 'wrap',
               }}>
-                {onApprove && entry.status !== 'approved' && (
+                {canReview && onApprove && entry.status !== 'approved' && (
                   <Button size="sm" variant="outline" onClick={() => onApprove(entry)}>
                     Approve
                   </Button>
                 )}
-                {onReject && entry.status !== 'rejected' && (
+                {canReview && onReject && entry.status !== 'rejected' && (
                   <Button size="sm" variant="ghost" onClick={() => onReject(entry)}>
                     Send back
                   </Button>
@@ -232,7 +255,7 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
                     fontFamily: theme.fonts.primary,
                     alignSelf: 'center',
                   }}>
-                    Locked
+                    {entry.pendingSync ? 'Not sent yet' : 'Locked'}
                   </span>
                 )}
               </div>

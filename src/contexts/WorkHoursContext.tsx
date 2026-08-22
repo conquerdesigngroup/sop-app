@@ -2,10 +2,20 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { WorkHoursEntry, WorkHoursSummary, WorkDay, WorkCategory, EmployeePayRate, WorkHoursPay } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { queueWorkHoursOffline, getQueuedWorkHours } from '../lib/indexedDB';
+import { isNetworkFailure } from '../lib/networkErrors';
 
 interface WorkHoursContextType {
   workHours: WorkHoursEntry[];
-  addWorkHours: (entry: Omit<WorkHoursEntry, 'id' | 'createdAt' | 'createdBy' | 'status'>) => Promise<void>;
+  /**
+   * Log hours. Resolves with `{ queued: true }` when the entry could not
+   * reach the database and is waiting in the offline queue instead — the
+   * caller needs that to avoid telling someone their hours were submitted
+   * when they are still sitting on the phone.
+   */
+  addWorkHours: (
+    entry: Omit<WorkHoursEntry, 'id' | 'createdAt' | 'createdBy' | 'status'>
+  ) => Promise<{ queued: boolean }>;
   updateWorkHours: (id: string, entry: Partial<WorkHoursEntry>) => Promise<void>;
   deleteWorkHours: (id: string) => Promise<void>;
   approveWorkHours: (id: string) => Promise<void>;
@@ -65,6 +75,7 @@ const raise = (error: { message?: string } | null, action: string): void => {
   if (!error) return;
   throw new Error(error.message ? `${action}: ${error.message}` : action);
 };
+
 
 // Map Supabase data to WorkCategory type
 const mapSupabaseWorkCategory = (dbEntry: any): WorkCategory => ({
@@ -393,7 +404,53 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
   }, [useSupabase, userId]);
 
-  const addWorkHours = useCallback(async (entryData: Omit<WorkHoursEntry, 'id' | 'createdAt' | 'createdBy' | 'status'>) => {
+  /**
+   * Hours logged with no usable connection, waiting in IndexedDB.
+   *
+   * Held apart from `workHours` on purpose. Every refetch in this file —
+   * the load effect, the realtime handler — replaces `workHours` wholesale,
+   * which would wipe an optimistic row merged into it. Keeping the queue in
+   * its own state means a queued entry survives until the row it stands for
+   * is actually in the database.
+   */
+  const [queuedWorkHours, setQueuedWorkHours] = useState<WorkHoursEntry[]>([]);
+
+  const refreshQueuedWorkHours = useCallback(async () => {
+    try {
+      setQueuedWorkHours(await getQueuedWorkHours());
+    } catch (error) {
+      // A browser with IndexedDB unavailable (private mode in some engines)
+      // still gets a working online app; it just cannot queue.
+      console.error('Could not read queued hours:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshQueuedWorkHours();
+  }, [refreshQueuedWorkHours]);
+
+  // useOfflineSync fires this once a replay pass has cleared at least one
+  // change. Re-reading the queue drops whatever synced, and the refetch
+  // pulls the real rows — with their server ids and trigger-computed totals.
+  useEffect(() => {
+    if (!useSupabase) return;
+
+    const handleSynced = async () => {
+      await refreshQueuedWorkHours();
+      const { data } = await supabase
+        .from('work_hours')
+        .select('*')
+        .order('work_date', { ascending: false });
+      if (data) setWorkHours(data.map(mapSupabaseWorkHours));
+    };
+
+    window.addEventListener('sop-app:offline-synced', handleSynced);
+    return () => window.removeEventListener('sop-app:offline-synced', handleSynced);
+  }, [useSupabase, refreshQueuedWorkHours]);
+
+  const addWorkHours = useCallback(async (
+    entryData: Omit<WorkHoursEntry, 'id' | 'createdAt' | 'createdBy' | 'status'>
+  ): Promise<{ queued: boolean }> => {
     if (!currentUser) throw new Error('You are not signed in.');
 
     const totalHours = calculateTotalHours(entryData.startTime, entryData.endTime, entryData.breakMinutes);
@@ -408,23 +465,55 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
 
     if (useSupabase) {
-      const { data, error } = await supabase
-        .from('work_hours')
-        .insert([{
-          employee_id: newEntry.employeeId,
-          work_date: newEntry.workDate,
-          start_time: newEntry.startTime,
-          end_time: newEntry.endTime,
-          break_minutes: newEntry.breakMinutes,
-          ...(hasV7Schema ? { category_id: newEntry.categoryId || null } : {}),
-          notes: newEntry.notes,
-          status: newEntry.status,
-          created_by: newEntry.createdBy,
-          // total_hours is deliberately not sent: a trigger added in
-          // migration v7 computes it from the times and the break.
-        }])
-        .select()
-        .single();
+      // Built once and used for both paths, so a queued entry inserts the
+      // same row the online path would have. No id (the column is a UUID the
+      // database assigns) and no total_hours (a v7 trigger computes it).
+      // status stays 'pending' and employee_id stays the signed-in user
+      // because v7's RLS accepts nothing else from a team member — a queued
+      // row that broke either rule would fail on every replay, forever.
+      const row = {
+        employee_id: newEntry.employeeId,
+        work_date: newEntry.workDate,
+        start_time: newEntry.startTime,
+        end_time: newEntry.endTime,
+        break_minutes: newEntry.breakMinutes,
+        ...(hasV7Schema ? { category_id: newEntry.categoryId || null } : {}),
+        notes: newEntry.notes,
+        status: newEntry.status,
+        created_by: newEntry.createdBy,
+      };
+
+      const queue = async () => {
+        await queueWorkHoursOffline(newEntry, row);
+        await refreshQueuedWorkHours();
+      };
+
+      // Known-offline: do not attempt the write at all.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        await queue();
+        return { queued: true };
+      }
+
+      let data: any = null;
+      let error: { message?: string } | null = null;
+
+      try {
+        ({ data, error } = await supabase
+          .from('work_hours')
+          .insert([row])
+          .select()
+          .single());
+      } catch (thrown) {
+        // supabase-js rejects rather than returning an error when the
+        // request never completes — a dead spot mid-shift, a captive portal,
+        // a DNS failure. That is exactly the case worth queueing, and it is
+        // distinct from a rejection the server actually sent.
+        if (isNetworkFailure(thrown)) {
+          await queue();
+          return { queued: true };
+        }
+        throw thrown;
+      }
 
       raise(error, 'Could not save these hours');
       if (!data) {
@@ -437,7 +526,9 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     } else {
       setWorkHours(prev => [newEntry, ...prev]);
     }
-  }, [currentUser, useSupabase, hasV7Schema]);
+
+    return { queued: false };
+  }, [currentUser, useSupabase, hasV7Schema, refreshQueuedWorkHours]);
 
   const updateWorkHours = useCallback(async (id: string, updates: Partial<WorkHoursEntry>) => {
     // Recalculate total hours if time fields changed
@@ -917,8 +1008,20 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     return workCategories.find(c => c.id === categoryId)?.name;
   }, [workCategories]);
 
+  /**
+   * Queued entries lead, then whatever the database returned.
+   *
+   * Deliberately only the list: the summary and payroll helpers keep reading
+   * `workHours`, so unsynced hours never reach a total anyone is paid from.
+   * They are visible to the person who logged them, and nowhere else.
+   */
+  const visibleWorkHours = useMemo(
+    () => (queuedWorkHours.length ? [...queuedWorkHours, ...workHours] : workHours),
+    [queuedWorkHours, workHours]
+  );
+
   const value = useMemo(() => ({
-    workHours,
+    workHours: visibleWorkHours,
     addWorkHours,
     updateWorkHours,
     deleteWorkHours,
@@ -953,7 +1056,7 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     loadError,
     hasV7Schema,
   }), [
-    workHours,
+    visibleWorkHours,
     addWorkHours,
     updateWorkHours,
     deleteWorkHours,

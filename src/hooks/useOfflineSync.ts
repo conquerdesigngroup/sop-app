@@ -31,10 +31,13 @@ export const useOfflineSync = () => {
       // Sort by timestamp to maintain order
       const sortedChanges = changes.sort((a, b) => a.timestamp - b.timestamp);
 
+      let synced = 0;
+
       for (const change of sortedChanges) {
         try {
           await syncSingleChange(change);
           await clearPendingChange(change.id);
+          synced += 1;
         } catch (error) {
           console.error(`Failed to sync change ${change.id}:`, error);
           // Continue with other changes even if one fails
@@ -42,6 +45,14 @@ export const useOfflineSync = () => {
       }
 
       await updatePendingCount();
+
+      // Contexts holding optimistic copies of queued rows need to know the
+      // real ones have landed, so they can drop the local placeholders and
+      // re-read from the database. An event keeps that one-way: the sync
+      // hook does not need to know which contexts exist.
+      if (synced > 0) {
+        window.dispatchEvent(new CustomEvent('sop-app:offline-synced'));
+      }
     } catch (error) {
       console.error('Error syncing changes:', error);
     } finally {
@@ -51,7 +62,7 @@ export const useOfflineSync = () => {
 
   // Sync a single change based on its type
   const syncSingleChange = async (change: PendingChange) => {
-    const { storeName, changeType, data } = change;
+    const { storeName, changeType, data, payload } = change;
 
     // Map store names to Supabase tables
     const tableMap: { [key: string]: string } = {
@@ -59,6 +70,7 @@ export const useOfflineSync = () => {
       job_tasks: 'job_tasks',
       task_templates: 'task_templates',
       users: 'profiles',
+      work_hours: 'work_hours',
     };
 
     const tableName = tableMap[storeName];
@@ -77,7 +89,11 @@ export const useOfflineSync = () => {
       return converted;
     };
 
-    const dbData = convertToSnakeCase(data);
+    // A change that carried an explicit payload knows its own row shape —
+    // which columns the table has, which the database computes, and which
+    // key it is allowed to omit. Deriving one from the local object would
+    // undo that. Everything else keeps the original camelCase conversion.
+    const dbData = payload ?? convertToSnakeCase(data);
 
     switch (changeType) {
       case 'create':
