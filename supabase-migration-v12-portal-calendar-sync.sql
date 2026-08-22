@@ -1,9 +1,23 @@
 -- =============================================================================
 -- v12 — Google Calendar into the portal calendar (phase 4)
 --
--- STATUS: NOT YET APPLIED. Apply sections 1–3 whenever you like; section 4
---         (the schedule) only works once the portal-calendar-sync function is
---         deployed. Change this header to record the date, as v7/v8/v9 do.
+-- STATUS: sections 1 and 2 APPLIED to prod 2026-08-21, as two migrations
+--         (v12_portal_calendar_sources, v12_portal_sync_google_events).
+--
+--         Section 3 is a worked example, not a step — the portal manager writes
+--         that row. Section 4 (the schedule) is NOT applied: it needs a Vault
+--         secret and is only worth turning on once a manual sync has succeeded.
+--
+--         Both Edge Functions are deployed (google-oauth, portal-calendar-sync)
+--         but neither has its Google secret set yet, so nothing syncs.
+--
+-- VERIFIED ON APPLY, in a transaction that was rolled back:
+--   two new events           -> 2 upserted, 0 removed
+--   one renamed, one cancelled -> 1 upserted, 1 removed
+--   empty payload            -> the in-window row pruned, and a 'google' row
+--                               OUTSIDE the window untouched
+--   the 8 existing 'manual' events unchanged throughout
+-- The ON CONFLICT did infer the partial index, which was the open question.
 --
 -- v9 reserved the shape this fills: portal_events.source is CHECK IN
 -- ('manual','google'), and portal_events_google_uniq is a partial unique index
