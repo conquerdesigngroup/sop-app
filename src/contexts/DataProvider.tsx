@@ -1,7 +1,6 @@
 import React, { ReactNode } from 'react';
 import { SOPProvider } from './SOPContext';
 import { TaskProvider } from './TaskContext';
-import { JobProvider } from './JobContext';
 import { EventProvider } from './EventContext';
 import { WorkHoursProvider } from './WorkHoursContext';
 
@@ -19,7 +18,6 @@ import { WorkHoursProvider } from './WorkHoursContext';
  * - DataProvider (all data contexts combined)
  *   ├── SOPProvider
  *   ├── TaskProvider
- *   ├── JobProvider
  *   ├── EventProvider
  *   └── WorkHoursProvider
  */
@@ -31,13 +29,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   return (
     <SOPProvider>
       <TaskProvider>
-        <JobProvider>
-          <EventProvider>
-            <WorkHoursProvider>
-              {children}
-            </WorkHoursProvider>
-          </EventProvider>
-        </JobProvider>
+        <EventProvider>
+          <WorkHoursProvider>
+            {children}
+          </WorkHoursProvider>
+        </EventProvider>
       </TaskProvider>
     </SOPProvider>
   );
