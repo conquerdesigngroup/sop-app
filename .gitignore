@@ -32,3 +32,7 @@ yarn-error.log*
 # environment files (never commit secrets)
 .env
 .env*
+
+# Supabase CLI local state (machine-specific, never committed)
+supabase/.temp/
+supabase/.branches/
