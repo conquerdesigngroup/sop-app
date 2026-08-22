@@ -15,6 +15,7 @@ import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
 import { PortalProvider } from './contexts/PortalContext';
+import { PortalAdminProvider } from './contexts/PortalAdminContext';
 import './App.css';
 
 // Lazy load page components for code splitting
@@ -46,6 +47,10 @@ const ClassDetail = lazy(() => import('./pages/portal/ClassDetail'));
 const ProgramUpdates = lazy(() => import('./pages/portal/ProgramUpdates'));
 const ProgramDocuments = lazy(() => import('./pages/portal/ProgramDocuments'));
 const ProgramCalendar = lazy(() => import('./pages/portal/ProgramCalendar'));
+
+// The staff side of the portal. Reachable by admins and by any employee holding
+// a class, which is why its route is a plain ProtectedRoute — see the page.
+const PortalManagerPage = lazy(() => import('./pages/portal-admin/PortalManagerPage'));
 
 // Page loading fallback - simple centered spinner.
 // theme.colors resolve to CSS variables, so this is theme-aware automatically.
@@ -302,6 +307,16 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          {/* Not adminOnly: instructors with a per-class grant belong here too,
+              and the page turns itself away if can_edit_portal() says no. */}
+          <Route
+            path="/portal-admin"
+            element={
+              <ProtectedRoute>
+                <PortalManagerPage />
+              </ProtectedRoute>
+            }
+          />
           {/* Catch-all. Staff land on the dashboard; everyone else lands on the
               chooser rather than being pushed at a staff login they have no
               account for — a mistyped portal URL is far more likely to be a
@@ -342,9 +357,14 @@ function App() {
             <ActivityLogProvider>
               <DataProvider>
                 <DashboardSettingsProvider>
-                  <Router>
-                    <AppContent />
-                  </Router>
+                  {/* Above the Router because the nav asks it whether to show
+                      the Portal entry. Every fetch inside is behind a session,
+                      so a signed-out parent pays nothing for it. */}
+                  <PortalAdminProvider>
+                    <Router>
+                      <AppContent />
+                    </Router>
+                  </PortalAdminProvider>
                 </DashboardSettingsProvider>
               </DataProvider>
             </ActivityLogProvider>

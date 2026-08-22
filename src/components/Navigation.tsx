@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
@@ -82,6 +83,12 @@ const icons = {
       <line x1="16" y1="6" x2="22" y2="6" />
     </svg>
   ),
+  portal: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+      <path d="M9 21v-6h6v6" />
+    </svg>
+  ),
   chevronDown: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="6 9 12 15 18 9" />
@@ -113,6 +120,10 @@ const Navigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, logout, isAdmin } = useAuth();
+  // Shown by authoring rights rather than by role: an instructor holding a
+  // class is a plain 'team' member, and gating this on isAdmin would hide the
+  // portal manager from the people it was built for.
+  const { canEdit: canEditPortal } = usePortalAdmin();
   const { isDark, toggleTheme } = useTheme();
   const colors = useThemeColors();
   // DIDC brand marks: white outline on dark backgrounds, ink outline on light
@@ -205,6 +216,10 @@ const Navigation: React.FC = () => {
     elements.push({ path: '/hours', label: 'Hours', icon: icons.hours });
     elements.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
 
+    if (canEditPortal) {
+      elements.push({ path: '/portal-admin', label: 'Portal', icon: icons.portal });
+    }
+
     // Admin group (only for admins)
     if (isAdmin) {
       elements.push({
@@ -237,6 +252,10 @@ const Navigation: React.FC = () => {
     items.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
     items.push({ path: '/hours', label: 'Hours', icon: icons.hours });
     items.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+
+    if (canEditPortal) {
+      items.push({ path: '/portal-admin', label: 'Portal', icon: icons.portal });
+    }
 
     if (isAdmin) {
       items.push({ path: '/team', label: 'Team', icon: icons.team });

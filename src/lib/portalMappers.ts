@@ -1,0 +1,88 @@
+import {
+  PortalProgram,
+  PortalClass,
+  PortalUpdate,
+  PortalEvent,
+  PortalDocument,
+} from '../types';
+
+/**
+ * Row -> model for every portal_* table.
+ *
+ * The only place snake_case column names appear. Both sides of the portal read
+ * the same tables — PortalContext as `anon` for parents, PortalAdminContext as
+ * a signed-in author — and a column renamed in one mapper but not the other
+ * would show up as a silently empty field on one side only.
+ *
+ * There is no generated Supabase types file, hence `any` and hand-written
+ * mappers, matching the idiom in SOPContext and WorkHoursContext.
+ */
+
+export const mapProgram = (r: any): PortalProgram => ({
+  id: r.id,
+  slug: r.slug,
+  name: r.name,
+  blurb: r.blurb ?? '',
+  requiresCode: r.requires_code,
+  sortOrder: r.sort_order ?? 0,
+  isActive: r.is_active,
+});
+
+export const mapClass = (r: any): PortalClass => ({
+  id: r.id,
+  programId: r.program_id,
+  name: r.name,
+  dayOfWeek: r.day_of_week,
+  startTime: r.start_time,
+  endTime: r.end_time,
+  level: r.level,
+  location: r.location,
+  description: r.description ?? '',
+  instructorName: r.instructor_name,
+  sortOrder: r.sort_order ?? 0,
+  isActive: r.is_active,
+});
+
+export const mapUpdate = (r: any): PortalUpdate => ({
+  id: r.id,
+  programId: r.program_id,
+  classId: r.class_id,
+  title: r.title,
+  body: r.body ?? '',
+  isPinned: r.is_pinned,
+  isPublished: r.is_published,
+  publishedAt: r.published_at,
+  authorId: r.author_id,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+export const mapEvent = (r: any): PortalEvent => ({
+  id: r.id,
+  programId: r.program_id,
+  classId: r.class_id,
+  title: r.title,
+  description: r.description ?? '',
+  startsAt: r.starts_at,
+  endsAt: r.ends_at,
+  isAllDay: r.is_all_day,
+  location: r.location,
+  source: r.source,
+  isPublished: r.is_published,
+});
+
+export const mapDocument = (r: any): PortalDocument => ({
+  id: r.id,
+  programId: r.program_id,
+  classId: r.class_id,
+  title: r.title,
+  description: r.description ?? '',
+  category: r.category,
+  storagePath: r.storage_path,
+  fileName: r.file_name,
+  mimeType: r.mime_type,
+  sizeBytes: r.size_bytes,
+  sortOrder: r.sort_order ?? 0,
+  isPublished: r.is_published,
+  createdAt: r.created_at,
+});

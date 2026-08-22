@@ -13,6 +13,15 @@ import {
   grantPortalAccess,
   revokePortalAccess,
 } from '../lib/portal';
+// Shared with PortalAdminContext, which reads the same tables as a signed-in
+// author. One mapper per table, so the two sides cannot drift.
+import {
+  mapProgram,
+  mapClass,
+  mapUpdate,
+  mapEvent,
+  mapDocument,
+} from '../lib/portalMappers';
 
 /**
  * Data for the parent portal.
@@ -72,80 +81,6 @@ export const usePortal = () => {
   if (!ctx) throw new Error('usePortal must be used within a PortalProvider');
   return ctx;
 };
-
-// --------------------------------------------------------------- mappers
-// Hand-written, matching the idiom in SOPContext and WorkHoursContext. There is
-// no generated Supabase types file, so these are the only place snake_case
-// column names appear.
-
-const mapProgram = (r: any): PortalProgram => ({
-  id: r.id,
-  slug: r.slug,
-  name: r.name,
-  blurb: r.blurb ?? '',
-  requiresCode: r.requires_code,
-  sortOrder: r.sort_order ?? 0,
-  isActive: r.is_active,
-});
-
-const mapClass = (r: any): PortalClass => ({
-  id: r.id,
-  programId: r.program_id,
-  name: r.name,
-  dayOfWeek: r.day_of_week,
-  startTime: r.start_time,
-  endTime: r.end_time,
-  level: r.level,
-  location: r.location,
-  description: r.description ?? '',
-  instructorName: r.instructor_name,
-  sortOrder: r.sort_order ?? 0,
-  isActive: r.is_active,
-});
-
-const mapUpdate = (r: any): PortalUpdate => ({
-  id: r.id,
-  programId: r.program_id,
-  classId: r.class_id,
-  title: r.title,
-  body: r.body ?? '',
-  isPinned: r.is_pinned,
-  isPublished: r.is_published,
-  publishedAt: r.published_at,
-  authorId: r.author_id,
-  createdAt: r.created_at,
-  updatedAt: r.updated_at,
-});
-
-const mapEvent = (r: any): PortalEvent => ({
-  id: r.id,
-  programId: r.program_id,
-  classId: r.class_id,
-  title: r.title,
-  description: r.description ?? '',
-  startsAt: r.starts_at,
-  endsAt: r.ends_at,
-  isAllDay: r.is_all_day,
-  location: r.location,
-  source: r.source,
-  isPublished: r.is_published,
-});
-
-const mapDocument = (r: any): PortalDocument => ({
-  id: r.id,
-  programId: r.program_id,
-  classId: r.class_id,
-  title: r.title,
-  description: r.description ?? '',
-  category: r.category,
-  storagePath: r.storage_path,
-  fileName: r.file_name,
-  mimeType: r.mime_type,
-  sizeBytes: r.size_bytes,
-  sortOrder: r.sort_order ?? 0,
-  isPublished: r.is_published,
-  createdAt: r.created_at,
-});
 
 // ------------------------------------------------------------- provider
 
