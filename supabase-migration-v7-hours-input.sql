@@ -500,6 +500,30 @@ CREATE TRIGGER work_hours_freeze_pay
   FOR EACH ROW EXECUTE FUNCTION public.work_hours_freeze_pay();
 
 
+-- -------------------------------------------------------------
+-- 13. Revoke the default anon grants on this migration's new tables
+--
+-- Supabase grants SELECT/INSERT/UPDATE/DELETE to `anon` automatically on
+-- every new table in `public`. All three tables here are staff-only and
+-- their RLS policies already deny anon, but v9 set the house rule for
+-- this database: "two independent things have to be wrong before anon
+-- can write, instead of one". employee_pay_rates holds salaries, so it
+-- is the last table that should rely on a single layer.
+--
+-- Note this is not hypothetical reach: PortalContext documents that the
+-- staff contexts fetch on a parent's device too, so anon really does
+-- issue requests against work_categories.
+-- -------------------------------------------------------------
+REVOKE ALL ON public.work_categories    FROM anon;
+REVOKE ALL ON public.employee_pay_rates FROM anon;
+REVOKE ALL ON public.work_hours_pay     FROM anon;
+
+-- Pay is admin-only, enforced by RLS. Keep the table grant for
+-- `authenticated` (admins are authenticated and RLS filters the rows),
+-- but anon has no business holding any grant at all.
+
+
+
 -- =============================================================
 -- POST-MIGRATION AUDIT — run these, they are not optional
 -- =============================================================

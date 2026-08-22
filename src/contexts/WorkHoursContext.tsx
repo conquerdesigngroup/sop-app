@@ -191,11 +191,38 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [hasV7Schema, setHasV7Schema] = useState(true);
   const { currentUser, users } = useAuth();
   const useSupabase = isSupabaseConfigured();
+  // Depend on the id, not the object. AuthContext can hand back a new
+  // currentUser reference for the same person, and depending on the object
+  // would refetch every time that happened.
+  const userId = currentUser?.id;
 
   // Load work hours and work days
   useEffect(() => {
     const loadData = async () => {
       setLoadError(null);
+
+      // Signed out? Fetch nothing.
+      //
+      // Every table this context reads is staff-only, and RLS returns zero
+      // rows to `anon` anyway — but the requests still go out. PortalContext
+      // documents the cost: a parent loading /portal/:program triggers the
+      // staff contexts too, and work_hours / work_days / work_categories are
+      // three of the wasted round trips on their phone. This adds two more
+      // (employee_pay_rates, work_hours_pay), so guard the whole load rather
+      // than make a parent's cold start worse.
+      //
+      // currentUser?.id is already a dependency, so signing in re-runs this
+      // and the staff side loads exactly as before.
+      if (!userId) {
+        setWorkHours([]);
+        setWorkDays([]);
+        setWorkCategories([]);
+        setEmployeePayRates([]);
+        setWorkHoursPay([]);
+        setLoading(false);
+        return;
+      }
+
       if (useSupabase) {
         try {
           // Load work hours
@@ -294,7 +321,7 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     // auth.uid(): the rows a signed-out or previous user could see are not
     // the rows this user can see. Without it, switching accounts kept the
     // old user's (now unauthorised, hence empty) result set.
-  }, [useSupabase, currentUser?.id]);
+  }, [useSupabase, userId]);
 
   // Save to localStorage when using localStorage mode
   useEffect(() => {
@@ -309,6 +336,11 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
   // Subscribe to real-time changes if using Supabase
   useEffect(() => {
     if (!useSupabase) return;
+    // Same reasoning as the load effect: no session, nothing to subscribe to.
+    // This channel opened on signed-out devices too — including a parent on
+    // /portal — where it can only ever deliver rows RLS denies. It is also
+    // what produced the failed-websocket noise on the login screen.
+    if (!userId) return;
 
     const channel = supabase
       .channel('work_data_changes')
@@ -359,7 +391,7 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase]);
+  }, [useSupabase, userId]);
 
   const addWorkHours = useCallback(async (entryData: Omit<WorkHoursEntry, 'id' | 'createdAt' | 'createdBy' | 'status'>) => {
     if (!currentUser) throw new Error('You are not signed in.');
