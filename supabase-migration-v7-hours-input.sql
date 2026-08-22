@@ -38,6 +38,12 @@
 --   7. fixes the rejected-entry lockout (see §7)
 --   8. closes the work_schedule_templates policy hole left by v6
 --
+-- STATUS: APPLIED to prod 2026-08-22 (project sgppeenmvskwztaszkgn), as
+--         v7_part1..part6. Applied AFTER v8/v9 — verified schema-disjoint
+--         from the portal first: v8/v9 mention work_hours only in comments,
+--         do not redefine is_admin(), and share no table names.
+--         Post-migration audit returned 0 for every check across 252 rows.
+--
 -- Safe to re-run. Run in the Supabase SQL Editor.
 -- Depends on v6 (public.is_admin() must already exist).
 -- =============================================================
@@ -137,6 +143,7 @@ ALTER TABLE public.work_hours
 CREATE OR REPLACE FUNCTION public.work_hours_compute_total()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   net_minutes INTEGER;
@@ -518,7 +525,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.work_hours_freeze_pay() FROM anon;
+-- FROM PUBLIC, not just anon: Postgres grants EXECUTE on new functions to
+-- PUBLIC by default, so revoking anon alone leaves the grant in place and
+-- the function still reachable at /rest/v1/rpc/work_hours_freeze_pay.
+REVOKE ALL ON FUNCTION public.work_hours_freeze_pay()    FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.work_hours_compute_total() FROM PUBLIC, anon;
 
 DROP TRIGGER IF EXISTS work_hours_freeze_pay ON public.work_hours;
 CREATE TRIGGER work_hours_freeze_pay
