@@ -20,21 +20,24 @@ import {
  * Mounted around /portal routes (see App.tsx) rather than at the app root, so
  * the portal owns its own fetching and nothing here runs for staff pages.
  *
- * KNOWN, MEASURED, NOT YET FIXED
+ * WHAT A PARENT'S DEVICE ACTUALLY REQUESTS
  *
- * Mounting this narrowly does NOT stop the staff contexts from firing on a
- * parent's device. DataProvider sits above the Router in App.tsx and its
- * children (SOP, Task, Job, Event, WorkHours) fetch on mount regardless of
- * route. A fresh load of /portal/:program issues 13 Supabase requests, 6 of
- * them to staff tables — work_hours, work_days and work_categories — which RLS
- * correctly returns nothing for. In development StrictMode doubles them; in
- * production it is 3 wasted round trips per parent, per cold load, on a phone.
+ * Mounting this narrowly does not, on its own, stop the staff contexts from
+ * firing: DataProvider sits above the Router in App.tsx, so its children mount
+ * regardless of route. That used to cost a parent 13 Supabase requests per cold
+ * load, 6 of them to staff tables RLS returns nothing for, plus two failures.
  *
- * The fix is to guard those contexts on isAuthenticated (AuthProvider is above
- * DataProvider, so they can). It is not done here because it touches five staff
- * contexts and there is currently no way to sign in locally to verify the staff
- * side still loads — see the .env note. Worth doing next time a staff login is
- * available to test against.
+ * WorkHoursContext now short-circuits its load and its realtime subscription
+ * when there is no session, which closed the bulk of it. Measured in production
+ * on /portal/:program:
+ *
+ *     3 requests — portal_programs, portal_updates, portal_events
+ *     0 staff-table requests
+ *     0 failures
+ *
+ * If that number climbs again, the cause is a staff context fetching on mount
+ * without a session guard; AuthProvider is above DataProvider, so any of them
+ * can check first.
  *
  * Every read here goes through the `anon` role. The portal_* tables are the only
  * ones that permit it, and only for published rows — so nothing in this file
