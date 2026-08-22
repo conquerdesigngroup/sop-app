@@ -1,6 +1,32 @@
 -- =============================================================
 -- Migration v7 — Hours Input (payroll-oriented time entry)
 --
+-- STATUS: APPLIED to prod 2026-08-21 (project sgppeenmvskwztaszkgn), split
+--         into v7_part1_work_categories_and_columns,
+--         v7_part2_server_computed_total_hours,
+--         v7_part3_rls_and_schedule_templates,
+--         v7_part4_pay_rates_and_frozen_pay.
+--
+-- This file was committed in 836f227 but never run. Until today total_hours
+-- was still whatever the browser sent: an employee could PATCH their own
+-- pending row with {"total_hours": 999.99} and it stored verbatim, passing
+-- both RLS clauses because those constrain only employee_id and status.
+-- Verified by probe before applying (stored 999.99) and after (held at 12.50,
+-- recomputed from the row's own clock times).
+--
+-- Nobody had exploited it. All 252 rows' stored totals matched the formula
+-- exactly — 818.00 hours, zero drift — and this migration leaves them
+-- unchanged.
+--
+-- Live data was clean (no negative breaks, no unparseable times, no
+-- end <= start), so §6c added all three CHECK constraints rather than
+-- skipping any.
+--
+-- The console 404s on /rest/v1/work_categories from parent-portal pages are
+-- now 401s instead: §8b revokes anon's grant outright. Same root cause
+-- either way — the staff contexts fetch on a signed-out device because
+-- DataProvider sits above the Router. See the note in PortalContext.
+--
 -- Adds:
 --   1. work_categories        admin-managed list backing the
 --                             "What did you work on?" dropdown
