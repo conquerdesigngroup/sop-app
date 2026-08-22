@@ -13,6 +13,7 @@ import {
   allDayToIso, timedToIso, isoToDateInput, isoToTimeInput, todayDateInput, localTimeZoneName,
 } from '../../lib/portalAdmin';
 import { useAdminList } from './useAdminList';
+import GoogleSyncPanel from './GoogleSyncPanel';
 import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audienceLabel, FieldPair, useAutoFocus } from './shared';
 
 /**
@@ -197,6 +198,8 @@ const EventsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }
 
   return (
     <>
+      {isAdmin && <GoogleSyncPanel program={program} onSynced={reload} />}
+
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
         <Button leftIcon={<PlusIcon />} onClick={startNew}>New event</Button>
       </div>
@@ -245,6 +248,10 @@ const EventsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }
                     onDelete={() => handleDelete(e)}
                     editLabel={`Edit ${e.title}`}
                     deleteLabel={`Delete ${e.title}`}
+                    // Deleting an imported event is futile — the next sync
+                    // re-adds it. Unticking "visible to parents" is the way to
+                    // take one off the portal, and the sync preserves that.
+                    canDelete={e.source !== 'google'}
                   />
                 )}
               </div>
@@ -274,8 +281,9 @@ const EventsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }
                 color: theme.colors.status.warning,
                 margin: 0,
               }}>
-                This event came from a Google calendar. Edits here will be overwritten the next
-                time it syncs — change it in Google instead.
+                This event came from a Google calendar. The title, dates, place and details are
+                overwritten every time it syncs — change those in Google. Whether parents can see
+                it is the one thing set here that sticks.
               </p>
             )}
 

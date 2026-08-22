@@ -485,6 +485,27 @@ export interface PortalEvent {
   isPublished: boolean;
 }
 
+/**
+ * Which Google calendar feeds a program's portal calendar, and what the last
+ * sync did. Staff-only: deliberately its own table rather than columns on
+ * portal_programs, which is anon-readable.
+ */
+export interface PortalCalendarSource {
+  programId: string;
+  googleCalendarId: string;
+  isEnabled: boolean;
+  daysBack: number;
+  daysAhead: number;
+  /** False lands imported events as drafts for review instead of publishing. */
+  publishImported: boolean;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastStatus: 'ok' | 'error' | null;
+  lastMessage: string | null;
+  lastUpserted: number | null;
+  lastRemoved: number | null;
+}
+
 export interface PortalDocument {
   id: string;
   programId: string;

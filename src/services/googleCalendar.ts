@@ -3,7 +3,17 @@
  * Handles authentication and calendar sync with Google Calendar API
  */
 
-// Google OAuth configuration
+import { supabase } from '../lib/supabase';
+
+// Google OAuth configuration.
+//
+// The client ID is public by design — it is in the authorization URL every user
+// is redirected to. The client SECRET is not, and is no longer in this file:
+// it lived here as process.env.REACT_APP_GOOGLE_CLIENT_SECRET, and every
+// REACT_APP_* var is compiled into the CRA bundle, so it was served in plain
+// text to anyone who opened the app and read the JavaScript. Both token calls
+// now go through the `google-oauth` Edge Function, where the secret is a
+// server-side environment variable.
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 const GOOGLE_REDIRECT_URI = process.env.REACT_APP_GOOGLE_REDIRECT_URI ||
   (window.location.origin + '/auth/callback');
@@ -78,33 +88,29 @@ export const initiateGoogleAuth = (): void => {
 };
 
 /**
- * Exchange authorization code for tokens
- * Note: In a production app, this should be done server-side
+ * Exchange an authorization code for tokens.
+ *
+ * The exchange itself happens in the `google-oauth` Edge Function: it needs the
+ * client secret, and the browser must not have it. invoke() attaches the
+ * caller's Supabase session, and the function refuses anyone who is not a
+ * signed-in employee.
  */
 export const exchangeCodeForTokens = async (code: string): Promise<GoogleTokens | null> => {
   try {
-    // For client-side apps, we use the implicit flow or a backend proxy
-    // This is a simplified version - in production, use a backend server
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        code,
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: process.env.REACT_APP_GOOGLE_CLIENT_SECRET || '',
-        redirect_uri: GOOGLE_REDIRECT_URI,
-        grant_type: 'authorization_code',
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('Failed to exchange code for tokens');
+    if (!supabase) {
+      console.error('Supabase is not configured; cannot exchange Google tokens');
       return null;
     }
 
-    const data = await response.json();
+    const { data, error } = await supabase.functions.invoke('google-oauth', {
+      body: { action: 'exchange', code, redirectUri: GOOGLE_REDIRECT_URI },
+    });
+
+    if (error || !data?.access_token) {
+      console.error('Failed to exchange code for tokens:', error ?? data);
+      return null;
+    }
+
     const tokens: GoogleTokens = {
       access_token: data.access_token,
       refresh_token: data.refresh_token,
@@ -112,7 +118,6 @@ export const exchangeCodeForTokens = async (code: string): Promise<GoogleTokens 
       token_type: data.token_type,
     };
 
-    // Store tokens
     localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens));
 
     return tokens;
@@ -148,35 +153,29 @@ export const isGoogleAuthenticated = (): boolean => {
 };
 
 /**
- * Refresh access token using refresh token
+ * Refresh the access token. Same reason as the exchange: the refresh grant is
+ * authenticated with the client secret, so it runs server-side.
  */
 export const refreshAccessToken = async (): Promise<GoogleTokens | null> => {
   const tokens = getStoredTokens();
   if (!tokens?.refresh_token) return null;
 
   try {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: process.env.REACT_APP_GOOGLE_CLIENT_SECRET || '',
-        refresh_token: tokens.refresh_token,
-        grant_type: 'refresh_token',
-      }),
+    if (!supabase) return null;
+
+    const { data, error } = await supabase.functions.invoke('google-oauth', {
+      body: { action: 'refresh', refreshToken: tokens.refresh_token },
     });
 
-    if (!response.ok) {
-      console.error('Failed to refresh token');
+    if (error || !data?.access_token) {
+      console.error('Failed to refresh token:', error ?? data);
       return null;
     }
 
-    const data = await response.json();
     const newTokens: GoogleTokens = {
       access_token: data.access_token,
-      refresh_token: tokens.refresh_token, // Keep the old refresh token
+      // A refresh grant returns no new refresh token; the existing one stands.
+      refresh_token: tokens.refresh_token,
       expires_at: Date.now() + (data.expires_in * 1000),
       token_type: data.token_type,
     };

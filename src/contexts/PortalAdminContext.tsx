@@ -5,10 +5,10 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import {
   PortalProgram, PortalClass, PortalUpdate, PortalEvent, PortalDocument,
-  PortalProgramSlug,
+  PortalProgramSlug, PortalCalendarSource,
 } from '../types';
 import {
-  mapProgram, mapClass, mapUpdate, mapEvent, mapDocument,
+  mapProgram, mapClass, mapUpdate, mapEvent, mapDocument, mapCalendarSource,
 } from '../lib/portalMappers';
 import { buildStoragePath } from '../lib/portalAdmin';
 
@@ -101,6 +101,23 @@ export interface ClassInput {
   isActive: boolean;
 }
 
+export interface CalendarSourceInput {
+  programId: string;
+  googleCalendarId: string;
+  isEnabled: boolean;
+  daysBack: number;
+  daysAhead: number;
+  publishImported: boolean;
+}
+
+export interface SyncRunResult {
+  programId: string;
+  fetched?: number;
+  upserted?: number;
+  removed?: number;
+  error?: string;
+}
+
 interface PortalAdminContextValue {
   /** May this account author portal content at all? Drives the nav entry. */
   canEdit: boolean;
@@ -140,6 +157,12 @@ interface PortalAdminContextValue {
   deleteClass: (id: string) => Promise<void>;
   fetchClassInstructors: (classId: string) => Promise<string[]>;
   setClassInstructors: (classId: string, profileIds: string[]) => Promise<void>;
+
+  fetchCalendarSource: (programId: string) => Promise<PortalCalendarSource | null>;
+  saveCalendarSource: (input: CalendarSourceInput) => Promise<void>;
+  removeCalendarSource: (programId: string) => Promise<void>;
+  /** Runs the sync now. The cron runs the same function on its own schedule. */
+  runCalendarSync: (programId: string) => Promise<SyncRunResult[]>;
 
   setRequiresCode: (programId: string, requiresCode: boolean) => Promise<void>;
   setAccessCode: (slug: PortalProgramSlug, code: string) => Promise<void>;
@@ -567,6 +590,61 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     await load();
   }, [authorId, fetchClassInstructors, load]);
 
+  // -------------------------------------------------------- calendar sync
+
+  const fetchCalendarSource = useCallback(async (programId: string) => {
+    const { data, error } = await supabase
+      .from('portal_calendar_sources')
+      .select('*')
+      .eq('program_id', programId)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapCalendarSource(data) : null;
+  }, []);
+
+  /**
+   * One row per program, so this is an upsert on the primary key rather than an
+   * insert-or-update dance: pointing a program at a different calendar is the
+   * same operation as pointing it at one for the first time.
+   */
+  const saveCalendarSource = useCallback(async (input: CalendarSourceInput) => {
+    const { error } = await supabase
+      .from('portal_calendar_sources')
+      .upsert({
+        program_id: input.programId,
+        google_calendar_id: input.googleCalendarId.trim(),
+        is_enabled: input.isEnabled,
+        days_back: input.daysBack,
+        days_ahead: input.daysAhead,
+        publish_imported: input.publishImported,
+      }, { onConflict: 'program_id' });
+    if (error) throw error;
+  }, []);
+
+  /**
+   * Disconnecting leaves the events behind on purpose. They are real dates a
+   * studio published; silently emptying the parent calendar because someone
+   * changed a setting would be worse than leaving rows that no longer refresh.
+   * Delete them in the calendar list if they are not wanted.
+   */
+  const removeCalendarSource = useCallback(async (programId: string) => {
+    const { error } = await supabase
+      .from('portal_calendar_sources')
+      .delete()
+      .eq('program_id', programId);
+    if (error) throw error;
+  }, []);
+
+  const runCalendarSync = useCallback(async (programId: string) => {
+    const { data, error } = await supabase.functions.invoke('portal-calendar-sync', {
+      body: { programId },
+    });
+    if (error) throw error;
+    // The function answers 200 with per-calendar outcomes even when one failed,
+    // so a run that reached Google but found nothing readable still lands here.
+    return (data?.synced ?? []) as SyncRunResult[];
+  }, []);
+
   // ------------------------------------------------------------ access code
 
   const setRequiresCode = useCallback(async (programId: string, requiresCode: boolean) => {
@@ -607,6 +685,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveEvent, deleteEvent,
     uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
+    fetchCalendarSource, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   }), [
     canEdit, checking, editableClassIds, canEditClass,
@@ -615,6 +694,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveUpdate, deleteUpdate, saveEvent, deleteEvent,
     uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
+    fetchCalendarSource, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   ]);
 

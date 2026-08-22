@@ -4,6 +4,7 @@ import {
   PortalUpdate,
   PortalEvent,
   PortalDocument,
+  PortalCalendarSource,
 } from '../types';
 
 /**
@@ -85,4 +86,19 @@ export const mapDocument = (r: any): PortalDocument => ({
   sortOrder: r.sort_order ?? 0,
   isPublished: r.is_published,
   createdAt: r.created_at,
+});
+
+export const mapCalendarSource = (r: any): PortalCalendarSource => ({
+  programId: r.program_id,
+  googleCalendarId: r.google_calendar_id,
+  isEnabled: r.is_enabled,
+  daysBack: r.days_back ?? 30,
+  daysAhead: r.days_ahead ?? 365,
+  publishImported: r.publish_imported,
+  lastRunAt: r.last_run_at,
+  lastSuccessAt: r.last_success_at,
+  lastStatus: r.last_status,
+  lastMessage: r.last_message,
+  lastUpserted: r.last_upserted,
+  lastRemoved: r.last_removed,
 });

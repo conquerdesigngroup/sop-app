@@ -32,6 +32,9 @@ yarn-error.log*
 # environment files (never commit secrets)
 .env
 .env*
+# ...except the example, which holds no values and is the only place the rule
+# about REACT_APP_* being public is written down where a new clone will see it.
+!.env.example
 
 # Supabase CLI local state (machine-specific, never committed)
 supabase/.temp/
