@@ -105,7 +105,6 @@ const BottomNavigation: React.FC = () => {
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-around',
           alignItems: 'center',
           height: '60px',
           maxWidth: '500px',
@@ -126,8 +125,13 @@ const BottomNavigation: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '4px',
-                padding: '8px 12px',
-                minWidth: '64px',
+                // Five equal columns that divide whatever width the phone has.
+                // These were minWidth:64px + 12px side padding, so the bar had
+                // a floor of ~461px and ran off the right edge of every screen
+                // narrower than that — which is every phone.
+                flex: '1 1 0',
+                minWidth: 0,
+                padding: '8px 2px',
                 backgroundColor: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
@@ -163,6 +167,11 @@ const BottomNavigation: React.FC = () => {
                   fontSize: '11px',
                   fontWeight: active ? 700 : 500,
                   letterSpacing: '0.3px',
+                  // The label must never be what widens the column.
+                  maxWidth: '100%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {item.label}

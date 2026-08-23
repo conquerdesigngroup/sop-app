@@ -264,13 +264,13 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   statsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(250px, 100%), 1fr))',
     gap: theme.responsiveSpacing.cardGap.desktop,
     marginBottom: theme.responsiveSpacing.containerPadding.desktop,
   },
   statsGridMobile: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: theme.responsiveSpacing.cardGap.mobile,
     marginBottom: theme.spacing.lg,
   },
@@ -338,7 +338,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   sopGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
     gap: theme.responsiveSpacing.cardGap.desktop,
   },
   sopGridMobile: {

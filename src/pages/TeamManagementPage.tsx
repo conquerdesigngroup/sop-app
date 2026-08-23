@@ -1044,12 +1044,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   statsGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
     gap: theme.pageLayout.filterGap.desktop,
     marginBottom: theme.pageLayout.sectionMargin.desktop,
   },
   statsGridMobile: {
-    gridTemplateColumns: 'repeat(2, 1fr)',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: theme.pageLayout.filterGap.mobile,
     marginBottom: theme.pageLayout.sectionMargin.mobile,
   },
