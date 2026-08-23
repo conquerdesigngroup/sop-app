@@ -755,7 +755,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   formRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
     gap: theme.spacing.lg,
   },
   section: {
@@ -1044,12 +1044,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '12px 16px',
   },
   statsMobile: {
-    gridTemplateColumns: '1fr',
+    gridTemplateColumns: 'minmax(0, 1fr)',
     gap: '12px',
     marginBottom: '24px',
   },
   templatesGridMobile: {
-    gridTemplateColumns: '1fr',
+    gridTemplateColumns: 'minmax(0, 1fr)',
     gap: '16px',
     padding: '0 16px 16px 16px',
   },

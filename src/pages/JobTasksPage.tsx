@@ -2353,7 +2353,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   formRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
     gap: theme.spacing.lg,
   },
   section: {
@@ -2864,7 +2864,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '16px',
   },
   formRowMobile: {
-    gridTemplateColumns: '1fr',
+    gridTemplateColumns: 'minmax(0, 1fr)',
     gap: '16px',
   },
   modalActionsMobile: {
@@ -2885,8 +2885,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottom: `2px solid ${theme.colors.bdr.primary}`,
   },
   tabNavigationMobile: {
+    display: 'flex',
     gap: '2px',
     marginBottom: theme.spacing.lg,
+    borderBottom: `2px solid ${theme.colors.bdr.primary}`,
   },
   tabButton: {
     display: 'flex',

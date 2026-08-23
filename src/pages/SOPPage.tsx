@@ -758,8 +758,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottom: `2px solid ${theme.colors.bdr.primary}`,
   },
   tabNavigationMobile: {
+    display: 'flex',
     gap: '2px',
     marginBottom: theme.spacing.lg,
+    borderBottom: `2px solid ${theme.colors.bdr.primary}`,
   },
   tabButton: {
     display: 'flex',

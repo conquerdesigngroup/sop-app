@@ -2088,7 +2088,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   // Main Layout
   mainLayout: {
     display: 'grid',
-    gridTemplateColumns: '260px 1fr',
+    gridTemplateColumns: '260px minmax(0, 1fr)',
     gap: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
   },
@@ -2522,7 +2522,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   dayTimeGrid: {
     display: 'grid',
-    gridTemplateColumns: '80px 1fr',
+    gridTemplateColumns: '80px minmax(0, 1fr)',
     maxHeight: '700px',
     overflowY: 'auto',
   },

@@ -367,7 +367,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   content: {
     display: 'grid',
-    gridTemplateColumns: '300px 1fr',
+    gridTemplateColumns: '300px minmax(0, 1fr)',
     gap: '32px',
   },
   contentMobile: {

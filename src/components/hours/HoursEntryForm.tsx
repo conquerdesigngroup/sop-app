@@ -194,7 +194,7 @@ const HoursEntryForm: React.FC<HoursEntryFormProps> = ({
       {/* ---- Times ---- */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr',
+        gridTemplateColumns: isMobileOrTablet ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
         gap: theme.spacing.md,
         marginBottom: theme.spacing.lg,
       }}>
@@ -216,7 +216,7 @@ const HoursEntryForm: React.FC<HoursEntryFormProps> = ({
       {/* ---- Break + running total ---- */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr',
+        gridTemplateColumns: isMobileOrTablet ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
         gap: theme.spacing.md,
         marginBottom: theme.spacing.lg,
         alignItems: 'start',

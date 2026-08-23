@@ -858,7 +858,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   dateTimeSection: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
     gap: '16px',
   },
   checkboxGroup: {

@@ -1290,11 +1290,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   formRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
     gap: theme.pageLayout.filterGap.desktop,
   },
   formRowMobile: {
-    gridTemplateColumns: '1fr',
+    gridTemplateColumns: 'minmax(0, 1fr)',
   },
   formGroup: {
     marginBottom: '20px',

@@ -362,7 +362,7 @@ const TeamHoursPanel: React.FC = () => {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr auto',
+          gridTemplateColumns: isMobileOrTablet ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr) auto',
           gap: theme.spacing.md,
           alignItems: 'end',
         }}>
