@@ -417,7 +417,15 @@ const Navigation: React.FC = () => {
                           ...styles.mobileNavLink,
                           color: location.pathname === item.path ? colors.txt.primary : colors.txt.secondary,
                           ...(location.pathname === item.path ? styles.mobileNavLinkActive : {}),
-                          animationDelay: `${index * 0.05}s`,
+                          // Capped, not index * 0.05s. An admin sees eleven
+                          // items, so the last one used to start half a second
+                          // after the sheet opened and finish at 0.8s — and
+                          // until each item's slide-in settles it still covers
+                          // part of the row below, so an early tap opens the
+                          // wrong page. 0.18s keeps the stagger legible while
+                          // making the whole list settle in about a third of
+                          // the time.
+                          animationDelay: `${Math.min(index * 0.03, 0.18)}s`,
                           opacity: 0,
                         }}
                       >
@@ -760,7 +768,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    zIndex: 998,
+    // Above BottomNavigation (1000): this is a modal surface, and the
+    // persistent bottom bar must not show through its backdrop.
+    zIndex: 1098,
   },
   mobileMenu: {
     position: 'fixed',
@@ -771,7 +781,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderTopLeftRadius: '20px',
     borderTopRightRadius: '20px',
     borderTop: `2px solid ${theme.colors.bdr.secondary}`,
-    zIndex: 999,
+    zIndex: 1099,
     overflowY: 'auto',
     boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.5)',
     WebkitOverflowScrolling: 'touch',
@@ -829,7 +839,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: theme.shadows.lg,
     minWidth: '250px',
     overflow: 'hidden',
-    zIndex: 1000,
+    zIndex: 1100,
   },
   userInfoMobile: {
     padding: '16px',
@@ -916,7 +926,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: theme.shadows.lg,
     minWidth: '180px',
     overflow: 'hidden',
-    zIndex: 1000,
+    zIndex: 1100,
     padding: '6px',
   },
   dropdownItem: {
@@ -996,7 +1006,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: theme.shadows.lg,
     minWidth: '200px',
     overflow: 'hidden',
-    zIndex: 1000,
+    zIndex: 1100,
   },
   userMenuItem: {
     display: 'flex',
