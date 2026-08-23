@@ -1,40 +1,21 @@
+/*
+ * Left, not center.
+ *
+ * This was `text-align: center` — Create React App boilerplate, inherited from
+ * the starter template along with the spinning-logo styles that used to sit
+ * below it. Nothing in this app is designed around a centered default: every
+ * component that wants centered text sets it (66 of them do), so the only
+ * things the inherited value reached were the ones that never asked. That is
+ * why a card title would sit centered above a left-aligned subtitle, or a
+ * label drift away from the value it belongs to.
+ *
+ * The portal side already worked around this in two places — PortalLayout and
+ * ChooserPage both set `textAlign: 'left'` with a comment naming this rule.
+ * Fixing it here lets those stay as harmless belt-and-braces rather than
+ * load-bearing patches, and gives the staff side the same honest default.
+ */
 .App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  text-align: left;
 }
 
 /* Skeleton Loading Animation */

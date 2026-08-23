@@ -277,7 +277,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(60px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(60px, 100%), 1fr))',
     gap: '12px',
   },
   iconButton: {

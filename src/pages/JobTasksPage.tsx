@@ -2024,7 +2024,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   quickTemplatesGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(200px, 100%), 1fr))',
     gap: theme.spacing.sm,
   },
   quickTemplateButton: {
@@ -2684,7 +2684,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   taskDetailMeta: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.bg.tertiary,
@@ -2930,7 +2930,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   templatesGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))',
     gap: theme.spacing.lg,
   },
   templateCard: {

@@ -1,10 +1,10 @@
 // IndexedDB utilities for offline storage
 // Stores data locally when offline and syncs when connection is restored
 
-import { SOP, JobTask, TaskTemplate, User } from '../types';
+import { SOP, JobTask, TaskTemplate, User, WorkHoursEntry } from '../types';
 
 const DB_NAME = 'sop_app_offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Store names
 export const STORES = {
@@ -12,6 +12,7 @@ export const STORES = {
   JOB_TASKS: 'job_tasks',
   TASK_TEMPLATES: 'task_templates',
   USERS: 'users',
+  WORK_HOURS: 'work_hours',
   PENDING_CHANGES: 'pending_changes',
 };
 
@@ -24,6 +25,18 @@ export interface PendingChange {
   changeType: ChangeType;
   data: any;
   timestamp: number;
+  /**
+   * The exact row to send to Postgres, already in snake_case.
+   *
+   * Without this the sync path derives the row by camelCase-converting
+   * every key of `data`, which is fine for stores whose local shape happens
+   * to match their table. work_hours does not: its id is a server-side UUID
+   * (a client id would fail the column type), and total_hours is computed by
+   * a trigger and must not be sent. Supplying the payload explicitly keeps
+   * those rules in one place instead of teaching the generic converter about
+   * one table's exceptions.
+   */
+  payload?: Record<string, any>;
 }
 
 // Initialize IndexedDB
@@ -61,6 +74,15 @@ export const initDB = (): Promise<IDBDatabase> => {
         const userStore = db.createObjectStore(STORES.USERS, { keyPath: 'id' });
         userStore.createIndex('email', 'email', { unique: true });
         userStore.createIndex('department', 'department', { unique: false });
+      }
+
+      // Added in DB_VERSION 2. Existing installs run this branch on their
+      // next load; the contains() guard makes it a no-op afterwards.
+      if (!db.objectStoreNames.contains(STORES.WORK_HOURS)) {
+        const hoursStore = db.createObjectStore(STORES.WORK_HOURS, { keyPath: 'id' });
+        hoursStore.createIndex('employeeId', 'employeeId', { unique: false });
+        hoursStore.createIndex('workDate', 'workDate', { unique: false });
+        hoursStore.createIndex('status', 'status', { unique: false });
       }
 
       if (!db.objectStoreNames.contains(STORES.PENDING_CHANGES)) {
@@ -154,7 +176,8 @@ export const getItemsByIndex = async (
 export const addPendingChange = async (
   storeName: string,
   changeType: ChangeType,
-  data: any
+  data: any,
+  payload?: Record<string, any>
 ): Promise<void> => {
   const change: PendingChange = {
     id: `${storeName}_${changeType}_${data.id}_${Date.now()}`,
@@ -162,8 +185,17 @@ export const addPendingChange = async (
     changeType,
     data,
     timestamp: Date.now(),
+    ...(payload ? { payload } : {}),
   };
   return addItem(STORES.PENDING_CHANGES, change);
+};
+
+/** Pending changes for one store, oldest first. */
+export const getPendingChangesForStore = async (storeName: string): Promise<PendingChange[]> => {
+  const changes = await getPendingChanges();
+  return changes
+    .filter((change) => change.storeName === storeName)
+    .sort((a, b) => a.timestamp - b.timestamp);
 };
 
 export const getPendingChanges = async (): Promise<PendingChange[]> => {
@@ -187,6 +219,7 @@ export const clearAllData = async (): Promise<void> => {
     STORES.JOB_TASKS,
     STORES.TASK_TEMPLATES,
     STORES.USERS,
+    STORES.WORK_HOURS,
     STORES.PENDING_CHANGES,
   ];
 
@@ -232,4 +265,30 @@ export const saveTaskTemplateOffline = async (
   if (!isOnline()) {
     await addPendingChange(STORES.TASK_TEMPLATES, changeType, template);
   }
+};
+
+/**
+ * Queue an hours entry that could not reach the database.
+ *
+ * Hours Input is the screen most used away from wifi, and until now a
+ * submission made with no signal simply failed. The entry is kept locally
+ * with its client-side id so the employee can see it in their own history,
+ * while `payload` carries the row the replay will actually insert.
+ *
+ * The payload must keep status 'pending' and employee_id set to the signed-in
+ * user: migration v7's RLS only accepts an employee's own pending rows, and a
+ * queued write that violates that would fail on every future replay attempt.
+ */
+export const queueWorkHoursOffline = async (
+  entry: WorkHoursEntry,
+  payload: Record<string, any>
+): Promise<void> => {
+  await updateItem(STORES.WORK_HOURS, entry);
+  await addPendingChange(STORES.WORK_HOURS, 'create', entry, payload);
+};
+
+/** Entries still waiting to reach Postgres, oldest first. */
+export const getQueuedWorkHours = async (): Promise<WorkHoursEntry[]> => {
+  const changes = await getPendingChangesForStore(STORES.WORK_HOURS);
+  return changes.map((change) => ({ ...(change.data as WorkHoursEntry), pendingSync: true }));
 };

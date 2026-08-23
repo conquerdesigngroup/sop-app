@@ -1125,7 +1125,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   teamGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(350px, 100%), 1fr))',
     gap: theme.spacing.lg,
   },
   memberCard: {
@@ -1344,7 +1344,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(120px, 100%), 1fr))',
     gap: theme.spacing.md,
   },
   summaryCard: {
@@ -1416,7 +1416,7 @@ const styles: Record<string, React.CSSProperties> = {
   // Admin Summary Grid
   adminSummaryGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(140px, 100%), 1fr))',
     gap: theme.spacing.md,
     marginBottom: theme.spacing.xl,
   },

@@ -955,6 +955,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     marginBottom: theme.spacing.lg,
     gap: theme.spacing.md,
+    // Without this the title and the action buttons sit on one unbreakable
+    // line and push the whole document wider than the screen.
+    flexWrap: 'wrap' as const,
   },
   title: {
     ...theme.typography.h1,
@@ -969,6 +972,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   headerButtons: {
     display: 'flex',
     gap: '10px',
+    flexWrap: 'wrap' as const,
   },
   createBtn: {
     padding: '10px 20px',
@@ -1005,11 +1009,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
   },
   statsRowMobile: {
-    display: 'flex',
+    // Three equal columns rather than a wrapping flex row: "IN PROGRESS" is
+    // wide enough that space-around fitted only two per line and orphaned
+    // "COMPLETED" on a centred second row, which read as a layout mistake.
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    flexWrap: 'wrap' as const,
-    gap: '12px',
+    gap: '8px',
     marginBottom: theme.spacing.md,
     padding: '12px',
     backgroundColor: theme.colors.cardBackground,
@@ -1083,7 +1089,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   // Content Grid
   contentGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(350px, 100%), 1fr))',
     gap: theme.spacing.lg,
   },
   contentGridMobile: {
@@ -1306,7 +1312,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   calendarGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
   },
   dayHeader: {
     textAlign: 'center' as const,
@@ -1331,6 +1337,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRight: `1px solid ${theme.colors.border}`,
   },
   calendarDay: {
+    textAlign: 'center' as const,
     height: '90px',
     padding: '4px',
     backgroundColor: theme.colors.bg.secondary,
@@ -1341,6 +1348,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column' as const,
   },
   calendarDayMobile: {
+    textAlign: 'center' as const,
     height: '65px',
     padding: '3px',
     backgroundColor: theme.colors.bg.secondary,
@@ -1351,12 +1359,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column' as const,
   },
   calendarDayEmpty: {
+    textAlign: 'center' as const,
     height: '90px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRight: `1px solid ${theme.colors.border}`,
     borderBottom: `1px solid ${theme.colors.border}`,
   },
   calendarDayEmptyMobile: {
+    textAlign: 'center' as const,
     height: '65px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRight: `1px solid ${theme.colors.border}`,
@@ -1520,12 +1530,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   scheduleGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     gap: '8px',
   },
   scheduleGridMobile: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     gap: '4px',
   },
   scheduleDayCard: {

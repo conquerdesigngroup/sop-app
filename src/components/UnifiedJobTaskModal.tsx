@@ -1060,7 +1060,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   daysGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(80px, 100%), 1fr))',
     gap: '8px',
   },
   dayCheckbox: {
@@ -1118,7 +1118,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   usersGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(220px, 100%), 1fr))',
     gap: '12px',
   },
   userCard: {

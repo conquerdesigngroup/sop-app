@@ -323,7 +323,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(120px, 100%), 1fr))',
     gap: theme.spacing.md,
     marginBottom: theme.spacing.lg,
   },

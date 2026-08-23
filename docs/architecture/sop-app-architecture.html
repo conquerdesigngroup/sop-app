@@ -1,0 +1,1016 @@
+<title>SOP App Architecture Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@1,800&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ---------------------------------------------------------------- tokens
+   Light is the base set. Dark is redefined twice (system + explicit stamp)
+   so all three viewer states resolve. Print falls back to the light set. */
+:root{
+  --void:#FFFFFF; --panel:#F6F6F8; --panel2:#EDEDF1;
+  --txt:#131316; --txt2:#42424C; --smoke:#6C6C77;
+  --rule:#E1E1E7; --rule2:#C4C4CE; --wire:#84848F;
+  --electric:#C10F42;
+  --w-data:#1D4ED8; --w-auth:#A15C07; --w-local:#046C50;
+  --shadow:0 1px 2px rgba(19,19,22,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --void:#0B0B0D; --panel:#161618; --panel2:#1E1E21;
+    --txt:#F4F4F5; --txt2:#C9C9D1; --smoke:#9A9AA4;
+    --rule:#26262B; --rule2:#3A3A42; --wire:#7C7C88;
+    --electric:#E2144F;
+    --w-data:#5A93F7; --w-auth:#F0A227; --w-local:#22C58E;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --void:#0B0B0D; --panel:#161618; --panel2:#1E1E21;
+  --txt:#F4F4F5; --txt2:#C9C9D1; --smoke:#9A9AA4;
+  --rule:#26262B; --rule2:#3A3A42; --wire:#7C7C88;
+  --electric:#E2144F;
+  --w-data:#5A93F7; --w-auth:#F0A227; --w-local:#22C58E;
+  --shadow:none;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--void); color:var(--txt);
+  font-family:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{
+  font-family:'Kanit','Barlow Condensed',system-ui,sans-serif;
+  font-weight:800; font-style:italic; text-transform:uppercase;
+  text-wrap:balance; margin:0; line-height:.98; letter-spacing:-.01em;
+}
+p{margin:0}
+code,.mono{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* ---------------------------------------------------------------- shell */
+.shell{max-width:1360px; margin:0 auto; padding:0 28px 96px}
+.grid{display:grid; grid-template-columns:1fr; gap:0}
+@media (min-width:1260px){
+  .grid{grid-template-columns:172px minmax(0,1fr); gap:56px; align-items:start}
+}
+.rail{display:none}
+@media (min-width:1260px){
+  .rail{
+    display:block; position:sticky; top:0; padding-top:56px;
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; line-height:1.9;
+  }
+}
+.rail a{display:block; color:var(--smoke); text-decoration:none; letter-spacing:.06em;
+  border-left:2px solid var(--rule); padding-left:10px}
+.rail a:hover,.rail a:focus-visible{color:var(--txt); border-left-color:var(--electric); outline:none}
+.rail .rail-h{color:var(--txt); letter-spacing:.16em; margin-bottom:10px; padding-left:12px}
+
+/* ---------------------------------------------------------------- header */
+header.masthead{padding:64px 0 34px; border-bottom:1px solid var(--rule)}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.22em;
+  color:var(--electric); text-transform:uppercase; margin-bottom:18px;
+}
+h1{font-size:clamp(40px,7vw,78px)}
+.deck{max-width:64ch; color:var(--txt2); margin-top:20px; font-size:16.5px}
+.stamp{
+  display:flex; flex-wrap:wrap; gap:8px 26px; margin-top:26px;
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--smoke);
+  letter-spacing:.04em;
+}
+.stamp b{color:var(--txt2); font-weight:500}
+
+/* ---------------------------------------------------------------- legend */
+.legend{
+  display:flex; flex-wrap:wrap; gap:10px 26px; margin:22px 0 0;
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--txt2);
+}
+.legend span{display:inline-flex; align-items:center; gap:8px}
+.key{width:26px; height:0; border-top:2px solid var(--wire); display:inline-block}
+.key.data{border-top-color:var(--w-data)}
+.key.auth{border-top-color:var(--w-auth)}
+.key.local{border-top-color:var(--w-local)}
+.key.pink{border-top-color:var(--electric)}
+.key.dash{border-top-style:dashed}
+
+/* ---------------------------------------------------------------- plates */
+section.plate{padding:56px 0 8px; border-bottom:1px solid var(--rule)}
+section.plate:last-of-type{border-bottom:none}
+.plate-head{display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; margin-bottom:8px}
+.plate-tag{
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.2em;
+  color:var(--smoke); text-transform:uppercase;
+}
+h2{font-size:clamp(24px,3.2vw,36px)}
+.plate-lede{max-width:72ch; color:var(--txt2); margin:14px 0 26px}
+
+figure{margin:0 0 10px}
+.panel{
+  background:var(--panel); border:1px solid var(--rule2); border-radius:6px;
+  padding:20px; overflow-x:auto; box-shadow:var(--shadow);
+}
+.dg{display:block; width:100%; height:auto; min-width:820px}
+figcaption{
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--smoke);
+  margin-top:12px; max-width:92ch; line-height:1.7;
+}
+figcaption b{color:var(--txt2); font-weight:500}
+
+/* ---------------------------------------------------------------- svg language */
+.dg text{font-family:'JetBrains Mono',ui-monospace,monospace; fill:var(--txt)}
+.dg .t{font-size:12px; font-weight:500}
+.dg .tb{font-size:13px; font-weight:700}
+.dg .s{font-size:10px; fill:var(--smoke)}
+.dg .l{font-size:10px; fill:var(--txt2)}
+.dg .lane{font-size:9.5px; fill:var(--smoke); letter-spacing:.18em}
+.dg .pinktx{fill:var(--electric)}
+.dg .box{fill:var(--void); stroke:var(--rule2); stroke-width:1.1}
+.dg .box2{fill:var(--panel2); stroke:var(--rule2); stroke-width:1.1}
+.dg .grp{fill:none; stroke:var(--rule2); stroke-width:1; stroke-dasharray:5 4}
+.dg .accent{stroke:var(--electric); stroke-width:1.4}
+.dg .e{fill:none; stroke:var(--wire); stroke-width:1.2; marker-end:url(#ah)}
+.dg .e.data{stroke:var(--w-data); marker-end:url(#ah-data)}
+.dg .e.auth{stroke:var(--w-auth); marker-end:url(#ah-auth)}
+.dg .e.local{stroke:var(--w-local); marker-end:url(#ah-local)}
+.dg .e.pink{stroke:var(--electric); marker-end:url(#ah-pink)}
+.dg .e.dash{stroke-dasharray:5 4}
+.dg .e.plain{marker-end:none}
+.dg .tick{stroke:var(--rule2); stroke-width:1}
+.dg .dash-note{stroke-dasharray:5 4}
+.dg .e.both{marker-start:url(#ah)}
+.mk{fill:var(--wire)} .mk-data{fill:var(--w-data)} .mk-auth{fill:var(--w-auth)}
+.mk-local{fill:var(--w-local)} .mk-pink{fill:var(--electric)}
+
+/* ---------------------------------------------------------------- tables */
+.tbl-wrap{overflow-x:auto; border:1px solid var(--rule2); border-radius:6px; background:var(--panel)}
+table{border-collapse:collapse; width:100%; min-width:840px;
+  font-family:'JetBrains Mono',monospace; font-size:11px; font-variant-numeric:tabular-nums}
+th{
+  text-align:left; padding:11px 14px; border-bottom:1px solid var(--rule2);
+  color:var(--smoke); font-weight:500; letter-spacing:.1em; font-size:9.5px; text-transform:uppercase;
+  white-space:nowrap; position:sticky; top:0; background:var(--panel);
+}
+td{padding:9px 14px; border-bottom:1px solid var(--rule); color:var(--txt2); vertical-align:top}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--txt); white-space:nowrap}
+.pill{
+  display:inline-block; padding:1px 7px; border-radius:999px; font-size:9.5px;
+  border:1px solid var(--rule2); color:var(--smoke); white-space:nowrap;
+}
+.pill.admin{border-color:var(--w-auth); color:var(--w-auth)}
+.pill.staff{border-color:var(--rule2); color:var(--txt2)}
+.pill.pub{border-color:var(--electric); color:var(--electric)}
+
+/* ---------------------------------------------------------------- notes */
+.notes{display:grid; gap:14px; grid-template-columns:1fr}
+@media (min-width:900px){.notes{grid-template-columns:1fr 1fr}}
+.note{
+  border:1px solid var(--rule2); border-radius:6px; background:var(--panel);
+  padding:16px 18px; break-inside:avoid;
+}
+.note h3{font-size:15px; margin-bottom:7px}
+.note p{font-size:13.5px; color:var(--txt2)}
+.note .where{
+  font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--smoke);
+  margin-top:9px; display:block; word-break:break-all;
+}
+.note.hot{border-color:var(--electric)}
+.note.hot h3{color:var(--electric)}
+
+/* ---------------------------------------------------------------- print */
+@media print{
+  :root{
+    --void:#FFFFFF; --panel:#FAFAFA; --panel2:#F1F1F4;
+    --txt:#131316; --txt2:#3B3B45; --smoke:#63636E;
+    --rule:#DEDEE4; --rule2:#B4B4BE; --wire:#6E6E7A;
+    --electric:#B80D3E; --w-data:#17439C; --w-auth:#8A4E06; --w-local:#036046;
+    --shadow:none;
+  }
+  @page{size:A4 landscape; margin:11mm}
+  body{font-size:11px}
+  .shell{max-width:none; padding:0}
+  .grid{grid-template-columns:1fr; gap:0}
+  .rail{display:none}
+  header.masthead{padding:0 0 16px}
+  h1{font-size:52px}
+  .deck{font-size:13px; max-width:80ch}
+  section.plate{padding:0 0 6px; break-before:page; border-bottom:none}
+  h2{font-size:23px}
+  .plate-lede{font-size:11.5px; margin-bottom:14px; max-width:none}
+  .panel{padding:8px; overflow:visible}
+  .dg{min-width:0; max-height:436px}
+  figure,.note,.tbl-wrap,.legend{break-inside:avoid}
+  figcaption{font-size:9px}
+  table{min-width:0; font-size:7.8px; line-height:1.25}
+  th{font-size:7.5px; padding:5px 8px; position:static}
+  td{padding:1.9px 8px}
+  .notes{gap:9px}
+  .note{padding:10px 12px}
+  .note p{font-size:9.6px; line-height:1.45}
+  .note h3{font-size:11.5px; margin-bottom:4px}
+  .note .where{font-size:8.4px; margin-top:5px}
+  figcaption{margin-top:8px}
+  a{color:inherit; text-decoration:none}
+}
+</style>
+
+<svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 Z"/></marker>
+    <marker id="ah-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path class="mk-data" d="M0,0 L10,5 L0,10 Z"/></marker>
+    <marker id="ah-auth" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path class="mk-auth" d="M0,0 L10,5 L0,10 Z"/></marker>
+    <marker id="ah-local" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path class="mk-local" d="M0,0 L10,5 L0,10 Z"/></marker>
+    <marker id="ah-pink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path class="mk-pink" d="M0,0 L10,5 L0,10 Z"/></marker>
+  </defs>
+</svg>
+
+<div class="shell">
+<div class="grid">
+
+<nav class="rail" aria-label="Plates">
+  <div class="rail-h">PLATES</div>
+  <a href="#system">SYSTEM</a>
+  <a href="#routing">ROUTING</a>
+  <a href="#providers">PROVIDERS</a>
+  <a href="#wiring">WIRING</a>
+  <a href="#lifecycles">LIFECYCLES</a>
+  <a href="#freshness">FRESHNESS</a>
+  <a href="#routes">ROUTE INDEX</a>
+  <a href="#edges">SHARP EDGES</a>
+</nav>
+
+<main>
+<header class="masthead">
+  <div class="eyebrow">DIDC &middot; SOP App &middot; architecture atlas</div>
+  <h1>How the whole<br>app connects</h1>
+  <p class="deck">
+    Six plates, drawn from the source rather than from memory: what talks to what across the
+    network, how a URL becomes a guarded page, where every piece of state actually lives, and the
+    three flows &mdash; a task, an hour, a family&rsquo;s access code &mdash; that carry the product.
+    One app ships two products from one bundle: a staff operations tool behind a login, and a
+    public parent portal with no account at all.
+  </p>
+  <div class="stamp">
+    <span><b>SOURCE</b> conquerdesigngroup/sop-app @ 9a86370</span>
+    <span><b>STACK</b> React 19 &middot; TypeScript &middot; Supabase &middot; Vercel</span>
+    <span><b>SURFACE</b> 18 staff pages &middot; 8 portal pages &middot; 19 tables</span>
+  </div>
+  <div class="legend">
+    <span><i class="key data"></i> authenticated read/write (JWT)</span>
+    <span><i class="key pink"></i> public / anon surface</span>
+    <span><i class="key auth"></i> auth, gate or approval step</span>
+    <span><i class="key local"></i> device-local storage</span>
+    <span><i class="key dash"></i> conditional or dormant path</span>
+  </div>
+</header>
+
+<!-- ========================================================= PLATE 1 -->
+<section class="plate" id="system">
+  <div class="plate-head">
+    <span class="plate-tag">Plate 1 &middot; System</span>
+  </div>
+  <h2>One bundle, one key,<br>two audiences</h2>
+  <p class="plate-lede">
+    There is no backend of our own. Vercel serves a static React build; every request after that
+    goes from the browser straight to Supabase using the anon key that ships inside the public
+    bundle. That single fact sets the security model: what a signed-out visitor may see is decided
+    entirely by row-level security in Postgres, not by anything the client does.
+  </p>
+
+  <figure>
+    <div class="panel">
+      <svg class="dg" viewBox="0 0 1080 640" role="img" aria-label="System map: Vercel serves the static build to staff and family browsers, which call Supabase directly — staff with a JWT, families as the anon role limited to portal tables — plus browser-local stores and a direct Google Calendar OAuth call.">
+        <text class="lane" x="40" y="48">STATIC HOST &amp; DEVICE</text>
+        <text class="lane" x="830" y="22">THIRD PARTY</text>
+        <text class="lane" x="420" y="140">SUPABASE PROJECT</text>
+
+        <!-- host -->
+        <rect class="box" x="40" y="60" width="240" height="76" rx="4"/>
+        <text class="t" x="56" y="86">Vercel &middot; static host</text>
+        <text class="s" x="56" y="104">build/ + service-worker.js</text>
+        <text class="s" x="56" y="120">rewrite: /* &rarr; index.html</text>
+
+        <!-- browsers -->
+        <rect class="box" x="40" y="180" width="240" height="64" rx="4"/>
+        <text class="t" x="56" y="206">Staff browser</text>
+        <text class="s" x="56" y="224">React 19 SPA &middot; installable PWA</text>
+
+        <rect class="box" x="40" y="264" width="240" height="64" rx="4"/>
+        <text class="t" x="56" y="290">Family browser</text>
+        <text class="s" x="56" y="308">same bundle &middot; no account</text>
+
+        <!-- device stores -->
+        <rect class="grp" x="40" y="370" width="240" height="190" rx="4"/>
+        <text class="lane" x="56" y="392">BROWSER-LOCAL (BOTH)</text>
+        <rect class="box2" x="56" y="402" width="208" height="44" rx="3"/>
+        <text class="t" x="70" y="422">localStorage</text>
+        <text class="s" x="70" y="437">session, events, logs, prefs</text>
+        <rect class="box2" x="56" y="456" width="208" height="44" rx="3"/>
+        <text class="t" x="70" y="476">IndexedDB</text>
+        <text class="s" x="70" y="491">sop_app_offline + write queue</text>
+        <rect class="box2" x="56" y="510" width="208" height="44" rx="3"/>
+        <text class="t" x="70" y="530">Service worker cache</text>
+        <text class="s" x="70" y="545">workbox precache of the shell</text>
+
+        <!-- supabase -->
+        <rect class="grp" x="420" y="150" width="380" height="460" rx="5"/>
+        <text class="s" x="440" y="176">one anon key, shipped in the public bundle</text>
+        <rect class="box" x="440" y="192" width="340" height="52" rx="3"/>
+        <text class="t" x="456" y="213">Auth &middot; JWT session</text>
+        <text class="s" x="456" y="230">email + password, recovery links</text>
+        <rect class="box" x="440" y="258" width="340" height="52" rx="3"/>
+        <text class="t" x="456" y="279">Postgres &middot; 19 tables</text>
+        <text class="s" x="456" y="296">RLS: is_admin() / assigned_to / anon</text>
+        <rect class="box" x="440" y="324" width="340" height="52" rx="3"/>
+        <text class="t" x="456" y="345">RPC &middot; SECURITY DEFINER</text>
+        <text class="s" x="456" y="362">verify_portal_code &middot; set_portal_code</text>
+        <rect class="box" x="440" y="390" width="340" height="52" rx="3"/>
+        <text class="t" x="456" y="411">Triggers</text>
+        <text class="s" x="456" y="428">compute_total &middot; freeze_pay &middot; handle_new_user</text>
+        <rect class="box" x="440" y="456" width="340" height="52" rx="3"/>
+        <text class="t" x="456" y="477">Realtime</text>
+        <text class="s" x="456" y="494">6 postgres_changes channels</text>
+        <rect class="box" x="440" y="522" width="340" height="52" rx="3"/>
+        <text class="t" x="456" y="543">Storage &middot; portal-documents</text>
+        <text class="s" x="456" y="560">private bucket, 1-hour signed URLs</text>
+
+        <!-- third party -->
+        <rect class="box" x="830" y="30" width="210" height="56" rx="4"/>
+        <text class="t" x="846" y="54">Google Calendar</text>
+        <text class="s" x="846" y="71">OAuth 2.0, browser-direct</text>
+        <rect class="box" x="830" y="100" width="210" height="48" rx="4"/>
+        <text class="t" x="846" y="124">Enrollio</text>
+        <text class="s" x="846" y="140">billing &amp; registration</text>
+
+        <!-- edges -->
+        <line class="e" x1="160" y1="136" x2="160" y2="176"/>
+        <text class="l" x="172" y="157">app shell</text>
+
+        <line class="e data" x1="280" y1="206" x2="416" y2="206"/>
+        <text class="l" x="292" y="196">JWT &middot; authenticated</text>
+        <line class="e data" x1="420" y1="232" x2="284" y2="232"/>
+        <text class="l" x="292" y="248">postgres_changes push</text>
+
+        <line class="e pink" x1="280" y1="296" x2="416" y2="296"/>
+        <text class="l pinktx" x="290" y="288">anon role</text>
+        <text class="s pinktx" x="290" y="311">portal_* tables only</text>
+
+        <polyline class="e local" points="40,212 20,212 20,466 36,466"/>
+        <line class="e local" x1="160" y1="328" x2="160" y2="366"/>
+        <text class="l" x="172" y="352">cache &middot; queue &middot; prefs</text>
+
+        <polyline class="e auth" points="250,180 250,168 340,168 340,58 826,58"/>
+        <text class="l" x="356" y="48">OAuth 2.0 &middot; calendar.events (no server hop)</text>
+        <polyline class="e dash" points="700,58 700,124 826,124"/>
+        <text class="l" x="712" y="118">link out</text>
+      </svg>
+    </div>
+    <figcaption>
+      <b>Read it left to right.</b> Vercel is only a file server &mdash; it never sees app data. The two
+      browsers run identical code and differ only in the Postgres role their requests carry, which is
+      why the anon predicate on <code>portal_*</code> is the whole boundary between a family and the
+      staff tables. Google Calendar is called from the browser with a token kept in localStorage;
+      Enrollio is a plain outbound link.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ========================================================= PLATE 2 -->
+<section class="plate" id="routing">
+  <div class="plate-head">
+    <span class="plate-tag">Plate 2 &middot; Routing &amp; access</span>
+  </div>
+  <h2>The fork at the<br>front door</h2>
+  <p class="plate-lede">
+    <code>/</code> is a chooser, not a login &mdash; and it is shown on every visit with no
+    remembered side. Staff go left into a session-guarded app where a second guard splits admin
+    from team. Families go right into pages that never authenticate at all; their gate is a bcrypt
+    code checked by a database function, remembered per device.
+  </p>
+
+  <figure>
+    <div class="panel">
+      <svg class="dg" viewBox="0 0 1080 790" role="img" aria-label="Routing map: the chooser at slash splits into a staff branch guarded by ProtectedRoute and adminOnly, and a family portal branch guarded by ProgramGate and the verify_portal_code RPC, plus three special entrances.">
+        <!-- chooser -->
+        <rect class="box" x="400" y="40" width="280" height="64" rx="4"/>
+        <text class="tb" x="418" y="66">/</text>
+        <text class="t" x="440" y="66">ChooserPage</text>
+        <text class="s" x="418" y="86">public &middot; no remembered side</text>
+
+        <polyline class="e" points="470,104 470,138 250,138 250,164"/>
+        <polyline class="e" points="610,104 610,138 800,138 800,164"/>
+        <text class="lane" x="284" y="132">STAFF</text>
+        <text class="lane" x="700" y="132">FAMILIES</text>
+
+        <!-- staff branch -->
+        <rect class="box" x="110" y="166" width="280" height="58" rx="4"/>
+        <text class="tb" x="126" y="190">/login</text>
+        <text class="s" x="126" y="209">PublicRoute &mdash; session? &rarr; /dashboard</text>
+
+        <line class="e" x1="250" y1="224" x2="250" y2="256"/>
+        <rect class="box" x="110" y="258" width="280" height="64" rx="4"/>
+        <text class="t" x="126" y="284">supabase.auth.signInWithPassword</text>
+        <text class="s" x="126" y="303">&rarr; profiles row &rarr; role: admin | team</text>
+
+        <line class="e auth" x1="250" y1="322" x2="250" y2="352"/>
+        <rect class="box accent" x="110" y="354" width="280" height="64" rx="4"/>
+        <text class="t" x="126" y="380">ProtectedRoute</text>
+        <text class="s" x="126" y="399">loading &rarr; spinner &middot; no session &rarr; /login</text>
+
+        <polyline class="e" points="250,418 250,436 135,436 135,454"/>
+        <polyline class="e auth" points="250,418 250,436 365,436 365,454"/>
+
+        <rect class="box" x="40" y="456" width="190" height="192" rx="4"/>
+        <text class="lane" x="54" y="478">ANY SIGNED-IN USER</text>
+        <text class="s" x="54" y="500">/dashboard</text>
+        <text class="s" x="54" y="516">/my-tasks</text>
+        <text class="s" x="54" y="532">/sop</text>
+        <text class="s" x="54" y="548">/calendar</text>
+        <text class="s" x="54" y="564">/hours-input</text>
+        <text class="s" x="54" y="580">/hours</text>
+        <text class="s" x="54" y="596">/alerts</text>
+        <text class="s" x="54" y="612">/profile</text>
+        <text class="s" x="54" y="628">/settings</text>
+
+        <rect class="box" x="270" y="456" width="190" height="152" rx="4"/>
+        <text class="lane" x="284" y="478">ADMINONLY</text>
+        <text class="s" x="284" y="500">/job-tasks</text>
+        <text class="s" x="284" y="516">/task-library</text>
+        <text class="s" x="284" y="532">/team</text>
+        <text class="s" x="284" y="548">/activity-log</text>
+        <text class="s" x="284" y="564">/archive</text>
+        <text class="s" x="284" y="592">team member &rarr; /dashboard</text>
+
+        <!-- family branch -->
+        <rect class="box" x="660" y="166" width="280" height="58" rx="4"/>
+        <text class="tb" x="676" y="190">/portal</text>
+        <text class="s" x="676" y="209">PortalHome &mdash; lists active programs</text>
+
+        <line class="e pink" x1="800" y1="224" x2="800" y2="256"/>
+        <rect class="box accent" x="660" y="258" width="280" height="78" rx="4"/>
+        <text class="t" x="676" y="282">/portal/:program &middot; ProgramGate</text>
+        <text class="s" x="676" y="300">layout route &mdash; isProgramSlug(slug)?</text>
+        <text class="s" x="676" y="318">hasAccess(slug) in localStorage?</text>
+
+        <line class="e auth" x1="750" y1="336" x2="750" y2="376"/>
+        <text class="l" x="758" y="362">no code yet</text>
+        <line class="e auth" x1="910" y1="380" x2="910" y2="340"/>
+        <text class="l" x="902" y="362" text-anchor="end">verified</text>
+
+        <rect class="box" x="660" y="380" width="280" height="76" rx="4"/>
+        <text class="t" x="676" y="404">Access code form</text>
+        <text class="s" x="676" y="422">verify_portal_code(slug, code) &mdash; RPC</text>
+        <text class="s" x="676" y="440">bcrypt hash never leaves Postgres</text>
+
+        <line class="e pink" x1="800" y1="456" x2="800" y2="492"/>
+        <polyline class="e pink" points="940,298 980,298 980,534 944,534"/>
+        <text class="l" x="986" y="300">already</text>
+        <text class="l" x="986" y="314">granted</text>
+
+        <rect class="box" x="660" y="496" width="280" height="176" rx="4"/>
+        <text class="lane" x="676" y="518">CHILD ROUTES &middot; &lt;OUTLET/&gt;</text>
+        <text class="s" x="676" y="542">index &rarr; ProgramHome</text>
+        <text class="s" x="676" y="558">classes &rarr; ProgramClasses</text>
+        <text class="s" x="676" y="574">classes/:classId &rarr; ClassDetail</text>
+        <text class="s" x="676" y="590">updates &rarr; ProgramUpdates</text>
+        <text class="s" x="676" y="606">documents &rarr; ProgramDocuments</text>
+        <text class="s" x="676" y="622">calendar &rarr; ProgramCalendar</text>
+
+        <!-- special entrances -->
+        <text class="lane" x="40" y="692">ENTRANCES THAT BYPASS BOTH GUARDS</text>
+        <rect class="box2" x="40" y="700" width="320" height="70" rx="4"/>
+        <text class="t" x="56" y="724">/auth/callback</text>
+        <text class="s" x="56" y="742">Google OAuth code &rarr; tokens</text>
+        <text class="s" x="56" y="758">stored in localStorage, not Postgres</text>
+
+        <rect class="box2" x="380" y="700" width="320" height="70" rx="4"/>
+        <text class="t" x="396" y="724">/reset-password</text>
+        <text class="s" x="396" y="742">recovery token creates a session</text>
+        <text class="s" x="396" y="758">deliberately NOT a PublicRoute</text>
+
+        <rect class="box2" x="720" y="700" width="320" height="70" rx="4"/>
+        <text class="t" x="736" y="724">* &middot; NotFoundRedirect</text>
+        <text class="s" x="736" y="742">waits for the session check, then</text>
+        <text class="s" x="736" y="758">session ? /dashboard : / (chooser)</text>
+      </svg>
+    </div>
+    <figcaption>
+      <b>Two guards, two mechanisms.</b> The staff guard is client-side and advisory &mdash; it decides
+      what renders, while RLS decides what is actually returned. The family gate is server-side:
+      <code>verify_portal_code</code> is SECURITY DEFINER over a table with no grants, so a wrong guess
+      learns nothing. Staff chrome is suppressed on portal paths by
+      <code>showStaffChrome = isAuthenticated &amp;&amp; !isPortalPath(pathname)</code>, which is what keeps an
+      admin previewing the portal from seeing the staff header bleed through.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ========================================================= PLATE 3 -->
+<section class="plate" id="providers">
+  <div class="plate-head">
+    <span class="plate-tag">Plate 3 &middot; Provider tree</span>
+  </div>
+  <h2>Fifteen layers,<br>one straight line</h2>
+  <p class="plate-lede">
+    Every provider in <code>App.tsx</code> wraps the next &mdash; there are no siblings, so the tree is
+    really a chain. That matters for two reasons: anything above <code>Router</code> mounts on
+    <em>every</em> route including the public portal, and a context that fetches on mount without
+    checking for a session will fire requests on a family&rsquo;s device. Only
+    <code>PortalProvider</code> is scoped to its routes.
+  </p>
+
+  <figure>
+    <div class="panel">
+      <svg class="dg" viewBox="0 0 1080 730" role="img" aria-label="Provider nesting chain from ErrorBoundary down to PortalProvider, each row annotated with where that provider keeps its state.">
+        <text class="lane" x="40" y="34">PROVIDER CHAIN &mdash; App.tsx, OUTERMOST FIRST</text>
+        <text class="lane" x="545" y="34">WHERE ITS STATE ACTUALLY LIVES</text>
+        <rect class="box" x="40" y="56" width="480" height="34" rx="3"/>
+        <text class="t" x="54" y="78">ErrorBoundary</text>
+        <text class="s" x="545" y="78">catches any render error below it and shows a recovery screen</text>
+        <polyline class="e plain" points="50,90 50,117 60,117"/>
+        <rect class="box" x="60" y="100" width="460" height="34" rx="3"/>
+        <text class="t" x="74" y="122">ThemeProvider</text>
+        <text class="s" x="545" y="122">localStorage 'theme' &rarr; CSS custom properties stamped on &lt;html&gt;</text>
+        <polyline class="e plain" points="70,134 70,161 80,161"/>
+        <rect class="box" x="80" y="144" width="440" height="34" rx="3"/>
+        <text class="t" x="94" y="166">ToastProvider</text>
+        <text class="s" x="545" y="166">in-memory only; useToast() replaces alert() everywhere</text>
+        <polyline class="e plain" points="90,178 90,205 100,205"/>
+        <rect class="box" x="100" y="188" width="420" height="34" rx="3"/>
+        <text class="t" x="114" y="210">AuthProvider</text>
+        <text class="s" x="545" y="210">supabase.auth session + profiles row + users list; realtime profiles_changes</text>
+        <polyline class="e plain" points="110,222 110,249 120,249"/>
+        <rect class="box" x="120" y="232" width="400" height="34" rx="3"/>
+        <text class="t" x="134" y="254">ActivityLogProvider</text>
+        <text class="s" x="545" y="254">activity_logs table AND a localStorage mirror (dual write)</text>
+        <polyline class="e plain" points="130,266 130,293 140,293"/>
+        <rect class="box" x="140" y="276" width="380" height="34" rx="3"/>
+        <text class="t" x="154" y="298">DataProvider</text>
+        <text class="s" x="545" y="298">holds no state &mdash; a grouping wrapper five providers deep</text>
+        <polyline class="e plain" points="150,310 150,337 160,337"/>
+        <rect class="box" x="160" y="320" width="360" height="34" rx="3"/>
+        <text class="t" x="174" y="342">SOPProvider</text>
+        <text class="s" x="545" y="342">sops; realtime sops_changes; IndexedDB mirror when offline</text>
+        <polyline class="e plain" points="170,354 170,381 180,381"/>
+        <rect class="box" x="180" y="364" width="340" height="34" rx="3"/>
+        <text class="t" x="194" y="386">TaskProvider</text>
+        <text class="s" x="545" y="386">task_templates + job_tasks; two realtime channels</text>
+        <polyline class="e plain" points="190,398 190,425 200,425"/>
+        <rect class="box dash-note" x="200" y="408" width="320" height="34" rx="3"/>
+        <text class="t" x="214" y="430">JobProvider</text>
+        <text class="s" x="545" y="430">jobs table &mdash; mounted, but no page currently consumes it</text>
+        <polyline class="e plain" points="210,442 210,469 220,469"/>
+        <rect class="box accent" x="220" y="452" width="300" height="34" rx="3"/>
+        <text class="t" x="234" y="474">EventProvider</text>
+        <text class="s pinktx" x="545" y="474">localStorage ONLY &mdash; calendar events never reach Postgres</text>
+        <polyline class="e plain" points="230,486 230,513 240,513"/>
+        <rect class="box" x="240" y="496" width="280" height="34" rx="3"/>
+        <text class="t" x="254" y="518">WorkHoursProvider</text>
+        <text class="s" x="545" y="518">work_hours / work_days / work_categories + pay; skips fetch with no session</text>
+        <polyline class="e plain" points="250,530 250,557 260,557"/>
+        <rect class="box" x="260" y="540" width="260" height="34" rx="3"/>
+        <text class="t" x="274" y="562">DashboardSettingsProvider</text>
+        <text class="s" x="545" y="562">localStorage: which dashboard widgets show, and in what order</text>
+        <polyline class="e plain" points="270,574 270,601 280,601"/>
+        <rect class="box" x="280" y="584" width="240" height="34" rx="3"/>
+        <text class="t" x="294" y="606">Router</text>
+        <text class="s" x="545" y="606">BrowserRouter &mdash; everything above it is route-agnostic</text>
+        <polyline class="e plain" points="290,618 290,645 300,645"/>
+        <rect class="box" x="300" y="628" width="220" height="34" rx="3"/>
+        <text class="t" x="314" y="650">AppContent</text>
+        <text class="s" x="545" y="650">Navigation, Routes, OfflineIndicator, SessionExpiryModal</text>
+        <polyline class="e plain" points="310,662 310,689 320,689"/>
+        <rect class="box accent dash-note" x="320" y="672" width="200" height="34" rx="3"/>
+        <text class="t" x="334" y="694">PortalProvider</text>
+        <text class="s pinktx" x="545" y="694">mounted INSIDE Routes on /portal only &mdash; reads portal_* as anon</text>
+      </svg>
+    </div>
+    <figcaption>
+      <b>Two rows to remember.</b> <code>EventProvider</code> is the only data context with no table
+      behind it &mdash; calendar events live in one browser and are invisible to everyone else.
+      <code>JobProvider</code> and its <code>jobs</code> table are wired up but unreachable: the only
+      component calling <code>useJob()</code> is <code>JobForm</code>, which no page imports.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ========================================================= PLATE 4 -->
+<section class="plate" id="wiring">
+  <div class="plate-head">
+    <span class="plate-tag">Plate 4 &middot; Wiring</span>
+  </div>
+  <h2>Every context,<br>and what backs it</h2>
+  <p class="plate-lede">
+    Pages hold almost no data of their own &mdash; they read a context, and each context owns exactly
+    one slice of storage. Trace any value on screen back through this plate and you land on either a
+    Postgres table with an RLS predicate, or a key in the browser that no one else can see.
+  </p>
+
+  <figure>
+    <div class="panel">
+      <svg class="dg" viewBox="0 0 1080 790" role="img" aria-label="Wiring diagram: nine React contexts on the left, each connected to the Postgres tables or browser-local stores that back it.">
+        <text class="lane" x="40" y="62">REACT CONTEXT</text>
+        <text class="lane" x="640" y="62">POSTGRESQL &middot; ROW-LEVEL SECURITY</text>
+        <text class="lane" x="640" y="560">BROWSER-LOCAL &middot; NEVER LEAVES THE DEVICE</text>
+
+        <rect class="grp" x="640" y="70" width="400" height="474" rx="5"/>
+        <rect class="grp" x="640" y="568" width="400" height="180" rx="5"/>
+
+        <!-- left column -->
+        <rect class="box" x="40" y="100" width="250" height="40" rx="3"/><text class="t" x="54" y="125">AuthContext</text>
+        <rect class="box" x="40" y="148" width="250" height="40" rx="3"/><text class="t" x="54" y="173">SOPContext</text>
+        <rect class="box" x="40" y="196" width="250" height="40" rx="3"/><text class="t" x="54" y="221">TaskContext</text>
+        <rect class="box dash-note" x="40" y="244" width="250" height="40" rx="3"/><text class="t" x="54" y="269">JobContext</text>
+        <rect class="box" x="40" y="292" width="250" height="40" rx="3"/><text class="t" x="54" y="317">WorkHoursContext</text>
+        <rect class="box" x="40" y="388" width="250" height="40" rx="3"/><text class="t" x="54" y="413">ActivityLogContext</text>
+        <rect class="box accent" x="40" y="436" width="250" height="40" rx="3"/><text class="t" x="54" y="461">PortalContext</text>
+        <rect class="box accent" x="40" y="596" width="250" height="40" rx="3"/><text class="t" x="54" y="621">EventContext</text>
+        <rect class="box" x="40" y="644" width="250" height="40" rx="3"/><text class="t" x="54" y="663">ThemeContext +</text><text class="t" x="54" y="678">DashboardSettings</text>
+
+        <!-- postgres chips -->
+        <rect class="box" x="660" y="100" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="118">profiles</text><text class="s" x="674" y="133">+ auth.users via GoTrue &middot; handle_new_user trigger</text>
+        <rect class="box" x="660" y="148" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="166">sops</text><text class="s" x="674" y="181">published | draft | archived</text>
+        <rect class="box" x="660" y="196" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="214">task_templates &middot; job_tasks</text><text class="s" x="674" y="229">RLS: is_admin() OR auth.uid() = ANY(assigned_to)</text>
+        <rect class="box dash-note" x="660" y="244" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="262">jobs</text><text class="s" x="674" y="277">schema + context exist; nothing mounts them</text>
+        <rect class="box" x="660" y="292" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="310">work_hours &middot; work_days &middot; work_categories</text><text class="s" x="674" y="325">own rows while pending; admin sees all</text>
+        <rect class="box" x="660" y="340" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="358">employee_pay_rates &middot; work_hours_pay</text><text class="s" x="674" y="373">is_admin() only &mdash; empty arrays for a team member</text>
+        <rect class="box" x="660" y="388" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="406">activity_logs</text><text class="s" x="674" y="421">insert own &middot; read signed-in &middot; delete admin</text>
+        <rect class="box accent" x="660" y="436" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="454">portal_programs / _classes / _updates / _events</text><text class="s" x="674" y="469">+ _documents, _class_instructors &mdash; anon, published only</text>
+        <rect class="box accent" x="660" y="484" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="502">portal_access_codes</text><text class="s" x="674" y="517">no grants, no policy &mdash; reachable only via RPC</text>
+
+        <!-- device chips -->
+        <rect class="box2" x="660" y="592" width="360" height="44" rx="3"/>
+        <text class="t" x="674" y="610">localStorage</text><text class="s" x="674" y="626">auth session &middot; events &middot; tags &middot; logs &middot; prefs &middot; gate</text>
+        <rect class="box2" x="660" y="644" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="662">IndexedDB &middot; sop_app_offline</text><text class="s" x="674" y="677">sops, job_tasks, task_templates, users, pending_changes</text>
+        <rect class="box2" x="660" y="692" width="360" height="40" rx="3"/>
+        <text class="t" x="674" y="710">Service worker cache</text><text class="s" x="674" y="725">app shell only &mdash; no API responses</text>
+
+        <!-- edges -->
+        <line class="e data" x1="290" y1="120" x2="656" y2="120"/><text class="l" x="330" y="114">select &middot; update &middot; realtime</text>
+        <line class="e data" x1="290" y1="168" x2="656" y2="168"/><text class="l" x="330" y="162">CRUD &middot; realtime</text>
+        <line class="e data" x1="290" y1="216" x2="656" y2="216"/><text class="l" x="330" y="210">CRUD &middot; two channels</text>
+        <line class="e dash" x1="290" y1="264" x2="656" y2="264"/><text class="l" x="330" y="258">dormant</text>
+        <line class="e data" x1="290" y1="312" x2="656" y2="308"/><text class="l" x="330" y="303">CRUD &middot; realtime</text>
+        <line class="e auth" x1="290" y1="322" x2="656" y2="358"/><text class="l" x="330" y="345">read-only, admin</text>
+        <line class="e data" x1="290" y1="408" x2="656" y2="404"/><text class="l" x="330" y="399">insert &middot; select</text>
+        <line class="e pink" x1="290" y1="456" x2="656" y2="452"/><text class="l" x="340" y="447">select as anon</text>
+        <line class="e pink" x1="290" y1="466" x2="656" y2="502"/><text class="l" x="340" y="490">verify_portal_code() only</text>
+        <polyline class="e local" points="290,414 316,414 316,600 656,600"/><text class="l" x="326" y="594">mirror write</text>
+        <line class="e local" x1="290" y1="616" x2="656" y2="616"/><text class="l" x="340" y="610">the only store there is</text>
+        <line class="e local" x1="290" y1="664" x2="656" y2="630"/><text class="l" x="400" y="656">prefs</text>
+        <polyline class="e local dash" points="40,222 20,222 20,706 616,706 616,664 656,664"/>
+        <text class="l" x="120" y="698">offline queue, replayed on reconnect</text>
+      </svg>
+    </div>
+    <figcaption>
+      <b>The right-hand column is the real API.</b> Nine contexts, nine slices &mdash; near enough
+      one-to-one, which is why almost every wire runs straight across. The exceptions carry the
+      warnings: pay tables are a second, admin-gated read off the hours context; the portal access
+      code is reachable only through a function, never a table read; and
+      <code>EventContext</code>&rsquo;s only wire goes to the device.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ========================================================= PLATE 5 -->
+<section class="plate" id="lifecycles">
+  <div class="plate-head">
+    <span class="plate-tag">Plate 5 &middot; Lifecycles</span>
+  </div>
+  <h2>Three flows that<br>carry the product</h2>
+  <p class="plate-lede">
+    Everything else is scaffolding around these: a task moving from a library entry to a completed
+    checklist, an hour moving from a phone in the field to frozen payroll, and a family moving from a
+    link to a document. Each one crosses a boundary where the database, not the client, is the
+    authority.
+  </p>
+
+  <figure>
+    <div class="panel">
+      <svg class="dg" viewBox="0 0 1080 620" role="img" aria-label="Three horizontal lifecycles: a task from template to completion, an hours entry from logging through approval to frozen pay, and a family from portal link through the access code to a signed document URL.">
+        <text class="lane" x="25" y="40">A &nbsp;&middot;&nbsp; A TASK &mdash; FROM LIBRARY TO DONE</text>
+        <rect class="box" x="25" y="56" width="165" height="74" rx="4"/>
+        <text class="t" x="38" y="80">Library template</text>
+        <text class="s" x="38" y="99">task_templates</text>
+        <text class="s" x="38" y="116">TaskLibraryPage &middot; admin</text>
+        <line class="e" x1="190" y1="93" x2="237" y2="93"/>
+        <text class="l" x="213" y="85" text-anchor="middle">create</text>
+        <rect class="box" x="241" y="56" width="165" height="74" rx="4"/>
+        <text class="t" x="254" y="80">Assign</text>
+        <text class="s" x="254" y="99">job_tasks INSERT</text>
+        <text class="s" x="254" y="116">assigned_to[] &middot; date</text>
+        <line class="e" x1="406" y1="93" x2="453" y2="93"/>
+        <text class="l" x="429" y="85" text-anchor="middle">insert</text>
+        <rect class="box accent" x="457" y="56" width="165" height="74" rx="4"/>
+        <text class="t" x="470" y="80">Delivery</text>
+        <text class="s" x="470" y="99">RLS: assignee OR admin</text>
+        <text class="s" x="470" y="116">team sees only its own</text>
+        <line class="e" x1="622" y1="93" x2="669" y2="93"/>
+        <text class="l" x="645" y="85" text-anchor="middle">fetch</text>
+        <rect class="box" x="673" y="56" width="165" height="74" rx="4"/>
+        <text class="t" x="686" y="80">Do the steps</text>
+        <text class="s" x="686" y="99">completed_steps[]</text>
+        <text class="s" x="686" y="116">&rarr; progress_percentage</text>
+        <line class="e" x1="838" y1="93" x2="885" y2="93"/>
+        <text class="l" x="861" y="85" text-anchor="middle">done</text>
+        <rect class="box" x="889" y="56" width="165" height="74" rx="4"/>
+        <text class="t" x="902" y="80">Complete</text>
+        <text class="s" x="902" y="99">status: completed</text>
+        <text class="s" x="902" y="116">Dashboard + Alerts</text>
+        <text class="s" x="25" y="154">Archive instead of delete: status &rarr; archived, visible on /archive, restorable by an admin.</text>
+        <text class="s" x="25" y="169">Every transition also writes an activity_logs row.</text>
+        <text class="lane" x="25" y="250">B &nbsp;&middot;&nbsp; AN HOUR &mdash; FROM ENTRY TO PAYROLL</text>
+        <rect class="box" x="25" y="266" width="165" height="74" rx="4"/>
+        <text class="t" x="38" y="290">Log hours</text>
+        <text class="s" x="38" y="309">HoursInputPage</text>
+        <text class="s" x="38" y="326">employee_id = self</text>
+        <line class="e" x1="190" y1="303" x2="237" y2="303"/>
+        <text class="l" x="213" y="295" text-anchor="middle">insert</text>
+        <rect class="box accent" x="241" y="266" width="165" height="74" rx="4"/>
+        <text class="t" x="254" y="290">compute_total</text>
+        <text class="s" x="254" y="309">DB trigger</text>
+        <text class="s" x="254" y="326">start/end/break &rarr; hours</text>
+        <line class="e" x1="406" y1="303" x2="453" y2="303"/>
+        <text class="l" x="429" y="295" text-anchor="middle">on save</text>
+        <rect class="box" x="457" y="266" width="165" height="74" rx="4"/>
+        <text class="t" x="470" y="290">Review</text>
+        <text class="s" x="470" y="309">WorkHoursPage &middot; admin</text>
+        <text class="s" x="470" y="326">approve or reject</text>
+        <line class="e" x1="622" y1="303" x2="669" y2="303"/>
+        <text class="l" x="645" y="295" text-anchor="middle">list</text>
+        <rect class="box accent" x="673" y="266" width="165" height="74" rx="4"/>
+        <text class="t" x="686" y="290">freeze_pay</text>
+        <text class="s" x="686" y="309">DB trigger on approve</text>
+        <text class="s" x="686" y="326">rate frozen right then</text>
+        <line class="e" x1="838" y1="303" x2="885" y2="303"/>
+        <text class="l" x="861" y="295" text-anchor="middle">approve</text>
+        <rect class="box" x="889" y="266" width="165" height="74" rx="4"/>
+        <text class="t" x="902" y="290">Payroll</text>
+        <text class="s" x="902" y="309">work_hours_pay</text>
+        <text class="s" x="902" y="326">admin-only by RLS</text>
+        <text class="s" x="25" y="364">The rate is frozen at first approval, not read live &mdash; a later rate change never rewrites history.</text>
+        <text class="s" x="25" y="379">No rate on file sets rate_missing rather than silently paying zero. Rejected entries return to</text>
+        <text class="s" x="25" y="394">pending and become editable again.</text>
+        <text class="lane" x="25" y="430">C &nbsp;&middot;&nbsp; A FAMILY &mdash; FROM LINK TO DOCUMENT</text>
+        <rect class="box accent" x="25" y="446" width="165" height="74" rx="4"/>
+        <text class="t" x="38" y="470">Open a link</text>
+        <text class="s" x="38" y="489">/portal/:program</text>
+        <text class="s" x="38" y="506">no account, no session</text>
+        <line class="e" x1="190" y1="483" x2="237" y2="483"/>
+        <text class="l" x="213" y="475" text-anchor="middle">GET</text>
+        <rect class="box accent" x="241" y="446" width="165" height="74" rx="4"/>
+        <text class="t" x="254" y="470">Device check</text>
+        <text class="s" x="254" y="489">hasAccess(slug)</text>
+        <text class="s" x="254" y="506">localStorage flag</text>
+        <line class="e" x1="406" y1="483" x2="453" y2="483"/>
+        <text class="l" x="429" y="475" text-anchor="middle">no flag</text>
+        <rect class="box accent" x="457" y="446" width="165" height="74" rx="4"/>
+        <text class="t" x="470" y="470">Code</text>
+        <text class="s" x="470" y="489">verify_portal_code()</text>
+        <text class="s" x="470" y="506">SECURITY DEFINER</text>
+        <line class="e" x1="622" y1="483" x2="669" y2="483"/>
+        <text class="l" x="645" y="475" text-anchor="middle">verify</text>
+        <rect class="box" x="673" y="446" width="165" height="74" rx="4"/>
+        <text class="t" x="686" y="470">Content</text>
+        <text class="s" x="686" y="489">anon SELECT</text>
+        <text class="s" x="686" y="506">published rows only</text>
+        <line class="e" x1="838" y1="483" x2="885" y2="483"/>
+        <text class="l" x="861" y="475" text-anchor="middle">open</text>
+        <rect class="box" x="889" y="446" width="165" height="74" rx="4"/>
+        <text class="t" x="902" y="470">Documents</text>
+        <text class="s" x="902" y="489">private bucket</text>
+        <text class="s" x="902" y="506">1-hour signed URL</text>
+        <text class="s" x="25" y="544">A soft gate by design: the hash lives in a table with no grants, but portal content itself is</text>
+        <text class="s" x="25" y="559">anon-readable, so the code stops casual browsing and nothing more. Nothing private belongs there.</text>
+      </svg>
+    </div>
+    <figcaption>
+      <b>Highlighted boxes are where control leaves the browser.</b> RLS decides which tasks come back,
+      two Postgres triggers own the arithmetic and the pay snapshot, and a SECURITY DEFINER function
+      owns the access code. Nothing on these three paths can be talked out of its answer by the client.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ========================================================= PLATE 6 -->
+<section class="plate" id="freshness">
+  <div class="plate-head">
+    <span class="plate-tag">Plate 6 &middot; Freshness &amp; offline</span>
+  </div>
+  <h2>Four ways state<br>gets current</h2>
+  <p class="plate-lede">
+    The app is used on phones, in buildings, by people who lock the screen mid-task. So no single
+    refresh path is trusted: a fetch on mount, a live socket, a re-fetch when the tab comes back, and
+    a queue for writes made with no connection at all.
+  </p>
+
+  <figure>
+    <div class="panel">
+      <svg class="dg" viewBox="0 0 1080 500" role="img" aria-label="Four paths keep in-memory context state current: the initial session-gated fetch, six realtime channels, a refetch when the tab becomes visible, and an IndexedDB write queue replayed on reconnect.">
+        <rect class="box2" x="420" y="190" width="240" height="90" rx="5"/>
+        <text class="tb" x="440" y="222">Context state</text>
+        <text class="s" x="440" y="242">in memory, per tab</text>
+        <text class="s" x="440" y="262">what every page renders from</text>
+
+        <rect class="box" x="60" y="60" width="280" height="86" rx="4"/>
+        <text class="t" x="76" y="86">1 &middot; Initial fetch</text>
+        <text class="s" x="76" y="106">on mount and on session change</text>
+        <text class="s" x="76" y="124">guarded &mdash; no session, no staff query</text>
+
+        <rect class="box" x="740" y="60" width="280" height="86" rx="4"/>
+        <text class="t" x="756" y="86">2 &middot; Realtime</text>
+        <text class="s" x="756" y="106">6 postgres_changes channels</text>
+        <text class="s" x="756" y="124">sops &middot; templates &middot; job_tasks &middot; jobs &middot; hours</text>
+
+        <rect class="box" x="60" y="330" width="280" height="86" rx="4"/>
+        <text class="t" x="76" y="356">3 &middot; Tab becomes visible</text>
+        <text class="s" x="76" y="376">useVisibilityRefresh re-fetches</text>
+        <text class="s" x="76" y="394">catches whatever a dropped socket missed</text>
+
+        <rect class="box" x="740" y="330" width="280" height="86" rx="4"/>
+        <text class="t" x="756" y="356">4 &middot; Offline write queue</text>
+        <text class="s" x="756" y="376">IndexedDB pending_changes, replayed</text>
+        <text class="s" x="756" y="394">sops, job_tasks, task_templates, users only</text>
+
+        <polyline class="e data" points="340,103 400,103 400,208 414,208"/>
+        <text class="l" x="348" y="96">first paint</text>
+        <polyline class="e data" points="740,103 680,103 680,208 666,208"/>
+        <text class="l" x="732" y="96" text-anchor="end">push on INSERT/UPDATE/DELETE</text>
+        <polyline class="e local" points="340,373 400,373 400,262 414,262"/>
+        <text class="l" x="348" y="366">on visibilitychange</text>
+        <polyline class="e local" points="740,373 680,373 680,262 666,262"/>
+        <text class="l" x="732" y="366" text-anchor="end">on reconnect</text>
+
+        <rect class="grp" x="60" y="440" width="960" height="46" rx="4"/>
+        <text class="t" x="76" y="462">Service worker &middot; workbox</text>
+        <text class="s" x="76" y="478">Precaches the app shell only, never API responses. index.html and manifest.json are served no-store, so a deploy lands on the next load.</text>
+      </svg>
+    </div>
+    <figcaption>
+      <b>The queue is narrower than it looks.</b> Only four stores replay on reconnect &mdash; hours,
+      events, portal content and activity logs are not queued, so a write made offline on those
+      screens is lost rather than deferred.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ========================================================= ROUTE INDEX -->
+<section class="plate" id="routes">
+  <div class="plate-head">
+    <span class="plate-tag">Index &middot; Routes</span>
+  </div>
+  <h2>Every URL,<br>end to end</h2>
+  <p class="plate-lede">
+    The same map as Plate 2, in the form you actually search: URL, the component behind it, who gets
+    in, and what it reads.
+  </p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Route</th><th>Component</th><th>Access</th><th>Contexts</th><th>Backing data</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>/</td><td>ChooserPage</td><td><span class="pill pub">public</span></td><td>Theme</td><td>&mdash; (static + Enrollio link)</td></tr>
+        <tr><td>/login</td><td>Login</td><td><span class="pill pub">public</span></td><td>Auth, Theme</td><td>auth.users, profiles</td></tr>
+        <tr><td>/auth/callback</td><td>AuthCallback</td><td><span class="pill pub">public</span></td><td>&mdash;</td><td>Google OAuth &rarr; localStorage</td></tr>
+        <tr><td>/reset-password</td><td>ResetPassword</td><td><span class="pill pub">public</span></td><td>&mdash;</td><td>auth.users (recovery token)</td></tr>
+        <tr><td>/dashboard</td><td>Dashboard</td><td><span class="pill staff">signed in</span></td><td>Auth, SOP, Task, Event, WorkHours, DashboardSettings</td><td>sops, job_tasks, work_days, localStorage</td></tr>
+        <tr><td>/my-tasks</td><td>MyTasksPage</td><td><span class="pill staff">signed in</span></td><td>Auth, Task, SOP, Toast</td><td>job_tasks (own rows), sops</td></tr>
+        <tr><td>/sop</td><td>SOPPage</td><td><span class="pill staff">signed in</span></td><td>Auth, SOP, Confirm</td><td>sops</td></tr>
+        <tr><td>/calendar</td><td>CalendarPage</td><td><span class="pill staff">signed in</span></td><td>Auth, Event, Task, WorkHours, Toast</td><td>job_tasks, work_days, localStorage events</td></tr>
+        <tr><td>/hours-input</td><td>HoursInputPage</td><td><span class="pill staff">signed in</span></td><td>Auth, WorkHours, Toast, Confirm</td><td>work_hours, work_categories</td></tr>
+        <tr><td>/hours</td><td>WorkHoursPage</td><td><span class="pill staff">signed in</span></td><td>Auth, WorkHours, Toast, Confirm</td><td>work_hours, work_days, pay tables (admin)</td></tr>
+        <tr><td>/alerts</td><td>AlertsPage</td><td><span class="pill staff">signed in</span></td><td>Auth, Task, Toast</td><td>job_tasks (derived, no table of its own)</td></tr>
+        <tr><td>/profile</td><td>ProfilePage</td><td><span class="pill staff">signed in</span></td><td>Auth, Toast</td><td>profiles</td></tr>
+        <tr><td>/settings</td><td>SettingsPage</td><td><span class="pill staff">signed in</span></td><td>Auth, SOP, Task, Theme, Toast</td><td>prefs + data-integrity checks across tables</td></tr>
+        <tr><td>/job-tasks</td><td>JobTasksPage</td><td><span class="pill admin">admin</span></td><td>Auth, Task, SOP, Toast, Confirm</td><td>job_tasks, task_templates</td></tr>
+        <tr><td>/task-library</td><td>TaskLibraryPage</td><td><span class="pill admin">admin</span></td><td>Task, Toast, Confirm</td><td>task_templates</td></tr>
+        <tr><td>/team</td><td>TeamManagementPage</td><td><span class="pill admin">admin</span></td><td>Auth, Toast, Confirm</td><td>profiles, employee_pay_rates</td></tr>
+        <tr><td>/activity-log</td><td>ActivityLogPage</td><td><span class="pill admin">admin</span></td><td>Auth, ActivityLog</td><td>activity_logs + localStorage mirror</td></tr>
+        <tr><td>/archive</td><td>ArchivePage</td><td><span class="pill admin">admin</span></td><td>SOP, Task</td><td>sops + job_tasks where status = archived</td></tr>
+        <tr><td>/portal</td><td>PortalHome</td><td><span class="pill pub">public</span></td><td>Portal</td><td>portal_programs</td></tr>
+        <tr><td>/portal/:program</td><td>ProgramGate &rarr; ProgramHome</td><td><span class="pill pub">code</span></td><td>Portal</td><td>portal_programs, verify_portal_code()</td></tr>
+        <tr><td>/portal/:program/classes</td><td>ProgramClasses</td><td><span class="pill pub">code</span></td><td>Portal</td><td>portal_classes, portal_class_instructors</td></tr>
+        <tr><td>/portal/:program/classes/:id</td><td>ClassDetail</td><td><span class="pill pub">code</span></td><td>Portal</td><td>portal_classes, portal_updates</td></tr>
+        <tr><td>/portal/:program/updates</td><td>ProgramUpdates</td><td><span class="pill pub">code</span></td><td>Portal</td><td>portal_updates (published only)</td></tr>
+        <tr><td>/portal/:program/documents</td><td>ProgramDocuments</td><td><span class="pill pub">code</span></td><td>Portal</td><td>portal_documents + signed storage URLs</td></tr>
+        <tr><td>/portal/:program/calendar</td><td>ProgramCalendar</td><td><span class="pill pub">code</span></td><td>Portal</td><td>portal_events</td></tr>
+        <tr><td>*</td><td>NotFoundRedirect</td><td><span class="pill pub">public</span></td><td>Auth</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========================================================= SHARP EDGES -->
+<section class="plate" id="edges">
+  <div class="plate-head">
+    <span class="plate-tag">Notes &middot; Sharp edges</span>
+  </div>
+  <h2>What the diagrams<br>won&rsquo;t warn you about</h2>
+  <p class="plate-lede">
+    Seven things that are true of this codebase today and are easy to get wrong when changing it.
+  </p>
+
+  <div class="notes">
+    <div class="note hot">
+      <h3>Calendar events never leave the device</h3>
+      <p>
+        <code>EventContext</code> reads and writes three localStorage keys and has no Supabase call at
+        all &mdash; no <code>events</code> table exists. Two people looking at the same calendar see
+        different events, and clearing site data deletes them. Tasks on that same calendar
+        <em>are</em> shared, which makes the split easy to miss.
+      </p>
+      <span class="where">src/contexts/EventContext.tsx</span>
+    </div>
+
+    <div class="note">
+      <h3>Staff contexts mount on portal routes</h3>
+      <p>
+        <code>DataProvider</code> sits above <code>Router</code>, so every staff context mounts for a
+        signed-out family too. <code>WorkHoursContext</code> short-circuits its fetch and its channel
+        when there is no session, which is what got a portal load down to three requests. A new
+        context that fetches unguarded puts those requests back.
+      </p>
+      <span class="where">src/App.tsx &middot; src/contexts/PortalContext.tsx (header)</span>
+    </div>
+
+    <div class="note">
+      <h3>Pay data is gated in the database, not the UI</h3>
+      <p>
+        <code>employee_pay_rates</code> and <code>work_hours_pay</code> are RLS-gated on
+        <code>is_admin()</code>, so for a team member the context arrays are simply empty. There is no
+        client-side filter to preserve &mdash; and equally, none to rely on if you ever loosen those
+        policies.
+      </p>
+      <span class="where">src/contexts/WorkHoursContext.tsx &middot; migration v7</span>
+    </div>
+
+    <div class="note hot">
+      <h3>The portal gate is soft, on purpose</h3>
+      <p>
+        Portal content is readable by the <code>anon</code> role because a portal with no login has to
+        be. The bcrypt code stops casual browsing; it cannot stop anyone holding the anon key, which
+        ships in the public bundle. Nothing private belongs in <code>portal_*</code> content.
+      </p>
+      <span class="where">migration v9 header &middot; src/pages/portal/ProgramGate.tsx</span>
+    </div>
+
+    <div class="note">
+      <h3>Activity logs are written twice</h3>
+      <p>
+        <code>logActivity()</code> inserts into <code>activity_logs</code> and mirrors to
+        localStorage, and the log page reads both. The mirror is per-device and uncapped, so an
+        admin&rsquo;s history looks different on their laptop than on their phone.
+      </p>
+      <span class="where">src/utils/activityLogger.ts &middot; src/contexts/ActivityLogContext.tsx</span>
+    </div>
+
+    <div class="note">
+      <h3>Jobs are wired but unreachable</h3>
+      <p>
+        <code>JobProvider</code> mounts, subscribes to a realtime channel and queries the
+        <code>jobs</code> table on every staff load, but the only consumer of <code>useJob()</code> is
+        <code>JobForm</code>, which no page imports. <code>work_schedule_templates</code> has no client
+        code at all. Both are cost with no surface.
+      </p>
+      <span class="where">src/contexts/JobContext.tsx &middot; src/components/JobForm.tsx</span>
+    </div>
+
+    <div class="note">
+      <h3>Offline covers four stores, not the app</h3>
+      <p>
+        The IndexedDB queue replays <code>sops</code>, <code>job_tasks</code>,
+        <code>task_templates</code> and users. Hours, calendar events, portal content and logs are not
+        queued &mdash; on those screens an offline write fails rather than waiting for reconnection.
+      </p>
+      <span class="where">src/lib/indexedDB.ts &middot; src/hooks/useOfflineSync.ts</span>
+    </div>
+
+    <div class="note">
+      <h3>Theme tokens are CSS variables, not hex</h3>
+      <p>
+        <code>theme.colors.bg.*</code> resolves to <code>var(--c-bg-primary, …)</code>. Concatenating an
+        alpha suffix onto one, or passing one as an SVG presentation attribute, silently produces an
+        invalid value &mdash; the element renders with no colour rather than throwing.
+      </p>
+      <span class="where">src/theme.ts &middot; CLAUDE.md</span>
+    </div>
+  </div>
+</section>
+
+</main>
+</div>
+</div>

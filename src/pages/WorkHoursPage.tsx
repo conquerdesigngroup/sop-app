@@ -2285,7 +2285,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   summaryContainer: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))',
     gap: '20px',
   },
   summaryCard: {
@@ -2581,7 +2581,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   // Date picker grid styles
   dateGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     gap: '8px',
   },
   dateButton: {
@@ -2773,7 +2773,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   scheduleCalendarGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     gap: '2px',
     marginBottom: '10px',
   },
@@ -3137,7 +3137,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   calendarGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     gap: '1px',
     backgroundColor: theme.colors.bdr.primary,
     borderRadius: theme.borderRadius.md,
@@ -3369,12 +3369,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   weekViewGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     gap: '8px',
   },
   weekViewGridMobile: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, minmax(80px, 1fr))',
+    gridTemplateColumns: 'repeat(7, minmax(min(80px, 100%), 1fr))',
     gap: '6px',
     minWidth: '600px',
   },

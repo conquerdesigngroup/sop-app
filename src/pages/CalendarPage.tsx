@@ -1686,11 +1686,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   calendar: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
   },
   calendarMobile: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
   },
   dayHeader: {
     textAlign: 'center' as const,
@@ -1717,6 +1717,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRight: `1px solid ${theme.colors.bdr.primary}`,
   },
   calendarDay: {
+    textAlign: 'center' as const,
     height: '110px',
     padding: '6px',
     backgroundColor: theme.colors.bg.secondary,
@@ -1729,6 +1730,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column' as const,
   },
   calendarDayMobile: {
+    textAlign: 'center' as const,
     height: '80px',
     padding: '4px',
     backgroundColor: theme.colors.bg.secondary,
@@ -1741,12 +1743,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column' as const,
   },
   calendarDayEmpty: {
+    textAlign: 'center' as const,
     height: '110px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRight: `1px solid ${theme.colors.bdr.primary}`,
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
   calendarDayEmptyMobile: {
+    textAlign: 'center' as const,
     height: '80px',
     backgroundColor: theme.colors.bg.tertiary,
     borderRight: `1px solid ${theme.colors.bdr.primary}`,
@@ -1909,7 +1913,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   weekView: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     minHeight: '500px',
   },
   weekDay: {
@@ -2133,7 +2137,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   miniCalGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
     gap: '2px',
   },
   miniCalDayHeader: {
@@ -2158,6 +2162,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
   },
   miniCalDayEmpty: {
+    textAlign: 'center' as const,
     padding: '6px 4px',
   },
 
@@ -2281,7 +2286,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   weekHeaderRow: {
     display: 'grid',
-    gridTemplateColumns: '60px repeat(7, 1fr)',
+    gridTemplateColumns: '60px repeat(7, minmax(0, 1fr))',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
   },
   timeColumnHeader: {
@@ -2289,7 +2294,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   allDayRow: {
     display: 'grid',
-    gridTemplateColumns: '60px repeat(7, 1fr)',
+    gridTemplateColumns: '60px repeat(7, minmax(0, 1fr))',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
     minHeight: '40px',
   },
@@ -2328,7 +2333,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   weekTimeGrid: {
     display: 'grid',
-    gridTemplateColumns: '60px repeat(7, 1fr)',
+    gridTemplateColumns: '60px repeat(7, minmax(0, 1fr))',
     maxHeight: '600px',
     overflowY: 'auto',
   },

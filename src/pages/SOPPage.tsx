@@ -919,7 +919,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   sopGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(350px, 100%), 1fr))',
     gap: '24px',
     padding: '0 24px 24px 24px',
   },
@@ -1179,7 +1179,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   filterTabsMobile: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: '8px',
     padding: '0 0 16px 0',
     borderBottom: `2px solid ${theme.colors.border}`,

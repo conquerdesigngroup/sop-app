@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
+import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
 
 // Icons
@@ -431,6 +432,25 @@ const Navigation: React.FC = () => {
                         )}
                       </Link>
                     ))}
+
+                    {/* Leaves the staff app entirely, so it is separated from
+                        the nav items above and never shows an active state —
+                        the chooser is not a staff destination. */}
+                    <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary, margin: '8px 0'}} />
+                    <Link
+                      to={portalRoutes.chooser}
+                      style={{...styles.mobileNavLink, color: colors.txt.tertiary}}
+                    >
+                      <span style={styles.navIcon}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="3" y="3" width="7" height="7" rx="1" />
+                          <rect x="14" y="3" width="7" height="7" rx="1" />
+                          <rect x="3" y="14" width="7" height="7" rx="1" />
+                          <rect x="14" y="14" width="7" height="7" rx="1" />
+                        </svg>
+                      </span>
+                      Back to menu
+                    </Link>
                   </div>
                 </div>
               </>
@@ -495,6 +515,18 @@ const Navigation: React.FC = () => {
                     </svg>
                   )}
                   {isDark ? 'Light Mode' : 'Dark Mode'}
+                </div>
+                                <div
+                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
+                  onClick={() => navigate(portalRoutes.chooser)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="7" height="7" rx="1" />
+                  </svg>
+                  Back to menu
                 </div>
                 <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
                 <div
@@ -620,6 +652,18 @@ const Navigation: React.FC = () => {
                       </svg>
                     )}
                     {isDark ? 'Light Mode' : 'Dark Mode'}
+                  </div>
+                                    <div
+                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
+                    onClick={() => navigate(portalRoutes.chooser)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                  </svg>
+                    Back to menu
                   </div>
                   <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
                   <div
