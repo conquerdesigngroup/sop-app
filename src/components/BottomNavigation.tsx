@@ -98,7 +98,14 @@ const BottomNavigation: React.FC = () => {
         backgroundColor: colors.bg.secondary,
         borderTop: `1px solid ${colors.bdr.primary}`,
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        zIndex: 1000,
+        // Below Navigation's stacking context (position: sticky, z-index: 100),
+        // not above it. The mobile menu sheet and the user menu live *inside*
+        // Navigation, so their own z-indexes are only ever compared with each
+        // other — against this bar the whole context is judged as one layer.
+        // At 1000 the bar therefore painted over the bottom of the open menu
+        // sheet and swallowed taps on its last row. Still above page content,
+        // which sets no z-index at all.
+        zIndex: 90,
         boxShadow: isDark ? '0 -4px 20px rgba(0, 0, 0, 0.5)' : '0 -4px 20px rgba(0, 0, 0, 0.1)',
       }}
     >

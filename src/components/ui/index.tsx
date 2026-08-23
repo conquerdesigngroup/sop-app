@@ -1057,7 +1057,9 @@ const overlayStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  zIndex: 1000,
+  // Above the fixed bottom navigation (1000), which would otherwise paint
+  // over the dimmed backdrop and through the bottom of every dialog.
+  zIndex: 1100,
   padding: '20px',
 };
 
