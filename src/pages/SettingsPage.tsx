@@ -5,6 +5,7 @@ import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
+import { APP_VERSION } from '../version';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormButton } from '../components/FormComponents';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
@@ -134,7 +135,7 @@ const SettingsPage: React.FC = () => {
       const exportData = {
         exportDate: new Date().toISOString(),
         exportedBy: currentUser?.email || 'Unknown',
-        version: '1.0.6',
+        version: APP_VERSION,
         totalSOPs: sops.length,
         sops: sops.map(sop => ({
           ...sop,
@@ -569,7 +570,7 @@ const SettingsPage: React.FC = () => {
           <div style={styles.aboutInfo}>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>Cache Version</span>
-              <span style={styles.aboutValue}>1.0.6</span>
+              <span style={styles.aboutValue}>{APP_VERSION}</span>
             </div>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>Service Worker</span>
@@ -615,7 +616,7 @@ const SettingsPage: React.FC = () => {
           <div style={styles.aboutInfo}>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>App Version</span>
-              <span style={styles.aboutValue}>1.0.6</span>
+              <span style={styles.aboutValue}>{APP_VERSION}</span>
             </div>
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>Build Date</span>

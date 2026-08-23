@@ -97,8 +97,20 @@ function showUpdateBanner(onUpdate: () => void) {
   const banner = document.createElement('div');
   banner.id = 'sw-update-banner';
   banner.setAttribute('role', 'status');
+  // Sit above the bottom navigation when it is on screen, rather than on top
+  // of it. The banner is built outside React and does not know the route, so
+  // it asks the DOM.
+  const overBottomNav = !!document.querySelector('[data-bottom-nav]');
+  const bottom = overBottomNav
+    ? 'calc(76px + env(safe-area-inset-bottom, 0px))'
+    : 'calc(24px + env(safe-area-inset-bottom, 0px))';
+
   banner.style.cssText = [
-    'position:fixed', 'left:50%', 'bottom:24px', 'transform:translateX(-50%)',
+    // left+right+margin:auto rather than left:50% + translateX: without a width
+    // the box shrink-wrapped, the two fixed-width buttons took what they needed
+    // and the message was left wrapping onto three lines in the remainder.
+    'position:fixed', 'left:16px', 'right:16px', `bottom:${bottom}`,
+    'margin:0 auto', 'max-width:440px',
     'display:flex', 'align-items:center', 'gap:16px',
     'padding:12px 16px 12px 20px', 'border-radius:12px',
     'background:var(--c-bg-secondary, #161618)',
@@ -106,7 +118,7 @@ function showUpdateBanner(onUpdate: () => void) {
     'color:var(--c-txt-primary, #F4F4F5)',
     'box-shadow:var(--shadow-lg, 0 8px 16px rgba(0,0,0,0.7))',
     'font-family:Barlow, -apple-system, sans-serif', 'font-size:14px',
-    'z-index:10000', 'max-width:calc(100vw - 32px)',
+    'z-index:10000',
   ].join(';');
 
   const text = document.createElement('span');
