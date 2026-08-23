@@ -324,24 +324,24 @@ const TeamMemberDashboard: React.FC<{
 
       {/* Stats Row - Compact */}
       <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
-        <div style={styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}>
+        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}>
           <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
           <span style={styles.statLabel}>Pending</span>
         </div>
-        <div style={styles.statDivider} />
-        <div style={styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}>
+        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}>
           <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
           <span style={styles.statLabel}>In Progress</span>
         </div>
-        <div style={styles.statDivider} />
-        <div style={styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}>
+        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}>
           <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
           <span style={styles.statLabel}>Completed</span>
         </div>
         {overdueTasks.length > 0 && (
           <>
-            <div style={styles.statDivider} />
-            <div style={styles.statItem} onClick={() => navigate('/my-tasks')}>
+            <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+            <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks')}>
               <span style={{ ...styles.statNumber, color: theme.colors.status.overdue }}>{overdueTasks.length}</span>
               <span style={styles.statLabel}>Overdue</span>
             </div>
@@ -655,24 +655,24 @@ const AdminDashboard: React.FC<{
 
       {/* Task Stats Row */}
       <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
-        <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'pending' } })}>
+        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'pending' } })}>
           <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
           <span style={styles.statLabel}>Pending</span>
         </div>
-        <div style={styles.statDivider} />
-        <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'in-progress' } })}>
+        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'in-progress' } })}>
           <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
           <span style={styles.statLabel}>In Progress</span>
         </div>
-        <div style={styles.statDivider} />
-        <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'completed' } })}>
+        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'completed' } })}>
           <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
           <span style={styles.statLabel}>Completed</span>
         </div>
         {overdueTasks > 0 && (
           <>
-            <div style={styles.statDivider} />
-            <div style={styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>
+            <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+            <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>
               <span style={{ ...styles.statNumber, color: theme.colors.status.error }}>{overdueTasks}</span>
               <span style={styles.statLabel}>Overdue</span>
             </div>
@@ -1009,18 +1009,37 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
   },
   statsRowMobile: {
-    // Three equal columns rather than a wrapping flex row: "IN PROGRESS" is
-    // wide enough that space-around fitted only two per line and orphaned
-    // "COMPLETED" on a centred second row, which read as a layout mistake.
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-    alignItems: 'center',
-    gap: '8px',
+    // Items share the row equally and the separators are dropped, so the three
+    // stats (four when something is overdue) always sit on one line. Wrapping
+    // put "IN PROGRESS" over two lines and orphaned "COMPLETED" onto a centred
+    // second row; a fixed grid could not express the variable item count and
+    // left the dividers occupying cells of their own.
+    display: 'flex',
+    alignItems: 'stretch',
+    gap: '4px',
     marginBottom: theme.spacing.md,
     padding: '12px',
     backgroundColor: theme.colors.cardBackground,
     border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
+  },
+  statItemMobile: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    // Equal shares of whatever the phone has, and allowed to shrink: without
+    // minWidth 0 the longest label ("In Progress") sets the column width.
+    flex: '1 1 0',
+    minWidth: 0,
+    padding: '4px 2px',
+    textAlign: 'center' as const,
+    borderRadius: theme.borderRadius.md,
+    transition: 'background-color 0.2s',
+  },
+  statDividerMobile: {
+    display: 'none',
   },
   statItem: {
     display: 'flex',

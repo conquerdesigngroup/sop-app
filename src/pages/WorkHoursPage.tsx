@@ -790,7 +790,7 @@ const WorkHoursPage: React.FC = () => {
       {/* Header */}
       <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div>
-          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Work Hours</h1>
+          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Team Schedule</h1>
           <p style={isMobileOrTablet ? styles.subtitleMobile : styles.subtitle}>
             {isAdmin ? 'Manage team schedules and track work hours' : 'Track your schedule and work hours'}
           </p>

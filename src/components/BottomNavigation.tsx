@@ -90,6 +90,7 @@ const BottomNavigation: React.FC = () => {
 
   return (
     <nav
+      data-bottom-nav
       style={{
         position: 'fixed',
         bottom: 0,
