@@ -708,7 +708,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   container: {
     maxWidth: '1400px',
     margin: '0 auto',
-    padding: '12px 40px',
+    // 24px rather than 40px. The desktop header needed a constant 1367px and
+    // so ran off the right edge at every width below that — 1024, 1280 and
+    // 1366 are all common laptops. This and the tighter link padding recover
+    // about 100px, which is enough to keep one row down to 1280.
+    padding: '12px 16px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -858,8 +862,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   leftSection: {
     display: 'flex',
     alignItems: 'center',
-    gap: '32px',
+    gap: '24px',
     flex: 1,
+    // Without this the group refuses to shrink below its content, so the links
+    // could never wrap and the overflow was pushed onto the page instead.
+    minWidth: 0,
   },
   logoContainer: {
     display: 'flex',
@@ -868,9 +875,14 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   navLinks: {
     display: 'flex',
-    gap: '4px',
+    gap: '2px',
+    rowGap: '4px',
     alignItems: 'center',
-    flexWrap: 'nowrap',
+    // Wraps onto a second row below ~1280 instead of running off the page.
+    // Deliberately not `overflow: auto`: the Tasks and Admin dropdowns are
+    // absolutely positioned children and a scroll container would clip them.
+    flexWrap: 'wrap',
+    minWidth: 0,
   },
   logoImage: {
     height: '36px',
@@ -881,7 +893,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '8px 14px',
+    padding: '8px 8px',
     fontSize: '14px',
     fontWeight: '600',
     color: theme.colors.textSecondary,
