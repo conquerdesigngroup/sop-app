@@ -141,7 +141,7 @@ export const RowMeta: React.FC<{ children: React.ReactNode }> = ({ children }) =
 export const FieldPair: React.FC<{ stack: boolean; children: React.ReactNode }> = ({ stack, children }) => (
   <div style={{
     display: 'grid',
-    gridTemplateColumns: stack ? '1fr' : '1fr 1fr',
+    gridTemplateColumns: stack ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
     gap: '12px',
   }}>
     {children}

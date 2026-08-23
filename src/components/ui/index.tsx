@@ -256,6 +256,12 @@ interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, '
   fullWidth?: boolean;
 }
 
+/**
+ * Input types iOS renders with its own sizing and chrome. These are the ones
+ * that overflowed their cards on a phone — every other type sizes normally.
+ */
+const NATIVE_PICKER_TYPES = new Set(['date', 'time', 'datetime-local', 'month', 'week']);
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(({
   label,
   error,
@@ -281,6 +287,19 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
+    // A native date/time control on iOS carries a large intrinsic width and
+    // will not shrink for `width: 100%` alone — it needs permission to go below
+    // its own content size. Harmless for the other types, whose intrinsic width
+    // is small anyway.
+    minWidth: 0,
+    maxWidth: '100%',
+    // ...and the platform styling removed, so iOS stops reserving room for its
+    // own chrome. Scoped to the picker types on purpose: `appearance: none` on
+    // a checkbox or radio renders it invisible, so a future caller passing one
+    // of those must not inherit this.
+    ...(NATIVE_PICKER_TYPES.has(props.type ?? '')
+      ? { WebkitAppearance: 'none' as const, appearance: 'none' as const }
+      : {}),
     backgroundColor: theme.colors.bg.tertiary,
     border: `2px solid ${error ? theme.colors.status.error : theme.colors.bdr.primary}`,
     borderRadius: theme.borderRadius.md,
@@ -296,9 +315,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   };
 
   return (
-    <div style={{ width: fullWidth ? '100%' : 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div style={{ width: fullWidth ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {label && <label style={labelStyle}>{label}</label>}
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', minWidth: 0 }}>
         {leftIcon && (
           <div style={{ ...iconContainerStyle, left: '14px' }}>{leftIcon}</div>
         )}
@@ -438,7 +457,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({
   };
 
   return (
-    <div style={{ width: fullWidth ? '100%' : 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div style={{ width: fullWidth ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {label && <label style={labelStyle}>{label}</label>}
       <select ref={ref} style={selectStyle} disabled={disabled} {...props}>
         {placeholder && <option value="" disabled>{placeholder}</option>}
@@ -491,7 +510,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(({
   };
 
   return (
-    <div style={{ width: fullWidth ? '100%' : 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div style={{ width: fullWidth ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {label && <label style={labelStyle}>{label}</label>}
       <textarea ref={ref} style={textareaStyle} disabled={disabled} {...props} />
       {error && <span style={errorStyle}>{error}</span>}

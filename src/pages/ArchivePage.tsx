@@ -188,7 +188,7 @@ const ArchivePage: React.FC = () => {
           ) : (
             <div style={{
               ...styles.grid,
-              gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
+              gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : isTablet ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
             }}>
               {activeTab === 'sops'
                 ? filteredSOPs.map((sop) => (
