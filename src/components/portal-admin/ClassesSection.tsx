@@ -66,7 +66,9 @@ const ClassesSection: React.FC<{
   loading: boolean;
   error: string | null;
   reload: () => void;
-}> = ({ program, classes, loading, error, reload }) => {
+  /** Opens the class workspace — its files, its updates, its own audience. */
+  onOpenClass?: (classId: string) => void;
+}> = ({ program, classes, loading, error, reload, onOpenClass }) => {
   const {
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors, editableClassIds,
   } = usePortalAdmin();
@@ -168,8 +170,8 @@ const ClassesSection: React.FC<{
           color: theme.colors.txt.tertiary,
           margin: '0 0 16px',
         }}>
-          Classes are managed by an admin. Yours are marked below — those are the ones you can
-          post updates, files and events to.
+          Classes are managed by an admin. Yours are marked below — open one to post its
+          updates and files.
         </p>
       )}
 
@@ -206,14 +208,31 @@ const ClassesSection: React.FC<{
                 </RowMeta>
               </div>
 
-              {isAdmin && (
-                <RowActions
-                  onEdit={() => { setFormError(''); setDraft(toDraft(c)); }}
-                  onDelete={() => handleDelete(c)}
-                  editLabel={`Edit ${c.name}`}
-                  deleteLabel={`Delete ${c.name}`}
-                />
-              )}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                {/* Open is offered to a teacher for their own classes, not just
+                    to admins: posting to the class they hold is the entire
+                    reason the per-class grants exist. Editing the class RECORD
+                    stays admin-only below, because its write policy is. */}
+                {onOpenClass && (isAdmin || editableClassIds.includes(c.id)) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onOpenClass(c.id)}
+                    aria-label={`Open ${c.name}`}
+                  >
+                    Open
+                  </Button>
+                )}
+
+                {isAdmin && (
+                  <RowActions
+                    onEdit={() => { setFormError(''); setDraft(toDraft(c)); }}
+                    onDelete={() => handleDelete(c)}
+                    editLabel={`Edit ${c.name}`}
+                    deleteLabel={`Delete ${c.name}`}
+                  />
+                )}
+              </div>
             </div>
           </Card>
         ))}
