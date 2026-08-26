@@ -4,6 +4,7 @@ import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
+import { isManagementRole } from '../lib/roles';
 import { JobTask } from '../types';
 
 // Types for alerts
@@ -55,9 +56,13 @@ const AlertsPage: React.FC = () => {
 
     const progressMap = new Map<string, TeamMemberProgress>();
 
-    // Initialize all team members
+    // Initialize all team members.
+    //
+    // NOT `role !== 'admin'`. That reads as "everyone who is not management",
+    // and stopped meaning it when super_admin arrived: a super admin is not
+    // 'admin', so they would be listed here as somebody's team member.
     users.forEach(user => {
-      if (user.role !== 'admin') {
+      if (!isManagementRole(user.role)) {
         progressMap.set(user.id, {
           userId: user.id,
           userName: `${user.firstName} ${user.lastName}`,

@@ -59,12 +59,6 @@ const PortalBottomNav: React.FC<Props> = ({ slug }) => {
       icon: icon('M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 01-3.46 0'),
     },
     {
-      label: 'Files',
-      to: portalRoutes.documents(slug),
-      match: portalRoutes.documents(slug),
-      icon: icon('M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z M13 2v7h7'),
-    },
-    {
       label: 'Calendar',
       to: portalRoutes.calendar(slug),
       match: portalRoutes.calendar(slug),

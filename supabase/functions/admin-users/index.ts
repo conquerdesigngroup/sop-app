@@ -51,7 +51,7 @@ const json = (status: number, body: unknown) =>
     headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
-type Role = 'admin' | 'team';
+type Role = 'super_admin' | 'admin' | 'team';
 
 interface CreateUserBody {
   action: 'create_user';
@@ -115,7 +115,18 @@ Deno.serve(async (req: Request) => {
   if (profileErr || !callerProfile) {
     return json(403, { error: 'No profile found for this account' });
   }
-  if (callerProfile.role !== 'admin' || callerProfile.is_active === false) {
+  // Management or above. NOT `role !== 'admin'`: once v13 promotes anyone, that
+  // test is false for the most privileged accounts in the system and would lock
+  // the super admins out of the one function that exists for them.
+  //
+  // This stays admin-or-above ON PURPOSE for now. Tightening it to super-admin-
+  // only belongs in the deploy AFTER v13 — do it before and, with zero rows
+  // holding the new role, nobody at all can create a login or reset a password.
+  const callerIsManagement =
+    callerProfile.role === 'admin' || callerProfile.role === 'super_admin';
+  const callerIsSuperAdmin = callerProfile.role === 'super_admin';
+
+  if (!callerIsManagement || callerProfile.is_active === false) {
     return json(403, { error: 'Admin access required' });
   }
 
@@ -152,8 +163,16 @@ Deno.serve(async (req: Request) => {
         if (!password || password.length < MIN_PASSWORD) {
           return json(400, { error: `Password must be at least ${MIN_PASSWORD} characters` });
         }
-        if (role !== 'admin' && role !== 'team') {
-          return json(400, { error: "Role must be 'admin' or 'team'" });
+        if (role !== 'admin' && role !== 'team' && role !== 'super_admin') {
+          return json(400, { error: "Role must be 'super_admin', 'admin' or 'team'" });
+        }
+        // Nobody grants a tier they do not hold. This mirrors rule 2 of
+        // prevent_privilege_escalation() rather than replacing it — the database
+        // refuses it either way; refusing here gives a real message instead of a
+        // constraint error, and stops a half-made auth account being created
+        // first and rolled back.
+        if (role === 'super_admin' && !callerIsSuperAdmin) {
+          return json(403, { error: 'Only a super admin may create a super admin' });
         }
 
         // email_confirm: true — an admin handing someone their account should
@@ -183,7 +202,12 @@ Deno.serve(async (req: Request) => {
         // whatever metadata was supplied. Correct it AS THE CALLER so the
         // privilege-escalation trigger validates the change against a real
         // admin uid. See the header note.
-        const { error: patchErr } = await caller
+        // .select() is not decoration. Without it PostgREST answers an UPDATE
+        // with 204 and no body, and `error` is null even when ZERO rows matched
+        // — so an RLS refusal or a trigger rejection read as success and left a
+        // new account sitting at role='team', is_active=false, with the caller
+        // told it worked. The row count is the only honest signal.
+        const { data: patched, error: patchErr } = await caller
           .from('profiles')
           .update({
             first_name: firstName ?? '',
@@ -193,7 +217,16 @@ Deno.serve(async (req: Request) => {
             is_active: true,
             invited_by: callerId,
           })
-          .eq('id', newId);
+          .eq('id', newId)
+          .select('id');
+
+        if (!patchErr && (!patched || patched.length === 0)) {
+          await admin.auth.admin.deleteUser(newId);
+          return json(500, {
+            error: 'Account was created but its profile could not be set — the '
+              + 'update was refused. The account has been removed, please try again.',
+          });
+        }
 
         if (patchErr) {
           // The auth user exists but its profile is wrong. Roll back rather than
@@ -224,11 +257,20 @@ Deno.serve(async (req: Request) => {
 
         const { data: target } = await admin
           .from('profiles')
-          .select('email, first_name, last_name')
+          .select('email, first_name, last_name, role')
           .eq('id', userId)
           .single();
 
         if (!target) return json(404, { error: 'No such user' });
+
+        // A password reset is account takeover by another name. While this
+        // function is still open to admin-or-above, an admin resetting a super
+        // admin's password would hand themselves pay and provisioning one login
+        // later — so the target's tier is checked even though the caller's is
+        // not yet. Inert until v13 promotes anyone; wrong to add afterwards.
+        if (target.role === 'super_admin' && !callerIsSuperAdmin) {
+          return json(403, { error: "Only a super admin may reset a super admin's password" });
+        }
 
         const { error: pwErr } = await admin.auth.admin.updateUserById(userId, { password });
         if (pwErr) return json(400, { error: pwErr.message });

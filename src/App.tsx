@@ -45,7 +45,6 @@ const ProgramHome = lazy(() => import('./pages/portal/ProgramHome'));
 const ProgramClasses = lazy(() => import('./pages/portal/ProgramClasses'));
 const ClassDetail = lazy(() => import('./pages/portal/ClassDetail'));
 const ProgramUpdates = lazy(() => import('./pages/portal/ProgramUpdates'));
-const ProgramDocuments = lazy(() => import('./pages/portal/ProgramDocuments'));
 const ProgramCalendar = lazy(() => import('./pages/portal/ProgramCalendar'));
 
 // The staff side of the portal. Reachable by admins and by any employee holding
@@ -191,7 +190,10 @@ const AppContent: React.FC = () => {
               <Route path="classes" element={<ProgramClasses />} />
               <Route path="classes/:classId" element={<ClassDetail />} />
               <Route path="updates" element={<ProgramUpdates />} />
-              <Route path="documents" element={<ProgramDocuments />} />
+              {/* Files live inside the class they belong to now. Kept as a
+                  redirect rather than deleted: a parent may have had the old
+                  Documents page bookmarked or on their home screen. */}
+              <Route path="documents" element={<Navigate to="../classes" replace />} />
               <Route path="calendar" element={<ProgramCalendar />} />
             </Route>
           </Route>

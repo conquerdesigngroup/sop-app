@@ -6,10 +6,11 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePortalAdmin } from '../../contexts/PortalAdminContext';
 import { useAdminList } from '../../components/portal-admin/useAdminList';
+import { TabRow } from '../../components/portal-admin/shared';
 import UpdatesSection from '../../components/portal-admin/UpdatesSection';
-import DocumentsSection from '../../components/portal-admin/DocumentsSection';
 import EventsSection from '../../components/portal-admin/EventsSection';
 import ClassesSection from '../../components/portal-admin/ClassesSection';
+import ClassWorkspace from '../../components/portal-admin/ClassWorkspace';
 import AccessSection from '../../components/portal-admin/AccessSection';
 import { PortalClass } from '../../types';
 import { portalRoutes, isProgramSlug } from '../../lib/portal';
@@ -24,83 +25,38 @@ import { portalRoutes, isProgramSlug } from '../../lib/portal';
  * admin or for anyone holding a class. Gating this route on `isAdmin` would
  * lock out the instructors the per-class grants were built for.
  *
- * Within the screen the split is finer: Classes and Access are admin-only
- * because their write policies are, and a teacher's audience picker offers
- * their own classes and no studio-wide option, because can_edit_portal_class()
- * refuses a NULL class_id for anyone who is not an admin. Every one of those is
- * a mirror of a policy, never the thing enforcing it.
+ * Within the screen the split is finer: editing a class RECORD and the Access
+ * codes are admin-only because their write policies are, while a class's own
+ * content is open to whoever holds that class. Every one of those is a mirror of
+ * a policy, never the thing enforcing it.
  *
- * The program and section live in the query string so a refresh, a bookmark or
- * a link pasted to a colleague all land in the same place.
+ * WHY THREE SECTIONS AND NOT FIVE
+ *
+ * Updates, Files and Calendar used to be three sibling lists with a class
+ * dropdown on each row. Files has moved inside the class it belongs to, next to
+ * that class's updates, because a class is the unit people actually think in —
+ * see ClassWorkspace. What is left at this level is genuinely studio-wide:
+ * Updates that go to a whole program, and the Calendar.
+ *
+ * The program, section and open class live in the query string so a refresh, a
+ * bookmark or a link pasted to a colleague all land in the same place.
  */
 
-type SectionKey = 'updates' | 'documents' | 'calendar' | 'classes' | 'access';
-
-const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
-  { key: 'updates', label: 'Updates' },
-  { key: 'documents', label: 'Files' },
-  { key: 'calendar', label: 'Calendar' },
-  { key: 'classes', label: 'Classes' },
-  { key: 'access', label: 'Access', adminOnly: true },
-];
+type SectionKey = 'classes' | 'updates' | 'calendar' | 'access';
 
 /**
- * Shared look for both rows; the outer one is just bolder.
+ * Classes lead: it is the way in to most of what anyone comes here to do, and
+ * for a teacher it is the only section they can write to.
  *
- * `panelId` turns it into a real tab set — tablist, tabs and the panel they
- * control. The program row leaves it off and is announced as a plain group,
- * because those choices swap the whole screen rather than one panel, and
- * claiming otherwise gives a screen reader a contract the page does not keep.
+ * Access is not a fourth content section — it is the program's access code — but
+ * it has nowhere better to live and is admin-only, so it sits last.
  */
-const TabRow: React.FC<{
-  options: { key: string; label: string }[];
-  active: string;
-  onSelect: (key: string) => void;
-  emphasis?: boolean;
-  panelId?: string;
-  groupLabel?: string;
-}> = ({ options, active, onSelect, emphasis, panelId, groupLabel }) => (
-  <div
-    role={panelId ? 'tablist' : 'group'}
-    aria-label={groupLabel}
-    style={{
-      display: 'flex',
-      gap: '4px',
-      flexWrap: 'wrap',
-      borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-      marginBottom: emphasis ? '16px' : '24px',
-    }}
-  >
-    {options.map(opt => {
-      const isActive = opt.key === active;
-      return (
-        <button
-          key={opt.key}
-          role={panelId ? 'tab' : undefined}
-          aria-selected={panelId ? isActive : undefined}
-          aria-controls={panelId}
-          aria-current={panelId ? undefined : isActive}
-          onClick={() => onSelect(opt.key)}
-          style={{
-            appearance: 'none',
-            background: 'none',
-            border: 'none',
-            borderBottom: `2px solid ${isActive ? theme.colors.primary : 'transparent'}`,
-            padding: emphasis ? '10px 16px' : '8px 14px',
-            cursor: 'pointer',
-            color: isActive ? theme.colors.txt.primary : theme.colors.txt.tertiary,
-            fontFamily: theme.fonts.primary,
-            fontSize: emphasis ? '15px' : '14px',
-            fontWeight: isActive ? 700 : 500,
-            letterSpacing: '0.01em',
-          }}
-        >
-          {opt.label}
-        </button>
-      );
-    })}
-  </div>
-);
+const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
+  { key: 'classes', label: 'Classes' },
+  { key: 'updates', label: 'Updates' },
+  { key: 'calendar', label: 'Calendar' },
+  { key: 'access', label: 'Access', adminOnly: true },
+];
 
 const PortalManagerPage: React.FC = () => {
   const { canEdit, checking, programs, programsLoading, fetchClasses } = usePortalAdmin();
@@ -116,10 +72,12 @@ const PortalManagerPage: React.FC = () => {
     [programs, programSlug]
   );
 
+  // An unknown section — including the retired 'documents', which may still be
+  // in someone's bookmark — falls through to Classes rather than erroring.
   const requestedSection = params.get('section') as SectionKey | null;
   const section: SectionKey = sections.some(s => s.key === requestedSection)
     ? (requestedSection as SectionKey)
-    : 'updates';
+    : 'classes';
 
   // Classes are loaded once for the program and handed to every section: the
   // updates, files and calendar editors all need the same list to label rows
@@ -127,9 +85,24 @@ const PortalManagerPage: React.FC = () => {
   const { data: classes, loading: classesLoading, error: classesError, reload: reloadClasses } =
     useAdminList<PortalClass[]>(program?.id, fetchClasses, []);
 
-  const setParam = (key: string, value: string) => {
+  // A class id that does not match a class in THIS program is ignored rather
+  // than trusted: the param survives a program switch and a deletion, and
+  // handing a stale id to the workspace would render another program's class.
+  const openClassId = params.get('class');
+  const openClass = openClassId
+    ? classes.find(c => c.id === openClassId) ?? null
+    : null;
+
+  const setParam = (key: string, value: string, drop: string[] = []) => {
     const next = new URLSearchParams(params);
     next.set(key, value);
+    drop.forEach(k => next.delete(k));
+    setParams(next, { replace: true });
+  };
+
+  const closeClass = () => {
+    const next = new URLSearchParams(params);
+    next.delete('class');
     setParams(next, { replace: true });
   };
 
@@ -189,34 +162,42 @@ const PortalManagerPage: React.FC = () => {
             groupLabel="Portal section"
             options={programs.map(p => ({ key: p.slug, label: p.name }))}
             active={program.slug}
-            onSelect={key => setParam('program', key)}
+            onSelect={key => setParam('program', key, ['class'])}
           />
 
           <TabRow
             panelId="portal-manager-panel"
             options={sections.map(s => ({ key: s.key, label: s.label }))}
             active={section}
-            onSelect={key => setParam('section', key)}
+            onSelect={key => setParam('section', key, ['class'])}
           />
 
           <div id="portal-manager-panel" role="tabpanel">
-          {section === 'updates' && (
-            <UpdatesSection program={program} classes={classes} />
+          {section === 'classes' && (
+            openClass ? (
+              <ClassWorkspace
+                program={program}
+                klass={openClass}
+                classes={classes}
+                onBack={closeClass}
+              />
+            ) : (
+              <ClassesSection
+                program={program}
+                classes={classes}
+                loading={classesLoading}
+                error={classesError}
+                reload={reloadClasses}
+                onOpenClass={id => setParam('class', id)}
+              />
+            )
           )}
-          {section === 'documents' && (
-            <DocumentsSection program={program} classes={classes} />
+          {/* Studio-wide only. A class's own updates are in its workspace. */}
+          {section === 'updates' && (
+            <UpdatesSection program={program} classes={classes} scope={{ classId: null }} />
           )}
           {section === 'calendar' && (
             <EventsSection program={program} classes={classes} />
-          )}
-          {section === 'classes' && (
-            <ClassesSection
-              program={program}
-              classes={classes}
-              loading={classesLoading}
-              error={classesError}
-              reload={reloadClasses}
-            />
           )}
           {section === 'access' && isAdmin && (
             <AccessSection program={program} />

@@ -7,7 +7,8 @@ import { usePortal } from '../../contexts/PortalContext';
 import { portalRoutes, formatClassSchedule } from '../../lib/portal';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
-import { PortalClass, PortalUpdate } from '../../types';
+import { DocumentRow } from '../../components/portal/DocumentRow';
+import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
 /**
  * One class: its details, and the updates its teacher has posted.
@@ -15,14 +16,20 @@ import { PortalClass, PortalUpdate } from '../../types';
  * This is the page a parent lands on to find out what is happening in their
  * dancer's class specifically, so the updates are the substance and the
  * schedule is the header.
+ *
+ * Files sit below the updates. They used to live on a program-wide Documents
+ * page; a class's music and choreography notes belong with the class, and the
+ * teacher who holds it can now post them here rather than asking an admin to
+ * upload something studio-wide.
  */
 const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const { slug, program } = useProgramPage();
-  const { fetchClasses, fetchUpdates } = usePortal();
+  const { fetchClasses, fetchUpdates, fetchDocuments } = usePortal();
 
   const [klass, setKlass] = useState<PortalClass | null>(null);
   const [updates, setUpdates] = useState<PortalUpdate[]>([]);
+  const [documents, setDocuments] = useState<PortalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +44,10 @@ const ClassDetail: React.FC = () => {
       try {
         // The class list is small and already indexed by program, so one fetch
         // and a find beats a second round trip for a single row.
-        const [classes, classUpdates] = await Promise.all([
+        const [classes, classUpdates, classDocs] = await Promise.all([
           fetchClasses(program.id),
           fetchUpdates(program.id, classId),
+          fetchDocuments(program.id, classId),
         ]);
         if (cancelled) return;
 
@@ -47,6 +55,7 @@ const ClassDetail: React.FC = () => {
         setKlass(found);
         setNotFound(!found);
         setUpdates(classUpdates);
+        setDocuments(classDocs);
         setError(null);
       } catch (e) {
         if (cancelled) return;
@@ -58,7 +67,7 @@ const ClassDetail: React.FC = () => {
     })();
 
     return () => { cancelled = true; };
-    // fetchClasses/fetchUpdates are useCallback-stable in PortalContext.
+    // fetchClasses/fetchUpdates/fetchDocuments are useCallback-stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program?.id, classId]);
 
@@ -169,6 +178,26 @@ const ClassDetail: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Only rendered when there is something to show: an empty Files
+                heading on every class page is noise, and unlike updates — where
+                "nothing posted yet" is useful reassurance — a class with no
+                files is the normal case. */}
+            {documents.length > 0 && (
+              <div>
+                <h2 style={{
+                  ...theme.typography.h3,
+                  color: theme.colors.txt.primary,
+                  margin: '0 0 12px',
+                }}>
+                  Class files
+                </h2>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {documents.map(doc => <DocumentRow key={doc.id} doc={doc} />)}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

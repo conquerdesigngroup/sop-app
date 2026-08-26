@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { theme } from '../../theme';
-import { Card, EmptyState, Spinner } from '../../components/ui';
-import PortalLayout from '../../components/portal/PortalLayout';
+import { Spinner } from '../ui';
 import { usePortal } from '../../contexts/PortalContext';
-import { portalRoutes, formatFileSize } from '../../lib/portal';
-import { useProgramPage, useProgramQuery } from './useProgramPage';
+import { formatFileSize } from '../../lib/portal';
 import { PortalDocument } from '../../types';
 
 /**
- * Downloads for a program — handouts, policies, music, forms.
+ * One downloadable file, as a parent sees it.
+ *
+ * Lifted out of the old program-wide Documents page when files moved inside the
+ * class they belong to. It was always the reusable part of that page — the page
+ * itself was a list and a title — and a class needs exactly the same row.
  *
  * The bucket is private, so there is no URL to render into an href up front.
  * Each row signs on demand and then opens the result. That keeps links
@@ -33,7 +35,7 @@ const FileIcon: React.FC<{ mime: string | null }> = ({ mime }) => {
   );
 };
 
-const DocumentRow: React.FC<{ doc: PortalDocument }> = ({ doc }) => {
+export const DocumentRow: React.FC<{ doc: PortalDocument }> = ({ doc }) => {
   const { getDocumentUrl } = usePortal();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -139,45 +141,3 @@ const DocumentRow: React.FC<{ doc: PortalDocument }> = ({ doc }) => {
     </button>
   );
 };
-
-const ProgramDocuments: React.FC = () => {
-  const { slug, program } = useProgramPage();
-  const { fetchDocuments } = usePortal();
-  const { data: docs, loading, error } = useProgramQuery<PortalDocument[]>(program?.id, fetchDocuments, []);
-
-  return (
-    <PortalLayout
-      title="Documents"
-      subtitle={program?.name}
-      backTo={portalRoutes.program(slug)}
-      slug={slug}
-    >
-      <div style={{ maxWidth: '720px' }}>
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
-
-        {!loading && error && (
-          <Card><p style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>{error}</p></Card>
-        )}
-
-        {!loading && !error && docs.length === 0 && (
-          <EmptyState
-            title="No documents yet"
-            description="Handouts, policies and forms will appear here once the studio uploads them."
-          />
-        )}
-
-        {!loading && !error && docs.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {docs.map(doc => <DocumentRow key={doc.id} doc={doc} />)}
-          </div>
-        )}
-      </div>
-    </PortalLayout>
-  );
-};
-
-export default ProgramDocuments;

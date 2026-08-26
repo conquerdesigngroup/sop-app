@@ -42,9 +42,22 @@ const toDraft = (u: PortalUpdate): UpdateInput => ({
   publishedAt: u.publishedAt,
 });
 
-const UpdatesSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }> = ({
-  program, classes,
-}) => {
+/**
+ * `scope` narrows the section to one audience and pins new posts to it:
+ *
+ *   undefined            every update in the program (the original behaviour)
+ *   { classId: null }    studio-wide only — the Updates tab
+ *   { classId: '<id>' }  one class only — the class workspace
+ *
+ * Scoping is presentation, never permission. canEditClass still decides every
+ * button, so a teacher handed a class they do not hold sees the rows and none of
+ * the controls, exactly as before.
+ */
+const UpdatesSection: React.FC<{
+  program: PortalProgram;
+  classes: PortalClass[];
+  scope?: { classId: string | null };
+}> = ({ program, classes, scope }) => {
   const { fetchUpdates, saveUpdate, deleteUpdate, canEditClass, editableClassIds } = usePortalAdmin();
   const { isAdmin } = useAuth();
   const { success, error: toastError } = useToast();
@@ -55,13 +68,22 @@ const UpdatesSection: React.FC<{ program: PortalProgram; classes: PortalClass[] 
     program.id, fetchUpdates, []
   );
 
+  // The program-wide fetch is kept and filtered here rather than refetching per
+  // class. The list is small, and the Updates tab and every class workspace then
+  // share one cache instead of issuing a request each time you switch.
+  const rows = scope ? updates.filter(u => u.classId === scope.classId) : updates;
+
   const [draft, setDraft] = useState<UpdateInput | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const focusRef = useAutoFocus(draft !== null);
 
-  // A teacher's first class, so a new update opens on something they can save.
-  const defaultClassId = isAdmin ? null : (editableClassIds[0] ?? null);
+  // Inside a class workspace the audience is wherever you are standing.
+  // Otherwise: a teacher's first class, so a new update opens on something they
+  // can actually save.
+  const defaultClassId = scope
+    ? scope.classId
+    : (isAdmin ? null : (editableClassIds[0] ?? null));
 
   const startNew = () => {
     setFormError('');
@@ -122,12 +144,14 @@ const UpdatesSection: React.FC<{ program: PortalProgram; classes: PortalClass[] 
       <ManagerList
         loading={loading}
         error={error}
-        isEmpty={updates.length === 0}
+        isEmpty={rows.length === 0}
         emptyTitle="No updates yet"
-        emptyDescription="Post schedule changes, reminders and announcements. Parents see them newest first, pinned at the top."
+        emptyDescription={scope?.classId
+          ? 'Post reminders and announcements for this class. Only families in this class see them.'
+          : 'Post schedule changes, reminders and announcements. Parents see them newest first, pinned at the top.'}
         emptyAction={<Button leftIcon={<PlusIcon />} onClick={startNew}>New update</Button>}
       >
-        {updates.map(u => (
+        {rows.map(u => (
           <Card key={u.id}>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -146,9 +170,14 @@ const UpdatesSection: React.FC<{ program: PortalProgram; classes: PortalClass[] 
                 </h3>
 
                 <RowMeta>
-                  <span>{audienceLabel(u.classId, classes)}</span>
+                  {/* Redundant inside a scope — the heading already says whose
+                      updates these are. */}
+                  {!scope && <span>{audienceLabel(u.classId, classes)}</span>}
                   {u.publishedAt && (
-                    <span>· {new Date(u.publishedAt).toLocaleDateString()}</span>
+                    // The separator belongs to the audience label above it, so
+                    // it goes when that goes — otherwise the date reads
+                    // "· 8/21/2026" with nothing in front of the dot.
+                    <span>{scope ? '' : '· '}{new Date(u.publishedAt).toLocaleDateString()}</span>
                   )}
                 </RowMeta>
               </div>
@@ -202,14 +231,19 @@ const UpdatesSection: React.FC<{ program: PortalProgram; classes: PortalClass[] 
               onChange={e => setDraft({ ...draft, body: e.target.value })}
             />
 
-            <ClassSelect
-              classes={classes}
-              value={draft.classId}
-              onChange={classId => setDraft({ ...draft, classId })}
-              allowStudioWide={isAdmin}
-              editableClassIds={editableClassIds}
-              isAdmin={isAdmin}
-            />
+            {/* Scoped: the audience is fixed by where this was opened from, so
+                offering a picker would let someone move a post out of the list
+                they are looking at. */}
+            {!scope && (
+              <ClassSelect
+                classes={classes}
+                value={draft.classId}
+                onChange={classId => setDraft({ ...draft, classId })}
+                allowStudioWide={isAdmin}
+                editableClassIds={editableClassIds}
+                isAdmin={isAdmin}
+              />
+            )}
 
             <div style={{
               display: 'flex',

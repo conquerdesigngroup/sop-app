@@ -1,0 +1,121 @@
+import React, { useState } from 'react';
+import { theme } from '../../theme';
+import { Badge, Button, ChevronLeftIcon } from '../ui';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePortalAdmin } from '../../contexts/PortalAdminContext';
+import { PortalClass, PortalProgram } from '../../types';
+import { TabRow, classSummary } from './shared';
+import UpdatesSection from './UpdatesSection';
+import DocumentsSection from './DocumentsSection';
+
+/**
+ * One class, and the content that belongs to it.
+ *
+ * WHY THIS EXISTS
+ *
+ * The manager used to be five flat lists — Updates, Files, Calendar, Classes,
+ * Access — where a row's class was a dropdown on the row. That works, but it
+ * asks the wrong question first. A teacher does not think "I will post an
+ * update, and it happens to be for Junior Elite Hip Hop"; they think "I need to
+ * tell my class something". So the class comes first and its content lives
+ * inside it.
+ *
+ * Nothing new is enforced here. UpdatesSection and DocumentsSection already
+ * carried an optional class on every row and already refused a studio-wide save
+ * from anyone who is not an admin — that was built with the per-class grants and
+ * then only ever surfaced as a dropdown. This screen is the missing presentation
+ * for machinery that already worked.
+ *
+ * Updates lead rather than files, matching the parent-facing class page, whose
+ * own note says the updates are the substance and the schedule is the header.
+ *
+ * The open class lives in the query string, so a refresh or a pasted link lands
+ * back on it. The Updates/Files choice is deliberately local state instead: it
+ * is a glance, not a destination, and putting it in the URL would mean every
+ * switch pushed a history entry for the back button to walk through.
+ */
+
+type Tab = 'updates' | 'files';
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'updates', label: 'Updates' },
+  { key: 'files', label: 'Files' },
+];
+
+const ClassWorkspace: React.FC<{
+  program: PortalProgram;
+  klass: PortalClass;
+  classes: PortalClass[];
+  onBack: () => void;
+}> = ({ program, klass, classes, onBack }) => {
+  const [tab, setTab] = useState<Tab>('updates');
+  const { isAdmin } = useAuth();
+  const { editableClassIds } = usePortalAdmin();
+
+  const scope = { classId: klass.id };
+  const isMine = editableClassIds.includes(klass.id);
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        leftIcon={<ChevronLeftIcon size={16} />}
+        onClick={onBack}
+        style={{ paddingLeft: 0, marginBottom: theme.spacing.md }}
+      >
+        All classes
+      </Button>
+
+      <div style={{ marginBottom: theme.spacing.lg }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+          {!klass.isActive && <Badge variant="default" size="sm">Hidden from parents</Badge>}
+          {isMine && !isAdmin && <Badge variant="info" size="sm">Yours</Badge>}
+        </div>
+
+        <h2
+          style={{
+            ...theme.typography.h2,
+            color: theme.colors.txt.primary,
+            margin: '0 0 6px',
+            wordBreak: 'break-word',
+          }}
+        >
+          {klass.name}
+        </h2>
+
+        <p
+          style={{
+            ...theme.typography.bodySmall,
+            fontFamily: theme.fonts.mono,
+            color: theme.colors.txt.tertiary,
+            margin: 0,
+          }}
+        >
+          {classSummary(klass)}
+          {klass.location && ` · ${klass.location}`}
+          {klass.instructorName && ` · ${klass.instructorName}`}
+        </p>
+      </div>
+
+      <TabRow
+        panelId="class-workspace-panel"
+        groupLabel={`${klass.name} content`}
+        options={TABS}
+        active={tab}
+        onSelect={key => setTab(key as Tab)}
+      />
+
+      <div id="class-workspace-panel" role="tabpanel">
+        {tab === 'updates' && (
+          <UpdatesSection program={program} classes={classes} scope={scope} />
+        )}
+        {tab === 'files' && (
+          <DocumentsSection program={program} classes={classes} scope={scope} />
+        )}
+      </div>
+    </>
+  );
+};
+
+export default ClassWorkspace;

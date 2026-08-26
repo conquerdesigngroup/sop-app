@@ -4,6 +4,7 @@ import { theme } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes } from '../../lib/portal';
+import InstallAppGuide from '../../components/InstallAppGuide';
 
 /**
  * The front door.
@@ -201,6 +202,8 @@ const ChooserPage: React.FC = () => {
           accent
         />
       </div>
+
+      <InstallAppGuide />
 
       <p
         style={{

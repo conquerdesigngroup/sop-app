@@ -8,7 +8,7 @@ import { formatClassSchedule } from '../../lib/portal';
  * Pieces shared by the five portal-manager sections.
  *
  * Each section is a list of rows plus a modal editor, and these are the parts
- * that were identical across all five. Nothing here talks to Supabase.
+ * that were identical across them. Nothing here talks to Supabase.
  */
 
 /** Loading, error and empty handled once, so five sections cannot disagree. */
@@ -167,3 +167,66 @@ export const useAutoFocus = (isOpen: boolean) => {
   }, [isOpen, node]);
   return setNode;
 };
+
+
+/**
+ * A row of tabs.
+ *
+ * Lives here rather than in PortalManagerPage because the class workspace needs
+ * the same control for its Files/Updates switch, and a second copy of forty
+ * lines of tab styling is how two tab rows end up looking subtly different.
+ *
+ * `panelId` turns it into a real tab set — tablist, tabs and the panel they
+ * control. Callers whose choices swap the whole screen rather than one panel
+ * leave it off and are announced as a plain group, because claiming otherwise
+ * gives a screen reader a contract the page does not keep.
+ */
+export const TabRow: React.FC<{
+  options: { key: string; label: string }[];
+  active: string;
+  onSelect: (key: string) => void;
+  emphasis?: boolean;
+  panelId?: string;
+  groupLabel?: string;
+}> = ({ options, active, onSelect, emphasis, panelId, groupLabel }) => (
+  <div
+    role={panelId ? 'tablist' : 'group'}
+    aria-label={groupLabel}
+    style={{
+      display: 'flex',
+      gap: '4px',
+      flexWrap: 'wrap',
+      borderBottom: `1px solid ${theme.colors.bdr.primary}`,
+      marginBottom: emphasis ? '16px' : '24px',
+    }}
+  >
+    {options.map(opt => {
+      const isActive = opt.key === active;
+      return (
+        <button
+          key={opt.key}
+          role={panelId ? 'tab' : undefined}
+          aria-selected={panelId ? isActive : undefined}
+          aria-controls={panelId}
+          aria-current={panelId ? undefined : isActive}
+          onClick={() => onSelect(opt.key)}
+          style={{
+            appearance: 'none',
+            background: 'none',
+            border: 'none',
+            borderBottom: `2px solid ${isActive ? theme.colors.primary : 'transparent'}`,
+            padding: emphasis ? '10px 16px' : '8px 14px',
+            cursor: 'pointer',
+            color: isActive ? theme.colors.txt.primary : theme.colors.txt.tertiary,
+            fontFamily: theme.fonts.primary,
+            fontSize: emphasis ? '15px' : '14px',
+            fontWeight: isActive ? 700 : 500,
+            letterSpacing: '0.01em',
+          }}
+        >
+          {opt.label}
+        </button>
+      );
+    })}
+  </div>
+);

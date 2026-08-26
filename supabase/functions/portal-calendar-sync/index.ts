@@ -362,7 +362,11 @@ Deno.serve(async (req: Request) => {
       .eq('id', userData.user.id)
       .single();
 
-    if (!profile || profile.role !== 'admin' || profile.is_active === false) {
+    // Management or above, permanently: the calendar and the whole parent
+    // portal are things a plain admin keeps under the v13 split. `role !==
+    // 'admin'` would have locked out every promoted account.
+    const isManagement = profile?.role === 'admin' || profile?.role === 'super_admin';
+    if (!profile || !isManagement || profile.is_active === false) {
       return json(403, { error: 'Admin access required' });
     }
   }

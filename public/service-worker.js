@@ -4,7 +4,7 @@
 // Enables offline functionality and caching
 
 // IMPORTANT: Increment this version number whenever you deploy to force cache refresh
-const CACHE_VERSION = '1.0.8';
+const CACHE_VERSION = '1.0.10';
 const CACHE_NAME = `sop-app-v${CACHE_VERSION}`;
 
 const urlsToCache = [
@@ -159,8 +159,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'SOP App Notification';
   const options = {
     body: data.body || 'You have a new notification',
-    icon: '/logo192.png',
-    badge: '/logo192.png',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     data: data,
   };
 

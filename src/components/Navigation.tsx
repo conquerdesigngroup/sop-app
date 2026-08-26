@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
+import { roleLabel } from '../lib/roles';
 import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
 
@@ -472,7 +473,7 @@ const Navigation: React.FC = () => {
                     {currentUser?.firstName} {currentUser?.lastName}
                   </div>
                   <div style={{...styles.userRoleMobile, color: colors.txt.secondary}}>
-                    {currentUser?.role === 'admin' ? 'Admin' : 'Team Member'}
+                    {roleLabel(currentUser?.role)}
                   </div>
                 </div>
                 <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
@@ -592,7 +593,7 @@ const Navigation: React.FC = () => {
                     {currentUser?.firstName} {currentUser?.lastName}
                   </div>
                   <div style={{...styles.userRole, color: colors.txt.secondary}}>
-                    {currentUser?.role === 'admin' ? 'Admin' : 'Team Member'}
+                    {roleLabel(currentUser?.role)}
                   </div>
                 </div>
                 <svg

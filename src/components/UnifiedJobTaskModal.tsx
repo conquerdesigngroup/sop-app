@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import { JobTask, TaskTemplate, TaskPriority, RecurrencePattern } from '../types';
 import { theme } from '../theme';
+import { isManagementRole, roleLabel } from '../lib/roles';
 import { useResponsive } from '../hooks/useResponsive';
 import TemplateSelector from './TemplateSelector';
 import { CustomCheckbox } from './CustomCheckbox';
@@ -559,7 +560,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                           <span style={styles.userCardName}>
                             {user.firstName} {user.lastName}
                           </span>
-                          <span style={styles.userCardRole}>{user.role === 'admin' ? 'Admin' : user.department}</span>
+                          <span style={styles.userCardRole}>{isManagementRole(user.role) ? roleLabel(user.role) : user.department}</span>
                         </div>
                       </div>
                     );

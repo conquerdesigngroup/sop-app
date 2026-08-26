@@ -30,7 +30,12 @@ export interface SOP {
 
 // User & Auth Types
 
-export type UserRole = 'admin' | 'team';
+/**
+ * Ordered most privileged first. super_admin was added in v13; see
+ * src/lib/roles.ts for what each one means and supabase-migration-v13 for
+ * what the database enforces.
+ */
+export type UserRole = 'super_admin' | 'admin' | 'team';
 
 export interface User {
   id: string;

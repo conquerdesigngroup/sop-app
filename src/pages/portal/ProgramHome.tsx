@@ -116,7 +116,7 @@ const ProgramHome: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <NavTile
             label="Classes"
-            description="Schedules, levels and who teaches them"
+            description="Schedules, and the updates and files for each one"
             to={portalRoutes.classes(slug)}
             icon={icon('M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z M23 21v-2a4 4 0 00-3-3.87')}
           />
@@ -126,12 +126,6 @@ const ProgramHome: React.FC = () => {
             to={portalRoutes.updates(slug)}
             icon={icon('M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 01-3.46 0')}
             meta={updates.data.length ? String(updates.data.length) : undefined}
-          />
-          <NavTile
-            label="Documents"
-            description="Handouts, policies, music and forms"
-            to={portalRoutes.documents(slug)}
-            icon={icon('M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z M13 2v7h7')}
           />
           <NavTile
             label="Calendar"

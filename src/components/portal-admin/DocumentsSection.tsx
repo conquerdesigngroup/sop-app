@@ -37,9 +37,16 @@ const emptyMeta = (programId: string, classId: string | null): DocumentInput => 
   isPublished: true,
 });
 
-const DocumentsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }> = ({
-  program, classes,
-}) => {
+/**
+ * `scope` narrows the section to one audience and pins new uploads to it. Same
+ * contract as UpdatesSection — see the note there. Presentation only: the
+ * canEditClass guards below are untouched and remain what actually decides.
+ */
+const DocumentsSection: React.FC<{
+  program: PortalProgram;
+  classes: PortalClass[];
+  scope?: { classId: string | null };
+}> = ({ program, classes, scope }) => {
   const {
     fetchDocuments, uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
     canEditClass, editableClassIds,
@@ -52,6 +59,9 @@ const DocumentsSection: React.FC<{ program: PortalProgram; classes: PortalClass[
     program.id, fetchDocuments, []
   );
 
+  // Filtered here rather than refetched per class — see UpdatesSection.
+  const rows = scope ? documents.filter(d => d.classId === scope.classId) : documents;
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [meta, setMeta] = useState<DocumentInput | null>(null);
@@ -61,7 +71,10 @@ const DocumentsSection: React.FC<{ program: PortalProgram; classes: PortalClass[
   const [opening, setOpening] = useState<string | null>(null);
   const focusRef = useAutoFocus(meta !== null);
 
-  const defaultClassId = isAdmin ? null : (editableClassIds[0] ?? null);
+  // Inside a class workspace the audience is wherever you are standing.
+  const defaultClassId = scope
+    ? scope.classId
+    : (isAdmin ? null : (editableClassIds[0] ?? null));
   const busy = stage !== 'idle';
 
   const startUpload = () => {
@@ -192,12 +205,14 @@ const DocumentsSection: React.FC<{ program: PortalProgram; classes: PortalClass[
       <ManagerList
         loading={loading}
         error={error}
-        isEmpty={documents.length === 0}
+        isEmpty={rows.length === 0}
         emptyTitle="No files yet"
-        emptyDescription="Costume lists, handbooks, permission slips — anything a parent needs to download."
+        emptyDescription={scope?.classId
+          ? 'Music, choreography notes, costume details — anything this class needs. Only families in this class see them.'
+          : 'Costume lists, handbooks, permission slips — anything a parent needs to download.'}
         emptyAction={<Button leftIcon={<PlusIcon />} onClick={startUpload}>Upload file</Button>}
       >
-        {documents.map(doc => (
+        {rows.map(doc => (
           <Card key={doc.id}>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -218,7 +233,8 @@ const DocumentsSection: React.FC<{ program: PortalProgram; classes: PortalClass[
                   <span>{doc.fileName}</span>
                   {formatFileSize(doc.sizeBytes) && <span>· {formatFileSize(doc.sizeBytes)}</span>}
                   {doc.category && <span>· {doc.category}</span>}
-                  <span>· {audienceLabel(doc.classId, classes)}</span>
+                  {/* Redundant inside a scope — see UpdatesSection. */}
+                  {!scope && <span>· {audienceLabel(doc.classId, classes)}</span>}
                 </RowMeta>
 
                 <Button
@@ -331,15 +347,18 @@ const DocumentsSection: React.FC<{ program: PortalProgram; classes: PortalClass[
               onChange={e => setMeta({ ...meta, category: e.target.value })}
             />
 
-            <ClassSelect
-              classes={classes}
-              value={meta.classId}
-              onChange={classId => setMeta({ ...meta, classId })}
-              allowStudioWide={isAdmin}
-              editableClassIds={editableClassIds}
-              isAdmin={isAdmin}
-              disabled={busy}
-            />
+            {/* Scoped: fixed by where this was opened from. See UpdatesSection. */}
+            {!scope && (
+              <ClassSelect
+                classes={classes}
+                value={meta.classId}
+                onChange={classId => setMeta({ ...meta, classId })}
+                allowStudioWide={isAdmin}
+                editableClassIds={editableClassIds}
+                isAdmin={isAdmin}
+                disabled={busy}
+              />
+            )}
 
             <CustomCheckbox
               checked={meta.isPublished}
