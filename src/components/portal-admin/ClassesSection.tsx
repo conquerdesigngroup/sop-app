@@ -8,6 +8,7 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePortalAdmin, describeWriteError, ClassInput } from '../../contexts/PortalAdminContext';
 import { PortalClass, PortalProgram } from '../../types';
+import { isManagementRole, roleLabel } from '../../lib/roles';
 import { DAY_OPTIONS, timeColumnToInput, timeInputToColumn } from '../../lib/portalAdmin';
 import { ManagerList, RowActions, RowMeta, classSummary, FieldPair, useAutoFocus } from './shared';
 
@@ -367,7 +368,7 @@ const ClassesSection: React.FC<{
                     key={u.id}
                     checked={instructorIds.includes(u.id)}
                     onChange={on => toggleInstructor(u.id, on)}
-                    label={`${u.firstName} ${u.lastName}${u.role === 'admin' ? ' — admin' : ''}`}
+                    label={`${u.firstName} ${u.lastName}${isManagementRole(u.role) ? ` — ${roleLabel(u.role).toLowerCase()}` : ''}`}
                   />
                 ))}
               </div>

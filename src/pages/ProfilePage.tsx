@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
+import { isManagementRole, roleLabel } from '../lib/roles';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormInput, FormButton, FormGroup } from '../components/FormComponents';
 
@@ -125,9 +126,9 @@ const ProfilePage: React.FC = () => {
             </h2>
             <span style={{
               ...styles.roleBadge,
-              backgroundColor: currentUser.role === 'admin' ? theme.colors.primary : theme.colors.bg.tertiary,
+              backgroundColor: isManagementRole(currentUser.role) ? theme.colors.primary : theme.colors.bg.tertiary,
             }}>
-              {currentUser.role === 'admin' ? 'Admin' : 'Team Member'}
+              {roleLabel(currentUser.role)}
             </span>
           </div>
         </div>
@@ -251,7 +252,7 @@ const ProfilePage: React.FC = () => {
             <div style={styles.infoItem}>
               <span style={styles.infoLabel}>Role</span>
               <span style={styles.infoValue}>
-                {currentUser.role === 'admin' ? 'Administrator' : 'Team Member'}
+                {roleLabel(currentUser.role)}
               </span>
             </div>
           </div>

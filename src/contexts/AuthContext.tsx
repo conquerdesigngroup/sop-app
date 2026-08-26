@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { User, UserRole } from '../types';
+import { isManagementRole, isSuperAdminRole } from '../lib/roles';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { logActivity } from '../utils/activityLogger';
@@ -28,7 +29,10 @@ interface AuthContextType {
   getUsersByDepartment: (department: string) => User[];
   getUsersByRole: (role: UserRole) => User[];
   isAuthenticated: boolean;
+  /** Management or above — admin AND super_admin. Mirrors is_admin(). */
   isAdmin: boolean;
+  /** The narrow tier: pay, hours and logins. Mirrors is_super_admin(). */
+  isSuperAdmin: boolean;
   loading: boolean;
   sessionExpiryWarning: boolean;
   extendSession: () => void;
@@ -924,7 +928,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getUsersByDepartment,
     getUsersByRole,
     isAuthenticated: currentUser !== null,
-    isAdmin: currentUser?.role === 'admin',
+    // Deliberately NOT `role === 'admin'`. Once super_admin exists that test
+    // is false for the most privileged accounts in the system, which would
+    // drop them into a team member's UI.
+    isAdmin: isManagementRole(currentUser?.role),
+    isSuperAdmin: isSuperAdminRole(currentUser?.role),
     loading,
     sessionExpiryWarning,
     extendSession,

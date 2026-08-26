@@ -3,6 +3,7 @@ import { useTask, TASK_COMPLETE_MARKER } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useResponsive } from '../hooks/useResponsive';
+import { isManagementRole } from '../lib/roles';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { JobTask, TaskTemplate } from '../types';
 import { theme } from '../theme';
@@ -42,7 +43,10 @@ const JobTasksPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'date' | 'priority' | 'status' | 'name'>('date');
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
 
-  const isAdmin = currentUser?.role === 'admin';
+  // Was `currentUser?.role === 'admin'` — a second source of truth that a
+  // widened is_admin() would not reach, so a super admin would have lost this
+  // page while keeping every other admin screen.
+  const isAdmin = isManagementRole(currentUser?.role);
 
   // Get unique departments from job tasks
   const departments = Array.from(new Set(jobTasks.map(t => t.department)));

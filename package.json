@@ -1,6 +1,6 @@
 {
   "name": "sop-app",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.81.1",

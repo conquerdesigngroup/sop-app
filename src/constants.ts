@@ -37,13 +37,10 @@ export const RECURRENCE_FREQUENCY = {
 
 export type RecurrenceFrequencyType = typeof RECURRENCE_FREQUENCY[keyof typeof RECURRENCE_FREQUENCY];
 
-// User Roles
-export const USER_ROLES = {
-  ADMIN: 'admin',
-  TEAM_MEMBER: 'team member',
-} as const;
-
-export type UserRoleType = typeof USER_ROLES[keyof typeof USER_ROLES];
+// User roles live in src/lib/roles.ts, beside the helpers that read them, and
+// the union itself is UserRole in src/types.ts. The USER_ROLES constant that sat
+// here was unused and wrong — its TEAM_MEMBER was the string 'team member',
+// which never matched the 'team' the database actually stores.
 
 // Departments (These can be customized by organization)
 export const DEFAULT_DEPARTMENTS = [

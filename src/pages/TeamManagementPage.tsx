@@ -4,13 +4,14 @@ import { useToast } from '../contexts/ToastContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { theme } from '../theme';
 import { User, UserRole } from '../types';
-import { DEFAULT_DEPARTMENTS, USER_ROLES, SUCCESS_MESSAGES, ERROR_MESSAGES } from '../constants';
+import { DEFAULT_DEPARTMENTS, SUCCESS_MESSAGES, ERROR_MESSAGES } from '../constants';
+import { isManagementRole, isSuperAdminRole, roleLabel } from '../lib/roles';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { useConfirm } from '../hooks/useConfirm';
 import { Button, Input, Modal } from '../components/ui';
 
 const TeamManagementPage: React.FC = () => {
-  const { users, addUser, updateUser, deleteUser, adminResetPassword, currentUser } = useAuth();
+  const { users, addUser, updateUser, deleteUser, adminResetPassword, currentUser, isSuperAdmin } = useAuth();
   const { success, error } = useToast();
   const { isMobile, isTablet, isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
@@ -281,6 +282,7 @@ const TeamManagementPage: React.FC = () => {
   };
 
   const getRoleBadgeColor = (role: UserRole) => {
+    if (role === 'super_admin') return '#E2144F';
     return role === 'admin' ? '#8B5CF6' : '#3B82F6';
   };
 
@@ -360,6 +362,7 @@ const TeamManagementPage: React.FC = () => {
             }}
           >
             <option value="all">All Roles</option>
+            <option value="super_admin">Super Admin</option>
             <option value="admin">Admin</option>
             <option value="team">Team Member</option>
           </select>
@@ -396,7 +399,7 @@ const TeamManagementPage: React.FC = () => {
           <div style={styles.statLabel}>Total Members</div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statNumber}>{activeUsers.filter(u => u.role === 'admin').length}</div>
+          <div style={styles.statNumber}>{activeUsers.filter(u => isManagementRole(u.role)).length}</div>
           <div style={styles.statLabel}>Admins</div>
         </div>
         <div style={styles.statCard}>
@@ -450,7 +453,7 @@ const TeamManagementPage: React.FC = () => {
                       backgroundColor: getRoleBadgeColor(user.role) + '20',
                       color: getRoleBadgeColor(user.role),
                     }}>
-                      {user.role === 'admin' ? 'Admin' : 'Team Member'}
+                      {roleLabel(user.role)}
                     </span>
                   </div>
                   <div style={styles.userCardRow}>
@@ -584,7 +587,7 @@ const TeamManagementPage: React.FC = () => {
                         backgroundColor: getRoleBadgeColor(user.role) + '20',
                         color: getRoleBadgeColor(user.role),
                       }}>
-                        {user.role === 'admin' ? 'Admin' : 'Team Member'}
+                        {roleLabel(user.role)}
                       </span>
                     </td>
                     <td style={styles.td}>
@@ -793,6 +796,7 @@ const TeamManagementPage: React.FC = () => {
                   >
                     <option value="team">Team Member</option>
                     <option value="admin">Admin</option>
+                    {isSuperAdmin && <option value="super_admin">Super Admin</option>}
                   </select>
                 </div>
                 <div style={styles.formGroup}>
