@@ -68,6 +68,15 @@ const DEVICES = [
   { name: 'iPhone 14', width: 390, height: 844, statusBar: 47 },
   { name: 'iPhone X', width: 375, height: 812, statusBar: 44 },
   { name: 'small Android', width: 360, height: 740, statusBar: 24 },
+  // The two below are not phones and are not here for the notch. They exist
+  // because every width above was BELOW theme.breakpoints.mobile (480px), so
+  // every route was only ever measured in its isMobile layout. /job-tasks
+  // stacks its filter row into a column below 480 and leaves it a nowrap flex
+  // row above — which does not fit again until roughly 660px. A select ran 164px
+  // off the right edge for that whole band and four green phones said CLEAN.
+  // Any breakpoint the app switches on needs a sample on BOTH sides of it.
+  { name: 'iPhone SE / iPad Slide Over', width: 320, height: 568, statusBar: 20 },
+  { name: 'iPad split view', width: 507, height: 768, statusBar: 0 },
 ];
 
 const PUBLIC_ROUTES = ['/', '/login', '/reset-password', '/portal'];
@@ -122,6 +131,25 @@ const collect = (statusBar) => {
     return false;
   };
 
+  // The element that REPORTS an overflow is rarely the one causing it — a div
+  // sitting at a negative left is usually the innocent first child of a flex
+  // parent that centres or right-aligns content it cannot fit. Without the
+  // chain you are reading style files and guessing which ancestor did it.
+  const chainOf = (el) => {
+    const out = [];
+    for (let n = el.parentElement, i = 0; n && i < 5; n = n.parentElement, i++) {
+      const s = getComputedStyle(n);
+      const bits = [n.tagName.toLowerCase(), `w:${Math.round(n.getBoundingClientRect().width)}`];
+      if (s.display.includes('flex') || s.display.includes('grid')) bits.push(`d:${s.display}`);
+      if (s.justifyContent && s.justifyContent !== 'normal') bits.push(`j:${s.justifyContent}`);
+      if (s.flexWrap && s.flexWrap !== 'nowrap') bits.push(`wrap:${s.flexWrap}`);
+      if (s.overflowX !== 'visible') bits.push(`ox:${s.overflowX}`);
+      if (s.minWidth !== '0px' && s.minWidth !== 'auto') bits.push(`minW:${s.minWidth}`);
+      out.push(bits.join(','));
+    }
+    return out.join(' < ');
+  };
+
   const describe = (el) => {
     const id = el.id ? `#${el.id}` : '';
     const cls = typeof el.className === 'string' && el.className
@@ -149,7 +177,8 @@ const collect = (statusBar) => {
     if ((r.right > vw + 1 || r.left < -1) && !inScroller(el)) {
       problems.push({
         kind: 'horizontal-overflow',
-        detail: `${describe(el)} spans ${Math.round(r.left)}→${Math.round(r.right)} in a ${vw}px viewport`,
+        detail: `${describe(el)} spans ${Math.round(r.left)}→${Math.round(r.right)} in a ${vw}px viewport`
+          + `\n         via ${chainOf(el)}`,
       });
     }
 
@@ -181,12 +210,34 @@ const collect = (statusBar) => {
 
   const email = process.env.AUDIT_EMAIL;
   const password = process.env.AUDIT_PASSWORD;
-  const routes = email && password ? [...PUBLIC_ROUTES, ...AUTH_ROUTES] : [...PUBLIC_ROUTES];
+  let routes = email && password ? [...PUBLIC_ROUTES, ...AUTH_ROUTES] : [...PUBLIC_ROUTES];
+
+  // Re-checking one fix should not cost a six-minute full sweep — that is how a
+  // verification step quietly stops being run. Both filters are opt-in, so an
+  // unqualified `npm run audit:mobile` still means everything.
+  //   AUDIT_ROUTES=/hours,/task-library   AUDIT_DEVICES='iPhone 15,Android'
+  let devices = DEVICES;
+  if (process.env.AUDIT_ROUTES) {
+    const want = process.env.AUDIT_ROUTES.split(',').map((r) => r.trim()).filter(Boolean);
+    routes = routes.filter((r) => want.includes(r));
+    if (!routes.length) {
+      console.error(`AUDIT_ROUTES matched no known route. Known: ${[...PUBLIC_ROUTES, ...AUTH_ROUTES].join(' ')}`);
+      process.exit(2);
+    }
+  }
+  if (process.env.AUDIT_DEVICES) {
+    const want = process.env.AUDIT_DEVICES.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+    devices = DEVICES.filter((d) => want.some((w) => d.name.toLowerCase().includes(w)));
+    if (!devices.length) {
+      console.error(`AUDIT_DEVICES matched no device. Known: ${DEVICES.map((d) => d.name).join(' | ')}`);
+      process.exit(2);
+    }
+  }
 
   const browser = await chromium.launch();
   const findings = [];
 
-  for (const device of DEVICES) {
+  for (const device of devices) {
     const ctx = await browser.newContext({
       viewport: { width: device.width, height: device.height },
       deviceScaleFactor: 3,
@@ -240,7 +291,7 @@ const collect = (statusBar) => {
   // ------------------------------------------------------------------ report
   console.log('\nMOBILE UI AUDIT\n' + '='.repeat(64));
   console.log(`base ${BASE}`);
-  console.log(`routes ${routes.length}  devices ${DEVICES.length}`);
+  console.log(`routes ${routes.length}  devices ${devices.length}`);
   if (!email || !password) {
     console.log(`\n  NOTE: no AUDIT_EMAIL/AUDIT_PASSWORD, so ${AUTH_ROUTES.length} signed-in`);
     console.log('  routes were NOT checked. A clean run below does not cover them.');
