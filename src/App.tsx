@@ -78,11 +78,16 @@ const PageLoadingFallback: React.FC = () => (
 );
 
 // Protected Route Component
-const ProtectedRoute: React.FC<{ children: React.ReactElement; adminOnly?: boolean }> = ({
+const ProtectedRoute: React.FC<{
+  children: React.ReactElement;
+  adminOnly?: boolean;
+  superAdminOnly?: boolean;
+}> = ({
   children,
   adminOnly = false,
+  superAdminOnly = false,
 }) => {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { isAuthenticated, isAdmin, isSuperAdmin, loading } = useAuth();
 
   // Wait for auth to initialize before making redirect decisions
   if (loading) {
@@ -94,6 +99,14 @@ const ProtectedRoute: React.FC<{ children: React.ReactElement; adminOnly?: boole
   }
 
   if (adminOnly && !isAdmin) {
+    return <Navigate to="/dashboard" />;
+  }
+
+  // The database already refuses these to anyone below super_admin — see v13.
+  // Redirecting rather than rendering is so a plain admin gets their dashboard
+  // instead of a screen that loads and then shows nothing, which reads as
+  // broken rather than as "not yours".
+  if (superAdminOnly && !isSuperAdmin) {
     return <Navigate to="/dashboard" />;
   }
 
@@ -264,7 +277,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/archive"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute superAdminOnly>
                 <ArchivePage />
               </ProtectedRoute>
             }
@@ -272,7 +285,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/activity-log"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute superAdminOnly>
                 <ActivityLogPage />
               </ProtectedRoute>
             }
@@ -288,7 +301,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/alerts"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute superAdminOnly>
                 <AlertsPage />
               </ProtectedRoute>
             }
@@ -296,7 +309,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/hours"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute superAdminOnly>
                 <WorkHoursPage />
               </ProtectedRoute>
             }
