@@ -17,7 +17,7 @@ the policy set that is actually live. No queries were run against production.
 
 | # | Finding | Severity | Confidence |
 |---|---------|----------|------------|
-| 1 | Google OAuth **client secret** is compiled into the public JS bundle | **High** | Certain (if the env var is set) |
+| 1 | Google OAuth **client secret** was compiled into the public JS bundle | ~~High~~ **Closed in code** | Re-verified 2026-08-25 |
 | 2 | Portal document **files** are readable regardless of `is_published` | **Medium** | Certain |
 | 3 | `anon` keeps table-level grants on 9 staff tables; RLS is the only layer | **Medium-low** | High |
 | 4 | `verify_portal_code` has no rate limiting | **Low** | Certain |
@@ -30,10 +30,17 @@ shape — see *What holds up* at the end, which is most of this document.
 
 ---
 
-## 1. The Google OAuth client secret ships to every visitor — **High**
+## 1. The Google OAuth client secret shipped to every visitor — ~~High~~ **closed in code**
 
-`src/services/googleCalendar.ts:96` and `:165` exchange the authorization code by POSTing
-directly to Google from the browser:
+> **STATUS 2026-08-25 — the code path is fixed; two follow-ups were never done.**
+> This finding was written on a branch cut at `9a86370`, which is *before* the fix landed
+> in `258cd89`. The auditor was reading a stale copy of the file. What follows is the
+> original finding, then what is actually true now.
+
+### What was wrong
+
+`src/services/googleCalendar.ts` exchanged the authorization code by POSTing directly to
+Google from the browser:
 
 ```ts
 client_secret: process.env.REACT_APP_GOOGLE_CLIENT_SECRET || '',
@@ -41,36 +48,78 @@ client_secret: process.env.REACT_APP_GOOGLE_CLIENT_SECRET || '',
 
 Create React App **inlines every `REACT_APP_*` variable into the bundle at build time**.
 It is not read at runtime from a server — it is a literal string in
-`build/static/js/main.*.js`, served to anyone who loads the app, signed in or not. The file
-carries a comment conceding the point: *"In a production app, this should be done
-server-side."*
+`build/static/js/main.*.js`, served to anyone who loads the app, signed in or not. The
+secret was real (a `GOCSPX-` value) and was served from the public didc.app.
 
-**Impact** depends on one thing you can check in a minute:
+A client secret in a public bundle lets anyone run OAuth flows as this application — a
+Google consent screen carrying the studio's name, pointed wherever they like — and spend
+the project's quota. It does not by itself expose any user's calendar; an authorization
+code is still needed per user.
 
-- **If `REACT_APP_GOOGLE_CLIENT_SECRET` is set in Vercel** — the secret for that OAuth client
-  is public. Anyone can extract it, and combined with the client ID (also public, and
-  necessarily so) impersonate this application in OAuth flows: build a convincing consent
-  screen carrying your app's name, and mint tokens against your quota. It does not by itself
-  expose any user's calendar — an authorization code is still needed per user — but the
-  client identity is no longer yours alone.
-- **If it is not set** — the string is empty, Google rejects the exchange, and the Calendar
-  connect flow has simply never worked in production. No leak; a broken feature instead.
+### What is true now
 
-**Check first** Vercel → project → Settings → Environment Variables. Search for
-`REACT_APP_GOOGLE_CLIENT_SECRET`. Or: `curl -s <prod-url>/static/js/main.*.js | grep -o 'GOCSPX-[A-Za-z0-9_-]*'`
-— a Google client secret starts with `GOCSPX-`.
+Both token calls go through the `google-oauth` Edge Function, where the secret is a
+server-side `Deno.env` variable. Verified 2026-08-25 at `c60c216`:
 
-**Fix** — the correct one is PKCE, which exists precisely so browser apps need no secret:
+| Check | Result |
+|---|---|
+| `REACT_APP_GOOGLE_CLIENT_SECRET` in `src/` | Only a comment recording the history |
+| Live bundle at www.didc.app | **Clean** — all 33 chunks enumerated via `asset-manifest.json` |
+| Full git history (1104 objects, all branches) | **Clean** — 0 hits; the one committed `.env` held `PORT` only |
+| Old pre-fix deployment URLs | Behind Vercel SSO (302 → login); not publicly readable |
+| Bare `process.env` reads (would inline every var) | None; every use names a specific var |
+| `google-oauth` Edge Function | Deployed, `ACTIVE`, `verify_jwt: true` |
 
-1. Rotate the secret in Google Cloud Console immediately if it is set. Assume it is burned.
-2. Switch the client to **PKCE** (`code_challenge` / `code_verifier`). A "Web application"
-   OAuth client can use PKCE without a secret; the verifier is generated per-flow in the
-   browser and never stored.
-3. Delete `REACT_APP_GOOGLE_CLIENT_SECRET` from Vercel and from the code.
+Note on method: enumerate chunks from `/asset-manifest.json`, not from `index.html`.
+`index.html` references only the entry chunks, and `googleCalendar.ts` is code-split into a
+lazy chunk — scanning only the entry chunks reports a false clean.
 
-If PKCE is more than you want to take on, the alternative is a Supabase Edge Function that
-holds the secret and performs the exchange — more moving parts, same outcome. PKCE is less
-work and is what Google recommends for this shape of app.
+### What was still outstanding, and what was done
+
+1. **`REACT_APP_GOOGLE_CLIENT_SECRET` was still set in the Vercel project** (Production,
+   stored as *Non-sensitive*), months after the code stopped reading it. One stray
+   `process.env` reference would have re-published it.
+   → **Removed from Vercel Production on 2026-08-25.**
+
+2. **The Edge Function had no Google secrets.** `google-oauth` returned
+   `500 "Google OAuth is not configured on the server"`, so staff Google Calendar connect
+   was broken in production — the fix shipped without its server-side configuration.
+   → **Outstanding. Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`** (see below).
+
+3. **The old secret is burned and was never rotated.** It was public on didc.app for a
+   period; anyone who downloaded the bundle then still holds a valid credential.
+   → **Outstanding. Rotate in Google Cloud Console.**
+
+Remaining steps, in order — both require handling the credential itself:
+
+```bash
+# 1. Rotate in Google Cloud Console -> APIs & Services -> Credentials
+#    -> the OAuth 2.0 Client -> add a new client secret, delete the old one.
+
+# 2. Give the Edge Function the new values.
+supabase secrets set GOOGLE_CLIENT_ID=<client id> GOOGLE_CLIENT_SECRET=<new secret> \
+  --project-ref sgppeenmvskwztaszkgn
+
+# 3. Confirm. Configured -> 401 "Invalid or expired session".
+#    Not configured -> 500 "Google OAuth is not configured on the server".
+#    (The function checks its config before it validates the session, which is what
+#     makes this probe safe to run with nothing but the public anon key.)
+curl -s -X POST https://sgppeenmvskwztaszkgn.supabase.co/functions/v1/google-oauth \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY" -H "apikey: $SUPABASE_ANON_KEY" \
+  -H 'Content-Type: application/json' -d '{"action":"refresh","refreshToken":"probe"}'
+```
+
+Rotating first costs no downtime: Calendar connect is already failing for want of step 2.
+
+### Preventing recurrence
+
+`scripts/check-public-env.js` runs as a `prebuild` hook and fails the build if any
+`REACT_APP_*` name contains `SECRET`, `PASSWORD`, `PRIVATE`, `CREDENTIAL` or
+`SERVICE_ACCOUNT`. It reads both the ambient environment and the `.env` files, in
+react-scripts' own precedence order — a secret in `.env.local` never reaches `process.env`
+when a prebuild hook runs, so a check that read only `process.env` would miss the most
+likely case. `REACT_APP_SUPABASE_ANON_KEY` is deliberately not matched: it is public by
+design, and a blanket `_KEY` rule would fire every build and train everyone to ignore it.
 
 ---
 
@@ -284,8 +333,11 @@ right should not be re-litigated later:
 
 ## Suggested order
 
-1. **Check whether `REACT_APP_GOOGLE_CLIENT_SECRET` is set in Vercel.** Minutes. Determines
-   whether finding 1 is a live incident or a broken feature.
+1. ~~**Check whether `REACT_APP_GOOGLE_CLIENT_SECRET` is set in Vercel.**~~ Done 2026-08-25:
+   it was set, with a real value. The bundle itself was already clean, so this was a live
+   *credential* exposure rather than a live *leak* — the secret is out, but nothing is
+   still publishing it. The var has been removed from Vercel; **rotating it, and giving
+   the `google-oauth` function its secrets, are still outstanding** (see finding 1).
 2. **Finding 3's `REVOKE`** — one statement, no behaviour change, closes the whole class.
 3. **Findings 2 and 5 together** — one migration plus a one-character change.
 4. **Finding 4 step 1** — lengthen the portal codes.
