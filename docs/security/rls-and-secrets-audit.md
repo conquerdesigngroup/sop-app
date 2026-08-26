@@ -84,11 +84,14 @@ lazy chunk — scanning only the entry chunks reports a false clean.
 2. **The Edge Function had no Google secrets.** `google-oauth` returned
    `500 "Google OAuth is not configured on the server"`, so staff Google Calendar connect
    was broken in production — the fix shipped without its server-side configuration.
-   → **Outstanding. Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`** (see below).
+   → **Done 2026-08-26.** `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set as Edge
+   Function secrets. Probe flipped from `500` to `401 "Invalid or expired session"`, which
+   is the configured-and-reachable signal.
 
-3. **The old secret is burned and was never rotated.** It was public on didc.app for a
-   period; anyone who downloaded the bundle then still holds a valid credential.
-   → **Outstanding. Rotate in Google Cloud Console.**
+3. **The old secret was burned and was never rotated.**
+   → **Done 2026-08-26.** Both February secrets (`****Ed-C`, `****5SUK`) are deleted. The
+   client now holds exactly one secret, created 2026-08-26, which has never been published
+   anywhere. The leaked value is dead.
 
 Remaining steps, in order — both require handling the credential itself:
 
@@ -113,16 +116,30 @@ Rotating first costs no downtime: Calendar connect is already failing for want o
 
 ### Rotating this client: two things that will trip you up
 
-**Google will not let you disable every secret.** A client must keep at least one enabled,
-so "disable both old secrets" is impossible — the second one greys out its own Disable and
-trash controls with *"At least 1 secret must be enabled."* Deleting the old pair requires a
-third, new secret to exist first. Sequence that actually works:
+Two limits apply at once, and together they dictate the order. Getting it wrong wastes a
+trip to the console, which is what happened here twice.
 
-1. **+ Add secret**, and copy the value immediately — Google shows it once and viewing or
-   re-downloading an existing secret is no longer offered at all.
-2. Disable, then trash, each old secret. Both controls unlock once the new one is enabled.
+- **A client must keep at least one secret enabled.** The last enabled one greys out its own
+  Disable *and* its trash: *"At least 1 secret must be enabled."*
+- **A client may hold at most two secrets.** At two, **+ Add secret** is disabled:
+  *"You can only create 2 secrets. To add secret, disable and delete an existing secret."*
 
-**Or delete the client.** Which is what was done here, 2026-08-26: this client had *no
+So with two secrets already present you cannot add a third *and* cannot remove the enabled
+one — the only legal first move is to clear out a disabled secret. Sequence that works:
+
+1. **Disable** the old secret you are replacing.
+2. **Trash** it. Deleting requires it be disabled first — *"To delete this secret, disable
+   the secret first."* This is what frees the second slot.
+3. **+ Add secret**, now enabled. Copy the value at that moment: Google no longer offers
+   viewing or re-downloading an existing secret at all, so an uncopied value is lost.
+4. Put it where it belongs (`GOOGLE_CLIENT_SECRET`, Edge Function secrets), then come back
+   and **Disable + trash** the remaining old secret. Its controls unlock once the new one
+   is enabled.
+
+**Or delete the client**, which is the better move only if you are *not* about to use the
+feature — it avoids storing a new secret for days, at the cost of a new client ID and
+re-entering every URI. It was considered here and rejected once the Calendar work turned
+out to be imminent; the secret was rotated in place instead. This client had *no
 recorded usage whatsoever* (`Last used date` equal to its creation date, plus Google's own
 "will be deleted because it has not been used" banner), so the leaked secret was never
 exercised by anyone. Deleting the client destroys both secrets at once and avoids having to
@@ -365,11 +382,11 @@ right should not be re-litigated later:
 
 ## Suggested order
 
-1. ~~**Check whether `REACT_APP_GOOGLE_CLIENT_SECRET` is set in Vercel.**~~ Done 2026-08-25:
-   it was set, with a real value. The bundle itself was already clean, so this was a live
-   *credential* exposure rather than a live *leak* — the secret is out, but nothing is
-   still publishing it. The var has been removed from Vercel; **rotating it, and giving
-   the `google-oauth` function its secrets, are still outstanding** (see finding 1).
+1. ~~**Finding 1.**~~ **Closed 2026-08-26.** The var was set in Vercel with a real value,
+   though the bundle itself was already clean — a live *credential* exposure rather than a
+   live *leak*. Removed from Vercel, the secret rotated in Google Cloud Console, and
+   `google-oauth` given its `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, which also fixed
+   staff Calendar connect. `scripts/check-public-env.js` now guards the regression.
 2. **Finding 3's `REVOKE`** — one statement, no behaviour change, closes the whole class.
 3. **Findings 2 and 5 together** — one migration plus a one-character change.
 4. **Finding 4 step 1** — lengthen the portal codes.
