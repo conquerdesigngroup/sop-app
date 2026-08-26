@@ -705,6 +705,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     zIndex: 100,
     boxShadow: theme.shadows.md,
     width: '100%',
+    // This is the top-most element on every signed-in page, and index.html sets
+    // viewport-fit=cover, so the page runs under the notch. Padding rather than
+    // margin on purpose: the bar's own background then fills the status-bar
+    // area and the links sit below it, instead of leaving a strip of page
+    // showing through above a bar that starts too low.
+    //
+    // Only PortalLayout was doing this, which is why the parent portal looked
+    // right on a phone and every staff screen did not.
+    paddingTop: 'env(safe-area-inset-top)',
   },
   container: {
     maxWidth: '1400px',
@@ -790,7 +799,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflowY: 'auto',
     boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.5)',
     WebkitOverflowScrolling: 'touch',
-    maxHeight: '70vh',
+    maxHeight: '70dvh',
     paddingBottom: 'env(safe-area-inset-bottom, 20px)',
   },
   dragHandle: {

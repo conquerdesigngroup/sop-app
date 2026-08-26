@@ -1,6 +1,6 @@
 {
   "name": "sop-app",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.81.1",
@@ -27,6 +27,7 @@
     "start": "react-scripts start",
     "prebuild": "node scripts/check-public-env.js",
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
+    "audit:mobile": "node scripts/audit-mobile-ui.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "deploy": "npx vercel --prod"

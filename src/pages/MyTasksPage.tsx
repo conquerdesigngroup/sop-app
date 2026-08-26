@@ -1099,7 +1099,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     width: '100%',
     maxWidth: '800px',
-    maxHeight: '90vh',
+    maxHeight: '90dvh',
     overflow: 'auto',
     border: `1px solid ${theme.colors.bdr.primary}`,
   },
@@ -1108,7 +1108,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     width: '100%',
     maxWidth: '100%',
-    maxHeight: 'calc(100vh - 60px)', // Adjust height to account for nav header
+    maxHeight: 'calc(100dvh - 60px)', // Adjust height to account for nav header
     overflow: 'auto',
     border: `1px solid ${theme.colors.bdr.primary}`,
   },

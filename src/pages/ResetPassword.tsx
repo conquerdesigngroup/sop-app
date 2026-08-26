@@ -98,7 +98,12 @@ const ResetPassword: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: isMobileOrTablet ? '24px 16px' : '40px',
+        // See Login.tsx: viewport-fit=cover means the top and bottom insets are
+        // this page's own responsibility.
+        paddingTop: `calc(${isMobileOrTablet ? '24px' : '40px'} + env(safe-area-inset-top))`,
+        paddingBottom: `calc(${isMobileOrTablet ? '24px' : '40px'} + env(safe-area-inset-bottom))`,
+        paddingLeft: isMobileOrTablet ? '16px' : '40px',
+        paddingRight: isMobileOrTablet ? '16px' : '40px',
         textAlign: 'left',
       }}
     >

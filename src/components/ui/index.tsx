@@ -1087,7 +1087,7 @@ const modalStyle: React.CSSProperties = {
   border: `2px solid ${theme.colors.bdr.primary}`,
   borderRadius: theme.borderRadius.lg,
   width: '100%',
-  maxHeight: '90vh',
+  maxHeight: '90dvh',
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',

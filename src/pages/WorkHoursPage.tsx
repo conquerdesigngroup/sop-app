@@ -2360,7 +2360,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: `2px solid ${theme.colors.bdr.primary}`,
     width: '100%',
     maxWidth: '500px',
-    maxHeight: '90vh',
+    maxHeight: '90dvh',
     overflow: 'auto',
   },
   modalHeader: {

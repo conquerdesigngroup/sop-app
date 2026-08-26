@@ -406,7 +406,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: `1px solid ${theme.colors.bdr.primary}`,
     width: '100%',
     maxWidth: '600px',
-    maxHeight: '80vh',
+    maxHeight: '80dvh',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',

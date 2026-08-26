@@ -670,7 +670,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: `2px solid ${theme.colors.border}`,
     width: '100%',
     maxWidth: '600px',
-    maxHeight: '90vh',
+    maxHeight: '90dvh',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
