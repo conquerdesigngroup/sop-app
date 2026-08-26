@@ -41,7 +41,7 @@ const MY_PERIODS: PeriodPreset[] = ['this-week', 'last-week', 'this-month', 'all
  * scheduled. This one is about how many HOURS they worked.
  */
 const HoursInputPage: React.FC = () => {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, isSuperAdmin } = useAuth();
   const {
     workHours,
     workCategories,
@@ -251,7 +251,7 @@ const HoursInputPage: React.FC = () => {
         </div>
       )}
 
-      {isAdmin && (
+      {isSuperAdmin && (
         <div style={{
           display: 'flex',
           gap: theme.spacing.sm,
@@ -263,7 +263,7 @@ const HoursInputPage: React.FC = () => {
         </div>
       )}
 
-      {tab === 'team' && isAdmin ? (
+      {tab === 'team' && isSuperAdmin ? (
         <TeamHoursPanel />
       ) : (
         <>

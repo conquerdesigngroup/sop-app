@@ -309,18 +309,24 @@ const TeamManagementPage: React.FC = () => {
             ...(isMobile && styles.subtitleMobile),
           }}>Manage your team members and their permissions</p>
         </div>
-        <button onClick={handleOpenAddUser} style={{
-          ...styles.addButton,
-          ...(isMobile && styles.addButtonMobile),
-        }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="8.5" cy="7" r="4" />
-            <line x1="20" y1="8" x2="20" y2="14" />
-            <line x1="23" y1="11" x2="17" y2="11" />
-          </svg>
-          {isMobile ? 'Add Member' : 'Add Team Member'}
-        </button>
+        {/* Creating a login is super admin only from v13, and the admin-users
+            function refuses the call regardless — this only stops the UI
+            offering it. Hidden rather than disabled: a greyed-out control
+            invites a support question that "you cannot" does not settle. */}
+        {isSuperAdmin && (
+          <button onClick={handleOpenAddUser} style={{
+            ...styles.addButton,
+            ...(isMobile && styles.addButtonMobile),
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="8.5" cy="7" r="4" />
+              <line x1="20" y1="8" x2="20" y2="14" />
+              <line x1="23" y1="11" x2="17" y2="11" />
+            </svg>
+            {isMobile ? 'Add Member' : 'Add Team Member'}
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -482,6 +488,8 @@ const TeamManagementPage: React.FC = () => {
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
                   </button>
+                  {/* Setting someone else's password is super admin only. */}
+                  {isSuperAdmin && (
                   <button
                     onClick={() => handleOpenReset(user)}
                     style={{...styles.iconButton, ...styles.iconButtonMobile}}
@@ -492,6 +500,7 @@ const TeamManagementPage: React.FC = () => {
                       <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
                     </svg>
                   </button>
+                  )}
                   {user.id !== currentUser?.id && (
                     <>
                       {user.isActive !== false ? (
@@ -614,6 +623,8 @@ const TeamManagementPage: React.FC = () => {
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                           </svg>
                         </button>
+                        {/* Super admin only — see the card layout above. */}
+                        {isSuperAdmin && (
                         <button
                           onClick={() => handleOpenReset(user)}
                           style={styles.iconButton}
@@ -624,6 +635,7 @@ const TeamManagementPage: React.FC = () => {
                             <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
                           </svg>
                         </button>
+                        )}
                         {user.id !== currentUser?.id && (
                           <>
                             {user.isActive !== false ? (

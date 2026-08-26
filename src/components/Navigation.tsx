@@ -121,7 +121,7 @@ type NavElement = NavItem | NavGroup;
 const Navigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, logout, isAdmin } = useAuth();
+  const { currentUser, logout, isAdmin, isSuperAdmin } = useAuth();
   // Shown by authoring rights rather than by role: an instructor holding a
   // class is a plain 'team' member, and gating this on isAdmin would hide the
   // portal manager from the people it was built for.
@@ -214,25 +214,32 @@ const Navigation: React.FC = () => {
     elements.push(tasksGroup);
     elements.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
     elements.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
+    // Hours Input stays open to everyone — it is where you log your OWN time.
     elements.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
-    elements.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
-    elements.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+
+    // Everyone else's hours, and the alert board built on them, are super admin
+    // only from v13. These were previously offered to every signed-in user.
+    if (isSuperAdmin) {
+      elements.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
+      elements.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+    }
 
     if (canEditPortal) {
       elements.push({ path: '/portal-admin', label: 'Portal', icon: icons.portal });
     }
 
-    // Admin group (only for admins)
+    // Admin group. Team stays for admins — they need the directory to assign
+    // who may post to a class — but the audit log and the archive are super
+    // admin only, so the group can end up holding a single entry.
     if (isAdmin) {
-      elements.push({
-        label: 'Admin',
-        icon: icons.admin,
-        items: [
-          { path: '/team', label: 'Team', icon: icons.team },
-          { path: '/activity-log', label: 'Activity Log', icon: icons.activity },
-          { path: '/archive', label: 'Archive', icon: icons.archive },
-        ],
-      });
+      const adminItems: NavItem[] = [
+        { path: '/team', label: 'Team', icon: icons.team },
+      ];
+      if (isSuperAdmin) {
+        adminItems.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
+        adminItems.push({ path: '/archive', label: 'Archive', icon: icons.archive });
+      }
+      elements.push({ label: 'Admin', icon: icons.admin, items: adminItems });
     }
 
     return elements;
@@ -252,8 +259,11 @@ const Navigation: React.FC = () => {
     items.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
     items.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
     items.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
-    items.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
-    items.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+
+    if (isSuperAdmin) {
+      items.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
+      items.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+    }
 
     if (canEditPortal) {
       items.push({ path: '/portal-admin', label: 'Portal', icon: icons.portal });
@@ -261,6 +271,8 @@ const Navigation: React.FC = () => {
 
     if (isAdmin) {
       items.push({ path: '/team', label: 'Team', icon: icons.team });
+    }
+    if (isSuperAdmin) {
       items.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
       items.push({ path: '/archive', label: 'Archive', icon: icons.archive });
     }
