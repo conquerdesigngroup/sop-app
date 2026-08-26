@@ -2,9 +2,49 @@
 -- v13 — a super admin tier above admin
 -- =============================================================================
 --
--- STATUS: NOT YET APPLIED. Apply order is client → Edge Functions → this file.
---         See "APPLY ORDER" below; running this first logs every promoted user
---         out of their own admin UI until the client catches up.
+-- STATUS: APPLIED to prod 2026-08-26 as migration `v13_super_admin`
+--         (project sgppeenmvskwztaszkgn). Client 1.0.10 and both Edge Functions
+--         were already live, in that order.
+--
+--         Resulting counts: 3 super_admin, 2 admin, 3 active team (+1 inactive).
+--
+-- VERIFIED BY IMPERSONATION, NOT BY READING — every check below was run inside a
+-- transaction that was then rolled back.
+--
+--   as a plain admin
+--     is_admin() true, is_super_admin() false
+--     employee_pay_rates 0 rows, work_hours_pay 0 rows
+--     work_hours 141 of 252 — exactly the rows he owns, the other 111 hidden.
+--       This was the one result that looked wrong and was not: he is also an
+--       employee, and the "OR employee_id = auth.uid()" branch is preserved on
+--       purpose. Expecting 0 was my error, not the policy's.
+--     sops 29, portal_classes 9 — the things admin keeps, still reachable
+--
+--   the four escalation attempts, all REFUSED
+--     self-promote to super_admin  -> Only a super admin may grant super admin
+--     demote a super admin         -> Only a super admin may change another
+--     DEACTIVATE a super admin     -> Only a super admin may change another
+--     INSERT a new super_admin     -> Only a super admin may create a super admin
+--
+--   as a super admin
+--     is_admin() and is_super_admin() both true
+--     work_hours 252 — everyone's
+--     promoting an admin: allowed
+--     demoting the last remaining super admin: REFUSED, rule 4 holds
+--
+--   the pay wall, proved rather than assumed
+--     employee_pay_rates is EMPTY in production, so "a plain admin sees 0" was
+--     no evidence at all — it cannot be told apart from an empty table. A rate
+--     was seeded inside the rolled-back transaction and then:
+--       plain admin read  -> 0 rows, including his OWN rate
+--       plain admin write -> refused
+--       super admin read  -> 1 row
+--
+--   the migration runner is transactional. Confirmed before applying, by
+--   running a statement that created a table and then raised: the table was
+--   gone afterwards. The whole design depends on it — §3 drops the escalation
+--   trigger, and without atomicity a failure there would leave profiles with no
+--   guard at all.
 --
 -- WHAT THIS DOES
 --
