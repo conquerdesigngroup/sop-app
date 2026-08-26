@@ -111,6 +111,38 @@ curl -s -X POST https://sgppeenmvskwztaszkgn.supabase.co/functions/v1/google-oau
 
 Rotating first costs no downtime: Calendar connect is already failing for want of step 2.
 
+### Rotating this client: two things that will trip you up
+
+**Google will not let you disable every secret.** A client must keep at least one enabled,
+so "disable both old secrets" is impossible — the second one greys out its own Disable and
+trash controls with *"At least 1 secret must be enabled."* Deleting the old pair requires a
+third, new secret to exist first. Sequence that actually works:
+
+1. **+ Add secret**, and copy the value immediately — Google shows it once and viewing or
+   re-downloading an existing secret is no longer offered at all.
+2. Disable, then trash, each old secret. Both controls unlock once the new one is enabled.
+
+**Or delete the client.** Which is what was done here, 2026-08-26: this client had *no
+recorded usage whatsoever* (`Last used date` equal to its creation date, plus Google's own
+"will be deleted because it has not been used" banner), so the leaked secret was never
+exercised by anyone. Deleting the client destroys both secrets at once and avoids having to
+store a new secret days before the Calendar work needs it. Deleted credentials stay
+restorable from **Credentials → Restore deleted credentials** for a limited window.
+
+Recreate it as a **Web application** client with exactly these values — the redirect URI
+must match `REACT_APP_GOOGLE_REDIRECT_URI`, and `localhost:3003` is what `npm start` serves:
+
+| Field | Values |
+|---|---|
+| Name | `DIDC SOP App` |
+| Authorized JavaScript origins | `https://didc.app`<br>`http://localhost:3003`<br>`https://sop-app-zeta.vercel.app` |
+| Authorized redirect URIs | `https://didc.app/auth/callback`<br>`http://localhost:3003/auth/callback`<br>`https://sop-app-zeta.vercel.app/auth/callback` |
+
+The new client ID replaces `REACT_APP_GOOGLE_CLIENT_ID` in Vercel. The client ID is public
+by design — it travels in every authorization URL — so it belongs in Vercel. The **secret
+does not**: it goes only to `supabase secrets set`, and `scripts/check-public-env.js` now
+fails the build if anyone puts it back in a `REACT_APP_*` var.
+
 ### Preventing recurrence
 
 `scripts/check-public-env.js` runs as a `prebuild` hook and fails the build if any
