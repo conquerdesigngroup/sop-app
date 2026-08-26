@@ -69,7 +69,7 @@ interface PortalContextValue {
   fetchClasses: (programId: string) => Promise<PortalClass[]>;
   fetchUpdates: (programId: string, classId?: string | null) => Promise<PortalUpdate[]>;
   fetchEvents: (programId: string) => Promise<PortalEvent[]>;
-  fetchDocuments: (programId: string) => Promise<PortalDocument[]>;
+  fetchDocuments: (programId: string, classId?: string | null) => Promise<PortalDocument[]>;
   /** Short-lived signed URL for a document in the private bucket. */
   getDocumentUrl: (storagePath: string) => Promise<string | null>;
 }
@@ -243,12 +243,23 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return (data ?? []).map(mapEvent);
   }, []);
 
-  const fetchDocuments = useCallback(async (programId: string) => {
-    const { data, error: err } = await supabase
+  /**
+   * `classId` mirrors fetchUpdates: omitted means every file in the program,
+   * null means studio-wide only, a string means that one class. Undefined and
+   * null are deliberately different here — `.is('class_id', null)` and no filter
+   * at all are not the same query.
+   */
+  const fetchDocuments = useCallback(async (programId: string, classId?: string | null) => {
+    let query = supabase
       .from('portal_documents')
       .select('*')
       .eq('program_id', programId)
-      .eq('is_published', true)
+      .eq('is_published', true);
+
+    if (classId === null) query = query.is('class_id', null);
+    else if (typeof classId === 'string') query = query.eq('class_id', classId);
+
+    const { data, error: err } = await query
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
 
