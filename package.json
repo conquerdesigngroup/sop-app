@@ -25,6 +25,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "prebuild": "node scripts/check-public-env.js",
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
