@@ -1020,6 +1020,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   logDetailItem: {
     display: 'inline',
+    // A flex item will not shrink below its content's min-content width, and a
+    // JSON detail value like ["title","description","category"] has no space to
+    // break at — so it rendered 711px wide inside a 258px column and was simply
+    // cut off. minWidth lets the item shrink; overflowWrap lets the token break.
+    minWidth: 0,
+    overflowWrap: 'anywhere',
   },
   detailSeparator: {
     color: theme.colors.textMuted,

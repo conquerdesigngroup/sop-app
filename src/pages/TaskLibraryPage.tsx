@@ -521,6 +521,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
+    // chevron + a 22px bold category name + the "3 TEMPLATES" pill come to
+    // roughly 300px, and the button's own 24px side padding leaves about 276px
+    // on a 360px phone. Without wrap the row just kept going past the right
+    // edge; the pill drops onto its own line instead now.
+    flexWrap: 'wrap',
+    minWidth: 0,
   },
   categoryChevron: {
     transition: 'transform 0.2s',

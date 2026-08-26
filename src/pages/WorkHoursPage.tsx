@@ -3239,7 +3239,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   calendarLegend: {
     display: 'flex',
     justifyContent: 'center',
-    gap: '24px',
+    // Six employee chips plus 24px gaps come to roughly 540px, and this box is
+    // 333px on a phone. Overflow under justifyContent:'center' is split BOTH
+    // ways, so the first chip sat at x=-45 — off the left edge, where there is
+    // no scrolling left to reach it. A row that centres must be free to wrap.
+    flexWrap: 'wrap',
+    gap: '12px 24px',
     marginTop: '20px',
     paddingTop: '16px',
     borderTop: `1px solid ${theme.colors.bdr.primary}`,

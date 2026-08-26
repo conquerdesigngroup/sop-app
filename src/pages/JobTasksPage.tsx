@@ -2054,6 +2054,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   filtersContainer: {
     display: 'flex',
+    // Wrap, because the mobile breakpoint is 480px and this row does not fit
+    // between there and roughly 660px. filtersContainerMobile switches to a
+    // column below 480, so phones were always fine; an iPad in split view was
+    // not, and the third select ran off the right edge with nothing to scroll.
+    flexWrap: 'wrap',
     gap: theme.spacing.md,
     marginBottom: theme.spacing.xl,
   },
