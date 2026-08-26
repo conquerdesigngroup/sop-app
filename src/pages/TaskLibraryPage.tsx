@@ -716,7 +716,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.lg,
     width: '100%',
     maxWidth: '800px',
-    maxHeight: '90vh',
+    maxHeight: '90dvh',
     overflow: 'auto',
     border: `1px solid ${theme.colors.bdr.primary}`,
   },

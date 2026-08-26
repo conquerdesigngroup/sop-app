@@ -58,7 +58,7 @@ const PageLoadingFallback: React.FC = () => (
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '60vh',
+    minHeight: '60dvh',
     backgroundColor: theme.colors.bg.primary,
   }}>
     <div style={{
@@ -152,7 +152,7 @@ const AppContent: React.FC = () => {
       className="App"
       style={{
         backgroundColor: colors.bg.primary,
-        minHeight: '100vh',
+        minHeight: '100dvh',
         // Add padding bottom for bottom nav on mobile
         paddingBottom: showStaffChrome && isMobileOrTablet ? '70px' : 0,
         transition: 'background-color 0.3s ease',

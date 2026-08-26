@@ -783,7 +783,7 @@ const SettingsPage: React.FC = () => {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    minHeight: 'calc(100vh - 80px)',
+    minHeight: 'calc(100dvh - 80px)',
     backgroundColor: theme.colors.background,
   },
   content: {

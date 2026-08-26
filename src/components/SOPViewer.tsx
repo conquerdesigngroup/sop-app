@@ -222,13 +222,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '40px',
     maxWidth: '1400px',
     margin: '0 auto',
-    minHeight: '100vh',
+    minHeight: '100dvh',
   },
   containerMobile: {
     padding: '0',
     maxWidth: '100%',
     margin: '0',
-    minHeight: '100vh',
+    minHeight: '100dvh',
     position: 'fixed',
     top: '60px', // Add space for the navigation header
     left: 0,
@@ -446,7 +446,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.cardBackground,
     borderTop: `2px solid ${theme.colors.border}`,
     padding: '16px',
-    minHeight: 'calc(100vh - 200px)',
+    minHeight: 'calc(100dvh - 200px)',
   },
   stepHeader: {
     display: 'flex',

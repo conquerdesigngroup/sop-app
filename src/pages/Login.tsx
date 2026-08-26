@@ -241,18 +241,29 @@ const Login: React.FC = () => {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    minHeight: '100vh',
+    minHeight: '100dvh',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     background: `linear-gradient(135deg, ${theme.colors.bg.tertiary} 0%, ${theme.colors.bg.primary} 100%)`,
-    padding: theme.spacing.md,
+    // index.html sets viewport-fit=cover, so the page deliberately runs under the
+    // notch and the home indicator. index.css insets body left and right only,
+    // and this page renders without Navigation — nothing else adds the top or
+    // bottom. Without these the first element sits behind the clock.
+    // Longhand throughout: mixing `padding` with `paddingTop` is the conflicting
+    // -style warning this file already avoids further down.
+    paddingTop: `calc(${theme.spacing.md} + env(safe-area-inset-top))`,
+    paddingBottom: `calc(${theme.spacing.md} + env(safe-area-inset-bottom))`,
+    paddingLeft: theme.spacing.md,
+    paddingRight: theme.spacing.md,
   },
   containerMobile: {
-    padding: theme.spacing.sm,
     justifyContent: 'flex-start',
-    paddingTop: theme.spacing.lg,
+    paddingTop: `calc(${theme.spacing.lg} + env(safe-area-inset-top))`,
+    paddingBottom: `calc(${theme.spacing.sm} + env(safe-area-inset-bottom))`,
+    paddingLeft: theme.spacing.sm,
+    paddingRight: theme.spacing.sm,
   },
   loginCard: {
     backgroundColor: theme.colors.bg.secondary,

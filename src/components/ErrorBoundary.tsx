@@ -115,12 +115,21 @@ class ErrorBoundary extends Component<Props, State> {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    minHeight: '100vh',
+    minHeight: '100dvh',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.background,
-    padding: '20px',
+    // index.html sets viewport-fit=cover, so the page deliberately runs under the
+    // notch and the home indicator. index.css insets body left and right only,
+    // and this page renders without Navigation — nothing else adds the top or
+    // bottom. Without these the first element sits behind the clock.
+    // Longhand throughout: mixing `padding` with `paddingTop` is the conflicting
+    // -style warning this file already avoids further down.
+    paddingTop: 'calc(20px + env(safe-area-inset-top))',
+    paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
+    paddingLeft: '20px',
+    paddingRight: '20px',
   },
   card: {
     maxWidth: '600px',

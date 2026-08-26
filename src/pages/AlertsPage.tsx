@@ -1071,7 +1071,7 @@ const AlertsPage: React.FC = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    minHeight: 'calc(100vh - 80px)',
+    minHeight: 'calc(100dvh - 80px)',
     backgroundColor: theme.colors.background,
   },
   content: {

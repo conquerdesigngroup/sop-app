@@ -758,7 +758,7 @@ const DefaultIcon = () => (
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    minHeight: '100vh',
+    minHeight: '100dvh',
     backgroundColor: theme.colors.background,
   },
   content: {

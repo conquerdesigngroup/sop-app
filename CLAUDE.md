@@ -141,6 +141,67 @@ import {
 
 ---
 
+## 📱 MOBILE VERIFICATION (MANDATORY BEFORE SHIPPING UI)
+
+Most of this app is used on a phone. A layout that is only ever looked at on a
+laptop will be broken on a phone and nobody will notice until a parent does.
+
+**Run this before shipping any UI change:**
+
+```bash
+npm start                    # in another terminal
+npm run audit:mobile
+```
+
+It checks every route at four phone sizes for horizontal overflow, elements
+clipped off the top, and content sitting under the notch. Signed-in routes are
+only covered if you give it a session:
+
+```bash
+AUDIT_EMAIL=you@example.com AUDIT_PASSWORD=... npm run audit:mobile
+```
+
+Without those it says so, loudly — a clean run without credentials has checked
+four public routes and nothing else.
+
+It needs Playwright, which is deliberately not a dependency:
+`npm install --no-save playwright && npx playwright install chromium`.
+
+### The two rules it exists to enforce
+
+1. **Never `100vh`. Always `100dvh`.** On iOS `100vh` is the *large* viewport —
+   the height the page would have if the browser chrome collapsed — so a
+   "full screen" container is taller than the screen, runs off the bottom, and
+   drags its content up under the top edge. `100dvh` is the visible height.
+
+2. **`viewport-fit=cover` is set in index.html, so safe-area padding is
+   mandatory, not optional.** The page deliberately extends under the notch and
+   the home indicator. `index.css` insets `body` left and right only. Any page
+   that renders WITHOUT `Navigation` or `PortalLayout` — a login, a callback, an
+   error screen — must add its own:
+
+   ```tsx
+   paddingTop: `calc(${theme.spacing.md} + env(safe-area-inset-top))`,
+   paddingBottom: `calc(${theme.spacing.md} + env(safe-area-inset-bottom))`,
+   paddingLeft: theme.spacing.md,
+   paddingRight: theme.spacing.md,
+   ```
+
+   Longhand, not the `padding` shorthand — mixing the two in one style object is
+   React's conflicting-style warning.
+
+   Pages that DO render inside `Navigation` or `PortalLayout` must NOT add their
+   own top inset; those components already do it and it would double.
+
+### What the audit cannot tell you
+
+Chromium reports `env(safe-area-inset-*)` as `0` and gives no way to override
+it, so the notch check is a proxy: it flags content in the status-bar band on
+pages that apply no safe-area padding at all. It cannot confirm that padding you
+did add is the right size. For that, look at a real phone.
+
+---
+
 ## 🚫 DO NOT
 
 1. **DO NOT** create inline styles for buttons, cards, inputs - use the UI components
