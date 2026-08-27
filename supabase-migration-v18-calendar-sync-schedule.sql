@@ -62,10 +62,12 @@
 --
 --   select jobname, schedule, active from cron.job;
 --
---   select status, return_message, start_time
---     from cron.job_run_details
---    where jobname = 'calendar-sync-30min'
---    order by start_time desc limit 5;
+--   -- cron.job_run_details has no jobname column, only jobid. Join to get it.
+--   select d.status, d.return_message, d.start_time
+--     from cron.job_run_details d
+--     join cron.job j on j.jobid = d.jobid
+--    where j.jobname = 'calendar-sync-30min'
+--    order by d.start_time desc limit 5;
 --
 --   -- the thing that actually matters: did the sync write anything
 --   select 'staff' as side, name, last_status, last_synced_at from calendar_sources
