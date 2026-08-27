@@ -79,7 +79,40 @@ const DEVICES = [
   { name: 'iPad split view', width: 507, height: 768, statusBar: 0 },
 ];
 
-const PUBLIC_ROUTES = ['/', '/login', '/reset-password', '/portal'];
+const PUBLIC_ROUTES = [
+  '/', '/login', '/reset-password', '/portal',
+  // The parent portal's program pages. Left out until the calendar grew a month
+  // view and it turned out nothing here had ever been measured on a phone — the
+  // portal is the half of this app that is ONLY ever opened on one.
+  //
+  // Only allstars: both programs render the same components through the same
+  // ProgramGate layout, so auditing the second would measure the same JSX twice.
+  '/portal/allstars',
+  '/portal/allstars/classes',
+  '/portal/allstars/updates',
+  '/portal/allstars/documents',
+  '/portal/allstars/calendar',
+];
+
+// Portal program pages sit behind a studio access code. The flag it sets is
+// localStorage and is documented in src/lib/portal.ts as a convenience rather
+// than a security boundary — portal content is readable by `anon` either way —
+// so the audit grants itself access instead of holding a code. Without this
+// every route above measures the same access-gate screen.
+//
+// It also picks which calendar mode gets measured. The month grid is seven
+// columns inside a phone width and is the layout that can actually overflow;
+// the list is a single-column stack. So month is the default, and the list is
+// checked with AUDIT_PORTAL_VIEW=list rather than by not checking it.
+const PORTAL_VIEW = process.env.AUDIT_PORTAL_VIEW === 'list' ? 'list' : 'month';
+
+const PORTAL_ACCESS_INIT = `
+  try {
+    localStorage.setItem('didc_portal_access_allstars', 'granted');
+    localStorage.setItem('didc_portal_access_academy', 'granted');
+    localStorage.setItem('didc_portal_calendar_view', '${PORTAL_VIEW}');
+  } catch (e) {}
+`;
 
 const AUTH_ROUTES = [
   '/dashboard', '/sop', '/job-tasks', '/task-library', '/my-tasks',
@@ -244,6 +277,7 @@ const collect = (statusBar) => {
       isMobile: true,
       hasTouch: true,
     });
+    await ctx.addInitScript(PORTAL_ACCESS_INIT);
     const page = await ctx.newPage();
 
     if (email && password) {
@@ -291,7 +325,7 @@ const collect = (statusBar) => {
   // ------------------------------------------------------------------ report
   console.log('\nMOBILE UI AUDIT\n' + '='.repeat(64));
   console.log(`base ${BASE}`);
-  console.log(`routes ${routes.length}  devices ${devices.length}`);
+  console.log(`routes ${routes.length}  devices ${devices.length}  portal calendar in ${PORTAL_VIEW} view`);
   if (!email || !password) {
     console.log(`\n  NOTE: no AUDIT_EMAIL/AUDIT_PASSWORD, so ${AUTH_ROUTES.length} signed-in`);
     console.log('  routes were NOT checked. A clean run below does not cover them.');
