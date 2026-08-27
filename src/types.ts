@@ -227,7 +227,18 @@ export interface CalendarEvent {
   // legacy rows an older build wrote before the calendar became read-only.
   source?: 'manual' | 'google';
   googleCalendarId?: string;
+  /**
+   * The iCal UID, which is what the ICS feed reports and what the sync keys on.
+   * Looks like `<api id>@google.com`, and is NOT valid in a Calendar API URL.
+   */
   googleEventId?: string;
+  /**
+   * Google's API event id — the only form a Calendar API URL accepts.
+   *
+   * Null on every row the sync imported, because the feed does not carry it.
+   * The push derives one by stripping the UID's suffix in that case.
+   */
+  googleApiEventId?: string;
 }
 
 /**

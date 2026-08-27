@@ -75,7 +75,7 @@ const Checkbox: React.FC<{
 
 const EventEditor: React.FC<EventEditorProps> = ({ open, onClose, event, defaultDate }) => {
   const { sources, saveEvent, removeEvent } = useEvent();
-  const { success: showSuccess, error: showError } = useToast();
+  const { success: showSuccess, error: showError, warning: showWarning } = useToast();
   // The hook hands back both the asker and the dialog element; the element
   // has to be rendered or the promise never settles.
   const { confirm, confirmDialog } = useConfirm();
@@ -110,8 +110,12 @@ const EventEditor: React.FC<EventEditorProps> = ({ open, onClose, event, default
   const handleSave = async () => {
     setBusy(true);
     try {
-      await saveEvent(draft, event ?? undefined);
-      showSuccess(isEdit ? 'Event updated in Google Calendar' : 'Event added to Google Calendar');
+      const warning = await saveEvent(draft, event ?? undefined);
+      // A warning means Google took the change but the app copy did not. That
+      // is not a success, and reporting it as one is how a half-completed save
+      // becomes something nobody investigates.
+      if (warning) showWarning(warning);
+      else showSuccess(isEdit ? 'Event updated in Google Calendar' : 'Event added to Google Calendar');
       onClose();
     } catch (e: any) {
       // Everything reachable here is worth reading: the mapper's "the end has
@@ -134,8 +138,9 @@ const EventEditor: React.FC<EventEditorProps> = ({ open, onClose, event, default
 
     setBusy(true);
     try {
-      await removeEvent(event);
-      showSuccess('Event deleted from Google Calendar');
+      const warning = await removeEvent(event);
+      if (warning) showWarning(warning);
+      else showSuccess('Event deleted from Google Calendar');
       onClose();
     } catch (e: any) {
       showError(e?.message || 'Could not delete the event.');

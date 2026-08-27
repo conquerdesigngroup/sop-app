@@ -67,8 +67,13 @@ interface PushBody {
   calendarId: string;
   /** calendar_events.id — required for update and delete. */
   eventId?: string;
-  /** Google's own id — required for update and delete. */
+  /**
+   * The iCal UID, which is what calendar_events.google_event_id holds and what
+   * the sync keys on. NOT usable in a Calendar API URL.
+   */
   googleEventId?: string;
+  /** Google's API event id. The only form a Calendar API URL accepts. */
+  googleApiEventId?: string;
   googleEvent?: {
     summary?: string;
     description?: string;
@@ -117,6 +122,31 @@ const cleanGoogleEvent = (raw: PushBody['googleEvent']) => {
   if (description) out.description = description;
   if (location) out.location = location;
   return { event: out };
+};
+
+/**
+ * The id to put in a Calendar API URL.
+ *
+ * These are two different values for the same event and v19 conflated them.
+ * google_event_id holds the iCal UID from the feed — `abc123@google.com` — and
+ * PATCHing /events/abc123%40google.com returns 404. The API id is `abc123`.
+ *
+ * Pushed rows carry the API id explicitly. Rows the sync imported do not, so
+ * the suffix is stripped instead, which is the shape Google uses for events it
+ * created. A recurrence instance is refused outright: the sync stores those as
+ * `<uid>::<time>`, which is not a Google id under any transformation, and
+ * guessing one would edit the wrong occurrence.
+ */
+const apiEventId = (body: PushBody): { id: string } | { error: string } => {
+  if (body.googleApiEventId) return { id: body.googleApiEventId };
+  const uid = body.googleEventId ?? '';
+  if (!uid) return { error: 'This event has no Google id, so it cannot be changed here.' };
+  if (uid.includes('::')) {
+    return {
+      error: 'This is one occurrence of a repeating event. Edit it in Google Calendar.',
+    };
+  }
+  return { id: uid.split('@')[0] };
 };
 
 /** calendar_events columns the app may set. `source` and the google ids are
@@ -256,7 +286,10 @@ Deno.serve(async (req: Request) => {
   if (body.action === 'delete') {
     if (!body.googleEventId) return json(400, { error: 'googleEventId is required' });
 
-    const res = await fetch(`${calPath}/${encodeURIComponent(body.googleEventId)}`, {
+    const addressed = apiEventId(body);
+    if ('error' in addressed) return json(400, { error: addressed.error });
+
+    const res = await fetch(`${calPath}/${encodeURIComponent(addressed.id)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -269,14 +302,33 @@ Deno.serve(async (req: Request) => {
       return json(res.status, { error: 'Google refused the delete.', status: res.status });
     }
 
+    let rowWarning: string | null = null;
     if (body.eventId) {
-      await admin.from('calendar_events').delete().eq('id', body.eventId);
+      // Scoped by the Google identity as well as the row id. The row id comes
+      // from the caller, and this runs as the service role with RLS bypassed —
+      // without these an admin could name any uuid and delete a row that has
+      // nothing to do with the event Google just removed, including the legacy
+      // 'manual' rows the editor deliberately refuses to touch.
+      const { error: delRowErr, count } = await admin
+        .from('calendar_events')
+        .delete({ count: 'exact' })
+        .eq('id', body.eventId)
+        .eq('google_calendar_id', body.calendarId)
+        .eq('google_event_id', body.googleEventId);
+
+      if (delRowErr) {
+        console.error('Row delete failed after a successful Google delete:', delRowErr.message);
+        rowWarning = 'Deleted from Google, but the app copy did not clear. The next sync will correct it.';
+      } else if (!count) {
+        rowWarning = 'Deleted from Google. The app copy was already gone.';
+      }
     }
+
     await admin.from('google_credentials')
       .update({ last_used_at: new Date().toISOString(), last_error: null })
       .eq('id', 'calendar');
 
-    return json(200, { deleted: true });
+    return json(200, { deleted: true, warning: rowWarning });
   }
 
   // -------------------------------------------------------- create / update
@@ -293,8 +345,15 @@ Deno.serve(async (req: Request) => {
     return json(400, { error: 'eventId is required to update' });
   }
 
+  let addressedId = '';
+  if (isUpdate) {
+    const addressed = apiEventId(body);
+    if ('error' in addressed) return json(400, { error: addressed.error });
+    addressedId = addressed.id;
+  }
+
   const res = await fetch(
-    isUpdate ? `${calPath}/${encodeURIComponent(body.googleEventId!)}` : calPath,
+    isUpdate ? `${calPath}/${encodeURIComponent(addressedId)}` : calPath,
     {
       // PATCH, not PUT: an update should not blank fields this app has no UI
       // for. A recurrence rule set in Google survives an edit made here.
@@ -317,28 +376,59 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Google has it. Now the row — from the app's own values plus the id Google
-  // just assigned, which is the only thing here the app did not already know.
+  // Google has it. Now the row — from the app's own values plus the two ids
+  // Google just assigned, which are the only things here the app did not
+  // already know.
+  //
+  // BOTH ids, and which goes where is the whole fix. google_event_id must hold
+  // the iCalUID, because that is what the ICS feed reports and what the sync's
+  // upsert and prune key on; storing the API id there made every pushed row
+  // invisible to the sync, so it inserted a duplicate and pruned the original.
+  // google_api_event_id holds the API id, the only form a Calendar API URL
+  // accepts. v19 stored the API id in the UID column and had neither working.
+  //
+  // iCalUID is always present on a v3 Event resource; the fallback is there so
+  // a surprise cannot write null into the column the sync matches on.
   const row = {
     ...cleanRow(body.row),
     source: 'google',
     google_calendar_id: body.calendarId,
-    google_event_id: saved.id,
+    google_event_id: saved.iCalUID ?? `${saved.id}@google.com`,
+    google_api_event_id: saved.id,
     updated_at: new Date().toISOString(),
   };
 
   const { data: written, error: writeErr } = isUpdate
-    ? await admin.from('calendar_events').update(row).eq('id', body.eventId!).select().maybeSingle()
+    // Scoped by calendar as well as row id, for the same reason as the delete:
+    // body.eventId is caller-supplied and this client bypasses RLS.
+    ? await admin.from('calendar_events').update(row)
+        .eq('id', body.eventId!)
+        .eq('google_calendar_id', body.calendarId)
+        .select().maybeSingle()
     // created_by only on insert: an edit should not reassign authorship of an
     // event somebody else made.
     : await admin.from('calendar_events').insert({ ...row, created_by: actor }).select().maybeSingle();
+
+  // maybeSingle() answers { data: null, error: null } when nothing matched, so
+  // an update against a row the sync has since replaced looked like a complete
+  // success. The undefined-id case was already guarded above for exactly this
+  // reason; this is the same hole one step along.
+  if (!writeErr && isUpdate && !written) {
+    return json(200, {
+      googleEventId: row.google_event_id,
+      googleApiEventId: saved.id,
+      row: null,
+      warning: 'Saved to Google, but the app copy was not found to update. The next sync will bring it back in.',
+    });
+  }
 
   if (writeErr) {
     // Google is already updated, so this is not a failure the studio can
     // retry into a clean state — say so plainly. The next sync reconciles it.
     console.error('Row write failed after a successful Google write:', writeErr.message);
     return json(200, {
-      googleEventId: saved.id,
+      googleEventId: row.google_event_id,
+      googleApiEventId: saved.id,
       row: null,
       warning: 'Saved to Google, but the app copy did not update. The next sync will correct it.',
     });
@@ -348,5 +438,9 @@ Deno.serve(async (req: Request) => {
     .update({ last_used_at: new Date().toISOString(), last_error: null })
     .eq('id', 'calendar');
 
-  return json(200, { googleEventId: saved.id, row: written });
+  return json(200, {
+    googleEventId: row.google_event_id,
+    googleApiEventId: saved.id,
+    row: written,
+  });
 });

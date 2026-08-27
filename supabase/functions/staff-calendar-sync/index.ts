@@ -226,6 +226,16 @@ const parseFeed = (
     const cancelled = String(v.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED';
 
     if (!ev.isRecurring()) {
+      // Window-bound, exactly as the recurring branch below already is.
+      //
+      // Without this the import was unbounded while the PRUNE is bounded, and
+      // an iCal feed carries no tombstone for a deleted one-off event — it
+      // simply stops appearing. So anything imported outside the window could
+      // never be reclaimed: delete it in Google and it sat on the studio's
+      // calendar forever. That included every past event on the first sync.
+      const when = ev.startDate?.toJSDate();
+      if (when && (when > windowEnd || when < windowStart)) continue;
+
       const row = buildEvent(ev.uid, ev, ev.startDate, ev.endDate, timeZone, cancelled);
       if (row) out.push(row);
       continue;
@@ -353,6 +363,11 @@ Deno.serve(async (req: Request) => {
     try {
       if (!source.ics_url) throw new Error('No iCal URL configured for this calendar');
 
+      // Stamped BEFORE the request, not after. The prune's grace period is
+      // measured from this, and a slow fetch would otherwise narrow the very
+      // window it exists to provide.
+      const fetchedAt = new Date().toISOString();
+
       const res = await fetch(source.ics_url, { redirect: 'follow' });
       const body = await res.text();
 
@@ -380,6 +395,11 @@ Deno.serve(async (req: Request) => {
         p_window_start: isoDate(windowStart),
         p_window_end: isoDate(windowEnd),
         p_events: events,
+        // When this feed was fetched. The prune spares rows touched within
+        // fifteen minutes of it, because Google's ICS is a cache that lags the
+        // API: without this, an event the app pushed moments ago is absent
+        // from the feed, gets pruned, and the run reports 'ok' for doing it.
+        p_fetched_at: fetchedAt,
       });
       if (rpcErr) throw new Error(rpcErr.message);
 

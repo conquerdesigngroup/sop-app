@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { CalendarEvent, CalendarSource } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { toGoogleEvent } from '../lib/googleEventMap';
+import { buildEventPayload } from '../lib/googleEventMap';
 
 /**
  * The staff Calendar, as a read-only mirror of Google.
@@ -66,10 +66,16 @@ interface EventContextType {
   syncNow: () => Promise<SyncRunResult[]>;
 
   // ------------------------------------------------------------- writing
-  /** Create or update in Google, then record the row. Admins only. */
-  saveEvent: (draft: EventDraft, existing?: CalendarEvent) => Promise<void>;
-  /** Delete from Google, then drop the row. Admins only. */
-  removeEvent: (event: CalendarEvent) => Promise<void>;
+  /**
+   * Create or update in Google, then record the row. Admins only.
+   *
+   * Resolves to a warning when Google accepted the change but the app copy did
+   * not follow — a half-completed save the caller must not report as a plain
+   * success. Null when everything landed.
+   */
+  saveEvent: (draft: EventDraft, existing?: CalendarEvent) => Promise<string | null>;
+  /** Delete from Google, then drop the row. Admins only. Same warning contract. */
+  removeEvent: (event: CalendarEvent) => Promise<string | null>;
 
   // -------------------------------------------------- the Google connection
   googleConnection: GoogleConnection;
@@ -157,6 +163,7 @@ const mapEvent = (row: any): CalendarEvent => ({
   source: row.source ?? 'manual',
   googleCalendarId: row.google_calendar_id ?? undefined,
   googleEventId: row.google_event_id ?? undefined,
+  googleApiEventId: row.google_api_event_id ?? undefined,
 });
 
 const mapSource = (row: any): CalendarSource => ({
@@ -196,7 +203,13 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // event without knowing which calendar's colour it takes.
       const [eventsRes, sourcesRes] = await Promise.all([
         supabase.from('calendar_events').select('*').order('start_date', { ascending: true }),
-        supabase.from('calendar_sources').select('*').order('sort_order', { ascending: true }),
+        // Named columns, not '*'. calendar_sources.ics_url can hold a SECRET
+        // feed address — v16 tells operators to paste one there to keep a
+        // calendar private — and its RLS policy is USING (true), so '*' handed
+        // that credential to every signed-in employee. mapSource never read it.
+        supabase.from('calendar_sources')
+          .select('id, google_calendar_id, label, slug, color, sort_order, is_enabled, time_zone, last_success_at, last_status, last_message')
+          .order('sort_order', { ascending: true }),
       ]);
 
       if (eventsRes.error) throw eventsRes.error;
@@ -283,33 +296,33 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const source = sources.find(c => c.googleCalendarId === draft.calendarId);
     if (!source) throw new Error('Pick which calendar this belongs on.');
 
+    // Both shapes from one normalisation. They used to be built separately —
+    // this call for Google, a hand-rolled object below for the row — and an
+    // audit found three ways they could disagree. The worst put an event on no
+    // day at all while reporting success.
+    //
     // Throws with a sentence worth showing when the event cannot be
-    // represented — an end before its start, or an empty title.
-    const googleEvent = toGoogleEvent(draft, source.timeZone);
+    // represented: an end before its start, or an end date with no end time.
+    const { googleEvent, row } = buildEventPayload(draft, source.timeZone);
 
     const data = await invokeOrThrow('staff-calendar-push', {
       action: existing ? 'update' : 'create',
       calendarId: draft.calendarId,
       eventId: existing?.id,
       googleEventId: existing?.googleEventId,
+      // The API id when the row has one. Rows the sync imported do not, and
+      // the function strips the UID's suffix for those.
+      googleApiEventId: existing?.googleApiEventId,
       googleEvent,
-      // The same event in the table's own columns. Sent rather than derived
-      // back out of googleEvent so the exclusive-end shift is applied once,
-      // in one tested place, instead of being undone here.
-      row: {
-        title: draft.title.trim(),
-        description: draft.description.trim(),
-        location: draft.location.trim() || null,
-        start_date: draft.startDate,
-        start_time: draft.isAllDay ? null : (draft.startTime || null),
-        end_date: draft.endDate || null,
-        end_time: draft.isAllDay ? null : (draft.endTime || null),
-        is_all_day: draft.isAllDay,
-      },
+      row,
     });
 
-    if (data?.warning) console.warn(data.warning);
     await load();
+    // Returned rather than console.warn'd. The push deliberately answers 200
+    // with a warning when Google took the change but the app copy did not, and
+    // swallowing it here meant the studio saw an unqualified green toast for a
+    // half-completed save.
+    return (data?.warning as string | undefined) ?? null;
   }, [sources, invokeOrThrow, load]);
 
   const removeEvent = useCallback(async (event: CalendarEvent) => {
@@ -319,13 +332,15 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // does not offer to.
       throw new Error('That event is not in Google Calendar, so it cannot be changed here.');
     }
-    await invokeOrThrow('staff-calendar-push', {
+    const data = await invokeOrThrow('staff-calendar-push', {
       action: 'delete',
       calendarId: event.googleCalendarId,
       eventId: event.id,
       googleEventId: event.googleEventId,
+      googleApiEventId: event.googleApiEventId,
     });
     await load();
+    return (data?.warning as string | undefined) ?? null;
   }, [invokeOrThrow, load]);
 
   // ------------------------------------------------------ Google connection
@@ -347,9 +362,26 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [invokeOrThrow]);
 
   const beginGoogleConnect = useCallback(async () => {
+    // Minted here, kept in sessionStorage, and checked by AuthCallback against
+    // what Google hands back. It is what stops a code from somebody else's
+    // OAuth flow being walked into our callback and exchanged as though the
+    // studio had just consented.
+    //
+    // randomUUID needs a secure context, which production and localhost both
+    // are. The fallback exists so a stray http:// origin degrades to the old
+    // behaviour rather than throwing where the connect button used to work.
+    let state = '';
+    try {
+      state = crypto.randomUUID().replace(/-/g, '');
+      sessionStorage.setItem('didc_google_state', state);
+    } catch {
+      state = '';
+    }
+
     const data = await invokeOrThrow('google-oauth', {
       action: 'auth_url',
       redirectUri: `${window.location.origin}/auth/callback`,
+      ...(state ? { state } : {}),
     });
     if (!data?.url) throw new Error('Could not start the Google connection.');
     return data.url as string;

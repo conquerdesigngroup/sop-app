@@ -1,4 +1,4 @@
-import { toGoogleEvent, shiftDate } from './googleEventMap';
+import { toGoogleEvent, buildEventPayload, shiftDate } from './googleEventMap';
 
 /**
  * The outbound half of the Google round trip.
@@ -156,5 +156,93 @@ describe('optional fields', () => {
     expect(g.summary).toBe('Showcase');
     expect(g.description).toBe('bring shoes');
     expect(g.location).toBe('Studio A');
+  });
+});
+
+
+/**
+ * The row half, added after an audit found three ways it could disagree with
+ * the Google half. Each of these is a specific defect that shipped in v19.
+ */
+describe('the row and the Google resource agree', () => {
+  it('refuses an all-day range that ends before it starts', () => {
+    // v19 collapsed this for Google and wrote the inversion to the row. Every
+    // render path asks `date >= start && date <= end`, so the event appeared
+    // on NO day at all — behind a green "Event added to Google Calendar".
+    expect(() => buildEventPayload(event({
+      startDate: '2027-03-13', endDate: '2027-03-10',
+    }), TZ)).toThrow(/cannot be before/);
+  });
+
+  it('still collapses an end EQUAL to the start, which is not a mistake', () => {
+    const { googleEvent, row } = buildEventPayload(event({
+      startDate: '2027-03-13', endDate: '2027-03-13',
+    }), TZ);
+    expect(googleEvent.end).toEqual({ date: '2027-03-14' });
+    // Stored as no end at all, which is what the sync writes for a single day.
+    expect(row.end_date).toBeNull();
+  });
+
+  it('refuses a timed event with an end date but no end time', () => {
+    // v19 overwrote the end date with a +1 hour guess, so a three-day trip
+    // became a one-hour Friday slot in Google while the row kept three days.
+    expect(() => buildEventPayload(event({
+      isAllDay: false, startTime: '09:00',
+      endDate: '2027-03-16', endTime: undefined,
+    }), TZ)).toThrow(/end time/);
+  });
+
+  it('keeps a multi-day timed range in both halves', () => {
+    const { googleEvent, row } = buildEventPayload(event({
+      isAllDay: false, startTime: '22:00',
+      endDate: '2027-03-14', endTime: '02:00',
+    }), TZ);
+    expect(googleEvent.end.dateTime).toBe('2027-03-14T02:00:00');
+    expect(row.end_date).toBe('2027-03-14');
+    expect(row.end_time).toBe('02:00');
+  });
+
+  it('writes the row the way staff-calendar-sync writes it', () => {
+    // The sync stores end_date only when the event genuinely spans days, and
+    // no times at all for an all-day event. A pushed row that differs would
+    // render differently from the same event after the next sync.
+    const allDay = buildEventPayload(event({}), TZ).row;
+    expect(allDay).toEqual({
+      title: 'Allstar Showcase',
+      description: '',
+      location: null,
+      start_date: '2027-03-13',
+      start_time: null,
+      end_date: null,
+      end_time: null,
+      is_all_day: true,
+    });
+
+    const timed = buildEventPayload(event({
+      isAllDay: false, startTime: '16:30', endTime: '18:00',
+    }), TZ).row;
+    expect(timed.start_time).toBe('16:30');
+    expect(timed.end_time).toBe('18:00');
+    // Same day, so no end_date — matching the sync's "only worth storing when
+    // it genuinely spans days".
+    expect(timed.end_date).toBeNull();
+    expect(timed.is_all_day).toBe(false);
+  });
+
+  it('carries the same span in both halves for a run of days', () => {
+    const { googleEvent, row } = buildEventPayload(event({
+      startDate: '2026-12-21', endDate: '2027-01-03',
+    }), TZ);
+    // Google exclusive, row inclusive — the same closure described two ways.
+    expect(googleEvent.end).toEqual({ date: '2027-01-04' });
+    expect(row.end_date).toBe('2027-01-03');
+  });
+
+  it('normalises a single-digit time in the row too, not just for Google', () => {
+    const { googleEvent, row } = buildEventPayload(event({
+      isAllDay: false, startTime: '9:05', endTime: '10:00',
+    }), TZ);
+    expect(googleEvent.start.dateTime).toBe('2027-03-13T09:05:00');
+    expect(row.start_time).toBe('09:05');
   });
 });
