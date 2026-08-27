@@ -72,7 +72,7 @@ interface EventContextType {
   removeEvent: (event: CalendarEvent) => Promise<void>;
 
   // -------------------------------------------------- the Google connection
-  googleStatus: GoogleStatus | null;
+  googleConnection: GoogleConnection;
   refreshGoogleStatus: () => Promise<void>;
   /** Returns the URL to send the admin to; the caller navigates. */
   beginGoogleConnect: () => Promise<string>;
@@ -101,6 +101,24 @@ export interface GoogleStatus {
   /** Set when Google last refused the stored token — usually a revoked grant. */
   lastError: string | null;
 }
+
+/**
+ * Four states, because collapsing them hid a real failure.
+ *
+ * This was `GoogleStatus | null`, and every failure set null — which the
+ * banner rendered as nothing at all. An admin whose status call failed saw no
+ * Connect button, went looking for one elsewhere, and found the old per-user
+ * flow on Settings, which could not work from production. The invisible error
+ * was what sent them there.
+ *
+ * 'forbidden' is the only one that should render nothing: a team member does
+ * not manage this and does not need telling.
+ */
+export type GoogleConnection =
+  | { state: 'loading' }
+  | { state: 'forbidden' }
+  | { state: 'failed'; message: string }
+  | { state: 'ready'; status: GoogleStatus };
 
 /** One entry per calendar, whether it succeeded or not. */
 export interface SyncRunResult {
@@ -160,7 +178,7 @@ const mapSource = (row: any): CalendarSource => ({
 
 export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
+  const [googleConnection, setGoogleConnection] = useState<GoogleConnection>({ state: 'loading' });
   const [sources, setSources] = useState<CalendarSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -251,7 +269,12 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       } catch {
         /* keep the generic message */
       }
-      throw new Error(message);
+      // The HTTP status rides along: 403 means "not your job" and should be
+      // silent, anything else is a fault worth surfacing. Without it the two
+      // are indistinguishable and both end up hidden.
+      const err = new Error(message) as Error & { status?: number };
+      err.status = (fnError as any).context?.status;
+      throw err;
     }
     return data;
   }, []);
@@ -310,11 +333,16 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const refreshGoogleStatus = useCallback(async () => {
     try {
       const data = await invokeOrThrow('google-oauth', { action: 'status' });
-      setGoogleStatus(data as GoogleStatus);
-    } catch {
-      // A non-admin asking gets a 403. That is not a failure worth showing —
-      // they simply do not manage the connection.
-      setGoogleStatus(null);
+      setGoogleConnection({ state: 'ready', status: data as GoogleStatus });
+    } catch (e: any) {
+      // A team member gets 403 and should see nothing — they do not manage
+      // this. Anything else is a real fault, and swallowing it is what left an
+      // admin with no Connect button and no reason why.
+      setGoogleConnection(
+        e?.status === 403
+          ? { state: 'forbidden' }
+          : { state: 'failed', message: e?.message || 'Could not check the Google connection.' }
+      );
     }
   }, [invokeOrThrow]);
 
@@ -376,7 +404,7 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       getEventById, getEventsByDate, getEventsByDateRange,
       loading, error, refresh: load, syncNow,
       saveEvent, removeEvent,
-      googleStatus, refreshGoogleStatus, beginGoogleConnect, disconnectGoogle,
+      googleConnection, refreshGoogleStatus, beginGoogleConnect, disconnectGoogle,
     }}>
       {children}
     </EventContext.Provider>
