@@ -8,7 +8,6 @@ import { theme } from '../theme';
 import { APP_VERSION } from '../version';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormButton } from '../components/FormComponents';
-import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -418,11 +417,29 @@ const SettingsPage: React.FC = () => {
             </h3>
           </div>
 
-          <div style={styles.integrationSection}>
-            <GoogleCalendarConnect />
-          </div>
-
-          <div style={styles.divider} />
+          {/*
+            * The per-user "Connect Google Calendar" used to live here. Removed
+            * in v19, and not because it was merely redundant.
+            *
+            * Two buttons called Connect Google, in one app, going to different
+            * places. This one ran the old per-user flow against
+            * REACT_APP_GOOGLE_CLIENT_ID — a client in the unrelated ILBACIO
+            * project whose redirect list has didc.app but not www.didc.app.
+            * Production redirects to www, so it could only ever fail with
+            * redirect_uri_mismatch, and it did, the first time it was used
+            * after the studio connection shipped.
+            *
+            * Even had it worked it would have been the wrong thing: it stores
+            * one person's token in one browser's localStorage, and the calendar
+            * needs a studio-wide credential that outlives a tab. That lives on
+            * the Calendar page now, is admin-only, and is the only one.
+            *
+            * useGoogleCalendar still exists and EventDetailModal and
+            * CalendarTaskModal still consult it; both gate on isConnected,
+            * which is now permanently false, so their extra buttons stay
+            * hidden. Left rather than ripped out — that is a separate change
+            * to a separate feature.
+            */}
 
           <div style={styles.settingsList}>
             <div style={styles.settingItem}>
