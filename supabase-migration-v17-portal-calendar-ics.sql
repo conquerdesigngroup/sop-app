@@ -140,6 +140,21 @@ delete from public.portal_events
 
 -- The two images, rebuilt from the surviving storage objects. Re-attached to
 -- the program rather than to a class, because the class they hung off is gone.
+--
+-- THEN DELETED AGAIN, and the reason is worth keeping. A portal_documents row
+-- with class_id IS NULL is unreachable from every screen:
+--
+--   * /portal/:program/documents is a redirect to ../classes.
+--   * ClassDetail fetches documents with a class id, never `null`.
+--   * DocumentsSection is only ever rendered from ClassWorkspace, always with
+--     `scope`, and filters `d.classId === scope.classId`.
+--
+-- So the studio could neither see nor delete them, and the `!scope` branch of
+-- DocumentsSection — the one carrying allowStudioWide — cannot render at all.
+-- Program-wide documents are a retired concept here, not a broken one: files
+-- belong to a class now. The INSERT is kept below as the restore recipe if a
+-- studio-wide surface ever comes back; it is followed by the delete that is
+-- actually in effect.
 insert into public.portal_documents
   (id, program_id, class_id, title, description, category, storage_path,
    file_name, mime_type, size_bytes, sort_order, is_published, uploaded_by,
@@ -156,6 +171,11 @@ values
    'image/jpeg', 2727971, 0, true, 'd212908e-9790-40af-b692-cbfc5933a351',
    '2026-08-27 00:26:46.538016+00', now())
 on conflict (id) do nothing;
+
+-- Unreachable, so removed. The storage objects are deliberately left in place:
+-- they are the only copy, and an orphaned object costs bytes while a broken
+-- download costs a parent's trust.
+delete from public.portal_documents where class_id is null;
 
 
 -- ----------------------------------------------------------------- verifying
