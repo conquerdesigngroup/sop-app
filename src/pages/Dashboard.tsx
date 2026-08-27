@@ -449,7 +449,7 @@ const TeamMemberDashboard: React.FC<{
   );
 };
 
-// 7-Day Schedule Snapshot Component
+// Work Schedule Snapshot Component
 const ScheduleSnapshot: React.FC<{
   workDays: WorkDay[];
   users: User[];
@@ -520,7 +520,7 @@ const ScheduleSnapshot: React.FC<{
             <line x1="8" y1="2" x2="8" y2="6" />
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          7-Day Schedule
+          Work Schedule
         </h3>
         <button onClick={() => navigate('/hours')} style={styles.viewAllBtn}>View All</button>
       </div>
@@ -723,7 +723,7 @@ const AdminDashboard: React.FC<{
         )}
       </div>
 
-      {/* 7-Day Schedule Snapshot */}
+      {/* Work Schedule Snapshot */}
       <ScheduleSnapshot workDays={workDays} users={users} navigate={navigate} />
 
       {/* Calendar */}
@@ -1525,7 +1525,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
   },
 
-  // 7-Day Schedule Snapshot
+  // Work Schedule Snapshot
   scheduleSnapshotContainer: {
     marginBottom: theme.spacing.lg,
   },

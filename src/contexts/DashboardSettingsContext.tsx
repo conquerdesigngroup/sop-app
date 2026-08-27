@@ -25,7 +25,7 @@ const defaultWidgets: DashboardWidget[] = [
   { id: 'stats', name: 'Task Stats', description: 'Overview of pending, in-progress, and completed tasks', enabled: true, order: 0 },
   { id: 'departments', name: 'Departments', description: 'Quick access to department SOPs', enabled: true, order: 1 },
   { id: 'recentSops', name: 'Recent SOPs', description: 'Recently created or updated SOPs', enabled: true, order: 2 },
-  { id: 'schedule', name: '7-Day Schedule', description: 'Upcoming work schedule snapshot', enabled: true, order: 3 },
+  { id: 'schedule', name: 'Work Schedule', description: 'Upcoming work schedule snapshot', enabled: true, order: 3 },
   { id: 'calendar', name: 'Calendar', description: 'Monthly calendar view with tasks and events', enabled: true, order: 4 },
   { id: 'todayTasks', name: "Today's Tasks", description: 'Tasks due today', enabled: true, order: 5 },
   { id: 'upcomingTasks', name: 'Upcoming Tasks', description: 'Tasks coming up this week', enabled: true, order: 6 },
