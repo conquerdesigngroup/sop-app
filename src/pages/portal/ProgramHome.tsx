@@ -4,7 +4,9 @@ import { Card, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
 import { usePortal } from '../../contexts/PortalContext';
-import { portalRoutes, formatEventDate, formatEventTime } from '../../lib/portal';
+import {
+  portalRoutes, formatEventDate, formatEventTime, eventLastDayKey, dateKey,
+} from '../../lib/portal';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
 import { PortalUpdate, PortalEvent } from '../../types';
 
@@ -34,7 +36,19 @@ const ProgramHome: React.FC = () => {
   const events = useProgramQuery<PortalEvent[]>(program?.id, fetchEvents, []);
 
   const latest = updates.data[0];
-  const nextEvent = events.data.find(e => new Date(e.startsAt) >= new Date()) ?? events.data[0];
+  // Two bugs lived in one line here. Comparing startsAt to `now` skipped an
+  // all-day event happening TODAY — it is stored at UTC midnight, which is
+  // already in the past by breakfast in California — and the `?? events.data[0]`
+  // fallback put a finished event under the heading "Coming up", because
+  // fetchEvents deliberately reaches a month back.
+  //
+  // Comparing the event's LAST day against today's key fixes both: a run of
+  // days stays "coming up" while it is still running, and no match means the
+  // card simply does not render.
+  const todayKey = dateKey(new Date());
+  const nextEvent = events.data.find(
+    e => eventLastDayKey(e.startsAt, e.endsAt, e.isAllDay) >= todayKey
+  );
   const busy = updates.loading || events.loading;
 
   return (
