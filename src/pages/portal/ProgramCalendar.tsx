@@ -1,17 +1,20 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { theme } from '../../theme';
-import { Card, EmptyState, Spinner, ChevronLeftIcon } from '../../components/ui';
+import {
+  Card, EmptyState, Spinner, ChevronLeftIcon, IconButton, CalendarIcon,
+} from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import EventCard from '../../components/portal/EventCard';
+import { useAddToCalendar } from '../../components/portal/useAddToCalendar';
 import { usePortal } from '../../contexts/PortalContext';
 import {
   portalRoutes,
   formatEventDate,
-  formatEventTime,
   eventDayOfMonth,
   eventMonthKey,
-  eventDayKey,
   eventDayKeys,
   eventLastDayKey,
+  describeEventWhen,
   monthGridDays,
   dateKey,
 } from '../../lib/portal';
@@ -86,28 +89,14 @@ const groupByMonth = (events: PortalEvent[]): MonthGroup[] => {
   return Array.from(groups.values());
 };
 
-/** "4:30 PM – 6:00 PM", "All day", or "Dec 21 – Jan 3" for a run of days. */
-const describeWhen = (event: PortalEvent): string => {
-  const firstDay = eventDayKey(event.startsAt, event.isAllDay);
-  const lastDay = eventLastDayKey(event.startsAt, event.endsAt, event.isAllDay);
-
-  if (lastDay !== firstDay) {
-    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    const from = formatEventDate(event.startsAt, event.isAllDay, opts);
-    const to = formatEventDate(event.endsAt!, event.isAllDay, opts);
-    return `${from} – ${to}`;
-  }
-
-  if (event.isAllDay) return 'All day';
-
-  return event.endsAt
-    ? `${formatEventTime(event.startsAt, false)} – ${formatEventTime(event.endsAt, false)}`
-    : formatEventTime(event.startsAt, false);
-};
-
-const EventRow: React.FC<{ event: PortalEvent }> = ({ event }) => (
-  <Card>
-    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+const EventRow: React.FC<{
+  event: PortalEvent;
+  onOpen: (event: PortalEvent) => void;
+  onAdd: (event: PortalEvent) => void;
+  adding: boolean;
+}> = ({ event, onOpen, onAdd, adding }) => (
+  <Card hover onClick={() => onOpen(event)}>
+    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
       {/* Date chip — the thing being scanned for. */}
       <div style={{ flexShrink: 0, width: '52px', textAlign: 'center', paddingTop: '2px' }}>
         <div style={{
@@ -147,7 +136,8 @@ const EventRow: React.FC<{ event: PortalEvent }> = ({ event }) => (
           fontFamily: theme.fonts.mono,
           color: theme.colors.txt.secondary,
         }}>
-          {describeWhen(event)}{event.location ? ` · ${event.location}` : ''}
+          {describeEventWhen(event.startsAt, event.endsAt, event.isAllDay)}
+          {event.location ? ` · ${event.location}` : ''}
         </div>
 
         {event.description && (
@@ -161,6 +151,21 @@ const EventRow: React.FC<{ event: PortalEvent }> = ({ event }) => (
             {event.description}
           </p>
         )}
+      </div>
+
+      {/* stopPropagation, or adding the date also opens the card behind the
+          share sheet. flexShrink so it keeps its touch target at 320px while
+          the title column absorbs the squeeze. */}
+      <div style={{ flexShrink: 0 }}>
+        <IconButton
+          variant="ghost"
+          size="sm"
+          aria-label={`Add ${event.title} to my calendar`}
+          disabled={adding}
+          onClick={e => { e.stopPropagation(); onAdd(event); }}
+        >
+          <CalendarIcon size={18} />
+        </IconButton>
       </div>
     </div>
   </Card>
@@ -253,7 +258,14 @@ const DayDots: React.FC<{ count: number; muted: boolean }> = ({ count, muted }) 
   </div>
 );
 
-const MonthView: React.FC<{ events: PortalEvent[] }> = ({ events }) => {
+interface ViewProps {
+  events: PortalEvent[];
+  onOpen: (event: PortalEvent) => void;
+  onAdd: (event: PortalEvent) => void;
+  addingId: string | null;
+}
+
+const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => {
   const todayKey = dateKey(new Date());
 
   const [cursor, setCursor] = useState(() => {
@@ -488,7 +500,12 @@ const MonthView: React.FC<{ events: PortalEvent[] }> = ({ events }) => {
           </Card>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {listed.map(event => <EventRow key={event.id} event={event} />)}
+            {listed.map(event => (
+              <EventRow
+                key={event.id} event={event} onOpen={onOpen}
+                onAdd={onAdd} adding={addingId === event.id}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -498,7 +515,7 @@ const MonthView: React.FC<{ events: PortalEvent[] }> = ({ events }) => {
 
 // -------------------------------------------------------------- agenda view
 
-const ListView: React.FC<{ events: PortalEvent[] }> = ({ events }) => {
+const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => {
   const groups = useMemo(() => {
     const todayKey = dateKey(new Date());
     // Filtered on the LAST day, not the first. A two-week closure that started
@@ -534,7 +551,12 @@ const ListView: React.FC<{ events: PortalEvent[] }> = ({ events }) => {
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {group.events.map(event => <EventRow key={event.id} event={event} />)}
+            {group.events.map(event => (
+              <EventRow
+                key={event.id} event={event} onOpen={onOpen}
+                onAdd={onAdd} adding={addingId === event.id}
+              />
+            ))}
           </div>
         </section>
       ))}
@@ -550,11 +572,15 @@ const ProgramCalendar: React.FC = () => {
   const { data: events, loading, error } = useProgramQuery<PortalEvent[]>(program?.id, fetchEvents, []);
 
   const [view, setView] = useState<ViewMode>(readViewMode);
+  const [opened, setOpened] = useState<PortalEvent | null>(null);
+  const { add, busyId } = useAddToCalendar();
 
   const changeView = useCallback((next: ViewMode) => {
     setView(next);
     writeViewMode(next);
   }, []);
+
+  const closeCard = useCallback(() => setOpened(null), []);
 
   return (
     <PortalLayout
@@ -587,10 +613,12 @@ const ProgramCalendar: React.FC = () => {
 
         {!loading && !error && (
           view === 'month'
-            ? <MonthView events={events} />
-            : <ListView events={events} />
+            ? <MonthView events={events} onOpen={setOpened} onAdd={add} addingId={busyId} />
+            : <ListView events={events} onOpen={setOpened} onAdd={add} addingId={busyId} />
         )}
       </div>
+
+      <EventCard event={opened} onClose={closeCard} />
     </PortalLayout>
   );
 };

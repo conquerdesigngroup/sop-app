@@ -295,6 +295,33 @@ export const monthGridDays = (year: number, month: number): Date[] => {
   return days;
 };
 
+/**
+ * "4:30 PM – 6:00 PM", "All day", or "Dec 21 – Jan 3" for a run of days.
+ *
+ * Lives here rather than in the calendar page because the event card shows the
+ * same string, and two copies of this would drift the first time one of them
+ * learned about multi-day events.
+ */
+export const describeEventWhen = (
+  startsAt: string,
+  endsAt: string | null,
+  isAllDay: boolean
+): string => {
+  const firstDay = eventDayKey(startsAt, isAllDay);
+  const lastDay = eventLastDayKey(startsAt, endsAt, isAllDay);
+
+  if (lastDay !== firstDay) {
+    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+    return `${formatEventDate(startsAt, isAllDay, opts)} – ${formatEventDate(endsAt!, isAllDay, opts)}`;
+  }
+
+  if (isAllDay) return 'All day';
+
+  return endsAt
+    ? `${formatEventTime(startsAt, false)} – ${formatEventTime(endsAt, false)}`
+    : formatEventTime(startsAt, false);
+};
+
 // ---------------------------------------------------------------- files
 
 export const formatFileSize = (bytes: number | null): string | null => {
