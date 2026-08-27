@@ -197,6 +197,104 @@ export const startOfToday = (): Date => {
   return d;
 };
 
+/**
+ * 'YYYY-MM-DD' for a local Date — how a month-grid cell is addressed.
+ *
+ * Built by hand rather than `toISOString().slice(0, 10)`, which converts to UTC
+ * first and so names the wrong day for every local evening west of Greenwich.
+ */
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+export const dateKey = (d: Date): string =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/**
+ * 'YYYY-MM-DD' for an event boundary, read in the event's own frame.
+ *
+ * Same split as eventMonthKey and for the same reason: an all-day event is
+ * stored at UTC midnight, so reading it locally names the previous day.
+ */
+export const eventDayKey = (iso: string, isAllDay: boolean): string => {
+  const d = new Date(iso);
+  return isAllDay
+    ? `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`
+    : dateKey(d);
+};
+
+// A season is at most a year of grid. Runaway guard for a bad end date.
+const MAX_SPAN_DAYS = 400;
+
+/**
+ * The last day an event covers, inclusive.
+ *
+ * portal_events stores all-day ends inclusively — portal-calendar-sync shifts
+ * iCal's exclusive DTEND back a day before writing — so "Closed for Christmas
+ * Break" ending 2027-01-03 really is closed on the 3rd.
+ *
+ * Keys are zero-padded, so `>` and `>=` on the strings order dates correctly
+ * and no Date needs building to compare two of them.
+ */
+export const eventLastDayKey = (
+  startsAt: string,
+  endsAt: string | null,
+  isAllDay: boolean
+): string => {
+  const first = eventDayKey(startsAt, isAllDay);
+  if (!endsAt) return first;
+  const last = eventDayKey(endsAt, isAllDay);
+  return last > first ? last : first;
+};
+
+/**
+ * Every day key an event covers, so a multi-day event paints across the grid
+ * instead of appearing only on the day it started.
+ *
+ * Stepped a day at a time in the event's own frame rather than by dividing a
+ * millisecond difference: across a DST boundary a "day" is 23 or 25 hours and
+ * the division silently loses or repeats a date.
+ */
+export const eventDayKeys = (
+  startsAt: string,
+  endsAt: string | null,
+  isAllDay: boolean
+): string[] => {
+  const first = eventDayKey(startsAt, isAllDay);
+  const last = eventLastDayKey(startsAt, endsAt, isAllDay);
+  if (last === first) return [first];
+
+  const keys: string[] = [];
+  const cursor = new Date(startsAt);
+
+  for (let i = 0; i < MAX_SPAN_DAYS; i++) {
+    const key = eventDayKey(cursor.toISOString(), isAllDay);
+    keys.push(key);
+    if (key >= last) break;
+    if (isAllDay) cursor.setUTCDate(cursor.getUTCDate() + 1);
+    else cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return keys;
+};
+
+/**
+ * The Sundays-to-Saturdays block of local dates a month grid shows, including
+ * the leading and trailing days from the neighbouring months.
+ */
+export const monthGridDays = (year: number, month: number): Date[] => {
+  const first = new Date(year, month, 1);
+  const cursor = new Date(year, month, 1 - first.getDay());
+  const days: Date[] = [];
+
+  // Six rows always. A fixed height stops the page jumping as the parent pages
+  // between a month that needs five rows and one that needs six.
+  for (let i = 0; i < 42; i++) {
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+};
+
 // ---------------------------------------------------------------- files
 
 export const formatFileSize = (bytes: number | null): string | null => {
