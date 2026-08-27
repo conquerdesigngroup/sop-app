@@ -1,5 +1,5 @@
 -- =============================================================================
--- v18 — the calendars refresh themselves
+-- v18 — the calendars refresh themselves  (superseded in part by v21)
 -- =============================================================================
 --
 -- STATUS: APPLIED to prod 2026-08-27 as `v18_calendar_sync_schedule`, plus the
@@ -75,6 +75,37 @@
 --   select 'portal', p.name, s.last_status, s.last_run_at
 --     from portal_calendar_sources s join portal_programs p on p.id = s.program_id;
 --
+-- SUPERSEDED BY v21: EVERY MINUTE, NOT EVERY THIRTY
+--
+-- The half-hour cadence below was chosen because the syncs read Google's
+-- secret iCal addresses, and those are rate limited hard enough that polling
+-- faster made things worse rather than better (see the 429 section under it,
+-- which is now history rather than advice).
+--
+-- v21 moved both syncs onto the Calendar API. That removed the rate limit, so
+-- the cadence is no longer forced by anything, and the job now runs every
+-- minute:
+--
+--   select cron.unschedule('calendar-sync-30min');
+--   select cron.schedule('calendar-sync', '* * * * *',
+--                        $$select public.run_calendar_syncs()$$);
+--
+-- Cost at that rate: five Calendar API reads a minute, about 7,200 a day
+-- against a million-a-day quota, and roughly 86,000 Edge Function invocations
+-- a month against the 500,000 on this plan. Both comfortable.
+--
+-- WHY NOT PUSH NOTIFICATIONS INSTEAD
+--
+-- events.watch would make this seconds rather than a minute, and it was the
+-- plan. Google requires the receiving URL's domain to be verified in Search
+-- Console, and the functions live on <ref>.supabase.co, which the studio does
+-- not own and cannot verify. Doing it properly means hosting the endpoint on
+-- didc.app — which is currently a static Vercel build with no serverless
+-- functions — and then owning the channel lifecycle, where a renewal that
+-- quietly fails leaves a calendar that has silently stopped updating. Polling
+-- every minute has none of those failure modes and is within a minute of the
+-- same answer.
+--
 -- GOOGLE WILL 429 YOU OCCASIONALLY, AND THAT IS FINE
 --
 -- Google rate-limits the ICS feeds. Measured over five untouched ticks on
@@ -95,9 +126,9 @@
 --
 -- TO CHANGE THE CADENCE OR STOP IT
 --
---   select cron.schedule('calendar-sync-30min', '*/15 * * * *',
+--   select cron.schedule('calendar-sync', '*/15 * * * *',
 --                        $$select public.run_calendar_syncs()$$);  -- re-times it
---   select cron.unschedule('calendar-sync-30min');                 -- stops it
+--   select cron.unschedule('calendar-sync');                       -- stops it
 -- =============================================================================
 
 create extension if not exists pg_net;
