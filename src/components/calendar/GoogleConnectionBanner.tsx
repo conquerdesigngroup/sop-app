@@ -24,7 +24,7 @@ import { useToast } from '../../contexts/ToastContext';
  */
 
 const GoogleConnectionBanner: React.FC = () => {
-  const { googleStatus, refreshGoogleStatus, beginGoogleConnect } = useEvent();
+  const { googleConnection, refreshGoogleStatus, beginGoogleConnect } = useEvent();
   const { error: showError } = useToast();
   const [starting, setStarting] = useState(false);
 
@@ -57,8 +57,43 @@ const GoogleConnectionBanner: React.FC = () => {
 
   // Still asking. Saying nothing beats a banner that flashes "not connected"
   // for half a second on every page load.
-  if (googleStatus === null) return null;
+  if (googleConnection.state === 'loading') return null;
 
+  // A team member. They do not manage this, so there is nothing to tell them.
+  if (googleConnection.state === 'forbidden') return null;
+
+  // Could not even ask. This used to render as nothing, which is how an admin
+  // ended up hunting for a Connect button and finding the wrong one.
+  if (googleConnection.state === 'failed') {
+    return (
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px',
+        padding: theme.spacing.md, marginBottom: theme.spacing.md,
+        background: theme.colors.bg.secondary,
+        border: `2px solid ${theme.colors.status.error}`,
+        borderRadius: theme.borderRadius.lg,
+      }}>
+        <div style={{ flex: '1 1 240px', minWidth: 0, overflowWrap: 'anywhere' }}>
+          <div style={{
+            ...theme.typography.body, fontFamily: theme.fonts.primary,
+            fontWeight: 600, color: theme.colors.txt.primary, marginBottom: '4px',
+          }}>
+            Could not check the Google connection
+          </div>
+          <div style={{
+            ...theme.typography.bodySmall, fontFamily: theme.fonts.primary,
+            color: theme.colors.txt.secondary,
+          }}>
+            {googleConnection.message} Reading the calendar still works; adding
+            and editing events may not.
+          </div>
+        </div>
+        <Button variant="secondary" onClick={() => refreshGoogleStatus()}>Try again</Button>
+      </div>
+    );
+  }
+
+  const googleStatus = googleConnection.status;
   const healthy = googleStatus.connected && !googleStatus.lastError;
 
   if (healthy) {
