@@ -88,7 +88,7 @@ interface RefreshBody {
 }
 
 /** Server-side connection actions. Admin or above — checked in the handler. */
-interface AuthUrlBody { action: 'auth_url'; redirectUri: string }
+interface AuthUrlBody { action: 'auth_url'; redirectUri: string; state?: string }
 interface ConnectBody { action: 'connect'; code: string; redirectUri: string }
 interface StatusBody { action: 'status' }
 interface DisconnectBody { action: 'disconnect' }
@@ -214,11 +214,24 @@ Deno.serve(async (req: Request) => {
     }
 
     if (body.action === 'auth_url') {
+      // `state` is round-tripped by Google untouched and compared by the
+      // callback before the code is spent. Without it, a code obtained from
+      // some other flow can be walked into /auth/callback and exchanged as
+      // though the studio had just consented — the admin JWT does not help,
+      // because the admin is the one being made to submit it.
+      //
+      // Rejected rather than sanitised: anything but a plain token here is a
+      // caller doing something odd, not a formatting slip to be tidied up.
+      if (body.state && !/^[A-Za-z0-9._-]{8,128}$/.test(body.state)) {
+        return json(400, { error: 'Invalid state value' });
+      }
+
       const p = new URLSearchParams({
         client_id: clientId,
         redirect_uri: body.redirectUri,
         response_type: 'code',
         scope: CONNECT_SCOPES,
+        ...(body.state ? { state: body.state } : {}),
         // offline + consent together are what actually produce a refresh
         // token. Without prompt=consent Google returns one only on the very
         // first authorisation ever, so a re-connect silently yields none and

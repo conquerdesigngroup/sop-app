@@ -47,15 +47,29 @@ const AuthCallback: React.FC = () => {
       // working connection in the wrong place, and the studio's Add Event
       // keeps reporting "Google is not connected" while Settings insists it is.
       let flow: string | null = null;
+      let expectedState: string | null = null;
       try {
         flow = sessionStorage.getItem('didc_google_connect');
+        expectedState = sessionStorage.getItem('didc_google_state');
         sessionStorage.removeItem('didc_google_connect');
+        sessionStorage.removeItem('didc_google_state');
       } catch {
         /* Safari private mode; falls through to the per-user flow */
       }
 
       try {
         if (flow === 'studio') {
+          // The state Google hands back must be the one we minted. A code that
+          // arrives without it did not come from a connect this browser
+          // started, and spending it would store somebody else's grant as the
+          // studio's credential.
+          //
+          // Only enforced when we actually issued one — sessionStorage can be
+          // unavailable (Safari private mode), and refusing there would break
+          // the connect for a real admin rather than protect them.
+          if (expectedState && searchParams.get('state') !== expectedState) {
+            throw new Error('That sign-in did not match the one this page started. Try connecting again.');
+          }
           if (!isSupabaseConfigured() || !supabase) {
             throw new Error('The app is not connected to its database.');
           }

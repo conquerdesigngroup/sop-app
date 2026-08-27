@@ -992,10 +992,18 @@ const CalendarPage: React.FC = () => {
         onClose={() => setSelectedEvent(null)}
         event={selectedEvent}
         users={users}
-        // Only offered for rows that exist in Google. The three legacy 'manual'
-        // rows from the old localStorage build have no google_event_id, so
-        // there is nothing there to edit and the button stays hidden.
-        onEdit={canEdit && selectedEvent?.googleEventId
+        // Only offered for rows that exist in Google AND that this app can
+        // address. Two exclusions:
+        //
+        //   no google_event_id — the three legacy 'manual' rows from the old
+        //     localStorage build. Nothing in Google to edit.
+        //   an id containing '::' — one occurrence of a repeating event. The
+        //     sync stores those as `<uid>::<time>`, which is not a Google id
+        //     under any transformation, and editing one would mean answering
+        //     "this occurrence or all of them" before touching a whole term of
+        //     classes. Left to Google Calendar until that is built properly.
+        onEdit={canEdit && selectedEvent?.googleEventId &&
+                !selectedEvent.googleEventId.includes('::')
           ? (e) => { setSelectedEvent(null); setEditing({ event: e }); }
           : undefined}
       />

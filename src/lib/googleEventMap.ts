@@ -37,6 +37,23 @@ export interface GoogleEventResource {
   end: GoogleDateTime;
 }
 
+/** calendar_events, in its own columns. Exactly what the sync writes. */
+export interface CalendarEventRow {
+  title: string;
+  description: string;
+  location: string | null;
+  start_date: string;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
+  is_all_day: boolean;
+}
+
+export interface EventPayload {
+  googleEvent: GoogleEventResource;
+  row: CalendarEventRow;
+}
+
 const pad = (n: number): string => String(n).padStart(2, '0');
 
 /**
@@ -52,10 +69,10 @@ export const shiftDate = (date: string, days: number): string => {
   return `${out.getUTCFullYear()}-${pad(out.getUTCMonth() + 1)}-${pad(out.getUTCDate())}`;
 };
 
-/** 'HH:MM' or 'HH:MM:SS' -> 'HH:MM:SS', which is what Google wants. */
+/** 'HH:MM' or 'HH:MM:SS' -> 'HH:MM', which is what calendar_events stores. */
 const normalizeTime = (time: string): string => {
-  const [h, m, s] = time.split(':');
-  return `${pad(Number(h))}:${pad(Number(m))}:${pad(Number(s ?? 0))}`;
+  const [h, m] = time.split(':');
+  return `${pad(Number(h))}:${pad(Number(m))}`;
 };
 
 const minutesOf = (time: string): number => {
@@ -73,76 +90,139 @@ const oneHourAfter = (date: string, time: string): { date: string; time: string 
 };
 
 /**
- * Build the Google resource for an event.
+ * Build BOTH shapes of an event from one set of normalised values.
  *
- * `timeZone` is the calendar's own zone, from calendar_sources.time_zone. It is
- * required for timed events and meaningless for all-day ones.
+ * WHY THIS RETURNS TWO THINGS
  *
- * Throws rather than guessing when the event could not be represented: a
- * refused save the studio can read beats an event quietly landing at the wrong
- * time on a calendar parents are reading.
+ * They used to be built separately — this module made the Google resource and
+ * EventContext hand-rolled the row beside it. An audit found three ways they
+ * could disagree, and disagreement here is not a rendering nit: the row is what
+ * the studio's own calendar shows and what the parent portal reads.
+ *
+ * The worst was an all-day event whose end date preceded its start. This module
+ * collapsed it to a single day for Google; the hand-rolled row kept the
+ * inverted range verbatim, and every render path asks `date >= start && date <=
+ * end`, so the event appeared on NO day at all — behind a green "Event added to
+ * Google Calendar".
+ *
+ * One function, one normalisation, two renderings of it.
+ *
+ * `timeZone` is the calendar's own zone from calendar_sources.time_zone.
+ * Required for timed events, meaningless for all-day ones.
+ *
+ * Throws rather than guessing when the event cannot be represented. A refused
+ * save the studio can read beats an event quietly landing on the wrong day of a
+ * calendar parents are reading.
  */
-export const toGoogleEvent = (
+export const buildEventPayload = (
   event: Pick<CalendarEvent,
     'title' | 'description' | 'location' | 'startDate' | 'startTime' |
     'endDate' | 'endTime' | 'isAllDay'>,
   timeZone: string
-): GoogleEventResource => {
+): EventPayload => {
   const title = (event.title ?? '').trim();
   if (!title) throw new Error('An event needs a title.');
   if (!event.startDate) throw new Error('An event needs a start date.');
 
-  const resource: GoogleEventResource = {
-    summary: title,
-    start: {},
-    end: {},
-  };
-
   const description = (event.description ?? '').trim();
   const location = (event.location ?? '').trim();
-  if (description) resource.description = description;
-  if (location) resource.location = location;
+  const startDate = event.startDate;
 
   // No start time means all-day, whatever the flag says. The two disagree in
   // rows written before is_all_day existed, and a missing time is the more
   // reliable signal of the two.
   if (event.isAllDay || !event.startTime) {
-    const stored = event.endDate;
-    // Stored inclusively, so a run ending on the 3rd is closed on the 3rd.
-    // Anything at or before the start collapses to a single day.
-    const lastDay = stored && stored > event.startDate ? stored : event.startDate;
-    resource.start = { date: event.startDate };
-    resource.end = { date: shiftDate(lastDay, 1) };
-    return resource;
+    const stored = event.endDate || '';
+
+    // Inverted ranges are refused, not repaired. Repairing them is what let an
+    // event render on no day at all: Google got the collapsed version and the
+    // row got the inversion.
+    if (stored && stored < startDate) {
+      throw new Error('The last day of an event cannot be before the first.');
+    }
+
+    // Stored inclusively, so a run ending on the 3rd is closed on the 3rd. A
+    // single day stores no end at all, matching what the sync writes.
+    const spans = Boolean(stored) && stored > startDate;
+    const lastDay = spans ? stored : startDate;
+
+    return {
+      googleEvent: {
+        summary: title,
+        ...(description ? { description } : {}),
+        ...(location ? { location } : {}),
+        start: { date: startDate },
+        // DTEND / end.date is EXCLUSIVE — the exact inverse of the shift
+        // staff-calendar-sync applies on the way in.
+        end: { date: shiftDate(lastDay, 1) },
+      },
+      row: {
+        title,
+        description,
+        location: location || null,
+        start_date: startDate,
+        start_time: null,
+        end_date: spans ? stored : null,
+        end_time: null,
+        is_all_day: true,
+      },
+    };
   }
 
   if (!timeZone) throw new Error('A timed event needs the calendar time zone.');
 
-  const startTime = event.startTime;
-  let endDate = event.endDate || event.startDate;
-  let endTime = event.endTime;
+  const startTime = normalizeTime(event.startTime);
+  let endDate = event.endDate || '';
+  let endTime = event.endTime ? normalizeTime(event.endTime) : '';
 
   if (!endTime) {
-    const guess = oneHourAfter(event.startDate, startTime);
+    // An end date with no end time cannot be represented without inventing one.
+    // Guessing +1 hour here is what silently turned a three-day trip into a
+    // one-hour Friday slot in Google while the row kept the three days.
+    if (endDate && endDate !== startDate) {
+      throw new Error('Give the event an end time, or clear the end date.');
+    }
+    const guess = oneHourAfter(startDate, startTime);
     endDate = guess.date;
     endTime = guess.time;
+  } else if (!endDate) {
+    endDate = startDate;
   }
 
   // Google refuses end <= start with a 400 that names neither field. Caught
   // here so the studio gets a sentence instead.
-  if (endDate < event.startDate ||
-      (endDate === event.startDate && minutesOf(endTime) <= minutesOf(startTime))) {
+  if (endDate < startDate ||
+      (endDate === startDate && minutesOf(endTime) <= minutesOf(startTime))) {
     throw new Error('The end of an event has to come after its start.');
   }
 
-  resource.start = {
-    dateTime: `${event.startDate}T${normalizeTime(startTime)}`,
-    timeZone,
+  return {
+    googleEvent: {
+      summary: title,
+      ...(description ? { description } : {}),
+      ...(location ? { location } : {}),
+      // Studio wall clock plus the zone, never converted to UTC: start_time is
+      // a zoneless TEXT column, and converting means undoing it at the other
+      // end, getting DST wrong on the way.
+      start: { dateTime: `${startDate}T${startTime}:00`, timeZone },
+      end: { dateTime: `${endDate}T${endTime}:00`, timeZone },
+    },
+    row: {
+      title,
+      description,
+      location: location || null,
+      start_date: startDate,
+      start_time: startTime,
+      // Only stored when it genuinely spans days, matching the sync.
+      end_date: endDate !== startDate ? endDate : null,
+      end_time: endTime,
+      is_all_day: false,
+    },
   };
-  resource.end = {
-    dateTime: `${endDate}T${normalizeTime(endTime)}`,
-    timeZone,
-  };
-
-  return resource;
 };
+
+/** The Google half alone. Kept because the round-trip tests read it directly. */
+export const toGoogleEvent = (
+  event: Parameters<typeof buildEventPayload>[0],
+  timeZone: string
+): GoogleEventResource => buildEventPayload(event, timeZone).googleEvent;
