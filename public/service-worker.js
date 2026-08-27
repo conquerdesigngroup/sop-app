@@ -4,7 +4,7 @@
 // Enables offline functionality and caching
 
 // IMPORTANT: Increment this version number whenever you deploy to force cache refresh
-const CACHE_VERSION = '1.0.14';
+const CACHE_VERSION = '1.0.15';
 const CACHE_NAME = `sop-app-v${CACHE_VERSION}`;
 
 const urlsToCache = [

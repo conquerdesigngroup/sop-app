@@ -752,11 +752,6 @@ const AdminDashboard: React.FC<{
           date={dayActionModal.date}
           position={{ x: dayActionModal.x, y: dayActionModal.y }}
           onClose={() => setDayActionModal(null)}
-          onAddEvent={() => {
-            const dateStr = `${dayActionModal.date.getFullYear()}-${String(dayActionModal.date.getMonth() + 1).padStart(2, '0')}-${String(dayActionModal.date.getDate()).padStart(2, '0')}`;
-            setDayActionModal(null);
-            navigate('/calendar', { state: { openEventForm: true, selectedDate: dateStr } });
-          }}
           onAddJobTask={() => {
             const dateStr = `${dayActionModal.date.getFullYear()}-${String(dayActionModal.date.getMonth() + 1).padStart(2, '0')}-${String(dayActionModal.date.getDate()).padStart(2, '0')}`;
             setDayActionModal(null);
@@ -782,9 +777,8 @@ const DayActionModal: React.FC<{
   date: Date;
   position: { x: number; y: number };
   onClose: () => void;
-  onAddEvent: () => void;
   onAddJobTask: () => void;
-}> = ({ date, position, onClose, onAddEvent, onAddJobTask }) => {
+}> = ({ date, position, onClose, onAddJobTask }) => {
   const modalRef = React.useRef<HTMLDivElement>(null);
 
   // Close on click outside
@@ -839,16 +833,10 @@ const DayActionModal: React.FC<{
         </div>
 
         <div style={dayActionStyles.buttonGroup}>
-          <button onClick={onAddEvent} style={dayActionStyles.actionBtn}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <span>Add Event</span>
-          </button>
-
+          {/* No "Add Event" here either. It used to navigate to /calendar with
+              openEventForm, and that form no longer exists — events come from
+              Google now. A button that lands you somewhere you cannot do the
+              thing it named is worse than no button. */}
           <button onClick={onAddJobTask} style={{ ...dayActionStyles.actionBtn, ...dayActionStyles.actionBtnPrimary }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 11l3 3L22 4" />
