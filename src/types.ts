@@ -245,6 +245,13 @@ export interface CalendarSource {
   color: string;
   sortOrder: number;
   isEnabled: boolean;
+  /**
+   * The calendar's own zone, e.g. 'America/Los_Angeles'.
+   *
+   * Needed to write a timed event back: start_time is a zoneless TEXT column,
+   * so Google has to be told which wall clock '16:30' belongs to.
+   */
+  timeZone: string;
   lastSuccessAt?: string | null;
   lastStatus?: string | null;
   lastMessage?: string | null;
