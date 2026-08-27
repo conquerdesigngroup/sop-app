@@ -101,7 +101,12 @@ const HoursEntryForm: React.FC<HoursEntryFormProps> = ({
         (Number(values.endTime.split(':')[0]) * 60 + Number(values.endTime.split(':')[1])) -
         (Number(values.startTime.split(':')[0]) * 60 + Number(values.startTime.split(':')[1]));
       if (values.breakMinutes >= span) {
-        next.breakMinutes = 'Break is longer than the shift.';
+        // The break field is gone from this form, so this can only be an
+        // older entry whose shift has just been shortened past the break it
+        // already carries. Report it on a field that can still be changed —
+        // an error keyed to a control that no longer renders would block
+        // the save with nothing on screen to explain why.
+        next.endTime = `This entry carries a ${values.breakMinutes} min unpaid break, which is longer than the shift.`;
       }
     }
     if (activeCategories.length > 0 && !values.categoryId) {
@@ -213,54 +218,51 @@ const HoursEntryForm: React.FC<HoursEntryFormProps> = ({
         />
       </div>
 
-      {/* ---- Break + running total ---- */}
+      {/* ---- Running total ---- */}
+      {/*
+        No break field: unpaid breaks are not tracked here any more. The value
+        still rides along in `values` untouched, so editing one of the older
+        entries that does carry a break cannot silently pay it back. Those
+        entries show the deduction below rather than leaving an unexplained
+        gap between the two times and the total.
+      */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobileOrTablet ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
-        gap: theme.spacing.md,
+        backgroundColor: theme.colors.bg.tertiary,
+        border: `1px solid ${theme.colors.bdr.primary}`,
+        borderRadius: theme.borderRadius.md,
+        padding: theme.spacing.md,
         marginBottom: theme.spacing.lg,
-        alignItems: 'start',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        minHeight: '58px',
       }}>
-        <Input
-          type="number"
-          inputMode="numeric"
-          label="Unpaid break (minutes)"
-          min={0}
-          step={5}
-          value={String(values.breakMinutes)}
-          error={errors.breakMinutes}
-          // Rounded, not just clamped: break_minutes is an INTEGER column,
-          // and 7.5 would reach Postgres as an invalid-input error.
-          onChange={e => set('breakMinutes', Math.max(0, Math.round(Number(e.target.value) || 0)))}
-        />
-        <div style={{
-          backgroundColor: theme.colors.bg.tertiary,
-          border: `1px solid ${theme.colors.bdr.primary}`,
-          borderRadius: theme.borderRadius.md,
-          padding: theme.spacing.md,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          minHeight: '58px',
+        <span style={{
+          fontSize: '12px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: theme.colors.txt.tertiary,
+          fontFamily: theme.fonts.mono,
         }}>
+          Total
+        </span>
+        <span style={{
+          fontSize: '22px',
+          fontWeight: 700,
+          color: total > 0 ? theme.colors.txt.primary : theme.colors.txt.tertiary,
+          fontFamily: theme.fonts.mono,
+        }}>
+          {formatHours(total)} hrs
+        </span>
+        {values.breakMinutes > 0 && (
           <span style={{
             fontSize: '12px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
             color: theme.colors.txt.tertiary,
-            fontFamily: theme.fonts.mono,
+            fontFamily: theme.fonts.primary,
           }}>
-            Total
+            less {values.breakMinutes} min unpaid break
           </span>
-          <span style={{
-            fontSize: '22px',
-            fontWeight: 700,
-            color: total > 0 ? theme.colors.txt.primary : theme.colors.txt.tertiary,
-            fontFamily: theme.fonts.mono,
-          }}>
-            {formatHours(total)} hrs
-          </span>
-        </div>
+        )}
       </div>
 
       {/* ---- Category ---- */}

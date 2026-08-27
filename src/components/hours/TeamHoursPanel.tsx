@@ -66,7 +66,8 @@ const TeamHoursPanel: React.FC = () => {
   const { confirm, confirmDialog } = useConfirm();
   const { isMobileOrTablet } = useResponsive();
 
-  const [preset, setPreset] = useState<PeriodPreset>('this-week');
+  // All time by default — same reasoning as the My Hours tab.
+  const [preset, setPreset] = useState<PeriodPreset>('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);

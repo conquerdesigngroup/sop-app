@@ -58,7 +58,10 @@ const HoursInputPage: React.FC = () => {
   const { isMobileOrTablet } = useResponsive();
 
   const [tab, setTab] = useState<Tab>('mine');
-  const [period, setPeriod] = useState<PeriodPreset>('this-week');
+  // All time by default. Hours are reviewed far more often than they are
+  // logged, and a week-shaped default hid every older entry behind a chip
+  // nobody thought to press.
+  const [period, setPeriod] = useState<PeriodPreset>('all');
   const [editing, setEditing] = useState<WorkHoursEntry | null>(null);
 
   const range = useMemo(() => resolvePeriod(period), [period]);
