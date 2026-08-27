@@ -220,6 +220,34 @@ export interface CalendarEvent {
   createdBy: string;
   createdAt: string;
   updatedAt?: string;
+
+  // v15. 'google' rows are a mirror of a subscribed calendar and are owned by
+  // the sync — editing one in the app would be undone on the next run, which is
+  // why the Calendar page offers no editing at all. 'manual' is only the three
+  // legacy rows an older build wrote before the calendar became read-only.
+  source?: 'manual' | 'google';
+  googleCalendarId?: string;
+  googleEventId?: string;
+}
+
+/**
+ * A Google calendar the staff Calendar subscribes to.
+ *
+ * One Google account, several calendars under it, each a category with its own
+ * colour. The colour lives here rather than on the event so that recolouring a
+ * category is one row, not a re-sync of every event in it.
+ */
+export interface CalendarSource {
+  id: string;
+  googleCalendarId: string;
+  label: string;
+  slug: string;
+  color: string;
+  sortOrder: number;
+  isEnabled: boolean;
+  lastSuccessAt?: string | null;
+  lastStatus?: string | null;
+  lastMessage?: string | null;
 }
 
 // Work Hours Types

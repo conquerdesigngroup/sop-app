@@ -1,38 +1,35 @@
 import React, { useState, useMemo } from 'react';
 import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
-import { useWorkHours, calculateTotalHours } from '../contexts/WorkHoursContext';
+import { useWorkHours } from '../contexts/WorkHoursContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { WorkHoursEntry, WorkDay } from '../types';
+import { WorkDay } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
 
 const WorkHoursPage: React.FC = () => {
   const { currentUser, users, isAdmin } = useAuth();
-  const {
-    workHours, addWorkHours, updateWorkHours, deleteWorkHours,
-    workDays, addWorkDays, deleteWorkDay, getWorkDaysByDateRange
-  } = useWorkHours();
+  // Deliberately only the work_days half of this context. Team Schedule shows
+  // who is rostered on which day and nothing else — submitted hours belong to
+  // Hours Input and must not leak back in here.
+  const { workDays, addWorkDays, deleteWorkDay, getWorkDaysByDateRange } = useWorkHours();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
 
   // Modal states
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<WorkHoursEntry | null>(null);
 
   // Day detail panel state (for when clicking a marked day in schedule modal)
   const [selectedDayForDetail, setSelectedDayForDetail] = useState<string | null>(null);
-  const [showHoursForm, setShowHoursForm] = useState(false);
 
-  // Calendar day detail modal (for viewing employee hours on main calendar)
+  // Calendar day detail modal (for viewing a rostered day on the main calendar)
   const [calendarDetailModal, setCalendarDetailModal] = useState<{ employeeId: string; date: string } | null>(null);
 
   // Filter states
   const [filterEmployee, setFilterEmployee] = useState<string>('all');
   const [filterDateRange, setFilterDateRange] = useState<'week' | 'month' | 'all'>('week');
-  const [viewMode, setViewMode] = useState<'list' | 'schedule' | 'calendar'>('calendar');
+  const [viewMode, setViewMode] = useState<'schedule' | 'calendar'>('calendar');
 
   // Calendar state
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -57,12 +54,6 @@ const WorkHoursPage: React.FC = () => {
   ];
 
   // Form states
-  const [formEmployee, setFormEmployee] = useState<string>(currentUser?.id || '');
-  const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
-  const [formStartTime, setFormStartTime] = useState('09:00');
-  const [formEndTime, setFormEndTime] = useState('17:00');
-  const [formBreakMinutes, setFormBreakMinutes] = useState(30);
-  const [formNotes, setFormNotes] = useState('');
 
   // Calculate date range for work hours (includes today and some future for flexibility)
   const getDateRange = () => {
@@ -126,20 +117,6 @@ const WorkHoursPage: React.FC = () => {
     return { startDate, endDate };
   };
 
-  // Filter work hours
-  const filteredWorkHours = useMemo(() => {
-    const { startDate, endDate } = getDateRange();
-
-    return workHours.filter(wh => {
-      // Non-admins can only see their own entries
-      if (!isAdmin && wh.employeeId !== currentUser?.id) return false;
-
-      const matchesEmployee = filterEmployee === 'all' || wh.employeeId === filterEmployee;
-      const matchesDate = filterDateRange === 'all' || (wh.workDate >= startDate && wh.workDate <= endDate);
-
-      return matchesEmployee && matchesDate;
-    }).sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime());
-  }, [workHours, filterEmployee, filterDateRange, isAdmin, currentUser]);
 
   // Filter work days (schedule view) - includes future dates
   const filteredWorkDays = useMemo(() => {
@@ -346,119 +323,13 @@ const WorkHoursPage: React.FC = () => {
     return user ? `${user.firstName} ${user.lastName}` : 'Unknown';
   };
 
-  // Reset form
-  const resetForm = () => {
-    setFormEmployee(currentUser?.id || '');
-    setFormDate(new Date().toISOString().split('T')[0]);
-    setFormStartTime('09:00');
-    setFormEndTime('17:00');
-    setFormBreakMinutes(30);
-    setFormNotes('');
-    setEditingEntry(null);
-  };
 
-  // Get last work hours entry for employee (for copy feature)
-  const getLastWorkHoursEntry = (employeeId: string) => {
-    const employeeEntries = workHours
-      .filter(wh => wh.employeeId === employeeId)
-      .sort((a, b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime());
-    return employeeEntries.length > 0 ? employeeEntries[0] : null;
-  };
 
-  // Copy previous hours to form
-  const copyPreviousHours = () => {
-    const lastEntry = getLastWorkHoursEntry(formEmployee);
-    if (lastEntry) {
-      setFormStartTime(lastEntry.startTime);
-      setFormEndTime(lastEntry.endTime);
-      setFormBreakMinutes(lastEntry.breakMinutes);
-      showToast('Copied from your last entry', 'success');
-    } else {
-      showToast('No previous hours found to copy', 'error');
-    }
-  };
 
-  // Time presets
-  const timePresets = [
-    { label: '9-5', start: '09:00', end: '17:00', break: 30 },
-    { label: '8-4', start: '08:00', end: '16:00', break: 30 },
-    { label: '8-5', start: '08:00', end: '17:00', break: 60 },
-    { label: '10-6', start: '10:00', end: '18:00', break: 30 },
-  ];
 
-  const applyTimePreset = (preset: typeof timePresets[0]) => {
-    setFormStartTime(preset.start);
-    setFormEndTime(preset.end);
-    setFormBreakMinutes(preset.break);
-  };
 
-  // Open edit modal
-  const openEditModal = (entry: WorkHoursEntry) => {
-    setEditingEntry(entry);
-    setFormEmployee(entry.employeeId);
-    setFormDate(entry.workDate);
-    setFormStartTime(entry.startTime);
-    setFormEndTime(entry.endTime);
-    setFormBreakMinutes(entry.breakMinutes);
-    setFormNotes(entry.notes || '');
-    setShowAddModal(true);
-  };
 
-  // Handle save
-  const handleSave = async () => {
-    if (!formEmployee || !formDate || !formStartTime || !formEndTime) {
-      showToast('Please fill in all required fields', 'error');
-      return;
-    }
 
-    // Validate times
-    if (formStartTime >= formEndTime) {
-      showToast('End time must be after start time', 'error');
-      return;
-    }
-
-    const entryData = {
-      employeeId: formEmployee,
-      workDate: formDate,
-      startTime: formStartTime,
-      endTime: formEndTime,
-      breakMinutes: formBreakMinutes,
-      totalHours: calculateTotalHours(formStartTime, formEndTime, formBreakMinutes),
-      notes: formNotes || undefined,
-    };
-
-    try {
-      if (editingEntry) {
-        await updateWorkHours(editingEntry.id, entryData);
-        showToast('Work hours updated', 'success');
-      } else {
-        await addWorkHours(entryData);
-        showToast('Work hours added', 'success');
-      }
-      setShowAddModal(false);
-      resetForm();
-    } catch (error) {
-      showToast('Failed to save work hours', 'error');
-    }
-  };
-
-  // Handle delete
-  const handleDelete = async (id: string) => {
-    const confirmed = await confirm({
-      title: 'Delete this entry?',
-      message: 'The logged hours will be removed. This cannot be undone.',
-      confirmLabel: 'Delete',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
-    try {
-      await deleteWorkHours(id);
-      showToast('Work hours deleted', 'success');
-    } catch (error) {
-      console.error('Failed to delete work hours:', error);
-      showToast('Failed to delete work hours', 'error');
-    }
-  };
 
   // Schedule modal handlers
   const resetScheduleForm = () => {
@@ -468,7 +339,6 @@ const WorkHoursPage: React.FC = () => {
     setScheduleNotes('');
     setScheduleModalMonth(new Date());
     setSelectedDayForDetail(null);
-    setShowHoursForm(false);
     setRecurringDays([]);
     setMultiSelectRemoveMode(false);
   };
@@ -518,16 +388,7 @@ const WorkHoursPage: React.FC = () => {
     return getExistingWorkDaysForEmployee(scheduleEmployee).map(wd => wd.workDate);
   }, [scheduleEmployee, workDays]);
 
-  // Get work hours for a specific date and employee
-  const getWorkHoursForDateAndEmployee = (date: string, employeeId: string) => {
-    return workHours.filter(wh => wh.workDate === date && wh.employeeId === employeeId);
-  };
 
-  // Get total hours for a date
-  const getTotalHoursForDate = (date: string, employeeId: string) => {
-    const hours = getWorkHoursForDateAndEmployee(date, employeeId);
-    return hours.reduce((sum, h) => sum + h.totalHours, 0);
-  };
 
   // Get calendar days for the schedule modal
   const getScheduleModalCalendarDays = () => {
@@ -604,27 +465,16 @@ const WorkHoursPage: React.FC = () => {
     if (isExisting && !isMarkedForRemoval) {
       // Show detail panel for existing day
       setSelectedDayForDetail(date);
-      setShowHoursForm(false);
-      // Pre-fill the hours form with this date
-      setFormDate(date);
-      setFormEmployee(scheduleEmployee);
     } else if (isMarkedForRemoval) {
       // Unmark for removal
       setDatesToRemove(prev => prev.filter(d => d !== date));
     } else if (isNewlySelected) {
       // Show detail for newly selected day
       setSelectedDayForDetail(date);
-      setShowHoursForm(false);
-      setFormDate(date);
-      setFormEmployee(scheduleEmployee);
     } else {
-      // Add new day and immediately show detail panel with hours form option
       // Use Set to ensure no duplicates
       setSelectedDates(prev => Array.from(new Set([...prev, date])));
       setSelectedDayForDetail(date);
-      setShowHoursForm(false);
-      setFormDate(date);
-      setFormEmployee(scheduleEmployee);
     }
   };
 
@@ -642,40 +492,8 @@ const WorkHoursPage: React.FC = () => {
   // Close day detail panel
   const closeDayDetail = () => {
     setSelectedDayForDetail(null);
-    setShowHoursForm(false);
   };
 
-  // Handle adding hours from within the schedule modal
-  const handleAddHoursFromSchedule = async () => {
-    if (!formStartTime || !formEndTime) {
-      showToast('Please fill in start and end times', 'error');
-      return;
-    }
-
-    if (formStartTime >= formEndTime) {
-      showToast('End time must be after start time', 'error');
-      return;
-    }
-
-    const entryData = {
-      employeeId: scheduleEmployee,
-      workDate: selectedDayForDetail!,
-      startTime: formStartTime,
-      endTime: formEndTime,
-      breakMinutes: formBreakMinutes,
-      totalHours: calculateTotalHours(formStartTime, formEndTime, formBreakMinutes),
-      notes: formNotes || undefined,
-    };
-
-    try {
-      await addWorkHours(entryData);
-      showToast('Work hours added', 'success');
-      setShowHoursForm(false);
-      resetForm();
-    } catch (error) {
-      showToast('Failed to add work hours', 'error');
-    }
-  };
 
   // Navigate schedule modal calendar
   const prevScheduleMonth = () => {
@@ -777,13 +595,6 @@ const WorkHoursPage: React.FC = () => {
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  // Format time
-  const formatTime = (timeStr: string) => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  };
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
@@ -792,7 +603,7 @@ const WorkHoursPage: React.FC = () => {
         <div>
           <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Team Schedule</h1>
           <p style={isMobileOrTablet ? styles.subtitleMobile : styles.subtitle}>
-            {isAdmin ? 'Manage team schedules and track work hours' : 'Track your schedule and work hours'}
+            {isAdmin ? 'Who is working which day' : 'The days you are scheduled to work'}
           </p>
         </div>
         <button
@@ -814,16 +625,6 @@ const WorkHoursPage: React.FC = () => {
         <div style={isMobileOrTablet ? styles.filtersRowMobile : styles.filtersRow}>
           {/* View Mode Toggle */}
           <div style={isMobileOrTablet ? styles.viewToggleMobile : styles.viewToggle}>
-            <button
-              onClick={() => setViewMode('list')}
-              style={{
-                ...styles.toggleButton,
-                ...(isMobileOrTablet ? styles.toggleButtonMobile : {}),
-                ...(viewMode === 'list' ? styles.toggleButtonActive : {}),
-              }}
-            >
-              Hours
-            </button>
             <button
               onClick={() => setViewMode('schedule')}
               style={{
@@ -877,73 +678,7 @@ const WorkHoursPage: React.FC = () => {
       </div>
 
       {/* Content */}
-      {viewMode === 'list' ? (
-        <div style={styles.listContainer}>
-          {filteredWorkHours.length === 0 ? (
-            <div style={styles.emptyState}>
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              <h3>No work hours found</h3>
-              <p>Add your first work hours entry to get started</p>
-            </div>
-          ) : (
-            filteredWorkHours.map(entry => (
-              <div key={entry.id} style={styles.entryCard}>
-                <div style={styles.entryHeader}>
-                  <div style={styles.entryDate}>{formatDate(entry.workDate)}</div>
-                  {isAdmin && (
-                    <div style={styles.employeeName}>{getUserName(entry.employeeId)}</div>
-                  )}
-                </div>
-
-                <div style={styles.entryContent}>
-                  <div style={styles.entryInfo}>
-                    <div style={styles.timeRange}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="2">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </svg>
-                      {formatTime(entry.startTime)} - {formatTime(entry.endTime)}
-                    </div>
-                    {entry.breakMinutes > 0 && (
-                      <div style={styles.breakInfo}>
-                        Break: {entry.breakMinutes} min
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={styles.hoursDisplay}>
-                    <span style={styles.hoursValue}>{entry.totalHours}</span>
-                    <span style={styles.hoursLabel}>hours</span>
-                  </div>
-                </div>
-
-                {entry.notes && (
-                  <div style={styles.notesSection}>
-                    <span style={styles.notesLabel}>Notes:</span> {entry.notes}
-                  </div>
-                )}
-
-                <div style={styles.entryActions}>
-                  {/* Edit/Delete buttons */}
-                  {(isAdmin || entry.employeeId === currentUser?.id) && (
-                    <>
-                      <button onClick={() => openEditModal(entry)} style={styles.actionButton}>
-                        Edit
-                      </button>
-                      <button onClick={() => handleDelete(entry.id)} style={styles.deleteButton}>
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : viewMode === 'schedule' ? (
+      {viewMode === 'schedule' ? (
         // Schedule View (Working Days)
         <div style={styles.listContainer}>
           {filteredWorkDays.length === 0 ? (
@@ -1082,8 +817,6 @@ const WorkHoursPage: React.FC = () => {
                     ) : (
                       <div style={styles.dayViewEntries}>
                         {dayWorkDays.map(wd => {
-                          const employeeHours = getWorkHoursForDateAndEmployee(dateStr, wd.employeeId);
-                          const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
                           return (
                             <div
                               key={wd.id}
@@ -1103,27 +836,11 @@ const WorkHoursPage: React.FC = () => {
                                   }} />
                                   <span style={styles.dayViewEntryName}>{getUserName(wd.employeeId)}</span>
                                 </div>
-                                {totalHours > 0 && (
-                                  <span style={{
-                                    ...styles.dayViewEntryStatus,
-                                    backgroundColor: getUserColor(wd.employeeId),
-                                  }}>
-                                    {totalHours}h
-                                  </span>
-                                )}
                               </div>
-                              {employeeHours.length > 0 ? (
+                              {wd.notes && (
                                 <div style={styles.dayViewEntryDetails}>
-                                  {employeeHours.map(h => (
-                                    <div key={h.id} style={styles.dayViewEntryTime}>
-                                      {formatTime(h.startTime)} - {formatTime(h.endTime)}
-                                      {h.breakMinutes > 0 && <span style={styles.dayViewEntryBreak}>({h.breakMinutes}min break)</span>}
-                                    </div>
-                                  ))}
-                                  <div style={styles.dayViewEntryTotal}>{totalHours}h total</div>
+                                  <div style={styles.dayViewEntryTime}>{wd.notes}</div>
                                 </div>
-                              ) : (
-                                <div style={styles.dayViewEntryNoHours}>No hours logged yet</div>
                               )}
                             </div>
                           );
@@ -1161,8 +878,6 @@ const WorkHoursPage: React.FC = () => {
                           </div>
                         ) : (
                           dayWorkDays.map(wd => {
-                            const employeeHours = getWorkHoursForDateAndEmployee(day.date, wd.employeeId);
-                            const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
                             return (
                               <div
                                 key={wd.id}
@@ -1171,16 +886,11 @@ const WorkHoursPage: React.FC = () => {
                                   ...(isMobileOrTablet ? styles.weekViewEntryMobile : styles.weekViewEntry),
                                   backgroundColor: getUserColor(wd.employeeId),
                                 }}
-                                title={`${getUserName(wd.employeeId)} - ${totalHours > 0 ? totalHours + 'h' : 'No hours logged'}`}
+                                title={wd.notes ? `${getUserName(wd.employeeId)} - ${wd.notes}` : getUserName(wd.employeeId)}
                               >
                                 <span style={isMobileOrTablet ? styles.weekViewEntryNameMobile : styles.weekViewEntryName}>
                                   {isMobileOrTablet ? getUserName(wd.employeeId).split(' ')[0].charAt(0) + '.' : getUserName(wd.employeeId).split(' ')[0]}
                                 </span>
-                                {totalHours > 0 ? (
-                                  <span style={isMobileOrTablet ? styles.weekViewEntryHoursMobile : styles.weekViewEntryHours}>{totalHours}h</span>
-                                ) : (
-                                  <span style={{ ...(isMobileOrTablet ? styles.weekViewEntryHoursMobile : styles.weekViewEntryHours), opacity: 0.6 }}>--</span>
-                                )}
                               </div>
                             );
                           })
@@ -1225,9 +935,6 @@ const WorkHoursPage: React.FC = () => {
                   {hasWorkDays && (
                     <div style={styles.calendarDayContent}>
                       {dayWorkDays.slice(0, isMobileOrTablet ? 2 : 3).map(wd => {
-                        const employeeHours = getWorkHoursForDateAndEmployee(day.date, wd.employeeId);
-                        const totalHours = employeeHours.reduce((sum, h) => sum + h.totalHours, 0);
-                        const canEditThis = isAdmin || wd.employeeId === currentUser?.id;
                         return (
                           <div
                             key={wd.id}
@@ -1240,10 +947,9 @@ const WorkHoursPage: React.FC = () => {
                               backgroundColor: getUserColor(wd.employeeId),
                               cursor: 'pointer',
                             }}
-                            title={`${getUserName(wd.employeeId)}${wd.notes ? ` - ${wd.notes}` : ''} - Click to view${canEditThis ? '/edit' : ''} hours`}
+                            title={wd.notes ? `${getUserName(wd.employeeId)} - ${wd.notes}` : getUserName(wd.employeeId)}
                           >
                             {isMobileOrTablet ? getUserName(wd.employeeId).split(' ')[0].substring(0, 4) : getUserName(wd.employeeId).split(' ')[0]}
-                            {totalHours > 0 && <span style={styles.calendarWorkDayHours}>{totalHours}h</span>}
                           </div>
                         );
                       })}
@@ -1277,155 +983,12 @@ const WorkHoursPage: React.FC = () => {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      {showAddModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowAddModal(false)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>{editingEntry ? 'Edit Work Hours' : 'Add Work Hours'}</h2>
-              <button onClick={() => setShowAddModal(false)} style={styles.closeButton}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <div style={styles.modalContent}>
-              {/* Employee Selection (Admin only) */}
-              {isAdmin && (
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Employee</label>
-                  <select
-                    value={formEmployee}
-                    onChange={(e) => setFormEmployee(e.target.value)}
-                    style={styles.input}
-                  >
-                    <option value="">Select employee...</option>
-                    {activeEmployees.map(emp => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.firstName} {emp.lastName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Date */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Date</label>
-                <input
-                  type="date"
-                  value={formDate}
-                  onChange={(e) => setFormDate(e.target.value)}
-                  style={styles.input}
-                />
-              </div>
-
-              {/* Quick Actions */}
-              {!editingEntry && (
-                <div style={styles.quickActions}>
-                  <button
-                    type="button"
-                    onClick={copyPreviousHours}
-                    style={styles.quickActionBtn}
-                    title="Copy times from your last entry"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                    Copy Last
-                  </button>
-                  <div style={styles.presetDivider}>|</div>
-                  {timePresets.map((preset, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => applyTimePreset(preset)}
-                      style={styles.presetBtn}
-                      title={`${preset.start.replace(':00', '')} - ${preset.end.replace(':00', '')} (${preset.break}min break)`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Time Row */}
-              <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Start Time</label>
-                  <input
-                    type="time"
-                    value={formStartTime}
-                    onChange={(e) => setFormStartTime(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>End Time</label>
-                  <input
-                    type="time"
-                    value={formEndTime}
-                    onChange={(e) => setFormEndTime(e.target.value)}
-                    style={styles.input}
-                  />
-                </div>
-              </div>
-
-              {/* Break */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Break (minutes)</label>
-                <input
-                  type="number"
-                  value={formBreakMinutes}
-                  onChange={(e) => setFormBreakMinutes(Number(e.target.value))}
-                  min={0}
-                  max={120}
-                  style={styles.input}
-                />
-              </div>
-
-              {/* Calculated Hours Preview */}
-              <div style={styles.hoursPreview}>
-                <span>Total Hours:</span>
-                <span style={styles.hoursPreviewValue}>
-                  {calculateTotalHours(formStartTime, formEndTime, formBreakMinutes)}
-                </span>
-              </div>
-
-              {/* Notes */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Notes (optional)</label>
-                <textarea
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  placeholder="Add any notes about this shift..."
-                  style={styles.textarea}
-                  rows={3}
-                />
-              </div>
-            </div>
-
-            <div style={styles.modalFooter}>
-              <button onClick={() => setShowAddModal(false)} style={styles.cancelButton}>
-                Cancel
-              </button>
-              <button onClick={handleSave} style={styles.saveButton}>
-                {editingEntry ? 'Update' : 'Add Hours'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Schedule Modal (Mark Working Days) */}
       {showScheduleModal && (
         <div style={styles.modalOverlay} onClick={() => setShowScheduleModal(false)}>
           <div style={{ ...styles.modal, maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>Manage Schedule & Hours</h2>
+              <h2 style={styles.modalTitle}>Manage Schedule</h2>
               <button onClick={() => setShowScheduleModal(false)} style={styles.closeButton}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -1603,7 +1166,6 @@ const WorkHoursPage: React.FC = () => {
                   const dayOfWeek = new Date(day.date + 'T00:00:00').getDay();
                   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
                   const isSelected = selectedDayForDetail === day.date;
-                  const hoursForDay = scheduleEmployee ? getTotalHoursForDate(day.date, scheduleEmployee) : 0;
 
                   return (
                     <button
@@ -1631,9 +1193,6 @@ const WorkHoursPage: React.FC = () => {
                       )}
                       {isNewlySelected && (
                         <span style={styles.scheduleDayNewIndicator}>+</span>
-                      )}
-                      {hoursForDay > 0 && (isExisting || isNewlySelected) && !isMarkedForRemoval && (
-                        <span style={styles.scheduleDayHoursIndicator}>{hoursForDay}h</span>
                       )}
                     </button>
                   );
@@ -1674,134 +1233,18 @@ const WorkHoursPage: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Existing Hours for this day */}
-                  {scheduleEmployee && getWorkHoursForDateAndEmployee(selectedDayForDetail, scheduleEmployee).length > 0 && (
-                    <div style={styles.dayDetailHoursList}>
-                      <span style={styles.dayDetailHoursLabel}>Logged Hours:</span>
-                      {getWorkHoursForDateAndEmployee(selectedDayForDetail, scheduleEmployee).map(wh => (
-                        <div key={wh.id} style={styles.dayDetailHoursItem}>
-                          <span>{formatTime(wh.startTime)} - {formatTime(wh.endTime)}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={styles.dayDetailHoursValue}>{wh.totalHours}h</span>
-                            <button
-                              onClick={() => {
-                                openEditModal(wh);
-                                setShowScheduleModal(false);
-                              }}
-                              style={styles.dayDetailEditBtn}
-                              title="Edit hours"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      <div style={styles.dayDetailHoursTotal}>
-                        <span>Total:</span>
-                        <span style={styles.dayDetailHoursTotalValue}>
-                          {getTotalHoursForDate(selectedDayForDetail, scheduleEmployee)}h
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Add Hours Form */}
-                  {showHoursForm ? (
-                    <div style={styles.dayDetailForm}>
-                      <div style={styles.formRow}>
-                        <div style={styles.formGroup}>
-                          <label style={styles.label}>Start Time</label>
-                          <input
-                            type="time"
-                            value={formStartTime}
-                            onChange={(e) => setFormStartTime(e.target.value)}
-                            style={styles.input}
-                          />
-                        </div>
-                        <div style={styles.formGroup}>
-                          <label style={styles.label}>End Time</label>
-                          <input
-                            type="time"
-                            value={formEndTime}
-                            onChange={(e) => setFormEndTime(e.target.value)}
-                            style={styles.input}
-                          />
-                        </div>
-                      </div>
-                      <div style={styles.formGroup}>
-                        <label style={styles.label}>Break (minutes)</label>
-                        <input
-                          type="number"
-                          value={formBreakMinutes}
-                          onChange={(e) => setFormBreakMinutes(Number(e.target.value))}
-                          min={0}
-                          max={120}
-                          style={styles.input}
-                        />
-                      </div>
-                      <div style={styles.hoursPreview}>
-                        <span>Total Hours:</span>
-                        <span style={styles.hoursPreviewValue}>
-                          {calculateTotalHours(formStartTime, formEndTime, formBreakMinutes)}
-                        </span>
-                      </div>
-                      <div style={styles.formGroup}>
-                        <label style={styles.label}>Notes (optional)</label>
-                        <input
-                          type="text"
-                          value={formNotes}
-                          onChange={(e) => setFormNotes(e.target.value)}
-                          placeholder="Add any notes..."
-                          style={styles.input}
-                        />
-                      </div>
-                      <div style={styles.dayDetailFormActions}>
-                        <button
-                          onClick={() => setShowHoursForm(false)}
-                          style={styles.dayDetailCancelBtn}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleAddHoursFromSchedule}
-                          style={styles.dayDetailSaveBtn}
-                        >
-                          Save Hours
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={styles.dayDetailActions}>
-                      <button
-                        onClick={() => {
-                          resetForm();
-                          setFormDate(selectedDayForDetail);
-                          setFormEmployee(scheduleEmployee);
-                          setShowHoursForm(true);
-                        }}
-                        style={styles.dayDetailAddHoursBtn}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        Add Hours
-                      </button>
-                      <button
-                        onClick={() => handleRemoveDay(selectedDayForDetail)}
-                        style={styles.dayDetailRemoveBtn}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                        {existingWorkDayDates.includes(selectedDayForDetail) ? 'Remove Day' : 'Unselect Day'}
-                      </button>
-                    </div>
-                  )}
+                  <div style={styles.dayDetailActions}>
+                    <button
+                      onClick={() => handleRemoveDay(selectedDayForDetail)}
+                      style={styles.dayDetailRemoveBtn}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                      {existingWorkDayDates.includes(selectedDayForDetail) ? 'Remove Day' : 'Unselect Day'}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1853,119 +1296,57 @@ const WorkHoursPage: React.FC = () => {
         </div>
       )}
 
-      {/* Calendar Employee Hours Detail Modal */}
-      {calendarDetailModal && (
-        <div style={styles.modalOverlay} onClick={() => setCalendarDetailModal(null)}>
-          <div style={{ ...styles.modal, maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>{getUserName(calendarDetailModal.employeeId)}</h2>
-              <button onClick={() => setCalendarDetailModal(null)} style={styles.closeButton}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <div style={styles.modalContent}>
-              <div style={styles.calendarDetailDate}>
-                {formatDate(calendarDetailModal.date)}
+      {/* Scheduled Day Detail Modal */}
+      {calendarDetailModal && (() => {
+        const day = workDays.find(
+          wd => wd.employeeId === calendarDetailModal.employeeId
+            && wd.workDate === calendarDetailModal.date
+            && wd.status !== 'cancelled'
+        );
+        return (
+          <div style={styles.modalOverlay} onClick={() => setCalendarDetailModal(null)}>
+            <div style={{ ...styles.modal, maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
+              <div style={styles.modalHeader}>
+                <h2 style={styles.modalTitle}>{getUserName(calendarDetailModal.employeeId)}</h2>
+                <button onClick={() => setCalendarDetailModal(null)} style={styles.closeButton}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Work Hours for this employee on this day */}
-              {(() => {
-                const hours = getWorkHoursForDateAndEmployee(calendarDetailModal.date, calendarDetailModal.employeeId);
-                const totalHours = hours.reduce((sum, h) => sum + h.totalHours, 0);
-                const canEdit = isAdmin || calendarDetailModal.employeeId === currentUser?.id;
+              <div style={styles.modalContent}>
+                <div style={styles.calendarDetailDate}>
+                  {formatDate(calendarDetailModal.date)}
+                </div>
+                {day?.notes
+                  ? <p style={styles.calendarDetailNote}>{day.notes}</p>
+                  : <p style={styles.calendarDetailNoteEmpty}>Scheduled to work. No note for this day.</p>}
+              </div>
 
-                if (hours.length === 0) {
-                  return (
-                    <div style={styles.calendarDetailNoHours}>
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </svg>
-                      <p>No hours logged for this day</p>
-                      <span style={styles.calendarDetailNoHoursSubtext}>
-                        {canEdit
-                          ? 'Click "Add Hours" below to log work hours for this day.'
-                          : 'This employee is scheduled but hasn\'t logged their work hours yet.'}
-                      </span>
-                    </div>
-                  );
-                }
-
-                return (
-                  <>
-                    <div style={styles.calendarDetailHoursList}>
-                      {hours.map(wh => (
-                        <div key={wh.id} style={styles.calendarDetailHoursItem}>
-                          <div style={styles.calendarDetailHoursTime}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="2">
-                              <circle cx="12" cy="12" r="10" />
-                              <polyline points="12 6 12 12 16 14" />
-                            </svg>
-                            {formatTime(wh.startTime)} - {formatTime(wh.endTime)}
-                          </div>
-                          <div style={styles.calendarDetailHoursInfo}>
-                            {wh.breakMinutes > 0 && (
-                              <span style={styles.calendarDetailBreak}>
-                                {wh.breakMinutes}min break
-                              </span>
-                            )}
-                            <span style={styles.calendarDetailHoursValue}>{wh.totalHours}h</span>
-                            {canEdit && (
-                              <button
-                                onClick={() => {
-                                  openEditModal(wh);
-                                  setCalendarDetailModal(null);
-                                }}
-                                style={styles.calendarDetailEditBtn}
-                                title="Edit"
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={styles.calendarDetailTotal}>
-                      <span>Total Hours</span>
-                      <span style={styles.calendarDetailTotalValue}>{totalHours}h</span>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            <div style={styles.modalFooter}>
-              {/* Show Add Hours button only if user can edit */}
-              {(isAdmin || calendarDetailModal.employeeId === currentUser?.id) && (
-                <button
-                  onClick={() => {
-                    resetForm();
-                    setFormEmployee(calendarDetailModal.employeeId);
-                    setFormDate(calendarDetailModal.date);
-                    setCalendarDetailModal(null);
-                    setShowAddModal(true);
-                  }}
-                  style={styles.saveButton}
-                >
-                  Add Hours
+              <div style={styles.modalFooter}>
+                {isAdmin && day && (
+                  <button
+                    onClick={async () => {
+                      // Reuse the one place that removes a working day, so the
+                      // confirm copy and the toast stay identical everywhere.
+                      await handleDeleteWorkDay(day.id);
+                      setCalendarDetailModal(null);
+                    }}
+                    style={styles.deleteButton}
+                  >
+                    Remove from schedule
+                  </button>
+                )}
+                <button onClick={() => setCalendarDetailModal(null)} style={styles.cancelButton}>
+                  Close
                 </button>
-              )}
-              <button onClick={() => setCalendarDetailModal(null)} style={styles.cancelButton}>
-                Close
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {confirmDialog}
     </div>
   );
@@ -2144,23 +1525,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '16px',
   },
-  entryCard: {
-    backgroundColor: theme.colors.bg.secondary,
-    border: `2px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.lg,
-    padding: '20px',
-  },
-  entryHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-  },
-  entryDate: {
-    fontSize: '16px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-  },
   statusBadge: {
     padding: '4px 12px',
     borderRadius: theme.borderRadius.full,
@@ -2168,80 +1532,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     color: '#FFFFFF',
     textTransform: 'uppercase',
-  },
-  entryContent: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  entryInfo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  employeeName: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-    marginBottom: '4px',
-  },
-  timeRange: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    color: theme.colors.txt.secondary,
-  },
-  breakInfo: {
-    fontSize: '13px',
-    color: theme.colors.txt.tertiary,
-  },
-  hoursDisplay: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    backgroundColor: theme.colors.bg.tertiary,
-    padding: '12px 20px',
-    borderRadius: theme.borderRadius.md,
-  },
-  hoursValue: {
-    fontSize: '28px',
-    fontWeight: 700,
-    color: theme.colors.primary,
-  },
-  hoursLabel: {
-    fontSize: '12px',
-    color: theme.colors.txt.tertiary,
-    textTransform: 'uppercase',
-  },
-  notesSection: {
-    marginTop: '12px',
-    padding: '12px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    color: theme.colors.txt.secondary,
-  },
-  notesLabel: {
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-  },
-  entryActions: {
-    display: 'flex',
-    gap: '8px',
-    marginTop: '16px',
-    paddingTop: '16px',
-    borderTop: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  actionButton: {
-    padding: '8px 16px',
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.primary,
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
   },
   deleteButton: {
     padding: '8px 16px',
@@ -2393,11 +1683,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '8px',
   },
-  formRow: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-    gap: '16px',
-  },
   label: {
     fontSize: '14px',
     fontWeight: 500,
@@ -2411,69 +1696,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.txt.primary,
     fontSize: '15px',
     outline: 'none',
-  },
-  textarea: {
-    padding: '12px 16px',
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `2px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.primary,
-    fontSize: '15px',
-    outline: 'none',
-    resize: 'vertical',
-    fontFamily: 'inherit',
-  },
-  hoursPreview: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    fontSize: '15px',
-    color: theme.colors.txt.secondary,
-  },
-  hoursPreviewValue: {
-    fontSize: '24px',
-    fontWeight: 700,
-    color: theme.colors.primary,
-  },
-  quickActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '12px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    marginBottom: '4px',
-    flexWrap: 'wrap',
-  },
-  quickActionBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 12px',
-    backgroundColor: theme.colors.bg.secondary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.secondary,
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-  },
-  presetDivider: {
-    color: theme.colors.bdr.primary,
-    fontSize: '16px',
-  },
-  presetBtn: {
-    padding: '6px 10px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.secondary,
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
   },
   modalFooter: {
     display: 'flex',
@@ -2846,12 +2068,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 700,
     marginTop: '1px',
   },
-  scheduleDayHoursIndicator: {
-    fontSize: '8px',
-    fontWeight: 600,
-    marginTop: '1px',
-    opacity: 0.9,
-  },
   scheduleCalendarDaySelected: {
     outline: '3px solid #FFFFFF',
     outlineOffset: '-3px',
@@ -2891,75 +2107,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dayDetailHoursList: {
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.sm,
-    padding: '12px',
-    marginBottom: '16px',
-  },
-  dayDetailHoursLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.txt.secondary,
-    marginBottom: '8px',
-    display: 'block',
-  },
-  dayDetailHoursItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '6px 0',
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  dayDetailHoursValue: {
-    fontWeight: 600,
-    color: theme.colors.primary,
-  },
-  dayDetailHoursTotal: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: '8px',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-  },
-  dayDetailHoursTotalValue: {
-    fontSize: '16px',
-    fontWeight: 700,
-    color: theme.colors.primary,
-  },
-  dayDetailEditBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '4px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.sm,
-    color: theme.colors.txt.secondary,
-    cursor: 'pointer',
-  },
   dayDetailActions: {
     display: 'flex',
     gap: '12px',
-  },
-  dayDetailAddHoursBtn: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '10px 16px',
-    backgroundColor: theme.colors.primary,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    color: '#FFFFFF',
-    fontSize: '14px',
-    fontWeight: 500,
-    cursor: 'pointer',
   },
   dayDetailRemoveBtn: {
     flex: 1,
@@ -2974,38 +2124,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.status.error,
     fontSize: '14px',
     fontWeight: 500,
-    cursor: 'pointer',
-  },
-  dayDetailForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  dayDetailFormActions: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '8px',
-  },
-  dayDetailCancelBtn: {
-    flex: 1,
-    padding: '10px 16px',
-    backgroundColor: 'transparent',
-    border: `2px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.secondary,
-    fontSize: '14px',
-    fontWeight: 500,
-    cursor: 'pointer',
-  },
-  dayDetailSaveBtn: {
-    flex: 1,
-    padding: '10px 16px',
-    backgroundColor: theme.colors.status.success,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    color: '#FFFFFF',
-    fontSize: '14px',
-    fontWeight: 600,
     cursor: 'pointer',
   },
   scheduleModalLegend: {
@@ -3226,11 +2344,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '2px',
   },
-  calendarWorkDayHours: {
-    fontSize: '10px',
-    opacity: 0.9,
-    fontWeight: 600,
-  },
   calendarMoreIndicator: {
     fontSize: '10px',
     color: theme.colors.txt.tertiary,
@@ -3330,14 +2443,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     color: theme.colors.txt.primary,
   },
-  dayViewEntryStatus: {
-    padding: '4px 10px',
-    borderRadius: theme.borderRadius.full,
-    fontSize: '11px',
-    fontWeight: 600,
-    color: '#FFFFFF',
-    textTransform: 'uppercase',
-  },
   dayViewEntryDetails: {
     display: 'flex',
     flexDirection: 'column',
@@ -3346,21 +2451,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   dayViewEntryTime: {
     fontSize: '14px',
     color: theme.colors.txt.secondary,
-  },
-  dayViewEntryBreak: {
-    marginLeft: '8px',
-    color: theme.colors.txt.tertiary,
-  },
-  dayViewEntryTotal: {
-    marginTop: '8px',
-    fontSize: '15px',
-    fontWeight: 600,
-    color: theme.colors.primary,
-  },
-  dayViewEntryNoHours: {
-    fontSize: '13px',
-    color: theme.colors.txt.tertiary,
-    fontStyle: 'italic',
   },
   // Week View styles
   weekViewContainer: {
@@ -3535,25 +2625,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     flex: 1,
     fontSize: '10px',
   },
-  weekViewEntryHours: {
-    fontWeight: 700,
-    flexShrink: 0,
-    marginLeft: '8px',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    padding: '2px 6px',
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '12px',
-  },
-  weekViewEntryHoursMobile: {
-    fontWeight: 700,
-    flexShrink: 0,
-    marginLeft: '4px',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    padding: '1px 4px',
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '10px',
-  },
   // Calendar Employee Detail Modal styles
+  calendarDetailNote: {
+    ...theme.typography.body,
+    color: theme.colors.txt.secondary,
+    margin: `${theme.spacing.md} 0 0`,
+    wordBreak: 'break-word',
+  },
+  calendarDetailNoteEmpty: {
+    ...theme.typography.body,
+    color: theme.colors.txt.tertiary,
+    fontStyle: 'italic',
+    margin: `${theme.spacing.md} 0 0`,
+  },
   calendarDetailDate: {
     fontSize: '16px',
     fontWeight: 600,
@@ -3563,84 +2647,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.md,
     marginBottom: '16px',
-  },
-  calendarDetailNoHours: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '32px 16px',
-    textAlign: 'center',
-    color: theme.colors.txt.tertiary,
-  },
-  calendarDetailNoHoursSubtext: {
-    fontSize: '13px',
-    color: theme.colors.txt.tertiary,
-    marginTop: '8px',
-  },
-  calendarDetailHoursList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  calendarDetailHoursItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-  },
-  calendarDetailHoursTime: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-  },
-  calendarDetailHoursInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  calendarDetailBreak: {
-    fontSize: '12px',
-    color: theme.colors.txt.tertiary,
-  },
-  calendarDetailHoursValue: {
-    fontSize: '16px',
-    fontWeight: 700,
-    color: theme.colors.primary,
-  },
-  calendarDetailEditBtn: {
-    background: 'none',
-    border: 'none',
-    color: theme.colors.txt.tertiary,
-    cursor: 'pointer',
-    padding: '4px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.borderRadius.sm,
-    transition: 'all 0.15s',
-  },
-  calendarDetailTotal: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px',
-    marginTop: '16px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    borderTop: `2px solid ${theme.colors.primary}`,
-    fontSize: '16px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-  },
-  calendarDetailTotalValue: {
-    fontSize: '24px',
-    fontWeight: 700,
-    color: theme.colors.primary,
   },
 };
 

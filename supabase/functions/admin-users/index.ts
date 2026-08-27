@@ -41,7 +41,14 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  // Reflected from the request rather than hard-coded. src/lib/supabase.ts sets
+  // a global 'x-application-name' header on EVERY Supabase call, and a header
+  // the preflight does not allow makes the browser refuse to send the real
+  // request — an OPTIONS 200 followed by nothing, and "Failed to send a request
+  // to the Edge Function" on the client. Listing headers by hand means every
+  // future one silently breaks this the same way.
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-application-name',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 

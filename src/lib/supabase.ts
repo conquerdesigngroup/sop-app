@@ -54,11 +54,19 @@ if (isSupabaseConfigured()) {
       db: {
         schema: 'public',
       },
-      global: {
-        headers: {
-          'x-application-name': 'sop-app',
-        },
-      },
+      // No custom global headers here, deliberately.
+      //
+      // This used to send 'x-application-name: sop-app' on every request. It was
+      // decorative — nothing read it, in the functions or the database — and it
+      // silently broke every browser call to an Edge Function. A header the
+      // function's CORS preflight does not list makes the browser refuse to send
+      // the real request: you get an OPTIONS 200, no POST at all, and "Failed to
+      // send a request to the Edge Function" on the client. That took out Add
+      // Team Member, Reset password and Google connect.
+      //
+      // The functions now also reflect the requested headers, so this would no
+      // longer break them. Adding a global header back still means checking
+      // every function's Access-Control-Allow-Headers first.
       realtime: {
         params: {
           eventsPerSecond: 10,

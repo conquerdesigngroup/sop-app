@@ -1,244 +1,228 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { CalendarEvent, EventTag, EventTemplate } from '../types';
-import { useAuth } from './AuthContext';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { CalendarEvent, CalendarSource } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+/**
+ * The staff Calendar, as a read-only mirror of Google.
+ *
+ * WHAT CHANGED AND WHY
+ *
+ * This context used to keep every event in localStorage and never spoke to
+ * Supabase at all. That meant each person had their own private calendar:
+ * nothing was shared between staff, nothing survived moving to another device,
+ * and clearing site data wiped it. It looked like a shared calendar and was
+ * not one, which is the worst version of that to have.
+ *
+ * It is now a subscription. Three Google calendars under one studio account are
+ * mirrored into calendar_events by the staff-calendar-sync Edge Function, and
+ * this reads them. Google is the source of truth.
+ *
+ * NO WRITE METHODS, ON PURPOSE
+ *
+ * There is no addEvent/updateEvent/deleteEvent here any more. A write would be
+ * silently reverted by the next sync — the prune deletes any 'google' row the
+ * feed no longer contains — so offering one would be offering a button that
+ * quietly does nothing. Events are created in Google Calendar.
+ *
+ * The three legacy 'manual' rows from the old build are still read and still
+ * shown. They are from May and long past; deleting a colleague's data to tidy a
+ * migration is not a trade worth making.
+ */
 
 interface EventContextType {
   events: CalendarEvent[];
-  addEvent: (event: Omit<CalendarEvent, 'id' | 'createdAt' | 'createdBy'>) => Promise<void>;
-  updateEvent: (id: string, event: Partial<CalendarEvent>) => Promise<void>;
-  deleteEvent: (id: string) => Promise<void>;
+  /** The subscribed calendars, in sort order. Drives the legend and filter. */
+  sources: CalendarSource[];
+  /** The calendar an event came from, or undefined for a legacy manual row. */
+  getSourceFor: (event: CalendarEvent) => CalendarSource | undefined;
+  /** The colour to draw an event in. Falls back to the row's own colour. */
+  colorFor: (event: CalendarEvent) => string;
   getEventById: (id: string) => CalendarEvent | undefined;
   getEventsByDate: (date: string) => CalendarEvent[];
   getEventsByDateRange: (startDate: string, endDate: string) => CalendarEvent[];
-  // Tags
-  tags: EventTag[];
-  addTag: (name: string) => Promise<EventTag>;
-  deleteTag: (id: string) => Promise<void>;
-  getTagById: (id: string) => EventTag | undefined;
-  // Templates
-  templates: EventTemplate[];
-  addTemplate: (template: Omit<EventTemplate, 'id' | 'createdAt' | 'createdBy'>) => Promise<EventTemplate>;
-  updateTemplate: (id: string, template: Partial<EventTemplate>) => Promise<void>;
-  deleteTemplate: (id: string) => Promise<void>;
-  getTemplateById: (id: string) => EventTemplate | undefined;
   loading: boolean;
+  error: string | null;
+  /** Re-read what is already in the database. Cheap; does not call Google. */
+  refresh: () => Promise<void>;
+  /**
+   * Pull from Google now, then re-read.
+   *
+   * Super admins only — the Edge Function and staff_sync_google_events() both
+   * refuse anyone else. There is no pg_cron in this project yet, so until one
+   * exists this is the only thing that makes a pull happen; the calendar would
+   * otherwise show whatever the last manual sync left behind.
+   */
+  syncNow: () => Promise<SyncRunResult[]>;
+}
+
+/** One entry per calendar, whether it succeeded or not. */
+export interface SyncRunResult {
+  calendar?: string;
+  fetched?: number;
+  upserted?: number;
+  removed?: number;
+  error?: string;
 }
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'mediamaple_calendar_events';
-const TAGS_STORAGE_KEY = 'mediamaple_event_tags';
-const TEMPLATES_STORAGE_KEY = 'mediamaple_event_templates';
+/** Colour for a manual row that has none — matches theme.colors.status.info. */
+const FALLBACK_COLOR = '#3B82F6';
 
-// Generate unique ID
-const generateId = () => {
-  return `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-};
+const mapEvent = (row: any): CalendarEvent => ({
+  id: row.id,
+  title: row.title ?? '',
+  description: row.description ?? '',
+  startDate: row.start_date,
+  startTime: row.start_time ?? undefined,
+  endDate: row.end_date ?? undefined,
+  endTime: row.end_time ?? undefined,
+  location: row.location ?? undefined,
+  isAllDay: Boolean(row.is_all_day),
+  color: row.color ?? FALLBACK_COLOR,
+  attendees: row.attendees ?? [],
+  reminders: row.reminders ?? undefined,
+  isRecurring: Boolean(row.is_recurring),
+  recurrencePattern: row.recurrence_pattern ?? undefined,
+  notes: row.notes ?? undefined,
+  tags: row.tags ?? undefined,
+  createdBy: row.created_by ?? '',
+  createdAt: row.created_at,
+  updatedAt: row.updated_at ?? undefined,
+  source: row.source ?? 'manual',
+  googleCalendarId: row.google_calendar_id ?? undefined,
+  googleEventId: row.google_event_id ?? undefined,
+});
+
+const mapSource = (row: any): CalendarSource => ({
+  id: row.id,
+  googleCalendarId: row.google_calendar_id,
+  label: row.label,
+  slug: row.slug,
+  color: row.color,
+  sortOrder: row.sort_order ?? 0,
+  isEnabled: Boolean(row.is_enabled),
+  lastSuccessAt: row.last_success_at ?? null,
+  lastStatus: row.last_status ?? null,
+  lastMessage: row.last_message ?? null,
+});
 
 export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [tags, setTags] = useState<EventTag[]>([]);
-  const [templates, setTemplates] = useState<EventTemplate[]>([]);
+  const [sources, setSources] = useState<CalendarSource[]>([]);
   const [loading, setLoading] = useState(true);
-  const { currentUser } = useAuth();
+  const [error, setError] = useState<string | null>(null);
 
-  // Load events, tags, and templates from localStorage on mount
-  useEffect(() => {
-    const loadData = () => {
+  const load = useCallback(async () => {
+    if (!isSupabaseConfigured() || !supabase) {
+      setLoading(false);
+      setError('The calendar needs a database connection.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Both in flight together: neither is large and the page cannot draw an
+      // event without knowing which calendar's colour it takes.
+      const [eventsRes, sourcesRes] = await Promise.all([
+        supabase.from('calendar_events').select('*').order('start_date', { ascending: true }),
+        supabase.from('calendar_sources').select('*').order('sort_order', { ascending: true }),
+      ]);
+
+      if (eventsRes.error) throw eventsRes.error;
+      if (sourcesRes.error) throw sourcesRes.error;
+
+      setEvents((eventsRes.data ?? []).map(mapEvent));
+      setSources((sourcesRes.data ?? []).map(mapSource));
+      setError(null);
+    } catch (e: any) {
+      console.error('Could not load the calendar:', e);
+      // Deliberately not falling back to a cached or empty calendar without
+      // saying so. A calendar that silently shows nothing reads as "no events
+      // today", which is a different and much worse message than "this failed".
+      setError(e?.message || 'Could not load the calendar.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const syncNow = useCallback(async (): Promise<SyncRunResult[]> => {
+    if (!isSupabaseConfigured() || !supabase) return [];
+    const { data, error: fnError } = await supabase.functions.invoke('staff-calendar-sync', {
+      body: { source: 'manual' },
+    });
+    // invoke surfaces a non-2xx as an error whose BODY holds the real message;
+    // dig it out so the user sees "GOOGLE_SERVICE_ACCOUNT_JSON is not set"
+    // rather than "Edge Function returned a non-2xx status code". The function
+    // answers 200 with per-calendar outcomes even when one calendar failed, so
+    // a partial run lands in `data`, not here.
+    if (fnError) {
+      let message = fnError.message || 'The calendar sync failed.';
       try {
-        // Load events
-        const storedEvents = localStorage.getItem(STORAGE_KEY);
-        if (storedEvents) {
-          setEvents(JSON.parse(storedEvents));
-        }
-
-        // Load tags
-        const storedTags = localStorage.getItem(TAGS_STORAGE_KEY);
-        if (storedTags) {
-          setTags(JSON.parse(storedTags));
-        }
-
-        // Load templates
-        const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-        if (storedTemplates) {
-          setTemplates(JSON.parse(storedTemplates));
-        }
-      } catch (error) {
-        console.error('Error loading data from localStorage:', error);
-      } finally {
-        setLoading(false);
+        const body = await (fnError as any).context?.json?.();
+        if (body?.error) message = body.error;
+      } catch {
+        /* keep the generic message */
       }
-    };
-
-    loadData();
-  }, []);
-
-  // Save events to localStorage whenever they change
-  useEffect(() => {
-    if (!loading) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+      throw new Error(message);
     }
-  }, [events, loading]);
+    await load();
+    return (data?.synced ?? []) as SyncRunResult[];
+  }, [load]);
 
-  // Save tags to localStorage whenever they change
-  useEffect(() => {
-    if (!loading) {
-      localStorage.setItem(TAGS_STORAGE_KEY, JSON.stringify(tags));
-    }
-  }, [tags, loading]);
+  const sourcesByCalendarId = useMemo(() => {
+    const m = new Map<string, CalendarSource>();
+    sources.forEach(s => m.set(s.googleCalendarId, s));
+    return m;
+  }, [sources]);
 
-  // Save templates to localStorage whenever they change
-  useEffect(() => {
-    if (!loading) {
-      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates));
-    }
-  }, [templates, loading]);
+  const getSourceFor = useCallback(
+    (event: CalendarEvent) =>
+      event.googleCalendarId ? sourcesByCalendarId.get(event.googleCalendarId) : undefined,
+    [sourcesByCalendarId]
+  );
 
-  const addEvent = useCallback(async (eventData: Omit<CalendarEvent, 'id' | 'createdAt' | 'createdBy'>) => {
-    const newEvent: CalendarEvent = {
-      ...eventData,
-      id: generateId(),
-      createdBy: currentUser?.id || '',
-      createdAt: new Date().toISOString(),
-    };
+  const colorFor = useCallback(
+    (event: CalendarEvent) => getSourceFor(event)?.color || event.color || FALLBACK_COLOR,
+    [getSourceFor]
+  );
 
-    setEvents(prev => [...prev, newEvent]);
-  }, [currentUser]);
+  const getEventById = useCallback(
+    (id: string) => events.find(e => e.id === id),
+    [events]
+  );
 
-  const updateEvent = useCallback(async (id: string, updates: Partial<CalendarEvent>) => {
-    setEvents(prev => prev.map(event =>
-      event.id === id
-        ? { ...event, ...updates, updatedAt: new Date().toISOString() }
-        : event
-    ));
-  }, []);
+  const getEventsByDate = useCallback(
+    (date: string) => events.filter(e => {
+      const end = e.endDate || e.startDate;
+      return date >= e.startDate && date <= end;
+    }),
+    [events]
+  );
 
-  const deleteEvent = useCallback(async (id: string) => {
-    setEvents(prev => prev.filter(event => event.id !== id));
-  }, []);
-
-  const getEventById = useCallback((id: string) => {
-    return events.find(event => event.id === id);
-  }, [events]);
-
-  const getEventsByDate = useCallback((date: string) => {
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
-
-    return events.filter(event => {
-      const eventStartDate = new Date(event.startDate);
-      eventStartDate.setHours(0, 0, 0, 0);
-
-      const eventEndDate = event.endDate ? new Date(event.endDate) : eventStartDate;
-      eventEndDate.setHours(0, 0, 0, 0);
-
-      // Check if the target date falls within the event's date range
-      return targetDate >= eventStartDate && targetDate <= eventEndDate;
-    });
-  }, [events]);
-
-  const getEventsByDateRange = useCallback((startDate: string, endDate: string) => {
-    const rangeStart = new Date(startDate);
-    rangeStart.setHours(0, 0, 0, 0);
-
-    const rangeEnd = new Date(endDate);
-    rangeEnd.setHours(23, 59, 59, 999);
-
-    return events.filter(event => {
-      const eventStart = new Date(event.startDate);
-      const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
-
-      // Check if event overlaps with the range
-      return eventStart <= rangeEnd && eventEnd >= rangeStart;
-    });
-  }, [events]);
-
-  // Tag CRUD operations
-  const addTag = useCallback(async (name: string): Promise<EventTag> => {
-    const newTag: EventTag = {
-      id: `tag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: name.trim(),
-      createdBy: currentUser?.id || '',
-      createdAt: new Date().toISOString(),
-    };
-    setTags(prev => [...prev, newTag]);
-    return newTag;
-  }, [currentUser]);
-
-  const deleteTag = useCallback(async (id: string) => {
-    setTags(prev => prev.filter(tag => tag.id !== id));
-    // Also remove this tag from all events that have it
-    setEvents(prev => prev.map(event => ({
-      ...event,
-      tags: event.tags?.filter(tagId => tagId !== id),
-    })));
-  }, []);
-
-  const getTagById = useCallback((id: string) => {
-    return tags.find(tag => tag.id === id);
-  }, [tags]);
-
-  // Template CRUD operations
-  const addTemplate = useCallback(async (templateData: Omit<EventTemplate, 'id' | 'createdAt' | 'createdBy'>): Promise<EventTemplate> => {
-    const newTemplate: EventTemplate = {
-      ...templateData,
-      id: `template_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      createdBy: currentUser?.id || '',
-      createdAt: new Date().toISOString(),
-    };
-    setTemplates(prev => [...prev, newTemplate]);
-    return newTemplate;
-  }, [currentUser]);
-
-  const updateTemplate = useCallback(async (id: string, updates: Partial<EventTemplate>) => {
-    setTemplates(prev => prev.map(template =>
-      template.id === id
-        ? { ...template, ...updates }
-        : template
-    ));
-  }, []);
-
-  const deleteTemplate = useCallback(async (id: string) => {
-    setTemplates(prev => prev.filter(template => template.id !== id));
-  }, []);
-
-  const getTemplateById = useCallback((id: string) => {
-    return templates.find(template => template.id === id);
-  }, [templates]);
-
-  const value: EventContextType = {
-    events,
-    addEvent,
-    updateEvent,
-    deleteEvent,
-    getEventById,
-    getEventsByDate,
-    getEventsByDateRange,
-    // Tags
-    tags,
-    addTag,
-    deleteTag,
-    getTagById,
-    // Templates
-    templates,
-    addTemplate,
-    updateTemplate,
-    deleteTemplate,
-    getTemplateById,
-    loading,
-  };
+  const getEventsByDateRange = useCallback(
+    (startDate: string, endDate: string) => events.filter(e => {
+      const end = e.endDate || e.startDate;
+      return end >= startDate && e.startDate <= endDate;
+    }),
+    [events]
+  );
 
   return (
-    <EventContext.Provider value={value}>
+    <EventContext.Provider value={{
+      events, sources, getSourceFor, colorFor,
+      getEventById, getEventsByDate, getEventsByDateRange,
+      loading, error, refresh: load, syncNow,
+    }}>
       {children}
     </EventContext.Provider>
   );
 };
 
 export const useEvent = () => {
-  const context = useContext(EventContext);
-  if (context === undefined) {
-    throw new Error('useEvent must be used within an EventProvider');
-  }
-  return context;
+  const ctx = useContext(EventContext);
+  if (!ctx) throw new Error('useEvent must be used within an EventProvider');
+  return ctx;
 };

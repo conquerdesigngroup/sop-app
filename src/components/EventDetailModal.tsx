@@ -18,8 +18,15 @@ interface EventDetailModalProps {
   onClose: () => void;
   event: CalendarEvent | null;
   users: User[];
-  onEdit: (event: CalendarEvent) => void;
-  onDelete: (eventId: string) => void;
+  /**
+   * Both optional as of v15. Events are a read-only mirror of Google, so no
+   * caller supplies these any more and the buttons stay hidden. They remain in
+   * the signature rather than being deleted because the three legacy 'manual'
+   * rows could still justify an editor one day, and because a prop that is
+   * absent reads more honestly than a handler that throws.
+   */
+  onEdit?: (event: CalendarEvent) => void;
+  onDelete?: (eventId: string) => void;
 }
 
 const EventDetailModal: React.FC<EventDetailModalProps> = ({
@@ -31,7 +38,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   onDelete,
 }) => {
   const { isMobileOrTablet } = useResponsive();
-  const { tags: allTags } = useEvent();
+  const { getSourceFor } = useEvent();
   const { showToast } = useToast();
   const { isConnected: isGoogleConnected, syncEventToGoogle } = useGoogleCalendar();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -40,14 +47,6 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
   if (!isOpen || !event) return null;
 
-  // Get tag names for display
-  const getTagNames = () => {
-    if (!event.tags || event.tags.length === 0) return [];
-    return event.tags
-      .map(tagId => allTags.find(t => t.id === tagId))
-      .filter(Boolean)
-      .map(t => t!.name);
-  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -164,14 +163,16 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   };
 
   const handleDelete = () => {
-    onDelete(event.id);
+    onDelete?.(event.id);
     setShowDeleteConfirm(false);
     onClose();
   };
 
   const attendeeNames = getAttendeeNames();
   const recurrenceText = getRecurrenceText();
-  const tagNames = getTagNames();
+  // Which subscribed calendar this came from. Replaces the old tag list: the
+  // categories are the calendars now, and a Google event carries no tags.
+  const sourceLabel = getSourceFor(event)?.label;
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -296,7 +297,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
           )}
 
           {/* Tags */}
-          {tagNames.length > 0 && (
+          {sourceLabel && (
             <div style={styles.infoRow}>
               <div style={styles.iconWrapper}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -306,9 +307,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               </div>
               <div style={styles.infoContent}>
                 <div style={styles.tagsContainer}>
-                  {tagNames.map((name, index) => (
-                    <span key={index} style={styles.tagBadge}>{name}</span>
-                  ))}
+                  <span style={styles.tagBadge}>{sourceLabel}</span>
                 </div>
               </div>
             </div>
@@ -359,13 +358,15 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             </div>
           ) : (
             <>
-              <button onClick={() => setShowDeleteConfirm(true)} style={styles.deleteButton}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-                Delete
-              </button>
+              {onDelete ? (
+                <button onClick={() => setShowDeleteConfirm(true)} style={styles.deleteButton}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Delete
+                </button>
+              ) : <span />}
               <div style={styles.rightButtons}>
                 {/* Add to Calendar Dropdown */}
                 <div style={styles.calendarDropdownContainer}>
@@ -434,13 +435,15 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                     </div>
                   )}
                 </div>
-                <button onClick={() => onEdit(event)} style={styles.editButton}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  Edit
-                </button>
+                {onEdit && (
+                  <button onClick={() => onEdit(event)} style={styles.editButton}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    Edit
+                  </button>
+                )}
               </div>
             </>
           )}
