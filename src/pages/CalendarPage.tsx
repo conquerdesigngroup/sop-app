@@ -1,6 +1,15 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { theme } from '../theme';
+import {
+  dayKey,
+  addDays,
+  layoutWeek,
+  hiddenPerColumn,
+  monthWeeks,
+  parseDayKey,
+  Segment,
+} from '../lib/calendarLayout';
 import { useEvent } from '../contexts/EventContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -91,6 +100,7 @@ const CalendarPage: React.FC = () => {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayKey = dayKey(today);
 
   // Calendar calculations
   const getDaysInMonth = (date: Date) => {
@@ -103,7 +113,7 @@ const CalendarPage: React.FC = () => {
     return { daysInMonth, startingDayOfWeek, year, month };
   };
 
-  const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth);
+  const { year, month } = getDaysInMonth(currentMonth);
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   // Filter events based on search and filters
@@ -128,13 +138,10 @@ const CalendarPage: React.FC = () => {
 
   // Get today's events for the agenda sidebar
   const todaysItems = useMemo(() => {
-    const todaysEvents = events.filter(event => {
-      const eventStart = new Date(event.startDate);
-      eventStart.setHours(0, 0, 0, 0);
-      const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
-      eventEnd.setHours(0, 0, 0, 0);
-      return today >= eventStart && today <= eventEnd;
-    }).sort((a, b) => {
+    const key = dayKey(today);
+    const todaysEvents = events.filter(
+      event => key >= event.startDate && key <= (event.endDate || event.startDate)
+    ).sort((a, b) => {
       if (a.isAllDay && !b.isAllDay) return -1;
       if (!a.isAllDay && b.isAllDay) return 1;
       return (a.startTime || '').localeCompare(b.startTime || '');
@@ -143,19 +150,25 @@ const CalendarPage: React.FC = () => {
     return { events: todaysEvents };
   }, [events, today]);
 
-  // Get events for a specific date (uses filtered events)
-  const getEventsForDate = (day: number) => {
-    const date = new Date(year, month, day);
-    date.setHours(0, 0, 0, 0);
+  /**
+   * Events covering one day, compared as 'YYYY-MM-DD' strings.
+   *
+   * Deliberately not `new Date(event.startDate)`. That reads a bare date as
+   * UTC midnight, which is the previous afternoon in California, so every
+   * all-day event rendered a day early — a birthday on the 5th sat on the
+   * 4th. Strings have no timezone to get wrong, and this is how
+   * EventContext's own getEventsByDate already worked.
+   */
+  const eventsOnDay = (key: string) =>
+    filteredEvents.filter(
+      event => key >= event.startDate && key <= (event.endDate || event.startDate)
+    );
 
-    return filteredEvents.filter(event => {
-      const eventStartDate = new Date(event.startDate);
-      eventStartDate.setHours(0, 0, 0, 0);
-      const eventEndDate = event.endDate ? new Date(event.endDate) : eventStartDate;
-      eventEndDate.setHours(0, 0, 0, 0);
-      return date >= eventStartDate && date <= eventEndDate;
-    });
-  };
+  /** Inclusive day range of an event, for the span layout. */
+  const eventSpan = (event: CalendarEvent) => ({
+    start: event.startDate,
+    end: event.endDate || event.startDate,
+  });
 
   // Navigation
   const previousMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
@@ -183,10 +196,10 @@ const CalendarPage: React.FC = () => {
     setCurrentMonth(new Date());
   };
 
-  const handleDayClick = (day: number) => {
-    // Navigate to day view for that specific day
-    const clickedDate = new Date(year, month, day);
-    setSelectedDayDate(clickedDate);
+  const handleDayClick = (key: string) => {
+    // A date key rather than a day-of-month number: the month grid now draws
+    // the neighbouring months' edge days too, and those are not in `month`.
+    setSelectedDayDate(parseDayKey(key));
     setViewMode('day');
   };
 
@@ -236,6 +249,13 @@ const CalendarPage: React.FC = () => {
   };
 
   const weekDates = getWeekDates();
+
+  // Month-row geometry. Bars are absolutely positioned, so their height and
+  // the space reserved above them for the date have to agree with the cell
+  // height in `styles.calendarDay` — 110px desktop, 80px mobile.
+  const monthBarHeight = isMobileOrTablet ? 14 : 18;
+  const monthBarTop = isMobileOrTablet ? 22 : 30;
+  const monthLanes = isMobileOrTablet ? 2 : 3;
 
   // Time slots for week view (6 AM to 10 PM)
   const timeSlots = Array.from({ length: 17 }, (_, i) => {
@@ -584,16 +604,8 @@ const CalendarPage: React.FC = () => {
 
             {/* All-day events section */}
             {(() => {
-              const dayAllDayEvents = filteredEvents.filter(event => {
-                if (!event.isAllDay) return false;
-                const eventStart = new Date(event.startDate);
-                const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
-                eventStart.setHours(0, 0, 0, 0);
-                eventEnd.setHours(0, 0, 0, 0);
-                const checkDate = new Date(selectedDayDate);
-                checkDate.setHours(0, 0, 0, 0);
-                return checkDate >= eventStart && checkDate <= eventEnd;
-              });
+              const dayAllDayEvents = eventsOnDay(dayKey(selectedDayDate))
+                .filter(event => event.isAllDay);
 
               return dayAllDayEvents.length > 0 && (
                 <div style={styles.dayAllDaySection}>
@@ -651,16 +663,8 @@ const CalendarPage: React.FC = () => {
 
                 {/* Positioned events */}
                 {(() => {
-                  const dayEvents = filteredEvents.filter(event => {
-                    if (event.isAllDay) return false;
-                    const eventStartDate = new Date(event.startDate);
-                    const eventEndDate = event.endDate ? new Date(event.endDate) : eventStartDate;
-                    eventStartDate.setHours(0, 0, 0, 0);
-                    eventEndDate.setHours(0, 0, 0, 0);
-                    const checkDate = new Date(selectedDayDate);
-                    checkDate.setHours(0, 0, 0, 0);
-                    return checkDate >= eventStartDate && checkDate <= eventEndDate;
-                  });
+                  const dayEvents = eventsOnDay(dayKey(selectedDayDate))
+                    .filter(event => !event.isAllDay);
 
                   return dayEvents.map(event => {
                     const pos = getEventPosition(event);
@@ -732,76 +736,89 @@ const CalendarPage: React.FC = () => {
             </div>
           </div>
         ) : viewMode === 'month' ? (
-          <div style={isMobileOrTablet ? styles.calendarMobile : styles.calendar}>
+          <div style={styles.monthGrid}>
             {/* Day headers */}
-            {(isMobileOrTablet ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((day, idx) => (
-              <div key={idx} style={isMobileOrTablet ? styles.dayHeaderMobile : styles.dayHeader}>{day}</div>
-            ))}
+            <div style={styles.monthHeaderRow}>
+              {(isMobileOrTablet
+                ? ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+              ).map((label, idx) => (
+                <div key={idx} style={isMobileOrTablet ? styles.dayHeaderMobile : styles.dayHeader}>
+                  {label}
+                </div>
+              ))}
+            </div>
 
-            {/* Empty cells before first day */}
-            {Array.from({ length: startingDayOfWeek }).map((_, index) => (
-              <div key={`empty-${index}`} style={isMobileOrTablet ? styles.calendarDayEmptyMobile : styles.calendarDayEmpty} />
-            ))}
-
-            {/* Days of month */}
-            {Array.from({ length: daysInMonth }).map((_, index) => {
-              const day = index + 1;
-              const eventsForDay = getEventsForDate(day);
-              const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
-              const totalItems = eventsForDay.length;
-              const maxVisible = isMobileOrTablet ? 2 : 3;
-              let visibleCount = 0;
+            {/*
+              One positioned row per week rather than one flat grid of days.
+              The cells underneath are background and click target only; every
+              event is drawn in the overlay above them. That is what lets a run
+              of days be a single bar instead of one chip per cell — a day cell
+              can only ever draw its own square.
+            */}
+            {monthWeeks(year, month).map(weekStart => {
+              const { segments } = layoutWeek(filteredEvents, weekStart, eventSpan);
+              const visible = segments.filter(s => s.lane < monthLanes);
+              const hidden = hiddenPerColumn(segments, monthLanes);
 
               return (
-                <CalendarDayCell
-                  key={day}
-                  isToday={isToday}
-                  isMobileOrTablet={isMobileOrTablet}
-                  onClick={() => handleDayClick(day)}
-                >
-                  <div style={isMobileOrTablet ? styles.dayHeader2Mobile : styles.dayHeader2}>
-                    <div style={{
-                      ...(isMobileOrTablet ? styles.dayNumberMobile : styles.dayNumber),
-                      ...(isToday ? (isMobileOrTablet ? styles.dayNumberTodayMobile : styles.dayNumberToday) : {}),
-                    }}>
-                      {day}
-                    </div>
-                  </div>
+                <div key={weekStart} style={styles.monthWeekRow}>
+                  <div style={styles.monthWeekCells}>
+                    {Array.from({ length: 7 }).map((_, col) => {
+                      const key = addDays(weekStart, col);
+                      const date = parseDayKey(key);
+                      const inMonth = date.getMonth() === month;
+                      const isToday = key === todayKey;
 
-                  <div style={isMobileOrTablet ? styles.itemsListMobile : styles.itemsList}>
-                    {/* Events first (colored left border) */}
-                    {eventsForDay.slice(0, maxVisible).map(event => {
-                      visibleCount++;
                       return (
-                        <div
-                          key={event.id}
-                          style={{
-                            ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem),
-                            borderLeftColor: colorFor(event),
-                          }}
-                          onClick={(e) => handleEventClick(event, e)}
-                          title={event.title}
+                        <CalendarDayCell
+                          key={key}
+                          isToday={isToday}
+                          isMobileOrTablet={isMobileOrTablet}
+                          onClick={() => handleDayClick(key)}
                         >
-                          {!isMobileOrTablet && event.isRecurring && (
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.recurringIcon, stroke: theme.colors.textSecondary }}>
-                              <polyline points="23 4 23 10 17 10" />
-                              <polyline points="1 20 1 14 7 14" />
-                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
+                          <div style={{
+                            ...(isMobileOrTablet ? styles.dayNumberMobile : styles.dayNumber),
+                            ...(isToday ? (isMobileOrTablet ? styles.dayNumberTodayMobile : styles.dayNumberToday) : {}),
+                            ...(inMonth ? {} : styles.dayNumberOutside),
+                          }}>
+                            {date.getDate()}
+                          </div>
+
+                          {hidden[col] > 0 && (
+                            <div style={isMobileOrTablet ? styles.moreIndicatorMobile : styles.moreIndicator}>
+                              +{hidden[col]} more
+                            </div>
                           )}
-                          <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{event.title}</span>
-                        </div>
+                        </CalendarDayCell>
                       );
                     })}
-
-                    {/* More indicator */}
-                    {totalItems > maxVisible && (
-                      <div style={isMobileOrTablet ? styles.moreIndicatorMobile : styles.moreIndicator}>
-                        +{totalItems - maxVisible} more
-                      </div>
-                    )}
                   </div>
-                </CalendarDayCell>
+
+                  {/* Bars sit above the cells; only the bars take clicks. */}
+                  <div style={{ ...styles.monthWeekBars, top: `${monthBarTop}px` }}>
+                    {visible.map(seg => (
+                      <div
+                        key={`${seg.item.id}-${weekStart}`}
+                        style={{
+                          position: 'absolute',
+                          left: `${(seg.startCol / 7) * 100}%`,
+                          width: `${(seg.span / 7) * 100}%`,
+                          top: `${seg.lane * (monthBarHeight + 2)}px`,
+                          height: `${monthBarHeight}px`,
+                          pointerEvents: 'auto',
+                        }}
+                      >
+                        <EventBar
+                          segment={seg}
+                          color={colorFor(seg.item)}
+                          compact={isMobileOrTablet}
+                          onClick={e => handleEventClick(seg.item, e)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -836,45 +853,50 @@ const CalendarPage: React.FC = () => {
             </div>
 
             {/* All-day events row */}
-            <div style={styles.allDayRow}>
-              <div style={styles.allDayLabel}>All Day</div>
-              {weekDates.map((date, index) => {
-                const allDayEvents = filteredEvents.filter(event => {
-                  if (!event.isAllDay) return false;
-                  const eventStart = new Date(event.startDate);
-                  const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
-                  eventStart.setHours(0, 0, 0, 0);
-                  eventEnd.setHours(0, 0, 0, 0);
-                  const checkDate = new Date(date);
-                  checkDate.setHours(0, 0, 0, 0);
-                  return checkDate >= eventStart && checkDate <= eventEnd;
-                });
+            {(() => {
+              // Same span layout as the month grid. Christmas break used to be
+              // seven identical red chips across this row; it is now one bar.
+              const weekStart = dayKey(weekDates[0]);
+              const { segments, laneCount } = layoutWeek(
+                filteredEvents.filter(e => e.isAllDay),
+                weekStart,
+                eventSpan
+              );
+              const rowHeight = Math.max(1, laneCount) * (ALL_DAY_BAR + 2) + 6;
 
-                return (
-                  <div key={index} style={styles.allDayCell}>
-                    {allDayEvents.map(event => (
+              return (
+                <div style={styles.allDayRow}>
+                  <div style={styles.allDayLabel}>All Day</div>
+                  <div style={{ ...styles.allDayTrack, height: `${rowHeight}px` }}>
+                    {/* Column rules, so the row still reads as seven days. */}
+                    <div style={styles.allDayGuides}>
+                      {weekDates.map((_, i) => (
+                        <div key={i} style={styles.allDayGuide} />
+                      ))}
+                    </div>
+
+                    {segments.map(seg => (
                       <div
-                        key={event.id}
+                        key={`${seg.item.id}-${weekStart}`}
                         style={{
-                          ...styles.allDayEvent,
-                          backgroundColor: colorFor(event),
+                          position: 'absolute',
+                          left: `${(seg.startCol / 7) * 100}%`,
+                          width: `${(seg.span / 7) * 100}%`,
+                          top: `${3 + seg.lane * (ALL_DAY_BAR + 2)}px`,
+                          height: `${ALL_DAY_BAR}px`,
                         }}
-                        onClick={() => setSelectedEvent(event)}
                       >
-                        {event.isRecurring && (
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={styles.recurringIcon}>
-                            <polyline points="23 4 23 10 17 10" />
-                            <polyline points="1 20 1 14 7 14" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                          </svg>
-                        )}
-                        {event.title}
+                        <EventBar
+                          segment={seg}
+                          color={colorFor(seg.item)}
+                          onClick={e => handleEventClick(seg.item, e)}
+                        />
                       </div>
                     ))}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })()}
 
             {/* Time slots grid */}
             <div style={styles.weekTimeGrid}>
@@ -889,19 +911,10 @@ const CalendarPage: React.FC = () => {
 
               {/* Day columns with time-positioned events */}
               {weekDates.map((date, dayIndex) => {
-                const dateStr = date.toISOString().split('T')[0];
-
-                // Get timed events for this day
-                const dayEvents = filteredEvents.filter(event => {
-                  if (event.isAllDay) return false;
-                  const eventStartDate = new Date(event.startDate);
-                  const eventEndDate = event.endDate ? new Date(event.endDate) : eventStartDate;
-                  eventStartDate.setHours(0, 0, 0, 0);
-                  eventEndDate.setHours(0, 0, 0, 0);
-                  const checkDate = new Date(date);
-                  checkDate.setHours(0, 0, 0, 0);
-                  return checkDate >= eventStartDate && checkDate <= eventEndDate;
-                });
+                // dayKey, not toISOString(): the latter converts this local
+                // midnight to UTC and hands back yesterday west of Greenwich.
+                const dateStr = dayKey(date);
+                const dayEvents = eventsOnDay(dateStr).filter(event => !event.isAllDay);
 
                 return (
                   <div
@@ -1201,13 +1214,61 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflow: 'hidden',
     marginBottom: theme.spacing.lg,
   },
-  calendar: {
+  monthGrid: {
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.lg,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.bg.secondary,
+  },
+  monthHeaderRow: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
   },
-  calendarMobile: {
+  monthWeekRow: {
+    position: 'relative',
+  },
+  monthWeekCells: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+  },
+  // pointerEvents none so the cell underneath stays clickable everywhere the
+  // bars are not; each bar switches them back on for itself.
+  monthWeekBars: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    pointerEvents: 'none',
+  },
+  dayNumberOutside: {
+    opacity: 0.35,
+  },
+  eventBar: {
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+    fontFamily: theme.fonts.primary,
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+  },
+  eventBarLabel: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  eventBarDot: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  eventBarTime: {
+    fontFamily: theme.fonts.mono,
+    fontWeight: 500,
+    opacity: 0.75,
+    flexShrink: 0,
   },
   dayHeader: {
     textAlign: 'center' as const,
@@ -1259,20 +1320,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column' as const,
   },
-  calendarDayEmpty: {
-    textAlign: 'center' as const,
-    height: '110px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRight: `1px solid ${theme.colors.bdr.primary}`,
-    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  calendarDayEmptyMobile: {
-    textAlign: 'center' as const,
-    height: '80px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRight: `1px solid ${theme.colors.bdr.primary}`,
-    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-  },
   calendarDayToday: {
     backgroundColor: theme.colors.bg.primary,
   },
@@ -1311,67 +1358,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     borderRadius: '50%',
     fontSize: '10px',
-  },
-  itemsList: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '2px',
-    flex: 1,
-    overflow: 'hidden',
-    marginTop: '4px',
-  },
-  itemsListMobile: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '1px',
-    flex: 1,
-    overflow: 'hidden',
-    marginTop: '2px',
-  },
-  eventItem: {
-    padding: '3px 6px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.sm,
-    borderLeft: '3px solid',
-    cursor: 'pointer',
-    transition: 'opacity 0.2s',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '3px',
-    flexShrink: 0,
-  },
-  eventItemMobile: {
-    padding: '2px 4px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: '3px',
-    borderLeft: '2px solid',
-    cursor: 'pointer',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    flexShrink: 0,
-  },
-  itemTitle: {
-    fontSize: '10px',
-    fontWeight: 500,
-    color: theme.colors.txt.primary,
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: 'block',
-    lineHeight: 1.3,
-  },
-  itemTitleMobile: {
-    fontSize: '8px',
-    fontWeight: 500,
-    color: theme.colors.txt.primary,
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: 'block',
-    lineHeight: 1.2,
   },
   moreIndicator: {
     fontSize: '9px',
@@ -1659,18 +1645,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 
   // Day Header with Quick Add
-  dayHeader2: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  dayHeader2Mobile: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
   quickAddBtnMobile: {
     padding: '1px',
     backgroundColor: 'transparent',
@@ -1705,9 +1679,27 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   allDayRow: {
     display: 'grid',
-    gridTemplateColumns: '60px repeat(7, minmax(0, 1fr))',
+    // One track for the seven days, not seven, so a bar can be positioned
+    // across them as a percentage without doing arithmetic around the 60px
+    // label column.
+    gridTemplateColumns: '60px minmax(0, 1fr)',
     borderBottom: `1px solid ${theme.colors.bdr.primary}`,
     minHeight: '40px',
+  },
+  allDayTrack: {
+    position: 'relative',
+    backgroundColor: theme.colors.bg.secondary,
+    minHeight: '34px',
+  },
+  allDayGuides: {
+    position: 'absolute',
+    inset: 0,
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+    pointerEvents: 'none',
+  },
+  allDayGuide: {
+    borderRight: `1px solid ${theme.colors.bdr.primary}`,
   },
   allDayLabel: {
     padding: '8px',
@@ -1718,29 +1710,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  allDayCell: {
-    padding: '4px',
-    backgroundColor: theme.colors.bg.secondary,
-    borderRight: `1px solid ${theme.colors.bdr.primary}`,
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    alignItems: 'flex-start',
-  },
-  allDayEvent: {
-    padding: '2px 6px',
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '10px',
-    fontWeight: 500,
-    color: '#FFFFFF',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    maxWidth: '100%',
-    display: 'flex',
-    alignItems: 'center',
   },
   weekTimeGrid: {
     display: 'grid',
@@ -2005,6 +1974,75 @@ const styles: { [key: string]: React.CSSProperties } = {
 };
 
 // Calendar Day Component with hover effect (defined after styles)
+/** Height of one bar in the week view's all-day row. */
+const ALL_DAY_BAR = 18;
+
+/** "14:30" -> "2:30p", "14:00" -> "2p". Compact enough to sit inside a bar. */
+const formatClock = (hhmm: string): string => {
+  const [h, m] = hhmm.split(':').map(Number);
+  if (Number.isNaN(h)) return hhmm;
+  const period = h >= 12 ? 'p' : 'a';
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${hour}:${String(m).padStart(2, '0')}${period}` : `${hour}${period}`;
+};
+
+/**
+ * One continuous bar for a run of days.
+ *
+ * The square edge is the load-bearing detail. An event that carries on past
+ * Saturday is cut flush at the boundary and picked up flush on the Sunday
+ * below, so the two rows read as one object interrupted by the grid rather
+ * than two events that happen to share a name. Rounding every segment on both
+ * ends is precisely what made a fortnight-long closure look like fourteen
+ * unrelated stickers.
+ */
+const EventBar: React.FC<{
+  segment: Segment<CalendarEvent>;
+  color: string;
+  compact?: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}> = ({ segment, color, compact = false, onClick }) => {
+  const event = segment.item;
+  const flatLeft = segment.continuesBefore;
+  const flatRight = segment.continuesAfter;
+  const radius = 4;
+
+  // Filled when the event occupies whole days — all-day, or anything running
+  // past midnight. A single timed event gets the lighter dot-and-time
+  // treatment instead, so the two are not confusable at a glance.
+  const filled =
+    event.isAllDay || segment.span > 1 || flatLeft || flatRight;
+
+  return (
+    <div
+      onClick={onClick}
+      title={event.title}
+      style={{
+        ...styles.eventBar,
+        fontSize: compact ? '9px' : '11px',
+        // Inset only at a real end. Insetting a cut edge would open a gap at
+        // the week boundary and break the run back into separate objects.
+        marginLeft: flatLeft ? 0 : 2,
+        marginRight: flatRight ? 0 : 2,
+        paddingLeft: filled ? (compact ? 4 : 6) : 2,
+        paddingRight: compact ? 4 : 6,
+        borderTopLeftRadius: flatLeft ? 0 : radius,
+        borderBottomLeftRadius: flatLeft ? 0 : radius,
+        borderTopRightRadius: flatRight ? 0 : radius,
+        borderBottomRightRadius: flatRight ? 0 : radius,
+        backgroundColor: filled ? color : 'transparent',
+        color: filled ? '#FFFFFF' : theme.colors.txt.primary,
+      }}
+    >
+      {!filled && <span style={{ ...styles.eventBarDot, backgroundColor: color }} />}
+      {!filled && !compact && event.startTime && (
+        <span style={styles.eventBarTime}>{formatClock(event.startTime)}</span>
+      )}
+      <span style={styles.eventBarLabel}>{event.title}</span>
+    </div>
+  );
+};
+
 const CalendarDayCell: React.FC<{
   isToday: boolean;
   isMobileOrTablet: boolean;
