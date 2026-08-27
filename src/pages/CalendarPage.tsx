@@ -2,23 +2,18 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { theme } from '../theme';
 import { useEvent } from '../contexts/EventContext';
-import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useWorkHours } from '../contexts/WorkHoursContext';
 import { useToast } from '../contexts/ToastContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { CalendarEvent, JobTask, WorkHoursEntry } from '../types';
-import EventFormModal from '../components/EventFormModal';
+import { CalendarEvent } from '../types';
 import EventDetailModal from '../components/EventDetailModal';
-import CalendarTaskModal from '../components/CalendarTaskModal';
 
 // View type for calendar filtering
-type CalendarViewType = 'all' | 'events' | 'tasks' | 'hours';
 
 const CalendarPage: React.FC = () => {
-  const { events, addEvent, updateEvent, deleteEvent, tags } = useEvent();
-  const { jobTasks } = useTask();
-  const { workHours } = useWorkHours();
+  // Read-only. The calendar mirrors three Google calendars and nobody authors
+  // events here — a write would be undone by the next sync's prune.
+  const { events, sources, colorFor, loading, error, refresh, syncNow } = useEvent();
   const { users, currentUser } = useAuth();
   const { isMobileOrTablet } = useResponsive();
   const { success: showSuccess, error: showError } = useToast();
@@ -28,44 +23,55 @@ const CalendarPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
   const [selectedDayDate, setSelectedDayDate] = useState<Date>(new Date());
 
-  // Modal states
-  const [showEventForm, setShowEventForm] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
+  const [syncing, setSyncing] = useState(false);
 
-  // Handle incoming state from navigation (e.g., from Dashboard day click)
+  // Super admins can pull from Google on demand. Everyone else gets a plain
+  // re-read of the database — the Edge Function would refuse them anyway, and
+  // offering the button would just be a 403 with extra steps.
+  const canSync = currentUser?.role === 'super_admin';
+
+  const handleSync = async () => {
+    if (!canSync) { await refresh(); return; }
+    setSyncing(true);
+    try {
+      const results = await syncNow();
+      const failed = results.filter(r => r.error);
+      const pulled = results.reduce((n, r) => n + (r.upserted ?? 0), 0);
+      if (failed.length) {
+        showError(`${failed[0].calendar ?? 'A calendar'}: ${failed[0].error}`);
+      } else {
+        showSuccess(`Synced ${pulled} event${pulled === 1 ? '' : 's'} from Google`);
+      }
+    } catch (e: any) {
+      showError(e?.message || 'Could not reach the calendar sync.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Arriving from a Dashboard day click. That used to open the event form; the
+  // calendar is read-only now, so only the half that still means something is
+  // honoured — jump to the month that day is in.
   useEffect(() => {
     if (location.state) {
       const state = location.state as { openEventForm?: boolean; selectedDate?: string };
-      if (state.openEventForm) {
-        setSelectedDate(state.selectedDate);
-        setEditingEvent(null);
-        setShowEventForm(true);
-        // Navigate to the selected date's month
-        if (state.selectedDate) {
-          const date = new Date(state.selectedDate);
-          setCurrentMonth(new Date(date.getFullYear(), date.getMonth(), 1));
-        }
+      if (state.selectedDate) {
+        const date = new Date(state.selectedDate);
+        setCurrentMonth(new Date(date.getFullYear(), date.getMonth(), 1));
       }
-      // Clear the state to prevent re-opening on refresh
+      // Clear the state so a refresh does not repeat the jump.
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
-  // Quick Add states
-  const [quickAddDay, setQuickAddDay] = useState<number | null>(null);
-  const [quickAddTitle, setQuickAddTitle] = useState('');
-  const quickAddInputRef = useRef<HTMLInputElement>(null);
-
   // Search and Filter states
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterColor, setFilterColor] = useState<string | ''>('');
   const [filterAttendee, setFilterAttendee] = useState<string | ''>('');
-  const [filterTag, setFilterTag] = useState<string | ''>('');
-  const [calendarViewType, setCalendarViewType] = useState<CalendarViewType>('all');
-  const [selectedWorkHours, setSelectedWorkHours] = useState<WorkHoursEntry | null>(null);
+  // Which subscribed calendar to show. Replaces the old colour and tag filters:
+  // colour IS the calendar now, so filtering on both would have been the same
+  // question asked twice.
+  const [filterSource, setFilterSource] = useState<string | ''>('');
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -91,23 +97,20 @@ const CalendarPage: React.FC = () => {
       if (searchQuery && !event.title.toLowerCase().includes(searchQuery.toLowerCase())) {
         return false;
       }
-      // Color filter
-      if (filterColor && event.color !== filterColor) {
-        return false;
-      }
       // Attendee filter
       if (filterAttendee && !event.attendees.includes(filterAttendee)) {
         return false;
       }
-      // Tag filter
-      if (filterTag && (!event.tags || !event.tags.includes(filterTag))) {
-        return false;
+      // Calendar filter
+      if (filterSource) {
+        const src = sources.find(x => x.googleCalendarId === event.googleCalendarId);
+        if (src?.slug !== filterSource) return false;
       }
       return true;
     });
-  }, [events, searchQuery, filterColor, filterAttendee, filterTag]);
+  }, [events, sources, searchQuery, filterAttendee, filterSource]);
 
-  // Get today's events and tasks for the agenda sidebar
+  // Get today's events for the agenda sidebar
   const todaysItems = useMemo(() => {
     const todaysEvents = events.filter(event => {
       const eventStart = new Date(event.startDate);
@@ -121,29 +124,8 @@ const CalendarPage: React.FC = () => {
       return (a.startTime || '').localeCompare(b.startTime || '');
     });
 
-    const todaysTasks = jobTasks.filter(task => {
-      if (task.status === 'archived' || task.status === 'draft') return false;
-      const taskDate = new Date(task.scheduledDate);
-      taskDate.setHours(0, 0, 0, 0);
-      return taskDate.getTime() === today.getTime();
-    }).sort((a, b) => {
-      return (a.dueTime || '').localeCompare(b.dueTime || '');
-    });
-
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const todaysWorkHours = workHours.filter(wh => wh.workDate === todayStr).sort((a, b) => {
-      return (a.startTime || '').localeCompare(b.startTime || '');
-    });
-
-    return { events: todaysEvents, tasks: todaysTasks, workHours: todaysWorkHours };
-  }, [events, jobTasks, workHours, today]);
-
-  // Focus quick add input when opened
-  useEffect(() => {
-    if (quickAddDay !== null && quickAddInputRef.current) {
-      quickAddInputRef.current.focus();
-    }
-  }, [quickAddDay]);
+    return { events: todaysEvents };
+  }, [events, today]);
 
   // Get events for a specific date (uses filtered events)
   const getEventsForDate = (day: number) => {
@@ -157,39 +139,6 @@ const CalendarPage: React.FC = () => {
       eventEndDate.setHours(0, 0, 0, 0);
       return date >= eventStartDate && date <= eventEndDate;
     });
-  };
-
-  // Get tasks for a specific date
-  const getTasksForDate = (day: number) => {
-    const date = new Date(year, month, day);
-    date.setHours(0, 0, 0, 0);
-
-    return jobTasks.filter(task => {
-      if (task.status === 'archived' || task.status === 'draft') return false;
-      const taskDate = new Date(task.scheduledDate);
-      taskDate.setHours(0, 0, 0, 0);
-      return taskDate.getTime() === date.getTime();
-    });
-  };
-
-  // Get work hours for a specific date
-  const getWorkHoursForDate = (day: number) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return workHours.filter(wh => wh.workDate === dateStr);
-  };
-
-  // Get user name from ID
-  const getUserName = (userId: string): string => {
-    const user = users.find(u => u.id === userId);
-    return user ? `${user.firstName} ${user.lastName}` : 'Unknown';
-  };
-
-  // Format hours display (e.g., "8h 30m")
-  const formatHoursDisplay = (hours: number): string => {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    if (m === 0) return `${h}h`;
-    return `${h}h ${m}m`;
   };
 
   // Navigation
@@ -218,13 +167,6 @@ const CalendarPage: React.FC = () => {
     setCurrentMonth(new Date());
   };
 
-  // Event handlers
-  const handleAddEvent = () => {
-    setEditingEvent(null);
-    setSelectedDate(undefined);
-    setShowEventForm(true);
-  };
-
   const handleDayClick = (day: number) => {
     // Navigate to day view for that specific day
     const clickedDate = new Date(year, month, day);
@@ -232,94 +174,11 @@ const CalendarPage: React.FC = () => {
     setViewMode('day');
   };
 
-  // Add event on a specific day (from day view)
-  const handleAddEventOnDay = (date: Date) => {
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    setSelectedDate(dateStr);
-    setEditingEvent(null);
-    setShowEventForm(true);
-  };
-
   const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedEvent(event);
   };
 
-  const handleTaskClick = (task: JobTask, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedTask(task);
-  };
-
-  const handleEditEvent = (event: CalendarEvent) => {
-    setSelectedEvent(null);
-    setEditingEvent(event);
-    setShowEventForm(true);
-  };
-
-  const handleSaveEvent = async (eventData: Omit<CalendarEvent, 'id' | 'createdAt' | 'createdBy'>) => {
-    try {
-      if (editingEvent) {
-        await updateEvent(editingEvent.id, eventData);
-        showSuccess('Event updated');
-      } else {
-        await addEvent(eventData);
-        showSuccess('Event created');
-      }
-      setShowEventForm(false);
-      setEditingEvent(null);
-    } catch (error) {
-      console.error('Failed to save event:', error);
-      showError('Failed to save event. Please try again.');
-    }
-  };
-
-  const handleDeleteEvent = async (eventId: string) => {
-    try {
-      await deleteEvent(eventId);
-      setSelectedEvent(null);
-      showSuccess('Event deleted');
-    } catch (error) {
-      console.error('Failed to delete event:', error);
-      showError('Failed to delete event. Please try again.');
-    }
-  };
-
-  // Quick Add handlers
-  const handleQuickAddClick = (day: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setQuickAddDay(day);
-    setQuickAddTitle('');
-  };
-
-  const handleQuickAddSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickAddTitle.trim() || quickAddDay === null) return;
-
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(quickAddDay).padStart(2, '0')}`;
-    try {
-      await addEvent({
-        title: quickAddTitle.trim(),
-        description: '',
-        startDate: dateStr,
-        isAllDay: true,
-        color: '#3B82F6',
-        attendees: [],
-        isRecurring: false,
-      });
-      setQuickAddDay(null);
-      setQuickAddTitle('');
-    } catch (error) {
-      console.error('Failed to add event:', error);
-      showError('Failed to add event. Please try again.');
-    }
-  };
-
-  const handleQuickAddKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setQuickAddDay(null);
-      setQuickAddTitle('');
-    }
-  };
 
   // Mini calendar navigation - jump to specific date
   const handleMiniCalendarDayClick = (day: number, miniMonth: number, miniYear: number) => {
@@ -343,16 +202,6 @@ const CalendarPage: React.FC = () => {
       return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
     }
     return '??';
-  };
-
-  // Get all assigned user initials for a task
-  const getTaskInitials = (task: JobTask): string => {
-    if (!task.assignedTo || task.assignedTo.length === 0) return '';
-    if (task.assignedTo.length === 1) {
-      return getUserInitials(task.assignedTo[0]);
-    }
-    // Multiple assignees - show first + count
-    return `${getUserInitials(task.assignedTo[0])}+${task.assignedTo.length - 1}`;
   };
 
   // Calculate week view dates
@@ -396,15 +245,6 @@ const CalendarPage: React.FC = () => {
     return { top, height: Math.max(duration, 20) }; // minimum 20px height
   };
 
-  // Helper to get task position in time slots view
-  const getTaskPosition = (task: JobTask) => {
-    if (!task.dueTime) return null;
-    const [hours, mins] = task.dueTime.split(':').map(Number);
-    if (hours < 6 || hours >= 23) return null;
-    const top = (hours - 6) * 60 + mins;
-    return { top, height: Math.max(task.estimatedDuration || 30, 20) };
-  };
-
   // Render mini calendar
   const renderMiniCalendar = (miniMonth: number, miniYear: number) => {
     const firstDay = new Date(miniYear, miniMonth, 1);
@@ -444,58 +284,59 @@ const CalendarPage: React.FC = () => {
       <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
         <div style={styles.headerLeft}>
           <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Calendar</h1>
-          <p style={styles.subtitle}>Manage events and view scheduled tasks</p>
+          <p style={styles.subtitle}>
+            {sources.length > 0
+              ? `Live from ${sources.map(x => x.label).join(', ')} in Google Calendar`
+              : 'Live from Google Calendar'}
+          </p>
         </div>
-        <button onClick={handleAddEvent} style={styles.addButton}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
+        {/* No "Add Event". Events are created in Google Calendar — the sync
+            would delete anything written here on its next run, so a button
+            would be a promise the app cannot keep. */}
+        <button onClick={handleSync} style={styles.addButton} disabled={loading || syncing}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
-          Add Event
+          {syncing ? 'Syncing…' : loading ? 'Loading…' : canSync ? 'Sync now' : 'Refresh'}
         </button>
       </div>
 
-      {/* View Type Toggle - Events, Tasks, Hours, All */}
-      <div style={styles.viewTypeToggle}>
-        <button
-          onClick={() => setCalendarViewType('all')}
-          style={calendarViewType === 'all' ? styles.viewTypeButtonActive : styles.viewTypeButton}
-        >
-          All
-        </button>
-        <button
-          onClick={() => setCalendarViewType('events')}
-          style={calendarViewType === 'events' ? styles.viewTypeButtonActive : styles.viewTypeButton}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          Events
-        </button>
-        <button
-          onClick={() => setCalendarViewType('tasks')}
-          style={calendarViewType === 'tasks' ? styles.viewTypeButtonActive : styles.viewTypeButton}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M9 11l3 3L22 4" />
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-          </svg>
-          Tasks
-        </button>
-        <button
-          onClick={() => setCalendarViewType('hours')}
-          style={calendarViewType === 'hours' ? styles.viewTypeButtonActive : styles.viewTypeButton}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          Hours
-        </button>
-      </div>
+      {/* The calendars this page is showing, and what colour each one is. */}
+      {sources.length > 0 && (
+        <div style={styles.sourceLegend}>
+          {sources.map(src => {
+            const active = filterSource === src.slug;
+            return (
+              <button
+                key={src.id}
+                onClick={() => setFilterSource(active ? '' : src.slug)}
+                style={{
+                  ...styles.sourceChip,
+                  borderColor: active ? src.color : theme.colors.bdr.primary,
+                  backgroundColor: active ? `${src.color}22` : 'transparent',
+                }}
+                title={active ? `Showing only ${src.label} — click to show all` : `Show only ${src.label}`}
+              >
+                <span style={{ ...styles.sourceDot, backgroundColor: src.color }} />
+                {src.label}
+              </button>
+            );
+          })}
+          {filterSource && (
+            <button onClick={() => setFilterSource('')} style={styles.sourceChipClear}>
+              Show all
+            </button>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div style={styles.errorBanner}>
+          {error}
+        </div>
+      )}
 
       {/* Search and Filter Bar */}
       <div style={styles.searchFilterBar}>
@@ -522,13 +363,13 @@ const CalendarPage: React.FC = () => {
         </div>
 
         <select
-          value={filterColor}
-          onChange={(e) => setFilterColor(e.target.value)}
+          value={filterSource}
+          onChange={(e) => setFilterSource(e.target.value)}
           style={styles.filterSelect}
         >
-          <option value="">All Colors</option>
-          {eventColors.map(color => (
-            <option key={color.value} value={color.value}>{color.label}</option>
+          <option value="">All Calendars</option>
+          {sources.map(src => (
+            <option key={src.id} value={src.slug}>{src.label}</option>
           ))}
         </select>
 
@@ -543,26 +384,12 @@ const CalendarPage: React.FC = () => {
           ))}
         </select>
 
-        {tags.length > 0 && (
-          <select
-            value={filterTag}
-            onChange={(e) => setFilterTag(e.target.value)}
-            style={styles.filterSelect}
-          >
-            <option value="">All Tags</option>
-            {tags.map(tag => (
-              <option key={tag.id} value={tag.id}>{tag.name}</option>
-            ))}
-          </select>
-        )}
-
-        {(searchQuery || filterColor || filterAttendee || filterTag) && (
+        {(searchQuery || filterAttendee || filterSource) && (
           <button
             onClick={() => {
               setSearchQuery('');
-              setFilterColor('');
               setFilterAttendee('');
-              setFilterTag('');
+              setFilterSource('');
             }}
             style={styles.clearFiltersButton}
           >
@@ -656,17 +483,17 @@ const CalendarPage: React.FC = () => {
                 Today's Agenda
               </h3>
 
-              {todaysItems.events.length === 0 && todaysItems.tasks.length === 0 && todaysItems.workHours.length === 0 ? (
-                <p style={styles.agendaEmpty}>No events, tasks, or work hours today</p>
+              {todaysItems.events.length === 0 ? (
+                <p style={styles.agendaEmpty}>No events today</p>
               ) : (
                 <div style={styles.agendaList}>
                   {/* Today's Events */}
-                  {(calendarViewType === 'all' || calendarViewType === 'events') && todaysItems.events.map(event => (
+                  {todaysItems.events.map(event => (
                     <div
                       key={event.id}
                       style={{
                         ...styles.agendaItem,
-                        borderLeftColor: event.color,
+                        borderLeftColor: colorFor(event),
                       }}
                       onClick={() => setSelectedEvent(event)}
                     >
@@ -684,56 +511,6 @@ const CalendarPage: React.FC = () => {
                     </div>
                   ))}
 
-                  {/* Today's Tasks (red with initials) */}
-                  {(calendarViewType === 'all' || calendarViewType === 'tasks') && todaysItems.tasks.map(task => (
-                    <div
-                      key={task.id}
-                      style={{
-                        ...styles.agendaItem,
-                        borderLeftColor: theme.colors.primary,
-                      }}
-                      onClick={() => setSelectedTask(task)}
-                    >
-                      <div style={styles.agendaItemTime}>
-                        {task.dueTime || 'No time'}
-                        {task.isRecurring && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ marginLeft: '4px', stroke: theme.colors.textSecondary }}>
-                            <polyline points="23 4 23 10 17 10" />
-                            <polyline points="1 20 1 14 7 14" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                          </svg>
-                        )}
-                      </div>
-                      <div style={styles.agendaItemTitle}>
-                        {getTaskInitials(task) && (
-                          <span style={{ ...styles.taskInitials, marginRight: '6px', backgroundColor: theme.colors.primary }}>{getTaskInitials(task)}</span>
-                        )}
-                        {task.title}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Today's Work Hours (green) */}
-                  {(calendarViewType === 'all' || calendarViewType === 'hours') && todaysItems.workHours.map(wh => (
-                    <div
-                      key={wh.id}
-                      style={{
-                        ...styles.agendaItem,
-                        borderLeftColor: '#10B981',
-                      }}
-                      onClick={() => setSelectedWorkHours(wh)}
-                    >
-                      <div style={styles.agendaItemTime}>
-                        {wh.startTime} - {wh.endTime}
-                      </div>
-                      <div style={styles.agendaItemTitle}>
-                        <span style={{ ...styles.taskInitials, marginRight: '6px', backgroundColor: '#10B981' }}>
-                          {getUserInitials(wh.employeeId)}
-                        </span>
-                        {formatHoursDisplay(wh.totalHours)}
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -770,16 +547,6 @@ const CalendarPage: React.FC = () => {
                   {monthNames[selectedDayDate.getMonth()]} {selectedDayDate.getDate()}, {selectedDayDate.getFullYear()}
                 </span>
               </div>
-              <button
-                onClick={() => handleAddEventOnDay(selectedDayDate)}
-                style={styles.dayAddEventBtn}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Add Event
-              </button>
             </div>
 
             {/* All-day events section */}
@@ -804,7 +571,7 @@ const CalendarPage: React.FC = () => {
                         key={event.id}
                         style={{
                           ...styles.dayAllDayEvent,
-                          backgroundColor: event.color,
+                          backgroundColor: colorFor(event),
                         }}
                         onClick={() => setSelectedEvent(event)}
                       >
@@ -871,7 +638,7 @@ const CalendarPage: React.FC = () => {
                           key={event.id}
                           style={{
                             ...styles.dayEventNoTime,
-                            backgroundColor: event.color,
+                            backgroundColor: colorFor(event),
                           }}
                           onClick={() => setSelectedEvent(event)}
                         >
@@ -891,7 +658,7 @@ const CalendarPage: React.FC = () => {
                         key={event.id}
                         style={{
                           ...styles.dayEventPositioned,
-                          backgroundColor: event.color,
+                          backgroundColor: colorFor(event),
                           top: `${pos.top}px`,
                           height: `${pos.height}px`,
                         }}
@@ -928,71 +695,6 @@ const CalendarPage: React.FC = () => {
                   });
                 })()}
 
-                {/* Positioned tasks */}
-                {(() => {
-                  const dayTasks = jobTasks.filter(task => {
-                    if (task.status === 'archived' || task.status === 'draft') return false;
-                    const taskDate = new Date(task.scheduledDate);
-                    return taskDate.toDateString() === selectedDayDate.toDateString();
-                  });
-
-                  return dayTasks.map(task => {
-                    const pos = getTaskPosition(task);
-                    if (!pos) {
-                      // No specific time - render at top
-                      return (
-                        <div
-                          key={task.id}
-                          style={styles.dayTaskNoTime}
-                          onClick={() => setSelectedTask(task)}
-                        >
-                          {task.isRecurring && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ marginRight: '6px', flexShrink: 0, stroke: theme.colors.textSecondary }}>
-                              <polyline points="23 4 23 10 17 10" />
-                              <polyline points="1 20 1 14 7 14" />
-                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
-                          )}
-                          {getTaskInitials(task) && (
-                            <span style={{ ...styles.taskInitials, marginRight: '8px' }}>{getTaskInitials(task)}</span>
-                          )}
-                          <span style={styles.dayTaskTitle}>{task.title}</span>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div
-                        key={task.id}
-                        style={{
-                          ...styles.dayTaskPositioned,
-                          top: `${pos.top}px`,
-                          height: `${pos.height}px`,
-                        }}
-                        onClick={() => setSelectedTask(task)}
-                      >
-                        <div style={styles.dayTaskHeader}>
-                          <span style={styles.dayTaskTime}>{task.dueTime}</span>
-                          {task.isRecurring && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
-                              <polyline points="23 4 23 10 17 10" />
-                              <polyline points="1 20 1 14 7 14" />
-                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
-                          )}
-                        </div>
-                        <div style={styles.dayTaskTitleRow}>
-                          {getTaskInitials(task) && (
-                            <span style={{ ...styles.taskInitials, marginRight: '8px' }}>{getTaskInitials(task)}</span>
-                          )}
-                          <span style={styles.dayTaskTitleLarge}>{task.title}</span>
-                        </div>
-                        {task.estimatedDuration && pos.height > 50 && (
-                          <span style={styles.dayTaskDuration}>{task.estimatedDuration} min</span>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
               </div>
             </div>
           </div>
@@ -1011,11 +713,9 @@ const CalendarPage: React.FC = () => {
             {/* Days of month */}
             {Array.from({ length: daysInMonth }).map((_, index) => {
               const day = index + 1;
-              const eventsForDay = (calendarViewType === 'all' || calendarViewType === 'events') ? getEventsForDate(day) : [];
-              const tasksForDay = (calendarViewType === 'all' || calendarViewType === 'tasks') ? getTasksForDate(day) : [];
-              const workHoursForDay = (calendarViewType === 'all' || calendarViewType === 'hours') ? getWorkHoursForDate(day) : [];
+              const eventsForDay = getEventsForDate(day);
               const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
-              const totalItems = eventsForDay.length + tasksForDay.length + workHoursForDay.length;
+              const totalItems = eventsForDay.length;
               const maxVisible = isMobileOrTablet ? 2 : 3;
               let visibleCount = 0;
 
@@ -1033,40 +733,7 @@ const CalendarPage: React.FC = () => {
                     }}>
                       {day}
                     </div>
-                    {/* Quick Add Button - hide on mobile */}
-                    {!isMobileOrTablet && (
-                      <button
-                        style={styles.quickAddBtn}
-                        onClick={(e) => handleQuickAddClick(day, e)}
-                        title="Quick add event"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="12" y1="5" x2="12" y2="19" />
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                      </button>
-                    )}
                   </div>
-
-                  {/* Quick Add Input - desktop only */}
-                  {!isMobileOrTablet && quickAddDay === day && (
-                    <form onSubmit={handleQuickAddSubmit} style={styles.quickAddForm}>
-                      <input
-                        ref={quickAddInputRef}
-                        type="text"
-                        placeholder="Add event..."
-                        value={quickAddTitle}
-                        onChange={(e) => setQuickAddTitle(e.target.value)}
-                        onKeyDown={handleQuickAddKeyDown}
-                        onBlur={() => {
-                          if (!quickAddTitle.trim()) {
-                            setQuickAddDay(null);
-                          }
-                        }}
-                        style={styles.quickAddInput}
-                      />
-                    </form>
-                  )}
 
                   <div style={isMobileOrTablet ? styles.itemsListMobile : styles.itemsList}>
                     {/* Events first (colored left border) */}
@@ -1077,7 +744,7 @@ const CalendarPage: React.FC = () => {
                           key={event.id}
                           style={{
                             ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem),
-                            borderLeftColor: event.color,
+                            borderLeftColor: colorFor(event),
                           }}
                           onClick={(e) => handleEventClick(event, e)}
                           title={event.title}
@@ -1090,60 +757,6 @@ const CalendarPage: React.FC = () => {
                             </svg>
                           )}
                           <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{event.title}</span>
-                        </div>
-                      );
-                    })}
-
-                    {/* Tasks (red left border with user initials) */}
-                    {tasksForDay.slice(0, Math.max(0, maxVisible - eventsForDay.length)).map(task => {
-                      visibleCount++;
-                      return (
-                        <div
-                          key={task.id}
-                          style={{
-                            ...(isMobileOrTablet ? styles.taskItemMobile : styles.taskItem),
-                            borderLeftColor: theme.colors.primary,
-                          }}
-                          onClick={(e) => handleTaskClick(task, e)}
-                          title={task.title}
-                        >
-                          {!isMobileOrTablet && task.isRecurring && (
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.recurringIcon, stroke: theme.colors.textSecondary }}>
-                              <polyline points="23 4 23 10 17 10" />
-                              <polyline points="1 20 1 14 7 14" />
-                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
-                          )}
-                          {getTaskInitials(task) && (
-                            <span style={isMobileOrTablet ? styles.taskInitialsMobile : styles.taskInitials}>{getTaskInitials(task)}</span>
-                          )}
-                          <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>{task.title}</span>
-                        </div>
-                      );
-                    })}
-
-                    {/* Work Hours (green left border) */}
-                    {workHoursForDay.slice(0, Math.max(0, maxVisible - eventsForDay.length - tasksForDay.length)).map(wh => {
-                      visibleCount++;
-                      return (
-                        <div
-                          key={wh.id}
-                          style={{
-                            ...(isMobileOrTablet ? styles.eventItemMobile : styles.eventItem),
-                            borderLeftColor: '#10B981',
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedWorkHours(wh);
-                          }}
-                          title={`${getUserName(wh.employeeId)}: ${formatHoursDisplay(wh.totalHours)}`}
-                        >
-                          <span style={isMobileOrTablet ? styles.taskInitialsMobile : { ...styles.taskInitials, backgroundColor: '#10B981' }}>
-                            {getUserInitials(wh.employeeId)}
-                          </span>
-                          <span style={isMobileOrTablet ? styles.itemTitleMobile : styles.itemTitle}>
-                            {formatHoursDisplay(wh.totalHours)}
-                          </span>
                         </div>
                       );
                     })}
@@ -1211,7 +824,7 @@ const CalendarPage: React.FC = () => {
                         key={event.id}
                         style={{
                           ...styles.allDayEvent,
-                          backgroundColor: event.color,
+                          backgroundColor: colorFor(event),
                         }}
                         onClick={() => setSelectedEvent(event)}
                       >
@@ -1257,21 +870,16 @@ const CalendarPage: React.FC = () => {
                   return checkDate >= eventStartDate && checkDate <= eventEndDate;
                 });
 
-                // Get timed tasks for this day
-                const dayTasks = jobTasks.filter(task => {
-                  if (task.status === 'archived' || task.status === 'draft') return false;
-                  const taskDate = new Date(task.scheduledDate);
-                  return taskDate.toDateString() === date.toDateString();
-                });
-
                 return (
                   <div
                     key={dayIndex}
                     style={styles.weekDayColumn}
                     onClick={() => {
-                      setSelectedDate(dateStr);
-                      setEditingEvent(null);
-                      setShowEventForm(true);
+                      // Was "open the new-event form on this day". Now it jumps
+                      // to that day's detail view, which is the only thing left
+                      // that clicking a day can usefully mean.
+                      setSelectedDayDate(new Date(dateStr + 'T00:00:00'));
+                      setViewMode('day');
                     }}
                   >
                     {/* Hour lines */}
@@ -1286,7 +894,7 @@ const CalendarPage: React.FC = () => {
                           key={event.id}
                           style={{
                             ...styles.weekEventFloating,
-                            backgroundColor: event.color,
+                            backgroundColor: colorFor(event),
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1303,31 +911,6 @@ const CalendarPage: React.FC = () => {
                           {event.title}
                         </div>
                       ))}
-                      {dayTasks.filter(t => !getTaskPosition(t)).map(task => (
-                        <div
-                          key={task.id}
-                          style={{
-                            ...styles.weekTaskFloating,
-                            borderLeftColor: theme.colors.primary,
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTask(task);
-                          }}
-                        >
-                          {task.isRecurring && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.recurringIcon, stroke: theme.colors.textSecondary }}>
-                              <polyline points="23 4 23 10 17 10" />
-                              <polyline points="1 20 1 14 7 14" />
-                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
-                          )}
-                          {getTaskInitials(task) && (
-                            <span style={{ ...styles.taskInitials, marginRight: '4px' }}>{getTaskInitials(task)}</span>
-                          )}
-                          {task.title}
-                        </div>
-                      ))}
                     </div>
 
                     {/* Positioned events (with specific time) */}
@@ -1338,7 +921,7 @@ const CalendarPage: React.FC = () => {
                           key={event.id}
                           style={{
                             ...styles.weekEventPositioned,
-                            backgroundColor: event.color,
+                            backgroundColor: colorFor(event),
                             top: `${pos.top}px`,
                             height: `${pos.height}px`,
                           }}
@@ -1360,38 +943,6 @@ const CalendarPage: React.FC = () => {
                       );
                     })}
 
-                    {/* Positioned tasks (with specific time) */}
-                    {dayTasks.filter(t => getTaskPosition(t)).map(task => {
-                      const pos = getTaskPosition(task)!;
-                      return (
-                        <div
-                          key={task.id}
-                          style={{
-                            ...styles.weekTaskPositioned,
-                            borderLeftColor: theme.colors.primary,
-                            top: `${pos.top}px`,
-                            height: `${pos.height}px`,
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTask(task);
-                          }}
-                        >
-                          <span style={styles.weekTaskTime}>{task.dueTime}</span>
-                          {getTaskInitials(task) && (
-                            <span style={{ ...styles.taskInitials, marginRight: '4px' }}>{getTaskInitials(task)}</span>
-                          )}
-                          <span style={styles.weekTaskTitle}>{task.title}</span>
-                          {task.isRecurring && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ marginLeft: 'auto', stroke: theme.colors.textSecondary }}>
-                              <polyline points="23 4 23 10 17 10" />
-                              <polyline points="1 20 1 14 7 14" />
-                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                            </svg>
-                          )}
-                        </div>
-                      );
-                    })}
                   </div>
                 );
               })}
@@ -1401,131 +952,72 @@ const CalendarPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Legend */}
-      <div style={styles.legend}>
-        <div style={styles.legendItem}>
-          <div style={{ ...styles.legendColor, backgroundColor: '#3B82F6' }} />
-          <span style={styles.legendText}>Events</span>
-        </div>
-        <div style={styles.legendItem}>
-          <div style={{ ...styles.legendColor, backgroundColor: theme.colors.primary }} />
-          <span style={styles.legendText}>Tasks</span>
-        </div>
-        <div style={styles.legendItem}>
-          <div style={{ ...styles.legendColor, backgroundColor: '#10B981' }} />
-          <span style={styles.legendText}>Work Hours</span>
-        </div>
-        <div style={styles.legendItem}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
-            <polyline points="23 4 23 10 17 10" />
-            <polyline points="1 20 1 14 7 14" />
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-          </svg>
-          <span style={styles.legendText}>Recurring</span>
-        </div>
-      </div>
-
-      {/* Modals */}
-      <EventFormModal
-        isOpen={showEventForm}
-        onClose={() => {
-          setShowEventForm(false);
-          setEditingEvent(null);
-          setSelectedDate(undefined);
-        }}
-        onSave={handleSaveEvent}
-        editingEvent={editingEvent}
-        users={users}
-        initialDate={selectedDate}
-      />
-
+      {/* No onEdit/onDelete: this is a mirror of Google, and the modal hides
+          both buttons when the handlers are absent. */}
       <EventDetailModal
         isOpen={selectedEvent !== null}
         onClose={() => setSelectedEvent(null)}
         event={selectedEvent}
         users={users}
-        onEdit={handleEditEvent}
-        onDelete={handleDeleteEvent}
       />
 
-      <CalendarTaskModal
-        isOpen={selectedTask !== null}
-        onClose={() => setSelectedTask(null)}
-        task={selectedTask}
-        users={users}
-      />
-
-      {/* Work Hours Detail Modal */}
-      {selectedWorkHours && (
-        <div style={styles.modalOverlay} onClick={() => setSelectedWorkHours(null)}>
-          <div style={styles.workHoursModal} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.workHoursModalHeader}>
-              <div style={styles.workHoursModalTitle}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-                Work Hours
-              </div>
-              <button style={styles.workHoursModalClose} onClick={() => setSelectedWorkHours(null)}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div style={styles.workHoursModalContent}>
-              <div style={styles.workHoursModalRow}>
-                <span style={styles.workHoursModalLabel}>Employee</span>
-                <span style={styles.workHoursModalValue}>{getUserName(selectedWorkHours.employeeId)}</span>
-              </div>
-              <div style={styles.workHoursModalRow}>
-                <span style={styles.workHoursModalLabel}>Date</span>
-                <span style={styles.workHoursModalValue}>
-                  {new Date(selectedWorkHours.workDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </span>
-              </div>
-              <div style={styles.workHoursModalRow}>
-                <span style={styles.workHoursModalLabel}>Time</span>
-                <span style={styles.workHoursModalValue}>{selectedWorkHours.startTime} - {selectedWorkHours.endTime}</span>
-              </div>
-              <div style={styles.workHoursModalRow}>
-                <span style={styles.workHoursModalLabel}>Break</span>
-                <span style={styles.workHoursModalValue}>{selectedWorkHours.breakMinutes} minutes</span>
-              </div>
-              <div style={styles.workHoursModalRow}>
-                <span style={styles.workHoursModalLabel}>Total Hours</span>
-                <span style={{ ...styles.workHoursModalValue, fontWeight: 700, color: '#10B981' }}>
-                  {formatHoursDisplay(selectedWorkHours.totalHours)}
-                </span>
-              </div>
-              <div style={styles.workHoursModalRow}>
-                <span style={styles.workHoursModalLabel}>Status</span>
-                <span style={{
-                  ...styles.workHoursStatusBadge,
-                  backgroundColor: selectedWorkHours.status === 'approved' ? 'rgba(16, 185, 129, 0.2)' :
-                                   selectedWorkHours.status === 'rejected' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                  color: selectedWorkHours.status === 'approved' ? '#10B981' :
-                         selectedWorkHours.status === 'rejected' ? '#EF4444' : '#F59E0B',
-                }}>
-                  {selectedWorkHours.status.charAt(0).toUpperCase() + selectedWorkHours.status.slice(1)}
-                </span>
-              </div>
-              {selectedWorkHours.notes && (
-                <div style={styles.workHoursModalRow}>
-                  <span style={styles.workHoursModalLabel}>Notes</span>
-                  <span style={styles.workHoursModalValue}>{selectedWorkHours.notes}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
+  // --- subscribed-calendar legend -------------------------------------------
+  // Doubles as the category filter: a chip is both the key to the colours and
+  // the control that isolates one calendar. Two widgets saying the same thing
+  // is how a legend and a filter drift apart.
+  sourceLegend: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  sourceChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '6px 12px',
+    borderRadius: theme.borderRadius.full,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    color: theme.colors.txt.secondary,
+    fontFamily: theme.fonts.primary,
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    // 44px is the touch target the mobile audit checks for.
+    minHeight: '36px',
+  },
+  sourceChipClear: {
+    padding: '6px 12px',
+    borderRadius: theme.borderRadius.full,
+    border: 'none',
+    background: 'transparent',
+    color: theme.colors.txt.tertiary,
+    fontFamily: theme.fonts.primary,
+    fontSize: '13px',
+    cursor: 'pointer',
+    minHeight: '36px',
+  },
+  sourceDot: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  errorBanner: {
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.status.error}`,
+    backgroundColor: 'rgba(226, 20, 79, 0.08)',
+    color: theme.colors.txt.primary,
+    fontFamily: theme.fonts.primary,
+    fontSize: '14px',
+  },
   container: {
     padding: theme.pageLayout.containerPadding.desktop,
     maxWidth: theme.pageLayout.maxWidth,
@@ -1574,40 +1066,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     fontWeight: 700,
     whiteSpace: 'nowrap',
-  },
-  viewTypeToggle: {
-    display: 'flex',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    marginBottom: theme.spacing.md,
-    flexWrap: 'wrap',
-  },
-  viewTypeButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '10px 16px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: theme.colors.textSecondary,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  viewTypeButtonActive: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '10px 16px',
-    backgroundColor: theme.colors.primary,
-    border: 'none',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#FFFFFF',
-    cursor: 'pointer',
   },
   controls: {
     display: 'flex',
@@ -1836,49 +1294,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '2px',
     flexShrink: 0,
   },
-  taskItem: {
-    padding: '3px 6px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.sm,
-    borderLeft: '3px solid',
-    cursor: 'pointer',
-    transition: 'opacity 0.2s',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '3px',
-    flexShrink: 0,
-  },
-  taskItemMobile: {
-    padding: '2px 4px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: '3px',
-    borderLeft: '2px solid',
-    cursor: 'pointer',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    flexShrink: 0,
-  },
-  taskInitials: {
-    fontSize: '8px',
-    fontWeight: 700,
-    color: '#FFFFFF',
-    backgroundColor: theme.colors.primary,
-    padding: '1px 3px',
-    borderRadius: '2px',
-    flexShrink: 0,
-  },
-  taskInitialsMobile: {
-    fontSize: '7px',
-    fontWeight: 700,
-    color: '#FFFFFF',
-    backgroundColor: theme.colors.primary,
-    padding: '0px 2px',
-    borderRadius: '2px',
-    flexShrink: 0,
-  },
   itemTitle: {
     fontSize: '10px',
     fontWeight: 500,
@@ -1987,43 +1402,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.sm,
     borderLeft: '3px solid',
     cursor: 'pointer',
-  },
-  weekTaskTime: {
-    fontSize: '10px',
-    fontWeight: 600,
-    color: theme.colors.txt.secondary,
-    display: 'block',
-    marginBottom: '2px',
-  },
-  weekTaskTitle: {
-    fontSize: '12px',
-    fontWeight: 500,
-    color: theme.colors.txt.primary,
-    display: 'block',
-  },
-  legend: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '20px',
-    padding: '16px 20px',
-    backgroundColor: theme.colors.backgroundLight,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-  },
-  legendItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  legendColor: {
-    width: '12px',
-    height: '12px',
-    borderRadius: '3px',
-  },
-  legendText: {
-    fontSize: '13px',
-    color: theme.colors.textSecondary,
-    fontWeight: 500,
   },
 
   // Search and Filter Bar
@@ -2234,19 +1612,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     flexShrink: 0,
   },
-  quickAddBtn: {
-    padding: '2px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    color: theme.colors.textSecondary,
-    opacity: 0.4,
-    transition: 'opacity 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.borderRadius.sm,
-  },
   quickAddBtnMobile: {
     padding: '1px',
     backgroundColor: 'transparent',
@@ -2258,19 +1623,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: '2px',
-  },
-  quickAddForm: {
-    marginBottom: '8px',
-  },
-  quickAddInput: {
-    width: '100%',
-    padding: '6px 8px',
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.primary}`,
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '11px',
-    color: theme.colors.textPrimary,
-    outline: 'none',
   },
 
   // Recurring Icon
@@ -2384,32 +1736,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
   },
-  weekTaskPositioned: {
-    position: 'absolute',
-    left: '2px',
-    right: '2px',
-    padding: '4px 6px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.sm,
-    borderLeft: '3px solid',
-    cursor: 'pointer',
-    overflow: 'hidden',
-    zIndex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  weekTaskFloating: {
-    padding: '4px 6px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.sm,
-    borderLeft: '3px solid',
-    cursor: 'pointer',
-    fontSize: '10px',
-    fontWeight: 500,
-    color: theme.colors.textPrimary,
-    display: 'flex',
-    alignItems: 'center',
-  },
   floatingItemsContainer: {
     position: 'absolute',
     top: 0,
@@ -2459,19 +1785,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '20px',
     fontWeight: 700,
     color: theme.colors.textPrimary,
-  },
-  dayAddEventBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 16px',
-    backgroundColor: theme.colors.primary,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#FFFFFF',
-    cursor: 'pointer',
   },
   dayAllDaySection: {
     display: 'flex',
@@ -2629,140 +1942,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   dayEventAttendeeMore: {
     fontSize: '10px',
     color: 'rgba(255,255,255,0.8)',
-  },
-  dayTaskPositioned: {
-    position: 'absolute',
-    left: '8px',
-    right: '8px',
-    padding: '8px 12px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    borderLeft: `4px solid ${theme.colors.primary}`,
-    cursor: 'pointer',
-    overflow: 'hidden',
-    zIndex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-  },
-  dayTaskNoTime: {
-    position: 'relative',
-    margin: '8px',
-    padding: '8px 12px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    borderLeft: `4px solid ${theme.colors.primary}`,
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: 500,
-    color: theme.colors.textPrimary,
-    display: 'flex',
-    alignItems: 'center',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-  },
-  dayTaskHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dayTaskTime: {
-    fontSize: '11px',
-    fontWeight: 600,
-    color: theme.colors.textSecondary,
-  },
-  dayTaskTitle: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: theme.colors.textPrimary,
-  },
-  dayTaskTitleRow: {
-    display: 'flex',
-    alignItems: 'center',
-  },
-  dayTaskTitleLarge: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.textPrimary,
-  },
-  dayTaskDuration: {
-    fontSize: '11px',
-    color: theme.colors.textSecondary,
-    marginTop: '2px',
-  },
-  // Work Hours Modal styles
-  modalOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  workHoursModal: {
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    maxWidth: '400px',
-    width: '90%',
-    boxShadow: theme.shadows.xl,
-  },
-  workHoursModalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px 20px',
-    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  workHoursModalTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    fontSize: '18px',
-    fontWeight: 700,
-    color: theme.colors.textPrimary,
-  },
-  workHoursModalClose: {
-    background: 'none',
-    border: 'none',
-    color: theme.colors.textSecondary,
-    cursor: 'pointer',
-    padding: '4px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.borderRadius.sm,
-    transition: 'all 0.2s',
-  },
-  workHoursModalContent: {
-    padding: '20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  workHoursModalRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  workHoursModalLabel: {
-    fontSize: '14px',
-    color: theme.colors.textSecondary,
-  },
-  workHoursModalValue: {
-    fontSize: '14px',
-    color: theme.colors.textPrimary,
-    fontWeight: 500,
-  },
-  workHoursStatusBadge: {
-    padding: '4px 10px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: 600,
   },
 };
 
