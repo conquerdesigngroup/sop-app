@@ -8,6 +8,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useResponsive } from '../../hooks/useResponsive';
 import { Button, Card, Input, Badge, EmptyState, Modal, Textarea } from '../ui';
 import HoursHistoryList from './HoursHistoryList';
+import HoursEntryForm, { HoursFormValues } from './HoursEntryForm';
 import WorkCategoryManager from './WorkCategoryManager';
 import PayRatesManager from './PayRatesManager';
 import {
@@ -58,8 +59,8 @@ interface EmployeeRollup {
 const TeamHoursPanel: React.FC = () => {
   const { users, currentUser } = useAuth();
   const {
-    workHours, getWorkCategoryName, approveWorkHours, rejectWorkHours, hasV7Schema,
-    getEmployeePayRate, getPayForEntry,
+    workHours, workCategories, getWorkCategoryName, approveWorkHours, rejectWorkHours, hasV7Schema,
+    getEmployeePayRate, getPayForEntry, updateWorkHours, deleteWorkHours,
   } = useWorkHours();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirm();
@@ -73,6 +74,7 @@ const TeamHoursPanel: React.FC = () => {
   const [showRates, setShowRates] = useState(false);
   const [rejecting, setRejecting] = useState<WorkHoursEntry | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [editing, setEditing] = useState<WorkHoursEntry | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Both filled AND the right way round. The min/max attributes on the two
@@ -186,6 +188,61 @@ const TeamHoursPanel: React.FC = () => {
     rollups.find(r => r.employeeId === id)?.name || 'Unknown';
 
   // ---------------------------------------------------------------- actions
+
+  /**
+   * Correcting someone else's entry. Only reachable here, and only for a
+   * super admin — work_hours_update's USING clause is
+   * `is_super_admin() OR (own row AND status IN ('pending','rejected'))`.
+   *
+   * An APPROVED entry is editable on purpose. work_hours_freeze_pay sees the
+   * row is already frozen and re-multiplies the corrected hours against the
+   * SAME rate_snapshot instead of looking the rate up again, so fixing a typo
+   * in settled history cannot pull in a rate that changed since approval.
+   * updateWorkHours only flips 'rejected' back to 'pending', never 'approved',
+   * so the freeze survives the edit.
+   */
+  const handleEditSave = async (values: HoursFormValues) => {
+    if (!editing) return;
+    try {
+      await updateWorkHours(editing.id, {
+        workDate: values.workDate,
+        startTime: values.startTime,
+        endTime: values.endTime,
+        breakMinutes: values.breakMinutes,
+        // null rather than undefined — mapToSupabase drops undefined keys, so
+        // undefined would make clearing a note or a category impossible.
+        categoryId: values.categoryId || null,
+        notes: values.notes.trim() || null,
+      });
+      showToast('Entry updated', 'success');
+      setEditing(null);
+    } catch (error: any) {
+      showToast(error?.message || 'Could not update this entry', 'error');
+      throw error;
+    }
+  };
+
+  const handleDeleteEntry = async (entry: WorkHoursEntry) => {
+    const u = users.find(x => x.id === entry.employeeId);
+    const who = u ? `${u.firstName} ${u.lastName}`.trim() || u.email : 'This employee';
+    const confirmed = await confirm({
+      title: 'Delete this entry?',
+      message: `${who} · ${formatDateShort(entry.workDate)} · ${formatHours(entry.totalHours)} hrs. `
+        + (entry.status === 'approved'
+            ? 'It is already approved, and the pay frozen against it will be removed too. '
+            : '')
+        + 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await deleteWorkHours(entry.id);
+      showToast('Entry deleted', 'success');
+    } catch (error: any) {
+      showToast(error?.message || 'Could not delete this entry', 'error');
+    }
+  };
 
   const handleApprove = async (entry: WorkHoursEntry) => {
     const rate = getEmployeePayRate(entry.employeeId, entry.categoryId);
@@ -577,6 +634,12 @@ const TeamHoursPanel: React.FC = () => {
                       setRejecting(entry);
                       setRejectReason('');
                     }}
+                    onEdit={setEditing}
+                    onDelete={handleDeleteEntry}
+                    // Team Schedule used to be the only place an approved entry
+                    // could be corrected. It is a schedule now, so that job
+                    // lands here — the one screen that already owns hours.
+                    allowEditingApproved
                     emptyTitle="Nothing logged this period"
                     emptyDescription={`${r.name} has not entered any hours between ${formatDateShort(range.start)} and ${formatDateShort(range.end)}.`}
                   />
@@ -586,6 +649,32 @@ const TeamHoursPanel: React.FC = () => {
           );
         })
       )}
+
+      {/* ---- Correct an entry ---- */}
+      <Modal
+        isOpen={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Edit entry"
+        size="md"
+      >
+        {editing && (
+          <HoursEntryForm
+            categories={workCategories}
+            categoriesUnavailable={!hasV7Schema}
+            submitLabel="Save changes"
+            initialValues={{
+              workDate: editing.workDate,
+              startTime: editing.startTime,
+              endTime: editing.endTime,
+              breakMinutes: editing.breakMinutes,
+              categoryId: editing.categoryId || '',
+              notes: editing.notes || '',
+            }}
+            onSubmit={handleEditSave}
+            onCancel={() => setEditing(null)}
+          />
+        )}
+      </Modal>
 
       {/* ---- Send-back reason ---- */}
       <Modal

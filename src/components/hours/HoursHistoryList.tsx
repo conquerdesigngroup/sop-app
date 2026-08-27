@@ -20,6 +20,23 @@ interface HoursHistoryListProps {
   getEmployeeName?: (employeeId: string) => string;
   onEdit?: (entry: WorkHoursEntry) => void;
   onDelete?: (entry: WorkHoursEntry) => void;
+  /**
+   * Let edit/delete reach an APPROVED entry. Off by default, and only the
+   * super-admin team panel turns it on.
+   *
+   * The employee-facing default is not squeamishness, it is what RLS actually
+   * allows: work_hours_update permits an employee to write only their own
+   * 'pending' or 'rejected' rows, so offering Edit on an approved one would be
+   * a button the database refuses. A super admin has no such restriction, and
+   * correcting an approved entry is a supported path — work_hours_freeze_pay
+   * re-multiplies the corrected hours against the SAME frozen rate_snapshot
+   * rather than looking the rate up again, so settled history cannot shift
+   * under a rate that changed after approval.
+   *
+   * pendingSync stays locked regardless: that row has no database id yet, so
+   * any write would address nothing.
+   */
+  allowEditingApproved?: boolean;
   onApprove?: (entry: WorkHoursEntry) => void;
   onReject?: (entry: WorkHoursEntry) => void;
   /**
@@ -52,6 +69,7 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
   getEmployeeName,
   onEdit,
   onDelete,
+  allowEditingApproved = false,
   onApprove,
   onReject,
   getPayLabel,
@@ -75,8 +93,9 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
         const category = getCategoryName(entry.categoryId);
         const status = STATUS_META[entry.status] ?? STATUS_META.pending;
         const locked = isLocked(entry);
-        const canEdit = Boolean(onEdit) && !locked;
-        const canDelete = Boolean(onDelete) && !locked;
+        const writable = allowEditingApproved ? !entry.pendingSync : !locked;
+        const canEdit = Boolean(onEdit) && writable;
+        const canDelete = Boolean(onDelete) && writable;
         // A locked row still renders the column — otherwise the "Locked"
         // note below has nowhere to go and the row silently loses its
         // buttons with no explanation of why.
@@ -248,7 +267,7 @@ const HoursHistoryList: React.FC<HoursHistoryListProps> = ({
                     Delete
                   </Button>
                 )}
-                {locked && !onApprove && !onReject && (
+                {locked && !writable && !onApprove && !onReject && (
                   <span style={{
                     fontSize: '12px',
                     color: theme.colors.txt.tertiary,
