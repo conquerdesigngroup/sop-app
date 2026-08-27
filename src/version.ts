@@ -12,4 +12,4 @@
  * installed one, so if CACHE_VERSION does not change the file is identical, no
  * install fires, no update banner appears, and the old cache is never evicted.
  */
-export const APP_VERSION = '1.0.14';
+export const APP_VERSION = '1.0.15';
