@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { theme } from '../../theme';
 import {
-  Card, EmptyState, Spinner, ChevronLeftIcon, IconButton, CalendarIcon,
+  Card, EmptyState, Spinner, ChevronLeftIcon, CalendarIcon,
 } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import EventCard from '../../components/portal/EventCard';
@@ -140,33 +140,54 @@ const EventRow: React.FC<{
           {event.location ? ` · ${event.location}` : ''}
         </div>
 
-        {event.description && (
-          <p style={{
-            ...theme.typography.bodySmall,
-            fontFamily: theme.fonts.primary,
-            color: theme.colors.txt.tertiary,
-            margin: '8px 0 0',
-            whiteSpace: 'pre-wrap',
-          }}>
-            {event.description}
-          </p>
-        )}
+        {/*
+          No description here on purpose. These come from the studio's Google
+          entries and open with bookkeeping — "Status: Confirmed" on every one,
+          and occasionally a whole note written for staff. Printed on each row
+          it buried the three things a parent is actually scanning for: what,
+          when, where. The full text is still one tap away in the card.
+        */}
       </div>
 
       {/* stopPropagation, or adding the date also opens the card behind the
           share sheet. flexShrink so it keeps its touch target at 320px while
           the title column absorbs the squeeze. */}
-      <div style={{ flexShrink: 0 }}>
-        <IconButton
-          variant="ghost"
-          size="sm"
-          aria-label={`Add ${event.title} to my calendar`}
-          disabled={adding}
-          onClick={e => { e.stopPropagation(); onAdd(event); }}
-        >
-          <CalendarIcon size={18} />
-        </IconButton>
-      </div>
+      <button
+        type="button"
+        aria-label={`Add ${event.title} to my calendar`}
+        disabled={adding}
+        onClick={e => { e.stopPropagation(); onAdd(event); }}
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '3px',
+          width: '48px',
+          // 44px is the smallest reliable touch target.
+          minHeight: '44px',
+          padding: '5px 0',
+          background: 'transparent',
+          border: `1px solid ${theme.colors.bdr.primary}`,
+          borderRadius: theme.borderRadius.md,
+          color: theme.colors.txt.secondary,
+          cursor: adding ? 'default' : 'pointer',
+          opacity: adding ? 0.45 : 1,
+        }}
+      >
+        <CalendarIcon size={15} />
+        <span style={{
+          fontFamily: theme.fonts.mono,
+          fontSize: '9px',
+          fontWeight: 600,
+          lineHeight: 1,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+        }}>
+          Add
+        </span>
+      </button>
     </div>
   </Card>
 );
@@ -539,6 +560,8 @@ const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => {
     <>
       {groups.map(group => (
         <section key={group.key} style={{ marginBottom: '28px' }}>
+          {/* The count turns a heading into a signpost: it tells you whether
+              a month is worth scrolling into before you scroll into it. */}
           <h2 style={{
             ...theme.typography.captionSmall,
             fontFamily: theme.fonts.mono,
@@ -546,8 +569,15 @@ const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => {
             textTransform: 'uppercase',
             letterSpacing: '0.1em',
             margin: '0 0 10px',
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: '12px',
           }}>
-            {group.label}
+            <span>{group.label}</span>
+            <span style={{ letterSpacing: '0.04em', textTransform: 'none' }}>
+              {group.events.length} {group.events.length === 1 ? 'event' : 'events'}
+            </span>
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -591,6 +621,22 @@ const ProgramCalendar: React.FC = () => {
     >
       <div style={{ maxWidth: '720px' }}>
         <ViewToggle value={view} onChange={changeView} />
+
+        {/*
+          Said once here rather than repeated on every row. The calendar
+          button used to be a bare icon — obvious the moment you have pressed
+          it, and cryptic until then.
+        */}
+        <p style={{
+          ...theme.typography.bodySmall,
+          fontFamily: theme.fonts.primary,
+          color: theme.colors.txt.tertiary,
+          margin: '0 0 16px',
+        }}>
+          Tap an event for full details, or press{' '}
+          <span style={{ color: theme.colors.txt.secondary, fontWeight: 600 }}>Add</span>
+          {' '}to save it to your own calendar.
+        </p>
 
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
