@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { theme } from '../theme';
 import { exchangeCodeForTokens } from '../services/googleCalendar';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -34,7 +35,58 @@ const AuthCallback: React.FC = () => {
         return;
       }
 
+      // Two OAuth journeys end here and they are not interchangeable.
+      //
+      //   'studio' — the Calendar page's Connect Google. The code is sent to
+      //              the google-oauth function, which keeps the refresh token
+      //              server-side so the app can write to Google unattended.
+      //   anything else — the older per-user connect on Settings, whose tokens
+      //              live in this browser's localStorage and act for one person.
+      //
+      // Sending a code down the wrong path does not fail loudly: it stores a
+      // working connection in the wrong place, and the studio's Add Event
+      // keeps reporting "Google is not connected" while Settings insists it is.
+      let flow: string | null = null;
       try {
+        flow = sessionStorage.getItem('didc_google_connect');
+        sessionStorage.removeItem('didc_google_connect');
+      } catch {
+        /* Safari private mode; falls through to the per-user flow */
+      }
+
+      try {
+        if (flow === 'studio') {
+          if (!isSupabaseConfigured() || !supabase) {
+            throw new Error('The app is not connected to its database.');
+          }
+          const { data, error: fnError } = await supabase.functions.invoke('google-oauth', {
+            body: {
+              action: 'connect',
+              code,
+              // Must be byte-identical to the one the authorization used, or
+              // Google rejects the exchange with redirect_uri_mismatch.
+              redirectUri: `${window.location.origin}/auth/callback`,
+            },
+          });
+          if (fnError) {
+            let message = fnError.message || 'Google refused the connection.';
+            try {
+              const payload = await (fnError as any).context?.json?.();
+              if (payload?.error) {
+                message = payload.description
+                  ? `${payload.error} ${payload.description}`
+                  : payload.error;
+              }
+            } catch { /* keep the generic message */ }
+            throw new Error(message);
+          }
+          if (!data?.connected) throw new Error('Google did not complete the connection.');
+
+          setStatus('success');
+          setTimeout(() => navigate('/calendar', { replace: true }), 1200);
+          return;
+        }
+
         const tokens = await exchangeCodeForTokens(code);
 
         if (tokens) {
@@ -47,9 +99,12 @@ const AuthCallback: React.FC = () => {
           setStatus('error');
           setErrorMessage('Failed to exchange authorization code for tokens.');
         }
-      } catch (err) {
+      } catch (err: any) {
         setStatus('error');
-        setErrorMessage('An unexpected error occurred during authentication.');
+        // The function's own sentence, when there is one — "Google did not
+        // return a refresh token" tells the studio what to do next in a way
+        // that "an unexpected error occurred" never will.
+        setErrorMessage(err?.message || 'An unexpected error occurred during authentication.');
         console.error('Auth callback error:', err);
       }
     };

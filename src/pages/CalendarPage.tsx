@@ -7,12 +7,16 @@ import { useToast } from '../contexts/ToastContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { CalendarEvent } from '../types';
 import EventDetailModal from '../components/EventDetailModal';
+import EventEditor from '../components/calendar/EventEditor';
+import GoogleConnectionBanner from '../components/calendar/GoogleConnectionBanner';
+import { isManagementRole } from '../lib/roles';
 
 // View type for calendar filtering
 
 const CalendarPage: React.FC = () => {
-  // Read-only. The calendar mirrors three Google calendars and nobody authors
-  // events here — a write would be undone by the next sync's prune.
+  // Reads Google, and — for admins — writes back to it. Nothing on this page
+  // writes calendar_events directly: saveEvent goes through the push function,
+  // which calls Google first, so the sync's prune has nothing to undo.
   const { events, sources, colorFor, loading, error, refresh, syncNow } = useEvent();
   const { users, currentUser } = useAuth();
   const { isMobileOrTablet } = useResponsive();
@@ -25,6 +29,18 @@ const CalendarPage: React.FC = () => {
 
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [syncing, setSyncing] = useState(false);
+
+  // Editing: null = closed, otherwise the event being edited or a blank draft
+  // for the given day. Kept as one piece of state so the two cannot both be
+  // open, and keyed on render so a half-typed event does not leak into the next.
+  const [editing, setEditing] = useState<{ event?: CalendarEvent; date?: string } | null>(null);
+
+  /**
+   * Admins and super admins only, matching what staff-calendar-push enforces.
+   * The hidden button is a courtesy; the function is the actual boundary, and
+   * it refuses anyone else regardless of what the page shows.
+   */
+  const canEdit = isManagementRole(currentUser?.role);
 
   // Super admins can pull from Google on demand. Everyone else gets a plain
   // re-read of the database — the Edge Function would refuse them anyway, and
@@ -290,9 +306,22 @@ const CalendarPage: React.FC = () => {
               : 'Live from Google Calendar'}
           </p>
         </div>
-        {/* No "Add Event". Events are created in Google Calendar — the sync
-            would delete anything written here on its next run, so a button
-            would be a promise the app cannot keep. */}
+        {/* Wraps: three controls on one row do not fit a phone, and a header
+            that overflows takes the Sync button off the right edge. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'flex-end' }}>
+        {canEdit && (
+          <button
+            onClick={() => setEditing({})}
+            style={styles.addButton}
+            disabled={loading || sources.length === 0}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add event
+          </button>
+        )}
         <button onClick={handleSync} style={styles.addButton} disabled={loading || syncing}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="23 4 23 10 17 10" />
@@ -301,7 +330,11 @@ const CalendarPage: React.FC = () => {
           </svg>
           {syncing ? 'Syncing…' : loading ? 'Loading…' : canSync ? 'Sync now' : 'Refresh'}
         </button>
+        </div>
       </div>
+
+      {/* Only rendered for admins, and only when something needs doing. */}
+      {canEdit && <GoogleConnectionBanner />}
 
       {/* The calendars this page is showing, and what colour each one is. */}
       {sources.length > 0 && (
@@ -959,7 +992,25 @@ const CalendarPage: React.FC = () => {
         onClose={() => setSelectedEvent(null)}
         event={selectedEvent}
         users={users}
+        // Only offered for rows that exist in Google. The three legacy 'manual'
+        // rows from the old localStorage build have no google_event_id, so
+        // there is nothing there to edit and the button stays hidden.
+        onEdit={canEdit && selectedEvent?.googleEventId
+          ? (e) => { setSelectedEvent(null); setEditing({ event: e }); }
+          : undefined}
       />
+
+      {editing && (
+        <EventEditor
+          // Keyed so each open starts from a fresh draft rather than whatever
+          // was typed last time.
+          key={editing.event?.id ?? `new-${editing.date ?? 'today'}`}
+          open
+          event={editing.event}
+          defaultDate={editing.date}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
     </div>
   );

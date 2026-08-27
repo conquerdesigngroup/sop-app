@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { CalendarEvent, CalendarSource } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { toGoogleEvent } from '../lib/googleEventMap';
 
 /**
  * The staff Calendar, as a read-only mirror of Google.
@@ -17,16 +18,26 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
  * mirrored into calendar_events by the staff-calendar-sync Edge Function, and
  * this reads them. Google is the source of truth.
  *
- * NO WRITE METHODS, ON PURPOSE
+ * WRITES CAME BACK IN v19, GOING THE OTHER WAY
  *
- * There is no addEvent/updateEvent/deleteEvent here any more. A write would be
- * silently reverted by the next sync — the prune deletes any 'google' row the
- * feed no longer contains — so offering one would be offering a button that
- * quietly does nothing. Events are created in Google Calendar.
+ * For a while there were no write methods here at all, and that was right: a
+ * row written straight to calendar_events is silently reverted by the next
+ * sync, because the prune deletes any 'google' row the feed no longer
+ * contains. A save button doing that is a button that quietly does nothing.
+ *
+ * saveEvent and removeEvent do not write the table. They go through the
+ * staff-calendar-push Edge Function, which writes to GOOGLE first and only
+ * records the row once Google has accepted it. So the sync and the editor
+ * agree, because both take Google's word.
+ *
+ * Only admins and super admins get this far — the function refuses anyone
+ * else, and the Calendar page hides the controls. Both, deliberately: a
+ * hidden button is a courtesy, and the function is the actual boundary.
  *
  * The three legacy 'manual' rows from the old build are still read and still
  * shown. They are from May and long past; deleting a colleague's data to tidy a
- * migration is not a trade worth making.
+ * migration is not a trade worth making. They have no google_event_id, so the
+ * editor leaves them alone.
  */
 
 interface EventContextType {
@@ -53,6 +64,42 @@ interface EventContextType {
    * otherwise show whatever the last manual sync left behind.
    */
   syncNow: () => Promise<SyncRunResult[]>;
+
+  // ------------------------------------------------------------- writing
+  /** Create or update in Google, then record the row. Admins only. */
+  saveEvent: (draft: EventDraft, existing?: CalendarEvent) => Promise<void>;
+  /** Delete from Google, then drop the row. Admins only. */
+  removeEvent: (event: CalendarEvent) => Promise<void>;
+
+  // -------------------------------------------------- the Google connection
+  googleStatus: GoogleStatus | null;
+  refreshGoogleStatus: () => Promise<void>;
+  /** Returns the URL to send the admin to; the caller navigates. */
+  beginGoogleConnect: () => Promise<string>;
+  disconnectGoogle: () => Promise<void>;
+}
+
+/** What the editor collects. Mirrors calendar_events' own shape. */
+export interface EventDraft {
+  /** Which of the studio's three Google calendars this belongs on. */
+  calendarId: string;
+  title: string;
+  description: string;
+  location: string;
+  startDate: string;
+  startTime?: string;
+  endDate?: string;
+  endTime?: string;
+  isAllDay: boolean;
+}
+
+export interface GoogleStatus {
+  connected: boolean;
+  email: string | null;
+  connectedAt: string | null;
+  lastUsedAt: string | null;
+  /** Set when Google last refused the stored token — usually a revoked grant. */
+  lastError: string | null;
 }
 
 /** One entry per calendar, whether it succeeded or not. */
@@ -102,6 +149,10 @@ const mapSource = (row: any): CalendarSource => ({
   color: row.color,
   sortOrder: row.sort_order ?? 0,
   isEnabled: Boolean(row.is_enabled),
+  // Defaulted rather than left undefined: a missing zone would send a timed
+  // event to Google with no timeZone, which it reads as the calendar's
+  // default and silently moves the class.
+  timeZone: row.time_zone || 'America/Los_Angeles',
   lastSuccessAt: row.last_success_at ?? null,
   lastStatus: row.last_status ?? null,
   lastMessage: row.last_message ?? null,
@@ -109,6 +160,7 @@ const mapSource = (row: any): CalendarSource => ({
 
 export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
   const [sources, setSources] = useState<CalendarSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +224,114 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return (data?.synced ?? []) as SyncRunResult[];
   }, [load]);
 
+  // ---------------------------------------------------------------- writing
+
+  /**
+   * Dig the real message out of a failed function call.
+   *
+   * supabase.functions.invoke reports any non-2xx as "Edge Function returned a
+   * non-2xx status code" and puts the actual sentence in the response body.
+   * Showing the wrapper instead of the body is how "That is not one of the
+   * studio calendars" becomes an unactionable shrug.
+   */
+  const invokeOrThrow = useCallback(async (name: string, body: unknown) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      throw new Error('The app is not connected to its database.');
+    }
+    const { data, error: fnError } = await supabase.functions.invoke(name, { body });
+    if (fnError) {
+      let message = fnError.message || 'That did not work.';
+      try {
+        const payload = await (fnError as any).context?.json?.();
+        if (payload?.error) {
+          message = payload.description
+            ? `${payload.error} ${payload.description}`
+            : payload.error;
+        }
+      } catch {
+        /* keep the generic message */
+      }
+      throw new Error(message);
+    }
+    return data;
+  }, []);
+
+  const saveEvent = useCallback(async (draft: EventDraft, existing?: CalendarEvent) => {
+    const source = sources.find(c => c.googleCalendarId === draft.calendarId);
+    if (!source) throw new Error('Pick which calendar this belongs on.');
+
+    // Throws with a sentence worth showing when the event cannot be
+    // represented — an end before its start, or an empty title.
+    const googleEvent = toGoogleEvent(draft, source.timeZone);
+
+    const data = await invokeOrThrow('staff-calendar-push', {
+      action: existing ? 'update' : 'create',
+      calendarId: draft.calendarId,
+      eventId: existing?.id,
+      googleEventId: existing?.googleEventId,
+      googleEvent,
+      // The same event in the table's own columns. Sent rather than derived
+      // back out of googleEvent so the exclusive-end shift is applied once,
+      // in one tested place, instead of being undone here.
+      row: {
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        location: draft.location.trim() || null,
+        start_date: draft.startDate,
+        start_time: draft.isAllDay ? null : (draft.startTime || null),
+        end_date: draft.endDate || null,
+        end_time: draft.isAllDay ? null : (draft.endTime || null),
+        is_all_day: draft.isAllDay,
+      },
+    });
+
+    if (data?.warning) console.warn(data.warning);
+    await load();
+  }, [sources, invokeOrThrow, load]);
+
+  const removeEvent = useCallback(async (event: CalendarEvent) => {
+    if (!event.googleEventId || !event.googleCalendarId) {
+      // A legacy 'manual' row from the old localStorage build. It exists in no
+      // Google calendar, so there is nothing to delete there and the editor
+      // does not offer to.
+      throw new Error('That event is not in Google Calendar, so it cannot be changed here.');
+    }
+    await invokeOrThrow('staff-calendar-push', {
+      action: 'delete',
+      calendarId: event.googleCalendarId,
+      eventId: event.id,
+      googleEventId: event.googleEventId,
+    });
+    await load();
+  }, [invokeOrThrow, load]);
+
+  // ------------------------------------------------------ Google connection
+
+  const refreshGoogleStatus = useCallback(async () => {
+    try {
+      const data = await invokeOrThrow('google-oauth', { action: 'status' });
+      setGoogleStatus(data as GoogleStatus);
+    } catch {
+      // A non-admin asking gets a 403. That is not a failure worth showing —
+      // they simply do not manage the connection.
+      setGoogleStatus(null);
+    }
+  }, [invokeOrThrow]);
+
+  const beginGoogleConnect = useCallback(async () => {
+    const data = await invokeOrThrow('google-oauth', {
+      action: 'auth_url',
+      redirectUri: `${window.location.origin}/auth/callback`,
+    });
+    if (!data?.url) throw new Error('Could not start the Google connection.');
+    return data.url as string;
+  }, [invokeOrThrow]);
+
+  const disconnectGoogle = useCallback(async () => {
+    await invokeOrThrow('google-oauth', { action: 'disconnect' });
+    await refreshGoogleStatus();
+  }, [invokeOrThrow, refreshGoogleStatus]);
+
   const sourcesByCalendarId = useMemo(() => {
     const m = new Map<string, CalendarSource>();
     sources.forEach(s => m.set(s.googleCalendarId, s));
@@ -215,6 +375,8 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       events, sources, getSourceFor, colorFor,
       getEventById, getEventsByDate, getEventsByDateRange,
       loading, error, refresh: load, syncNow,
+      saveEvent, removeEvent,
+      googleStatus, refreshGoogleStatus, beginGoogleConnect, disconnectGoogle,
     }}>
       {children}
     </EventContext.Provider>
