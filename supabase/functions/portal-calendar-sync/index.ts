@@ -8,33 +8,37 @@
 // (google_calendar_id, google_event_id) WHERE source = 'google', and the rule
 // that the sync owns those rows and never touches 'manual' ones.
 //
-// WHY iCal AND NOT THE CALENDAR API  (v17)
+// WHY THE CALENDAR API AND NOT THE iCal FEED  (v21)
 //
-// This used to authenticate as a service account against the Calendar API.
-// That was never configured — portal_calendar_sources sat empty for months —
-// because it cost a Google Cloud project, a JSON key and a per-calendar share
-// before a single event appeared. v16 moved the staff calendar onto iCal feeds
-// instead; this brings the portal onto the same mechanism, so there is one way
-// this studio talks to Google rather than two.
+// v17 put this on Google's secret iCal address, on the reasoning that a feed
+// is just a URL and needs no credentials. True, and it worked — but a feed
+// caps how fresh the portal can ever be. Google rate-limits those addresses
+// hard (measured 27 Aug 2026: one scheduled run in five rejected with HTTP
+// 429, and a second fetch inside twenty minutes rejected reliably), so polling
+// faster to get fresher data is the one thing that makes it worse. And a feed
+// cannot be pushed: Google has no way to tell us something moved.
 //
-// A feed is just a URL. The cost is that Google no longer expands recurring
-// events for us, so ical.js does it here — including EXDATE for a cancelled
-// week and RECURRENCE-ID for a class that moved once.
+// The API has neither limit, and supports events.watch. The credential is
+// already here — the studio account connected for the staff editor carries the
+// calendar.events scope, which reads and watches as well as writes.
 //
-// WHO CALLS IT
+// Recurrence is Google's problem again now (singleEvents=true), which is why
+// ical.js, the occurrence iterator and the EXDATE handling are all gone.
 //
-//   cron  — pg_cron + pg_net, with the service role key.
-//   admin — the "Sync now" button in the portal manager, with their own JWT.
+// Row identity is unchanged: google_event_id held the iCal UID and the API
+// returns exactly that as iCalUID, so this renumbered nothing on cutover.
 //
-// Told apart by comparing the bearer to the service role key. A user JWT must
-// belong to an active admin. Refused again by portal_sync_google_events(),
-// which checks auth.role() and is_admin() for itself.
-//
-// No secrets required. Deployed with verify_jwt: true.
+// Needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. Deployed with
+// verify_jwt: true.
 // =============================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import ICAL from 'https://esm.sh/ical.js@2.1.0';
+import {
+  getAccessToken,
+  listEvents,
+  shiftDate,
+  toPlainText,
+} from '../_shared/googleCalendar.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -51,10 +55,6 @@ const json = (status: number, body: unknown) =>
     headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
-// A season of weekly classes is a few hundred instances. Runaway guard for a
-// malformed RRULE with no UNTIL and no COUNT.
-const MAX_OCCURRENCES = 2000;
-
 interface SyncEvent {
   google_event_id: string;
   status: string;
@@ -66,74 +66,41 @@ interface SyncEvent {
   is_all_day: boolean;
 }
 
-/**
- * Google descriptions may contain HTML. The portal renders update and event
- * text as escaped plain text, so tags left in would be shown to parents
- * literally — `<b>Bring shoes</b>` on the page. Stripped rather than rendered:
- * making this the one place in the portal that emits HTML would undo the
- * decision phase 2 made about staff-authored text.
- */
-const toPlainText = (html: string | undefined | null): string => {
-  if (!html) return '';
-  return String(html)
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-};
-
 /** 'YYYY-MM-DD' -> UTC midnight, the convention portal_events stores. */
 const allDayToIso = (date: string): string => `${date}T00:00:00.000Z`;
 
-/** ICAL.Time for an all-day value -> 'YYYY-MM-DD', with no zone maths at all. */
-const dateOnly = (t: any): string =>
-  `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
+/**
+ * One Google API event -> one portal row.
+ *
+ * The identifier is iCalUID, not id. Both are unique per occurrence once
+ * singleEvents is on, but iCalUID is the value the feed path wrote, so using it
+ * means this switch matched every existing row instead of replacing the lot.
+ */
+const fromGoogle = (item: any): SyncEvent | null => {
+  const id = String(item.iCalUID ?? '').trim();
+  if (!id) return null;
 
-const shiftDays = (date: string, days: number): string => {
-  const [y, m, d] = date.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-};
-
-const buildEvent = (
-  id: string, item: any, startT: any, endT: any, cancelled: boolean
-): SyncEvent | null => {
-  if (cancelled) {
-    return {
-      google_event_id: id, status: 'cancelled',
-      title: '', description: '', location: null,
-      starts_at: null, ends_at: null, is_all_day: false,
-    };
-  }
-
-  const isAllDay = Boolean(startT?.isDate);
+  const isAllDay = Boolean(item.start?.date);
   let starts_at: string | null = null;
   let ends_at: string | null = null;
 
   if (isAllDay) {
-    const start = dateOnly(startT);
+    const start = item.start.date as string;
     starts_at = allDayToIso(start);
-    // DTEND is EXCLUSIVE for DATE values — a single-day event on the 30th ends
-    // on the 1st. The portal stores the last day inclusive, so it shifts back
-    // and a one-day event ends up with no end at all.
-    if (endT) {
-      const last = shiftDays(dateOnly(endT), -1);
+    // end.date is EXCLUSIVE — a single-day event on the 30th ends on the 1st.
+    // The portal stores the last day inclusive, so it shifts back, and a
+    // one-day event ends up with no end at all. Same rule the feed path had
+    // for DTEND, and the exact inverse of what staff-calendar-push writes.
+    if (item.end?.date) {
+      const last = shiftDate(item.end.date as string, -1);
       ends_at = last > start ? allDayToIso(last) : null;
     }
-  } else if (startT) {
+  } else if (item.start?.dateTime) {
     // portal_events stores real timestamptz instants, so unlike the staff
-    // calendar there is no wall-clock splitting to do here — the instant is
-    // the whole truth and the client renders it in the reader's zone.
-    starts_at = startT.toJSDate().toISOString();
-    ends_at = endT ? endT.toJSDate().toISOString() : null;
+    // calendar there is no wall-clock splitting to do — the instant is the
+    // whole truth and the client renders it in the reader's zone.
+    starts_at = new Date(item.start.dateTime).toISOString();
+    ends_at = item.end?.dateTime ? new Date(item.end.dateTime).toISOString() : null;
   }
 
   if (!starts_at) return null;
@@ -144,87 +111,10 @@ const buildEvent = (
     title: String(item.summary ?? '').trim(),
     description: toPlainText(item.description),
     location: String(item.location ?? '').trim() || null,
-    starts_at, ends_at, is_all_day: isAllDay,
+    starts_at,
+    ends_at,
+    is_all_day: isAllDay,
   };
-};
-
-/**
- * Parse a feed and flatten it into rows for the window.
- *
- * Recurring events are expanded into one row per occurrence: the portal
- * calendar is a list of dates, and an unexpanded rule would be a single row for
- * a class that meets every week.
- */
-const parseFeed = (
-  ics: string, windowStart: Date, windowEnd: Date
-): { events: SyncEvent[]; expanded: number } => {
-  const comp = new ICAL.Component(ICAL.parse(ics));
-
-  // VTIMEZONE blocks first, or a TZID the feed defines itself resolves to UTC
-  // and every time in that zone silently shifts.
-  for (const vt of comp.getAllSubcomponents('vtimezone')) {
-    const zone = new ICAL.Timezone(vt);
-    if (!ICAL.TimezoneService.has(zone.tzid)) ICAL.TimezoneService.register(zone.tzid, zone);
-  }
-
-  const masters: any[] = [];
-  const exceptions: any[] = [];
-  for (const v of comp.getAllSubcomponents('vevent')) {
-    (v.getFirstPropertyValue('recurrence-id') ? exceptions : masters).push(v);
-  }
-
-  const out: SyncEvent[] = [];
-  let expanded = 0;
-
-  for (const v of masters) {
-    const ev = new ICAL.Event(v);
-
-    // A single instance that was moved or edited arrives as its own VEVENT with
-    // a RECURRENCE-ID. Relating it lets the iterator hand back the override
-    // rather than the original slot.
-    for (const ex of exceptions) {
-      if (ex.getFirstPropertyValue('uid') === ev.uid) {
-        try { ev.relateException(new ICAL.Event(ex)); } catch { /* not ours */ }
-      }
-    }
-
-    const cancelled =
-      String(v.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED';
-
-    if (!ev.isRecurring()) {
-      const row = buildEvent(ev.uid, ev, ev.startDate, ev.endDate, cancelled);
-      if (row) out.push(row);
-      continue;
-    }
-
-    const it = ev.iterator();
-    let next;
-    let n = 0;
-    while ((next = it.next()) && n < MAX_OCCURRENCES) {
-      n += 1;
-      const when = next.toJSDate();
-      if (when > windowEnd) break;
-      if (when < windowStart) continue;
-
-      let details;
-      try {
-        details = ev.getOccurrenceDetails(next);
-      } catch {
-        continue; // EXDATE'd, or an occurrence ical.js cannot resolve
-      }
-
-      // Each instance needs its own stable id, or every occurrence of a weekly
-      // class would collide on the same UID and only one would survive.
-      const id = `${ev.uid}::${next.toString()}`;
-      const instCancelled =
-        String(details.item?.component?.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED';
-
-      const row = buildEvent(id, details.item, details.startDate, details.endDate, cancelled || instCancelled);
-      if (row) { out.push(row); expanded += 1; }
-    }
-  }
-
-  return { events: out, expanded };
 };
 
 /**
@@ -295,7 +185,7 @@ Deno.serve(async (req: Request) => {
 
   let query = admin
     .from('portal_calendar_sources')
-    .select('program_id, google_calendar_id, ics_url, days_back, days_ahead')
+    .select('program_id, google_calendar_id, days_back, days_ahead')
     .eq('is_enabled', true);
   if (requestedProgramId) query = query.eq('program_id', requestedProgramId);
 
@@ -306,6 +196,26 @@ Deno.serve(async (req: Request) => {
   }
   if (!sources?.length) return json(200, { synced: [], note: 'No enabled calendar sources' });
 
+  const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
+  if (!clientId || !clientSecret) {
+    return json(500, { error: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set' });
+  }
+
+  const auth = await getAccessToken(admin, clientId, clientSecret);
+  if (auth.error) {
+    // Recorded against every source, not just returned. Otherwise the rows keep
+    // showing the last good run and the portal looks healthy while it silently
+    // stops updating.
+    for (const source of sources) {
+      await admin.rpc('portal_record_sync_failure', {
+        p_program_id: source.program_id, p_message: auth.error,
+      });
+    }
+    return json(502, { error: auth.error });
+  }
+  const accessToken = auth.token;
+
   const results: unknown[] = [];
 
   for (const source of sources) {
@@ -315,25 +225,12 @@ Deno.serve(async (req: Request) => {
     windowEnd.setDate(windowEnd.getDate() + source.days_ahead);
 
     try {
-      if (!source.ics_url) throw new Error('No iCal URL configured for this program');
-
-      const res = await fetch(source.ics_url, { redirect: 'follow' });
-      const body = await res.text();
-
-      if (!res.ok) {
-        throw new Error(
-          res.status === 404
-            ? 'Feed not found (404). If this is the public URL, tick "Make available to public" in that calendar\'s Settings and sharing — or paste its secret iCal address instead.'
-            : `Could not fetch the feed: HTTP ${res.status}`
-        );
-      }
-      if (!body.includes('BEGIN:VCALENDAR')) {
-        // A private calendar answers a public URL with an HTML sign-in page
-        // rather than an error, so a 200 is not on its own proof of a feed.
-        throw new Error('That URL did not return a calendar feed. The calendar is probably not public yet.');
-      }
-
-      const { events, expanded } = parseFeed(body, windowStart, windowEnd);
+      const { items } = await listEvents(
+        accessToken, source.google_calendar_id, windowStart, windowEnd
+      );
+      const events = items
+        .map(fromGoogle)
+        .filter((e): e is SyncEvent => e !== null);
 
       const { data: counts, error: rpcErr } = await admin.rpc('portal_sync_google_events', {
         p_program_id: source.program_id,
@@ -346,7 +243,7 @@ Deno.serve(async (req: Request) => {
 
       results.push({
         programId: source.program_id,
-        parsed: events.length, fromRecurring: expanded,
+        fetched: items.length, parsed: events.length,
         ...(counts ?? {}),
       });
     } catch (e) {

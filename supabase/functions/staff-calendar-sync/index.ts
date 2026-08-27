@@ -1,39 +1,41 @@
 // =============================================================================
-// staff-calendar-sync — subscribe the staff Calendar to iCal feeds
+// staff-calendar-sync — mirror the studio's Google calendars into the app
 // =============================================================================
 //
 // The staff Calendar is a read-only mirror of three Google calendars under one
 // studio account. Nobody authors events in the app; Google is the source of
 // truth and this pulls it in.
 //
-// WHY iCal AND NOT THE GOOGLE API
+// WHY THE GOOGLE API AND NOT iCal  (v21)
 //
-// The first version of this read the Calendar API with a service account. It
-// worked, but it cost a Google Cloud project, a JSON key and a per-calendar
-// share before a single event showed up — a lot of setup for "show me these
-// three calendars". An iCal feed is just a URL. Subscribing to one is what
-// every other calendar app does, and it needs no Google Cloud at all.
+// v16 put this on Google's secret iCal address because a feed needs no
+// credentials. It worked, but it caps how fresh a calendar can be: Google
+// rate-limits those addresses hard (measured 27 Aug 2026 — one scheduled run
+// in five rejected with HTTP 429), so polling faster to get fresher data is
+// the one thing guaranteed to make it worse. And a feed cannot be pushed.
 //
-// The cost is that Google is no longer expanding recurring events for us: a
-// feed carries the RRULE and we expand it here. That is what ical.js is for,
-// and it is also what handles the parts that are easy to get wrong by hand —
-// EXDATE for a cancelled week, RECURRENCE-ID for a class that moved once, and
-// the VTIMEZONE definitions that make a 4pm class 4pm across a DST boundary.
+// The lag was already known here: the prune below carries a fifteen-minute
+// grace period written specifically because "Google's ICS is a cache that lags
+// the API", so an event this app had just pushed was missing from the feed and
+// got pruned. Reading the API means the reader and the writer are looking at
+// the same thing, and that grace period is now belt and braces rather than
+// load-bearing.
 //
-// TWO SHAPES OF URL, both fine in calendar_sources.ics_url:
+// Recurrence is Google's problem again (singleEvents=true), so ical.js, the
+// occurrence iterator and the EXDATE handling are gone.
 //
-//   public  .../ical/<ID>/public/basic.ics          — needs the calendar ticked
-//                                                     "Make available to public"
-//   secret  .../ical/<ID>/private-<TOKEN>/basic.ics — from "Secret address in
-//                                                     iCal format"; stays private
+// Row identity is unchanged: google_event_id held the iCal UID and the API
+// returns exactly that as iCalUID, so this renumbered nothing on cutover.
 //
-// The feed is fetched server-side, so a secret address never reaches a browser.
-//
-// No secrets required. Deployed with verify_jwt: true.
-// =============================================================================
+// Needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import ICAL from 'https://esm.sh/ical.js@2.1.0';
+import {
+  getAccessToken,
+  listEvents,
+  shiftDate,
+  toPlainText,
+} from '../_shared/googleCalendar.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -51,11 +53,8 @@ const json = (status: number, body: unknown) =>
     headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
+// Only reached if Google's response and the stored column are both empty.
 const FALLBACK_TZ = 'America/Los_Angeles';
-// A season of weekly classes is a few hundred instances. This is the runaway
-// guard for a malformed RRULE with no UNTIL and no COUNT, which would otherwise
-// iterate forever.
-const MAX_OCCURRENCES = 2000;
 
 interface SyncEvent {
   google_event_id: string;
@@ -70,35 +69,6 @@ interface SyncEvent {
   is_all_day: boolean;
 }
 
-/**
- * Google descriptions may contain HTML. The calendar renders event text as
- * escaped plain text, so tags left in would show literally — a class note
- * reading `<b>Bring shoes</b>` on the page.
- */
-const toPlainText = (html: string | undefined | null): string => {
-  if (!html) return '';
-  return String(html)
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-};
-
-/**
- * An instant, as the wall clock reads it where the studio is.
- *
- * calendar_events stores date and time as TEXT with no zone and the app renders
- * them verbatim, so "19:30" has to already mean 19:30 in the studio's zone.
- * Deriving it from the UTC instant instead would show a 7pm class as 2am the
- * next day for half the year, and the drift would change at every DST boundary.
- */
 const localParts = (d: Date, timeZone: string): { date: string; time: string } => ({
   // en-CA formats as YYYY-MM-DD, which is the storage format.
   date: new Intl.DateTimeFormat('en-CA', {
@@ -109,55 +79,41 @@ const localParts = (d: Date, timeZone: string): { date: string; time: string } =
   }).format(d),
 });
 
-/** ICAL.Time for an all-day value -> 'YYYY-MM-DD', with no zone maths at all. */
-const dateOnly = (t: any): string =>
-  `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
+/**
+ * One Google API event -> one staff calendar row.
+ *
+ * Keyed on iCalUID rather than id. Both are unique per occurrence once
+ * singleEvents is on, but iCalUID is what the feed path wrote, so using it
+ * matched every existing row on cutover instead of replacing all 62.
+ */
+const fromGoogle = (item: any, timeZone: string): SyncEvent | null => {
+  const id = String(item.iCalUID ?? '').trim();
+  if (!id) return null;
 
-const shiftDays = (date: string, days: number): string => {
-  const [y, m, d] = date.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-};
-
-const buildEvent = (
-  id: string,
-  item: any,
-  startT: any,
-  endT: any,
-  timeZone: string,
-  cancelled: boolean
-): SyncEvent | null => {
-  if (cancelled) {
-    return {
-      google_event_id: id, status: 'cancelled',
-      title: '', description: '', location: null,
-      start_date: null, start_time: null, end_date: null, end_time: null,
-      is_all_day: false,
-    };
-  }
-
-  const isAllDay = Boolean(startT?.isDate);
+  const isAllDay = Boolean(item.start?.date);
   let start_date: string | null = null;
   let start_time: string | null = null;
   let end_date: string | null = null;
   let end_time: string | null = null;
 
   if (isAllDay) {
-    start_date = dateOnly(startT);
-    // DTEND is EXCLUSIVE for DATE values, exactly as in the Google API: a
-    // one-day event on the 30th ends on the 1st. We store the last day
-    // inclusive, so it shifts back and a single-day event gets no end at all.
-    if (endT) {
-      const last = shiftDays(dateOnly(endT), -1);
+    start_date = item.start.date as string;
+    // end.date is EXCLUSIVE: a one-day event on the 30th ends on the 1st. We
+    // store the last day inclusive, so it shifts back and a single-day event
+    // gets no end at all. The exact inverse of what staff-calendar-push
+    // writes, and the pair has to stay that way or a round trip loses a day.
+    if (item.end?.date) {
+      const last = shiftDate(item.end.date as string, -1);
       end_date = last > start_date ? last : null;
     }
-  } else if (startT) {
-    const s = localParts(startT.toJSDate(), timeZone);
+  } else if (item.start?.dateTime) {
+    // The instant, rendered in the studio's zone. Storing wall-clock rather
+    // than UTC is what makes a 4pm class stay at 4pm across a DST change.
+    const s = localParts(new Date(item.start.dateTime), timeZone);
     start_date = s.date;
     start_time = s.time;
-    if (endT) {
-      const e = localParts(endT.toJSDate(), timeZone);
+    if (item.end?.dateTime) {
+      const e = localParts(new Date(item.end.dateTime), timeZone);
       end_time = e.time;
       // Only worth storing when it genuinely spans days; otherwise it is noise.
       end_date = e.date !== start_date ? e.date : null;
@@ -175,102 +131,6 @@ const buildEvent = (
     start_date, start_time, end_date, end_time,
     is_all_day: isAllDay,
   };
-};
-
-/**
- * Parse a feed and flatten it into rows for the window.
- *
- * Recurring events are expanded into one row per occurrence: the calendar is a
- * list of dates, and an unexpanded rule would be a single row for a class that
- * meets every week.
- */
-const parseFeed = (
-  ics: string,
-  windowStart: Date,
-  windowEnd: Date,
-  fallbackTz: string
-): { events: SyncEvent[]; timeZone: string; expanded: number } => {
-  const comp = new ICAL.Component(ICAL.parse(ics));
-
-  // VTIMEZONE blocks first, or a TZID the feed defines itself resolves to UTC
-  // and every time in that zone silently shifts.
-  for (const vt of comp.getAllSubcomponents('vtimezone')) {
-    const zone = new ICAL.Timezone(vt);
-    if (!ICAL.TimezoneService.has(zone.tzid)) ICAL.TimezoneService.register(zone.tzid, zone);
-  }
-
-  const timeZone = String(comp.getFirstPropertyValue('x-wr-timezone') || fallbackTz);
-
-  const vevents = comp.getAllSubcomponents('vevent');
-  const masters: any[] = [];
-  const exceptions: any[] = [];
-  for (const v of vevents) {
-    (v.getFirstPropertyValue('recurrence-id') ? exceptions : masters).push(v);
-  }
-
-  const out: SyncEvent[] = [];
-  let expanded = 0;
-
-  for (const v of masters) {
-    const ev = new ICAL.Event(v);
-
-    // A single instance that was moved or edited arrives as its own VEVENT with
-    // a RECURRENCE-ID. Relating it lets the iterator below hand back the
-    // override rather than the original slot.
-    for (const ex of exceptions) {
-      if (ex.getFirstPropertyValue('uid') === ev.uid) {
-        try { ev.relateException(new ICAL.Event(ex)); } catch { /* not ours */ }
-      }
-    }
-
-    const cancelled = String(v.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED';
-
-    if (!ev.isRecurring()) {
-      // Window-bound, exactly as the recurring branch below already is.
-      //
-      // Without this the import was unbounded while the PRUNE is bounded, and
-      // an iCal feed carries no tombstone for a deleted one-off event — it
-      // simply stops appearing. So anything imported outside the window could
-      // never be reclaimed: delete it in Google and it sat on the studio's
-      // calendar forever. That included every past event on the first sync.
-      const when = ev.startDate?.toJSDate();
-      if (when && (when > windowEnd || when < windowStart)) continue;
-
-      const row = buildEvent(ev.uid, ev, ev.startDate, ev.endDate, timeZone, cancelled);
-      if (row) out.push(row);
-      continue;
-    }
-
-    const it = ev.iterator();
-    let next;
-    let n = 0;
-    while ((next = it.next()) && n < MAX_OCCURRENCES) {
-      n += 1;
-      const when = next.toJSDate();
-      if (when > windowEnd) break;
-      if (when < windowStart) continue;
-
-      let details;
-      try {
-        details = ev.getOccurrenceDetails(next);
-      } catch {
-        continue; // EXDATE'd, or an occurrence ical.js cannot resolve
-      }
-
-      // Each instance needs its own stable id, or every occurrence of a weekly
-      // class would collide on the same UID and only one would survive.
-      const id = `${ev.uid}::${next.toString()}`;
-      const instCancelled =
-        String(details.item?.component?.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED';
-
-      const row = buildEvent(
-        id, details.item, details.startDate, details.endDate, timeZone, cancelled || instCancelled
-      );
-      if (row) { out.push(row); expanded += 1; }
-    }
-  }
-
-  return { events: out, timeZone, expanded };
 };
 
 /**
@@ -341,7 +201,7 @@ Deno.serve(async (req: Request) => {
 
   let query = admin
     .from('calendar_sources')
-    .select('google_calendar_id, label, ics_url, time_zone, days_back, days_ahead')
+    .select('google_calendar_id, label, time_zone, days_back, days_ahead')
     .eq('is_enabled', true);
   if (requestedCalendarId) query = query.eq('google_calendar_id', requestedCalendarId);
 
@@ -352,6 +212,26 @@ Deno.serve(async (req: Request) => {
   }
   if (!sources?.length) return json(200, { synced: [], note: 'No enabled calendar sources' });
 
+  const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
+  if (!clientId || !clientSecret) {
+    return json(500, { error: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set' });
+  }
+
+  const auth = await getAccessToken(admin, clientId, clientSecret);
+  if (auth.error) {
+    // Recorded against every calendar rather than only returned. Otherwise the
+    // rows keep showing the last good run and the calendar looks healthy while
+    // it has quietly stopped updating.
+    for (const source of sources) {
+      await admin.rpc('staff_record_sync_failure', {
+        p_calendar_id: source.google_calendar_id, p_message: auth.error,
+      });
+    }
+    return json(502, { error: auth.error });
+  }
+  const accessToken = auth.token;
+
   const results: unknown[] = [];
 
   for (const source of sources) {
@@ -361,51 +241,40 @@ Deno.serve(async (req: Request) => {
     windowEnd.setDate(windowEnd.getDate() + source.days_ahead);
 
     try {
-      if (!source.ics_url) throw new Error('No iCal URL configured for this calendar');
-
       // Stamped BEFORE the request, not after. The prune's grace period is
-      // measured from this, and a slow fetch would otherwise narrow the very
+      // measured from this, and a slow read would otherwise narrow the very
       // window it exists to provide.
       const fetchedAt = new Date().toISOString();
 
-      const res = await fetch(source.ics_url, { redirect: 'follow' });
-      const body = await res.text();
-
-      if (!res.ok) {
-        // 404 on the public URL is the one everybody hits: the calendar has not
-        // been made public, so the public feed does not exist yet.
-        throw new Error(
-          res.status === 404
-            ? 'Feed not found (404). If this is the public URL, tick "Make available to public" in that calendar\'s Settings and sharing — or paste its secret iCal address instead.'
-            : `Could not fetch the feed: HTTP ${res.status}`
-        );
-      }
-      if (!body.includes('BEGIN:VCALENDAR')) {
-        // A private calendar answers a public URL with an HTML sign-in page
-        // rather than an error, so a 200 is not on its own proof of a feed.
-        throw new Error('That URL did not return a calendar feed. The calendar is probably not public yet.');
-      }
-
-      const { events, timeZone, expanded } = parseFeed(
-        body, windowStart, windowEnd, source.time_zone || FALLBACK_TZ
+      const { items, timeZone: apiTimeZone } = await listEvents(
+        accessToken, source.google_calendar_id, windowStart, windowEnd
       );
+      // Google's own answer first, the stored value as a fallback — the same
+      // precedence the feed had, where X-WR-TIMEZONE beat the column.
+      const timeZone = apiTimeZone || source.time_zone || FALLBACK_TZ;
+      const events = items
+        .map(item => fromGoogle(item, timeZone))
+        .filter((e): e is SyncEvent => e !== null);
 
       const { data: counts, error: rpcErr } = await admin.rpc('staff_sync_google_events', {
         p_calendar_id: source.google_calendar_id,
         p_window_start: isoDate(windowStart),
         p_window_end: isoDate(windowEnd),
         p_events: events,
-        // When this feed was fetched. The prune spares rows touched within
-        // fifteen minutes of it, because Google's ICS is a cache that lags the
-        // API: without this, an event the app pushed moments ago is absent
-        // from the feed, gets pruned, and the run reports 'ok' for doing it.
+        // When this read happened. The prune spares rows touched within
+        // fifteen minutes of it. That grace was written because Google's ICS
+        // lagged the API, so an event this app had just pushed was missing
+        // from the feed, got pruned, and the run reported 'ok' for doing it.
+        // Reading the API closes that gap — reader and writer now see the same
+        // thing — so this is a guard against clock skew rather than the thing
+        // holding the two directions together.
         p_fetched_at: fetchedAt,
       });
       if (rpcErr) throw new Error(rpcErr.message);
 
       results.push({
         calendar: source.label, timeZone,
-        parsed: events.length, fromRecurring: expanded,
+        fetched: items.length, parsed: events.length,
         ...(counts ?? {}),
       });
     } catch (e) {
