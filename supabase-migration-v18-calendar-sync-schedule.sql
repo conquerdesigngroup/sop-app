@@ -75,6 +75,24 @@
 --   select 'portal', p.name, s.last_status, s.last_run_at
 --     from portal_calendar_sources s join portal_programs p on p.id = s.program_id;
 --
+-- GOOGLE WILL 429 YOU OCCASIONALLY, AND THAT IS FINE
+--
+-- Google rate-limits the ICS feeds. Measured over five untouched ticks on
+-- 27 Aug 2026, one of ten calls came back `Could not fetch the feed: HTTP 429`
+-- — about one staff run in five. Every other tick was clean, so 30 minutes is
+-- a workable cadence; fetching the same feed twice inside ~20 minutes is not,
+-- and reliably 429s.
+--
+-- Do not add a retry to chase the last few percent. A 429 costs at most one
+-- cycle of staleness, the next tick picks it up on its own, and a failed fetch
+-- writes NOTHING — last_success_at is kept separately from last_run_at
+-- precisely so a throttled run cannot be mistaken for an empty calendar, and
+-- the prune only ever touches rows the sync actually fetched. Retrying
+-- immediately is what provokes the throttle in the first place.
+--
+-- The visible cost is that calendar_sources.last_status sits at 'error'
+-- between ticks when this happens. That is the honest reading, not a bug.
+--
 -- TO CHANGE THE CADENCE OR STOP IT
 --
 --   select cron.schedule('calendar-sync-30min', '*/15 * * * *',
