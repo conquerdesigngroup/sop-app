@@ -153,7 +153,7 @@ npm start                    # in another terminal
 npm run audit:mobile
 ```
 
-It checks every route at four phone sizes for horizontal overflow, elements
+It checks every route at six screen sizes for horizontal overflow, elements
 clipped off the top, and content sitting under the notch. Signed-in routes are
 only covered if you give it a session:
 
@@ -162,12 +162,41 @@ AUDIT_EMAIL=you@example.com AUDIT_PASSWORD=... npm run audit:mobile
 ```
 
 Without those it says so, loudly — a clean run without credentials has checked
-four public routes and nothing else.
+four public routes and nothing else. That warning is not boilerplate: 15 of the
+19 routes need a login, and all four bugs the first full run found were on
+management-only pages — two of them super-admin-only. Every one had shipped.
+Those are the pages where a layout bug survives longest, because the handful of
+people who can see it are the same people who would have to report it.
+
+**Six sizes, not four, and two of them are not phones.** 320 and 507 are there
+because `theme.breakpoints.mobile` is 480px: every phone width sits below it, so
+without a sample on the other side each route is only ever measured in one of
+its two layouts. `/job-tasks` stacks its filter row into a column below 480 and
+leaves it a nowrap flex row above — which does not fit again until roughly
+660px. A select ran 164px off the right edge for that whole band while four
+green phones said CLEAN. **Any breakpoint the app switches on needs a sample on
+both sides of it.**
+
+**Overflow findings print the ancestor chain**, as `via div,w:333,d:flex,
+j:center < ...`. Read it. The element that reports an overflow is almost never
+the one causing it — it is usually the innocent first child of a parent that
+centres or right-aligns content it cannot fit. Guessing the parent from the
+style file is slower and gets it wrong.
+
+**Narrow the run while iterating** — both filters are opt-in, so a bare
+`npm run audit:mobile` still means everything:
+
+```bash
+AUDIT_ROUTES=/hours,/task-library AUDIT_DEVICES='iPhone 15' npm run audit:mobile
+```
+
+Seconds instead of six minutes. Re-check the full sweep before you ship, though:
+a filtered run proves one route, not the app.
 
 It needs Playwright, which is deliberately not a dependency:
 `npm install --no-save playwright && npx playwright install chromium`.
 
-### The two rules it exists to enforce
+### The three rules it exists to enforce
 
 1. **Never `100vh`. Always `100dvh`.** On iOS `100vh` is the *large* viewport —
    the height the page would have if the browser chrome collapsed — so a
@@ -193,12 +222,41 @@ It needs Playwright, which is deliberately not a dependency:
    Pages that DO render inside `Navigation` or `PortalLayout` must NOT add their
    own top inset; those components already do it and it would double.
 
+3. **A flex row that centres must be able to wrap.** `justifyContent: 'center'`
+   splits overflow **both** ways, so content wider than its box hangs off the
+   left as well as the right — and there is no scrolling left. It is not merely
+   ugly, it is unreachable.
+
+   `/hours` rendered six employee legend chips, about 540px, in a 333px box with
+   `justifyContent: 'center'` and no wrap. The first chip sat at `x=-45`: a
+   teammate was simply missing from the legend on every phone, and nothing
+   looked broken. Whenever you write `justifyContent: 'center'` on a row that
+   holds a variable number of items, write `flexWrap: 'wrap'` with it.
+
+   The same applies to the sibling failure: a flex item will not shrink below
+   its content's min-content width, and a value like
+   `["title","description"]` has nothing to break at. If a cell can hold
+   arbitrary text, it needs `minWidth: 0` **and** `overflowWrap: 'anywhere'` —
+   one without the other still overflows.
+
 ### What the audit cannot tell you
 
 Chromium reports `env(safe-area-inset-*)` as `0` and gives no way to override
 it, so the notch check is a proxy: it flags content in the status-bar band on
 pages that apply no safe-area padding at all. It cannot confirm that padding you
 did add is the right size. For that, look at a real phone.
+
+It also cannot check a page it never reaches. Routes live in `PUBLIC_ROUTES` and
+`AUTH_ROUTES` at the top of the script — add new ones there, or they are simply
+not audited and the summary will still say CLEAN.
+
+### If npm dies with `EPERM: operation not permitted, uv_cwd`
+
+Nothing to do with npm or this project. The repo lives in iCloud Drive, macOS
+treats that as protected, and npm crashes when it asks which directory it is in
+and gets refused. Grant the terminal access: **System Settings → Privacy &
+Security → Full Disk Access**, add Terminal, then **fully quit it (⌘Q)** — the
+permission does not take effect until it restarts.
 
 ---
 
