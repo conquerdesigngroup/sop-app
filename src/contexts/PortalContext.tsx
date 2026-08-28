@@ -41,14 +41,26 @@ import {
  * Every data context now short-circuits both its load AND its realtime
  * subscription when there is no session — WorkHoursContext first, then
  * EventContext, SOPContext, TaskContext and the profiles channel in
- * AuthContext. Measured on both portal routes, signed out:
+ * AuthContext. Measured signed out, against a PRODUCTION BUILD:
  *
- *     /portal/:program              7 requests
- *       portal_programs x3, portal_updates x2, portal_events x2
- *     /portal/:program/classes/:id  7 requests
- *       portal_programs x3, portal_classes x2, portal_updates, portal_documents
+ *     /portal/:program              3 requests
+ *       portal_programs, portal_updates, portal_events
+ *     /portal/:program/classes/:id  4 requests
+ *       portal_programs, portal_classes, portal_updates, portal_documents
  *
  *     0 staff-table requests   0 console errors   0 websocket attempts
+ *
+ * MEASURE THIS AGAINST `npm run build`, NOT `npm start`
+ *
+ * Both numbers roughly double on the dev server, because StrictMode mounts
+ * every provider twice — the same 3 reads look like 7 and neither figure is
+ * what a parent's phone does. Worse, HMR keeps the pre-edit module mounted, so
+ * the console can report requests the new code no longer makes AND requests it
+ * does. A guard was once declared working on that basis and was not.
+ *
+ * There is a `sop-app-build` entry in .claude/launch.json that serves build/ on
+ * :3004 for exactly this. Rebuild first — anything that ran a build from a
+ * stashed tree has left the wrong bundle in there.
  *
  * THE SUBSCRIPTIONS WERE THE HALF THAT GOT MISSED
  *
