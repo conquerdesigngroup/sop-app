@@ -4,7 +4,7 @@ import React, {
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import {
-  PortalProgram, PortalClass, PortalUpdate, PortalEvent, PortalDocument,
+  PortalProgram, PortalClass, PortalClassCategory, PortalUpdate, PortalEvent, PortalDocument,
   PortalProgramSlug, PortalCalendarSource,
 } from '../types';
 import {
@@ -89,6 +89,8 @@ export interface DocumentInput {
 export interface ClassInput {
   id?: string;
   programId: string;
+  /** Which schedules list it. See PROGRAM_CLASS_CATEGORIES. */
+  category: PortalClassCategory;
   name: string;
   dayOfWeek: number | null;
   startTime: string | null;
@@ -99,6 +101,22 @@ export interface ClassInput {
   instructorName: string | null;
   sortOrder: number;
   isActive: boolean;
+
+  // The catalogue fields an admin would plausibly change. The billing
+  // plumbing that came in with the import — registration and costume fee,
+  // billing cycle, billing day, registration_opens, source_title — is
+  // deliberately absent: it belongs to Enrollio, nobody would maintain it in
+  // two places, and saveClass leaves those columns untouched rather than
+  // writing NULL over them.
+  style: string | null;
+  ageGroup: string | null;
+  ageMinYears: number | null;
+  ageMaxYears: number | null;
+  capacity: number | null;
+  tuitionFee: number | null;
+  season: string | null;
+  seasonStart: string | null;
+  seasonEnd: string | null;
 }
 
 export interface CalendarSourceInput {
@@ -523,6 +541,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
   const saveClass = useCallback(async (input: ClassInput) => {
     const row = {
       program_id: input.programId,
+      category: input.category,
       name: input.name.trim(),
       day_of_week: input.dayOfWeek,
       start_time: input.startTime,
@@ -533,6 +552,15 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       instructor_name: input.instructorName,
       sort_order: input.sortOrder,
       is_active: input.isActive,
+      style: input.style,
+      age_group: input.ageGroup,
+      age_min_years: input.ageMinYears,
+      age_max_years: input.ageMaxYears,
+      capacity: input.capacity,
+      tuition_fee: input.tuitionFee,
+      season: input.season,
+      season_start: input.seasonStart,
+      season_end: input.seasonEnd,
     };
 
     if (input.id) {

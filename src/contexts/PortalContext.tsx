@@ -9,6 +9,7 @@ import {
 } from '../types';
 import {
   ProgramSlug,
+  PROGRAM_CLASS_CATEGORIES,
   hasPortalAccess,
   grantPortalAccess,
   revokePortalAccess,
@@ -66,7 +67,13 @@ interface PortalContextValue {
   verifyCode: (slug: ProgramSlug, code: string) => Promise<boolean>;
   forgetAccess: (slug: ProgramSlug) => void;
 
-  fetchClasses: (programId: string) => Promise<PortalClass[]>;
+  /**
+   * Every class shown on a program's schedule.
+   *
+   * Keyed by slug rather than program id: the All-Star schedule lists Academy
+   * and TNT classes too, and those rows are filed under a different program.
+   */
+  fetchClasses: (slug: ProgramSlug) => Promise<PortalClass[]>;
   fetchUpdates: (programId: string, classId?: string | null) => Promise<PortalUpdate[]>;
   fetchEvents: (programId: string) => Promise<PortalEvent[]>;
   fetchDocuments: (programId: string, classId?: string | null) => Promise<PortalDocument[]>;
@@ -185,15 +192,27 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // ----------------------------------------------------------- content
 
-  const fetchClasses = useCallback(async (programId: string) => {
+  /**
+   * Filtered by category, not by program.
+   *
+   * A parent on the All-Star schedule is meant to see the whole studio, and
+   * an Academy class belongs to the Academy program — so filtering by
+   * program_id here would show them 30 company routines and nothing else.
+   * Which categories belong to which schedule is PROGRAM_CLASS_CATEGORIES.
+   *
+   * Ordered by the schedule rather than by sort_order, because that is the
+   * order every view wants and re-sorting 102 rows on a phone is work the
+   * index has already done.
+   */
+  const fetchClasses = useCallback(async (slug: ProgramSlug) => {
     const { data, error: err } = await supabase
       .from('portal_classes')
       .select('*')
-      .eq('program_id', programId)
+      .in('category', PROGRAM_CLASS_CATEGORIES[slug])
       .eq('is_active', true)
-      .order('sort_order', { ascending: true })
       .order('day_of_week', { ascending: true, nullsFirst: false })
-      .order('start_time', { ascending: true, nullsFirst: false });
+      .order('start_time', { ascending: true, nullsFirst: false })
+      .order('name', { ascending: true });
 
     if (err) throw err;
     return (data ?? []).map(mapClass);
