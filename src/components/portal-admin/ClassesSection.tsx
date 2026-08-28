@@ -139,7 +139,7 @@ const ClassesSection: React.FC<{
     const ok = await confirm({
       title: `Delete ${c.name}?`,
       message:
-        'Updates and files posted to this class are deleted with it, and calendar events lose their class. ' +
+        'Info posts and files posted to this class are deleted with it, and calendar events lose their class. ' +
         'To take a class off the schedule without losing any of that, edit it and untick "Show on the schedule" instead.',
       confirmLabel: 'Delete anyway',
       variant: 'danger',

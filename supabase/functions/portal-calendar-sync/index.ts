@@ -4,9 +4,18 @@
 //
 // Mirrors each configured Google calendar into portal_events as `source =
 // 'google'` rows, so a parent's calendar is current whether or not anyone has
-// opened the staff app. v9 built the shape: a partial unique index on
-// (google_calendar_id, google_event_id) WHERE source = 'google', and the rule
-// that the sync owns those rows and never touches 'manual' ones.
+// opened the staff app. v9 built the shape and v23 widened it: a partial unique
+// index on (program_id, google_calendar_id, google_event_id) WHERE source =
+// 'google', and the rule that the sync owns those rows and never touches
+// 'manual' ones.
+//
+// A PROGRAM MAY READ SEVERAL CALENDARS  (v23)
+//
+// All-Stars reads the All-Stars calendar and the Studio calendar, and Studio
+// also feeds `academy` — so one Google event is a row for two programs at once.
+// The loop below was already per-source and needed no change for that; what it
+// needed was to say WHICH source each result and each failure belongs to, since
+// a program's status line is no longer a single row.
 //
 // WHY THE CALENDAR API AND NOT THE iCal FEED  (v21)
 //
@@ -209,7 +218,9 @@ Deno.serve(async (req: Request) => {
     // stops updating.
     for (const source of sources) {
       await admin.rpc('portal_record_sync_failure', {
-        p_program_id: source.program_id, p_message: auth.error,
+        p_program_id: source.program_id,
+        p_message: auth.error,
+        p_calendar_id: source.google_calendar_id,
       });
     }
     return json(502, { error: auth.error });
@@ -243,6 +254,7 @@ Deno.serve(async (req: Request) => {
 
       results.push({
         programId: source.program_id,
+        calendarId: source.google_calendar_id,
         fetched: items.length, parsed: events.length,
         ...(counts ?? {}),
       });
@@ -250,9 +262,15 @@ Deno.serve(async (req: Request) => {
       const message = e instanceof Error ? e.message : String(e);
       console.error(`Sync failed for ${source.google_calendar_id}:`, message);
       await admin.rpc('portal_record_sync_failure', {
-        p_program_id: source.program_id, p_message: message,
+        p_program_id: source.program_id,
+        p_message: message,
+        p_calendar_id: source.google_calendar_id,
       });
-      results.push({ programId: source.program_id, error: message });
+      results.push({
+        programId: source.program_id,
+        calendarId: source.google_calendar_id,
+        error: message,
+      });
     }
   }
 

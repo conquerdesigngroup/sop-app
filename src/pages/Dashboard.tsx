@@ -178,7 +178,12 @@ const TaskCalendar: React.FC<{
   return (
     <div style={styles.calendarSection}>
       <div style={styles.calendarHeader}>
-        <h3 style={styles.calendarTitle}>{monthNames[month]} {year}</h3>
+        <div>
+          {/* The grid mixes two different things — scheduled job tasks and
+              calendar events — and the month alone never said so. */}
+          <div style={styles.calendarKicker}>Tasks &amp; Events</div>
+          <h3 style={styles.calendarTitle}>{monthNames[month]} {year}</h3>
+        </div>
         <div style={styles.calendarNav}>
           <button onClick={() => setCurrentMonth(new Date())} style={styles.todayBtn}>Today</button>
           <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))} style={styles.navBtn}>
@@ -864,7 +869,7 @@ const dayActionStyles: { [key: string]: React.CSSProperties } = {
     border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.lg,
     padding: '12px',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    boxShadow: theme.shadows.lg,
     minWidth: '200px',
   },
   header: {
@@ -1279,6 +1284,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '12px 16px',
     borderBottom: `1px solid ${theme.colors.border}`,
   },
+  calendarKicker: {
+    fontFamily: theme.fonts.mono,
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const,
+    color: theme.colors.txt.tertiary,
+    marginBottom: '2px',
+  },
   calendarTitle: {
     fontSize: '18px',
     fontWeight: 700,
@@ -1376,7 +1390,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.primary,
   },
   calendarDayHover: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: 'var(--c-hover-tint, rgba(255, 255, 255, 0.05))',
     cursor: 'pointer',
   },
   dayNumber: {

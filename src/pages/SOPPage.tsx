@@ -382,7 +382,12 @@ const SOPPage: React.FC = () => {
             }}
           >
             <span>All</span>
-            <span style={styles.filterCount}>{filterCounts.all}</span>
+            <span style={{
+              ...styles.filterCount,
+              ...(filterView === 'all' ? styles.filterCountActive : {}),
+            }}>
+              {filterCounts.all}
+            </span>
           </button>
           <button
             onClick={() => setFilterView('published')}
@@ -392,7 +397,12 @@ const SOPPage: React.FC = () => {
             }}
           >
             <span>Published</span>
-            <span style={styles.filterCount}>{filterCounts.published}</span>
+            <span style={{
+              ...styles.filterCount,
+              ...(filterView === 'published' ? styles.filterCountActive : {}),
+            }}>
+              {filterCounts.published}
+            </span>
           </button>
           <button
             onClick={() => setFilterView('draft')}
@@ -402,7 +412,12 @@ const SOPPage: React.FC = () => {
             }}
           >
             <span>Drafts</span>
-            <span style={styles.filterCount}>{filterCounts.draft}</span>
+            <span style={{
+              ...styles.filterCount,
+              ...(filterView === 'draft' ? styles.filterCountActive : {}),
+            }}>
+              {filterCounts.draft}
+            </span>
           </button>
           <button
             onClick={() => setFilterView('archived')}
@@ -412,7 +427,12 @@ const SOPPage: React.FC = () => {
             }}
           >
             <span>Archived</span>
-            <span style={styles.filterCount}>{filterCounts.archived}</span>
+            <span style={{
+              ...styles.filterCount,
+              ...(filterView === 'archived' ? styles.filterCountActive : {}),
+            }}>
+              {filterCounts.archived}
+            </span>
           </button>
         </div>
       )}
@@ -1225,9 +1245,16 @@ const styles: { [key: string]: React.CSSProperties } = {
   filterCount: {
     fontSize: '13px',
     fontWeight: '700',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    // bdr.secondary rather than bg.tertiary: on a chalk page bg.tertiary is
+    // #ECECEE against #F4F4F5, which is barely a pill at all. This reads in
+    // light mode and lands within a few values of the old dark appearance.
+    backgroundColor: theme.colors.bdr.secondary,
     padding: '2px 8px',
     borderRadius: theme.borderRadius.full,
+  },
+  /** Only the selected tab has a crimson fill for white to read against. */
+  filterCountActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   templateBadge: {
     fontSize: '10px',

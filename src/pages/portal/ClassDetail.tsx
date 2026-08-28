@@ -143,13 +143,13 @@ const ClassDetail: React.FC = () => {
                 color: theme.colors.txt.primary,
                 margin: '0 0 12px',
               }}>
-                Class updates
+                Class info
               </h2>
 
               {updates.length === 0 ? (
                 <EmptyState
                   title="Nothing posted yet"
-                  description={`Updates from ${klass.instructorName || 'this class’s teacher'} will appear here.`}
+                  description={`Info from ${klass.instructorName || 'this class’s teacher'} will appear here.`}
                 />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

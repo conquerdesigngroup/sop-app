@@ -199,7 +199,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflow: 'auto',
     marginTop: '8px',
     padding: '12px',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'var(--c-hover-tint, rgba(255, 255, 255, 0.05))',
     borderRadius: theme.borderRadius.sm,
   },
   actions: {

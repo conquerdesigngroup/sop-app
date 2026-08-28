@@ -53,7 +53,7 @@ const PortalBottomNav: React.FC<Props> = ({ slug }) => {
       icon: icon('M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z M23 21v-2a4 4 0 00-3-3.87'),
     },
     {
-      label: 'Updates',
+      label: 'Info',
       to: portalRoutes.updates(slug),
       match: portalRoutes.updates(slug),
       icon: icon('M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 01-3.46 0'),

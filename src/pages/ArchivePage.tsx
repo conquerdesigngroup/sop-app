@@ -550,7 +550,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '10px 16px',
     fontSize: '14px',
     fontWeight: 600,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     backgroundColor: theme.colors.primary,
     border: 'none',
     borderRadius: theme.borderRadius.md,

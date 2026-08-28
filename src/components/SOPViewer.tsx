@@ -289,7 +289,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
     padding: '6px 14px',
-    backgroundColor: 'rgba(211, 222, 40, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     borderRadius: theme.borderRadius.full,
   },
   categoryMobile: {
@@ -299,7 +299,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
     padding: '4px 10px',
-    backgroundColor: 'rgba(211, 222, 40, 0.1)',
+    backgroundColor: 'rgba(226, 20, 79, 0.1)',
     borderRadius: theme.borderRadius.full,
   },
   header: {

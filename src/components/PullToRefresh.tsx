@@ -128,7 +128,10 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({
               height="24"
               viewBox="0 0 24 24"
               fill="none"
-              stroke={shouldTrigger ? theme.colors.primary : theme.colors.txt.tertiary}
+              // In the style object, not on the attribute: txt.tertiary is a
+              // var() string and an SVG attribute cannot resolve one, so this
+              // arrow was painting nothing for the whole pull.
+              style={{ stroke: shouldTrigger ? theme.colors.primary : theme.colors.txt.tertiary }}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

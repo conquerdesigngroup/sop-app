@@ -538,7 +538,14 @@ const ActivityLogPage: React.FC = () => {
                     {/* Left: Icon */}
                     <div style={{
                       ...styles.logIcon,
-                      backgroundColor: `${actionInfo.color}20`,
+                      // Only a literal hex can carry an alpha suffix. Logout
+                      // and every unmapped action use textMuted, which is a
+                      // var() string — `var(...)20` is invalid CSS and the
+                      // whole declaration was being dropped, leaving those
+                      // rows with a bare glyph and no tile.
+                      backgroundColor: actionInfo.color.startsWith('#')
+                        ? `${actionInfo.color}20`
+                        : theme.colors.bg.tertiary,
                       color: actionInfo.color,
                     }}>
                       {actionInfo.icon}
@@ -894,7 +901,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '10px 20px',
     fontSize: '14px',
     fontWeight: 600,
-    color: theme.colors.txt.primary,
+    color: '#FFFFFF',
     backgroundColor: theme.colors.primary,
     border: 'none',
     borderRadius: theme.borderRadius.md,

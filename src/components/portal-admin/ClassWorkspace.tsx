@@ -38,7 +38,7 @@ import DocumentsSection from './DocumentsSection';
 type Tab = 'updates' | 'files';
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'updates', label: 'Updates' },
+  { key: 'updates', label: 'Info' },
   { key: 'files', label: 'Files' },
 ];
 

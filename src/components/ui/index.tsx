@@ -958,9 +958,13 @@ export const Spinner: React.FC<SpinnerProps> = ({
     height={size}
     viewBox="0 0 24 24"
     fill="none"
-    stroke={color}
     strokeWidth="2"
-    style={{ animation: 'spin 1s linear infinite' }}
+    // stroke belongs in the style object, not on the attribute. Every
+    // theme.colors.bg/txt/bdr token is a var() string, and an SVG presentation
+    // attribute cannot resolve var() — it drops the declaration and falls back
+    // to `none`, so a caller passing a perfectly good token got an invisible
+    // spinner. DocumentRow was doing exactly that.
+    style={{ stroke: color, animation: 'spin 1s linear infinite' }}
   >
     <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
     <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />

@@ -26,7 +26,7 @@ const defaultWidgets: DashboardWidget[] = [
   { id: 'departments', name: 'Departments', description: 'Quick access to department SOPs', enabled: true, order: 1 },
   { id: 'recentSops', name: 'Recent SOPs', description: 'Recently created or updated SOPs', enabled: true, order: 2 },
   { id: 'schedule', name: 'Work Schedule', description: 'Upcoming work schedule snapshot', enabled: true, order: 3 },
-  { id: 'calendar', name: 'Calendar', description: 'Monthly calendar view with tasks and events', enabled: true, order: 4 },
+  { id: 'calendar', name: 'Tasks & Events', description: 'Monthly calendar view with tasks and events', enabled: true, order: 4 },
   { id: 'todayTasks', name: "Today's Tasks", description: 'Tasks due today', enabled: true, order: 5 },
   { id: 'upcomingTasks', name: 'Upcoming Tasks', description: 'Tasks coming up this week', enabled: true, order: 6 },
   { id: 'overdueTasks', name: 'Overdue Tasks', description: 'Tasks past their due date', enabled: true, order: 7 },
@@ -39,10 +39,21 @@ export const DashboardSettingsProvider: React.FC<{ children: React.ReactNode }> 
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          // Merge with defaults to handle new widgets
+          // Merge with defaults to handle new widgets.
+          //
+          // Only `enabled` and `order` come out of storage. Those two are the
+          // user's choices; `name` and `description` are code. Spreading the
+          // whole stored widget over the default let a stale copy of a label
+          // outlive a rename — anyone who had ever opened dashboard settings
+          // kept seeing the old name forever, because their localStorage said so.
           const mergedWidgets = defaultWidgets.map(defaultWidget => {
             const storedWidget = parsed.find((w: DashboardWidget) => w.id === defaultWidget.id);
-            return storedWidget ? { ...defaultWidget, ...storedWidget } : defaultWidget;
+            if (!storedWidget) return defaultWidget;
+            return {
+              ...defaultWidget,
+              enabled: typeof storedWidget.enabled === 'boolean' ? storedWidget.enabled : defaultWidget.enabled,
+              order: typeof storedWidget.order === 'number' ? storedWidget.order : defaultWidget.order,
+            };
           });
           return mergedWidgets.sort((a, b) => a.order - b.order);
         } catch {

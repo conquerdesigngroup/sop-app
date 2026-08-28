@@ -19,7 +19,7 @@ const PortalHome: React.FC = () => {
   return (
     <PortalLayout
       title="Parent Portal"
-      subtitle="Pick your section to see schedules, updates and documents."
+      subtitle="Pick your section to see schedules, info and documents."
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '720px' }}>
         {/* Always available — Enrollio has its own login, so it is not gated

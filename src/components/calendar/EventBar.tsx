@@ -31,6 +31,13 @@ export interface EventBarProps {
   /** Phone sizing: smaller type, tighter padding, no time label. */
   compact?: boolean;
   /**
+   * Label colour on a filled bar. The default is white, which is right for the
+   * saturated per-calendar colours the staff side passes. A caller that fills a
+   * bar with a NEUTRAL token must override it — the portal does, and its bars
+   * were white-on-pale-grey in light mode until it did.
+   */
+  textColor?: string;
+  /**
    * Omit to make the bar inert. The parent portal does that on purpose: at
    * 375px a column is about 49px wide, and a stack of individually tappable
    * bars in that space is a mis-tap generator. There the whole day cell is the
@@ -49,6 +56,7 @@ const EventBar: React.FC<EventBarProps> = ({
   continuesAfter = false,
   timeLabel = null,
   compact = false,
+  textColor = '#FFFFFF',
   onClick,
 }) => (
   <div
@@ -76,9 +84,10 @@ const EventBar: React.FC<EventBarProps> = ({
       borderTopRightRadius: continuesAfter ? 0 : RADIUS,
       borderBottomRightRadius: continuesAfter ? 0 : RADIUS,
       backgroundColor: filled ? color : 'transparent',
-      // Hardcoded white: the mode-dependent text tokens flip dark in light
-      // mode and would vanish against a saturated bar.
-      color: filled ? '#FFFFFF' : theme.colors.txt.primary,
+      // White by default, because the mode-dependent text tokens flip dark in
+      // light mode and would vanish against a saturated bar. Only true while
+      // the bar IS saturated — see textColor.
+      color: filled ? textColor : theme.colors.txt.primary,
     }}
   >
     {!filled && (
