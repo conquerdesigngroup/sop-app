@@ -5,7 +5,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import { useEvent } from '../contexts/EventContext';
 import { useToast } from '../contexts/ToastContext';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
-import { AttachmentList, useAttachments } from './calendar/EventAttachments';
+import { AttachmentList, AttachmentManager, useAttachments } from './calendar/EventAttachments';
 import { parseDayKey } from '../lib/calendarLayout';
 import {
   generateGoogleCalendarUrl,
@@ -21,14 +21,22 @@ interface EventDetailModalProps {
   event: CalendarEvent | null;
   users: User[];
   /**
-   * Both optional as of v15. Events are a read-only mirror of Google, so no
-   * caller supplies these any more and the buttons stay hidden. They remain in
-   * the signature rather than being deleted because the three legacy 'manual'
-   * rows could still justify an editor one day, and because a prop that is
-   * absent reads more honestly than a handler that throws.
+   * Optional because not every caller offers them. CalendarPage supplies
+   * onEdit for management roles, on events this app can address in Google.
+   * The Dashboard supplies neither and its modal is purely a reader. Nobody
+   * supplies onDelete — deleting belongs in Google — but it stays in the
+   * signature because an absent prop reads more honestly than a handler that
+   * throws.
    */
   onEdit?: (event: CalendarEvent) => void;
   onDelete?: (eventId: string) => void;
+  /**
+   * Lets an admin attach a link or a file from this modal rather than only
+   * from the editor. Without it the panel is read-only and hides entirely
+   * when nothing is attached — right for a parent or a reader, and wrong for
+   * the person who came here to attach the first one.
+   */
+  canManageAttachments?: boolean;
 }
 
 const EventDetailModal: React.FC<EventDetailModalProps> = ({
@@ -38,6 +46,7 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   users,
   onEdit,
   onDelete,
+  canManageAttachments = false,
 }) => {
   const { isMobileOrTablet } = useResponsive();
   const { getSourceFor } = useEvent();
@@ -46,10 +55,29 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  /**
+   * Attaching needs a real Google event to file the row under. Two exclusions,
+   * the same ones the Edit button makes: the legacy 'manual' rows have no
+   * google_event_id at all, and a '::' id is one occurrence of a repeating
+   * event, which is not an id Google would recognise.
+   */
+  const canManage = !!(
+    canManageAttachments &&
+    event?.googleCalendarId &&
+    event?.googleEventId &&
+    !event.googleEventId.includes('::')
+  );
+
   // Above the early return on purpose: a hook after it would run on some
   // renders and not others, which React refuses.
+  //
+  // Deliberately idle while managing, because AttachmentManager loads the same
+  // rows itself. Passing undefined makes this hook clear its list without
+  // fetching, so opening an event as an admin is still one query, and there is
+  // never a second copy of the list to disagree with the one on screen.
   const { items: attachments } = useAttachments(
-    event?.googleCalendarId, event?.googleEventId
+    canManage ? undefined : event?.googleCalendarId,
+    canManage ? undefined : event?.googleEventId
   );
 
   if (!isOpen || !event) return null;
@@ -286,8 +314,12 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
             </div>
           )}
 
-          {/* Links and files */}
-          {attachments.length > 0 && (
+          {/* Links and files. An admin sees this even when it is empty: this
+              is where you come to attach the first one, and a panel that
+              appears only once something is attached can never be the place
+              you attached it. A reader still sees nothing until there is
+              something to see. */}
+          {(canManage || attachments.length > 0) && (
             <div style={styles.infoRow}>
               <div style={styles.iconWrapper}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -295,7 +327,26 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 </svg>
               </div>
               <div style={{ ...styles.infoContent, minWidth: 0 }}>
-                <AttachmentList items={attachments} />
+                {canManage && event.googleCalendarId && event.googleEventId ? (
+                  <>
+                    <div style={{
+                      ...theme.typography.captionSmall,
+                      fontFamily: theme.fonts.mono,
+                      color: theme.colors.txt.tertiary,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      marginBottom: '8px',
+                    }}>
+                      Links and files
+                    </div>
+                    <AttachmentManager
+                      googleCalendarId={event.googleCalendarId}
+                      googleEventId={event.googleEventId}
+                    />
+                  </>
+                ) : (
+                  <AttachmentList items={attachments} />
+                )}
               </div>
             </div>
           )}
