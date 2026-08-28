@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { removeStorageObject } from './portalStorage';
 
 /**
  * Links and files hung on a calendar event.
@@ -178,15 +179,21 @@ export const uploadAttachment = async (
 /** Row first, then the object — the reverse would leave a row pointing at
  *  nothing if the storage call failed. */
 export const removeAttachment = async (a: EventAttachment): Promise<void> => {
+  // File first, row second, and the file's failure is not swallowed. The old
+  // order deleted the row and then fired the storage delete without even
+  // looking at the result, so a failure left the file in the bucket with
+  // nothing pointing at it and no way for the app to reach it again. See the
+  // long note on deleteDocument in PortalAdminContext for why that direction
+  // is the unrecoverable one.
+  if (a.storagePath) {
+    await removeStorageObject(ATTACHMENT_BUCKET, a.storagePath);
+  }
+
   const { error } = await supabase
     .from('calendar_event_attachments')
     .delete()
     .eq('id', a.id);
   if (error) throw new Error(error.message);
-
-  if (a.storagePath) {
-    await supabase.storage.from(ATTACHMENT_BUCKET).remove([a.storagePath]);
-  }
 };
 
 /**

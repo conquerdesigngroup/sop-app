@@ -11,7 +11,7 @@ import {
   mapProgram, mapClass, mapUpdate, mapEvent, mapDocument, mapCalendarSource,
 } from '../lib/portalMappers';
 import { buildStoragePath } from '../lib/portalAdmin';
-import { signDocumentUrls } from '../lib/portalStorage';
+import { signDocumentUrls, removeStorageObject } from '../lib/portalStorage';
 
 /**
  * Authoring for the parent portal — the staff half of the portal_* tables.
@@ -170,7 +170,11 @@ interface PortalAdminContextValue {
     onProgress?: (stage: 'uploading' | 'saving') => void,
   ) => Promise<void>;
   saveDocumentMeta: (input: DocumentInput & { id: string }) => Promise<void>;
-  deleteDocument: (doc: PortalDocument) => Promise<{ orphanedObject: boolean }>;
+  /**
+   * Removes the stored file first, then the row. Throws if the file cannot be
+   * removed, leaving the row intact so it can be retried.
+   */
+  deleteDocument: (doc: PortalDocument) => Promise<void>;
   getDocumentUrl: (storagePath: string) => Promise<string | null>;
   /** Batched signing, so a list can show thumbnails without a request each. */
   getDocumentUrls: (storagePaths: string[]) => Promise<Record<string, string>>;
@@ -509,21 +513,32 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
   }, []);
 
   /**
-   * Row first, object second — the same asymmetry as the upload.
+   * OBJECT FIRST, ROW SECOND. This used to be the other way round.
    *
-   * If the object delete fails afterwards the file is already unreachable
-   * (nothing links to it and nothing lists the bucket), so the caller is told
-   * rather than shown an error: the parent-facing outcome is already correct.
+   * The old order deleted the row, then tried the file, and reported a failed
+   * file delete as housekeeping — the reasoning being that the parent-facing
+   * outcome was already correct, since nothing linked to the file any more.
+   *
+   * That reasoning was half right and the missing half is expensive. Nothing
+   * links to the file, but the file is still THERE: still billed, still
+   * counting against a 1 GB quota, and now unreachable by every route the app
+   * has, because the app only ever lists the bucket by row. Supabase blocks
+   * direct DELETEs on storage.objects (trigger storage.protect_delete,
+   * "This prevents accidental data loss from orphaned objects"), so the only
+   * way back is the Supabase dashboard. Two files sat stranded like that for
+   * two days before anyone noticed, and only because someone went looking.
+   *
+   * Reversing it makes the failure recoverable instead. If the file cannot be
+   * deleted, the row stays, the entry stays in the manager, and it can be tried
+   * again. The worst case is a visible thing that still works.
+   *
+   * "Already gone" is not a failure — see removeStorageObject.
    */
   const deleteDocument = useCallback(async (doc: PortalDocument) => {
+    await removeStorageObject('portal-documents', doc.storagePath);
+
     const { error } = await supabase.from('portal_documents').delete().eq('id', doc.id);
     if (error) throw error;
-
-    const { error: objErr } = await supabase.storage
-      .from('portal-documents')
-      .remove([doc.storagePath]);
-
-    return { orphanedObject: !!objErr };
   }, []);
 
   const getDocumentUrl = useCallback(async (storagePath: string) => {
