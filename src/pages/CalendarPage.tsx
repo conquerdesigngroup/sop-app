@@ -1006,13 +1006,19 @@ const CalendarPage: React.FC = () => {
         </div>
       </div>
 
-      {/* No onEdit/onDelete: this is a mirror of Google, and the modal hides
-          both buttons when the handlers are absent. */}
+      {/* No onDelete: deleting belongs in Google, and the modal hides that
+          button when the handler is absent. onEdit is offered only for the
+          rows described below. */}
       <EventDetailModal
         isOpen={selectedEvent !== null}
         onClose={() => setSelectedEvent(null)}
         event={selectedEvent}
         users={users}
+        // Attaching is the same boundary as editing — a management role plus a
+        // Google event this app can address — so it is gated on the same flag.
+        // The modal applies the id exclusions itself rather than repeating the
+        // two conditions here.
+        canManageAttachments={canEdit}
         // Only offered for rows that exist in Google AND that this app can
         // address. Two exclusions:
         //
