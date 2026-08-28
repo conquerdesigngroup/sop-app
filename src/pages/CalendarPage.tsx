@@ -10,6 +10,7 @@ import {
   parseDayKey,
   Segment,
 } from '../lib/calendarLayout';
+import EventBar, { formatClock } from '../components/calendar/EventBar';
 import { useEvent } from '../contexts/EventContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -810,8 +811,12 @@ const CalendarPage: React.FC = () => {
                         }}
                       >
                         <EventBar
-                          segment={seg}
+                          title={seg.item.title}
                           color={colorFor(seg.item)}
+                          filled={seg.item.isAllDay || seg.span > 1 || seg.continuesBefore || seg.continuesAfter}
+                          continuesBefore={seg.continuesBefore}
+                          continuesAfter={seg.continuesAfter}
+                          timeLabel={seg.item.startTime ? formatClock(seg.item.startTime) : null}
                           compact={isMobileOrTablet}
                           onClick={e => handleEventClick(seg.item, e)}
                         />
@@ -887,8 +892,11 @@ const CalendarPage: React.FC = () => {
                         }}
                       >
                         <EventBar
-                          segment={seg}
+                          title={seg.item.title}
                           color={colorFor(seg.item)}
+                          filled
+                          continuesBefore={seg.continuesBefore}
+                          continuesAfter={seg.continuesAfter}
                           onClick={e => handleEventClick(seg.item, e)}
                         />
                       </div>
@@ -1241,34 +1249,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   dayNumberOutside: {
     opacity: 0.35,
-  },
-  eventBar: {
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    overflow: 'hidden',
-    cursor: 'pointer',
-    fontFamily: theme.fonts.primary,
-    fontWeight: 600,
-    whiteSpace: 'nowrap',
-  },
-  eventBarLabel: {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  eventBarDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    flexShrink: 0,
-  },
-  eventBarTime: {
-    fontFamily: theme.fonts.mono,
-    fontWeight: 500,
-    opacity: 0.75,
-    flexShrink: 0,
   },
   dayHeader: {
     textAlign: 'center' as const,
@@ -1976,72 +1956,6 @@ const styles: { [key: string]: React.CSSProperties } = {
 // Calendar Day Component with hover effect (defined after styles)
 /** Height of one bar in the week view's all-day row. */
 const ALL_DAY_BAR = 18;
-
-/** "14:30" -> "2:30p", "14:00" -> "2p". Compact enough to sit inside a bar. */
-const formatClock = (hhmm: string): string => {
-  const [h, m] = hhmm.split(':').map(Number);
-  if (Number.isNaN(h)) return hhmm;
-  const period = h >= 12 ? 'p' : 'a';
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return m ? `${hour}:${String(m).padStart(2, '0')}${period}` : `${hour}${period}`;
-};
-
-/**
- * One continuous bar for a run of days.
- *
- * The square edge is the load-bearing detail. An event that carries on past
- * Saturday is cut flush at the boundary and picked up flush on the Sunday
- * below, so the two rows read as one object interrupted by the grid rather
- * than two events that happen to share a name. Rounding every segment on both
- * ends is precisely what made a fortnight-long closure look like fourteen
- * unrelated stickers.
- */
-const EventBar: React.FC<{
-  segment: Segment<CalendarEvent>;
-  color: string;
-  compact?: boolean;
-  onClick: (e: React.MouseEvent) => void;
-}> = ({ segment, color, compact = false, onClick }) => {
-  const event = segment.item;
-  const flatLeft = segment.continuesBefore;
-  const flatRight = segment.continuesAfter;
-  const radius = 4;
-
-  // Filled when the event occupies whole days — all-day, or anything running
-  // past midnight. A single timed event gets the lighter dot-and-time
-  // treatment instead, so the two are not confusable at a glance.
-  const filled =
-    event.isAllDay || segment.span > 1 || flatLeft || flatRight;
-
-  return (
-    <div
-      onClick={onClick}
-      title={event.title}
-      style={{
-        ...styles.eventBar,
-        fontSize: compact ? '9px' : '11px',
-        // Inset only at a real end. Insetting a cut edge would open a gap at
-        // the week boundary and break the run back into separate objects.
-        marginLeft: flatLeft ? 0 : 2,
-        marginRight: flatRight ? 0 : 2,
-        paddingLeft: filled ? (compact ? 4 : 6) : 2,
-        paddingRight: compact ? 4 : 6,
-        borderTopLeftRadius: flatLeft ? 0 : radius,
-        borderBottomLeftRadius: flatLeft ? 0 : radius,
-        borderTopRightRadius: flatRight ? 0 : radius,
-        borderBottomRightRadius: flatRight ? 0 : radius,
-        backgroundColor: filled ? color : 'transparent',
-        color: filled ? '#FFFFFF' : theme.colors.txt.primary,
-      }}
-    >
-      {!filled && <span style={{ ...styles.eventBarDot, backgroundColor: color }} />}
-      {!filled && !compact && event.startTime && (
-        <span style={styles.eventBarTime}>{formatClock(event.startTime)}</span>
-      )}
-      <span style={styles.eventBarLabel}>{event.title}</span>
-    </div>
-  );
-};
 
 const CalendarDayCell: React.FC<{
   isToday: boolean;
