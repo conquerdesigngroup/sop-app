@@ -5,6 +5,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import { useEvent } from '../contexts/EventContext';
 import { useToast } from '../contexts/ToastContext';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
+import { AttachmentList, useAttachments } from './calendar/EventAttachments';
 import {
   generateGoogleCalendarUrl,
   generateICSForEvent,
@@ -44,6 +45,11 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  // Above the early return on purpose: a hook after it would run on some
+  // renders and not others, which React refuses.
+  const { items: attachments } = useAttachments(
+    event?.googleCalendarId, event?.googleEventId
+  );
 
   if (!isOpen || !event) return null;
 
@@ -271,6 +277,20 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
               </div>
               <div style={styles.infoContent}>
                 <div style={styles.descriptionText}>{event.description}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Links and files */}
+          {attachments.length > 0 && (
+            <div style={styles.infoRow}>
+              <div style={styles.iconWrapper}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </div>
+              <div style={{ ...styles.infoContent, minWidth: 0 }}>
+                <AttachmentList items={attachments} />
               </div>
             </div>
           )}

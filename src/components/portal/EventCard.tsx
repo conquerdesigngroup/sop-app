@@ -4,14 +4,23 @@ import { Button, Modal, CalendarIcon } from '../ui';
 import { formatEventDate, describeEventWhen } from '../../lib/portal';
 import { PortalEvent } from '../../types';
 import { useAddToCalendar } from './useAddToCalendar';
+import {
+  AttachmentList,
+  useAttachments,
+} from '../calendar/EventAttachments';
 
 /**
  * One event, opened from either calendar view.
  *
- * The list already shows title, time and location, so this exists for the two
- * things it cannot: the description in full rather than clipped, and a labelled
- * "Add to my calendar" rather than the row's bare icon — which is discoverable
- * once you know what it is, and cryptic until then.
+ * The list already shows title, time and location, so this exists for what it
+ * cannot: the description in full rather than clipped, whatever the studio has
+ * attached to the event, and a labelled "Add to my calendar" rather than the
+ * row's bare icon.
+ *
+ * Attachments are fetched on open rather than with the calendar. A term is
+ * dozens of events and almost none get opened; one small query on tap beats a
+ * join nobody reads. RLS decides what comes back — a file on the Staff
+ * calendar is not readable here at all, whatever this asks for.
  */
 
 interface EventCardProps {
@@ -45,9 +54,12 @@ const Line: React.FC<{ label: string; children: React.ReactNode }> = ({ label, c
 
 const EventCard: React.FC<EventCardProps> = ({ event, onClose }) => {
   const { add, busyId } = useAddToCalendar();
+  const { items: attachments } = useAttachments(
+    event?.googleCalendarId, event?.googleEventId
+  );
 
-  // Hooks first, then bail: an early return above useAddToCalendar would change
-  // the hook order between renders.
+  // Hooks first, then bail: an early return above these would change the hook
+  // order between renders.
   if (!event) return null;
 
   const fullDate = formatEventDate(event.startsAt, event.isAllDay, {
@@ -87,6 +99,12 @@ const EventCard: React.FC<EventCardProps> = ({ event, onClose }) => {
       </Line>
 
       {event.location && <Line label="Where">{event.location}</Line>}
+
+      {attachments.length > 0 && (
+        <Line label={attachments.length === 1 ? 'Attached' : 'Attached'}>
+          <AttachmentList items={attachments} />
+        </Line>
+      )}
 
       {event.description && (
         <Line label="Details">
