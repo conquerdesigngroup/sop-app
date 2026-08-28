@@ -217,17 +217,35 @@ export const Card: React.FC<CardProps> = ({
     return paddings[padding];
   };
 
+  /**
+   * Longhand border, and every property present in BOTH states.
+   *
+   * This used to set the `border` shorthand and then add `borderColor` only
+   * while hovered. React writes inline styles by diffing the two objects: on
+   * mouse-out it sees borderColor removed and sets it to '', but leaves the
+   * unchanged `border` shorthand alone because the string did not change.
+   * Clearing border-color that way does not restore the shorthand's colour —
+   * it falls back to the CSS initial value, `currentColor`. On these cards
+   * that is chalk, so every row the pointer crossed kept a white ring.
+   *
+   * The rule this is an instance of: never pair a shorthand with one of its
+   * own longhands in a React style object, and never let a property exist in
+   * one state and vanish in the other. Same trap as the padding shorthand
+   * noted in CLAUDE.md. `transform` is spelled out for the same reason rather
+   * than because 'none' and absent differ here.
+   */
+  const lifted = hover && isHovered;
+
   const cardStyle: React.CSSProperties = {
     backgroundColor: theme.colors.bg.secondary,
-    border: `2px solid ${theme.colors.bdr.primary}`,
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: lifted ? theme.colors.bdr.secondary : theme.colors.bdr.primary,
     borderRadius: theme.borderRadius.lg,
     padding: getPadding(),
     transition: 'all 0.2s ease',
     cursor: onClick ? 'pointer' : 'default',
-    ...(hover && isHovered ? {
-      borderColor: theme.colors.bdr.secondary,
-      transform: 'translateY(-2px)',
-    } : {}),
+    transform: lifted ? 'translateY(-2px)' : 'none',
     ...style,
   };
 

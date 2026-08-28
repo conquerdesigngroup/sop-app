@@ -395,7 +395,14 @@ export const theme = {
         fontSize: '15px',
         fontWeight: 400,
         borderRadius: '8px',
-        border: '2px solid var(--c-bdr-primary, #26262B)',
+        // Longhands, not the `border` shorthand. FormComponents overrides only
+        // the colour when a field is in error, and a shorthand here means that
+        // override is unrecoverable: React removes the longhand when the error
+        // clears and border-color falls back to currentColor — chalk. See the
+        // note on Card in components/ui/index.tsx.
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        borderColor: 'var(--c-bdr-primary, #26262B)',
         backgroundColor: 'var(--c-bg-tertiary, #1E1E21)',
         color: 'var(--c-txt-primary, #F4F4F5)',
         outline: 'none',
