@@ -10,8 +10,8 @@ import InstallAppGuide from '../../components/InstallAppGuide';
  * The front door.
  *
  * Everything reaching the app at `/` lands here and picks a side: STAFF goes to
- * the employee login and the app as it has always been; TEAM goes to the parent
- * portal, which needs no account.
+ * the employee login and the app as it has always been; DANCERS goes to the
+ * parent portal, which needs no account.
  *
  * Shown on every visit, deliberately — no remembered choice. A household with a
  * dancer and a staff member shares devices, and a silent redirect into the wrong
@@ -196,8 +196,8 @@ const ChooserPage: React.FC = () => {
         />
         <ChooserTile
           to={portalRoutes.home}
-          label="Team"
-          description="Dancer and parent portal."
+          label="Dancers"
+          description="Schedules, info and files."
           icon={TeamIcon}
           accent
         />
