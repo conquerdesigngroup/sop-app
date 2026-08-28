@@ -252,6 +252,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Subscribe to real-time profile changes
   useEffect(() => {
     if (!useSupabase) return;
+    // No session, nothing to subscribe to. Realtime delivers rows through
+    // RLS, so a signed-out device — a parent on /portal, anyone on the login
+    // screen — can only ever be sent nothing. What it DOES get is a websocket
+    // that fails and then retries on a backoff for as long as the page is
+    // open. Same guard as WorkHoursContext, which had this fixed first.
+    // Keyed on the id, not the object: setCurrentUser({ ...currentUser })
+    // runs on every profile edit and would otherwise tear the channel down and
+    // build it again each time.
+    if (!currentUser?.id) return;
 
     const channel = supabase
       .channel('profiles_changes')
@@ -272,7 +281,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase, loadUsers]);
+  }, [useSupabase, loadUsers, currentUser?.id]);
 
   // Refresh user data when tab becomes visible (ensures data is fresh when users return)
   const handleVisibilityRefresh = useCallback(() => {

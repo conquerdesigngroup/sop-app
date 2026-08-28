@@ -38,17 +38,33 @@ import {
  * regardless of route. That used to cost a parent 13 Supabase requests per cold
  * load, 6 of them to staff tables RLS returns nothing for, plus two failures.
  *
- * WorkHoursContext now short-circuits its load and its realtime subscription
- * when there is no session, which closed the bulk of it. Measured in production
- * on /portal/:program:
+ * Every data context now short-circuits both its load AND its realtime
+ * subscription when there is no session — WorkHoursContext first, then
+ * EventContext, SOPContext, TaskContext and the profiles channel in
+ * AuthContext. Measured on both portal routes, signed out:
  *
- *     3 requests — portal_programs, portal_updates, portal_events
- *     0 staff-table requests
- *     0 failures
+ *     /portal/:program              7 requests
+ *       portal_programs x3, portal_updates x2, portal_events x2
+ *     /portal/:program/classes/:id  7 requests
+ *       portal_programs x3, portal_classes x2, portal_updates, portal_documents
  *
- * If that number climbs again, the cause is a staff context fetching on mount
- * without a session guard; AuthProvider is above DataProvider, so any of them
- * can check first.
+ *     0 staff-table requests   0 console errors   0 websocket attempts
+ *
+ * THE SUBSCRIPTIONS WERE THE HALF THAT GOT MISSED
+ *
+ * The earlier pass fixed the fetches and left four `.channel(...).subscribe()`
+ * calls guarded only by `if (!useSupabase) return`. A realtime channel opened
+ * with the anon key cannot receive anything RLS would allow, so it fails — and
+ * then retries on a backoff for as long as the page is open. On a class page
+ * that was seven failed websockets, on the device this app is mostly used from.
+ * A subscription is a request that never stops, so it needs the guard more than
+ * a fetch does, not less.
+ *
+ * If these numbers climb again, the cause is a staff context fetching or
+ * subscribing on mount without a session guard; AuthProvider is above
+ * DataProvider, so any of them can check first. The portal_programs x3 is this
+ * file, PortalAdminProvider and the gate all reading the same public table —
+ * harmless, but it is where to start if someone wants 7 to be 5.
  *
  * Every read here goes through the `anon` role. The portal_* tables are the only
  * ones that permit it, and only for published rows — so nothing in this file
