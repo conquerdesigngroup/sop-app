@@ -53,7 +53,7 @@ type SectionKey = 'classes' | 'updates' | 'calendar' | 'access';
  */
 const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
   { key: 'classes', label: 'Classes' },
-  { key: 'updates', label: 'Updates' },
+  { key: 'updates', label: 'Info' },
   { key: 'calendar', label: 'Calendar' },
   { key: 'access', label: 'Access', adminOnly: true },
 ];

@@ -105,7 +105,7 @@ const UpdatesSection: React.FC<{
     setSaving(true);
     try {
       await saveUpdate(draft);
-      success(draft.isPublished ? 'Update published.' : 'Draft saved.');
+      success(draft.isPublished ? 'Info post published.' : 'Draft saved.');
       setDraft(null);
       reload();
     } catch (e) {
@@ -117,7 +117,7 @@ const UpdatesSection: React.FC<{
 
   const handleDelete = async (u: PortalUpdate) => {
     const ok = await confirm({
-      title: 'Delete this update?',
+      title: 'Delete this info post?',
       message: u.isPublished
         ? `"${u.title}" is live. Deleting it removes it from the portal immediately and cannot be undone.`
         : `"${u.title}" has not been published. This cannot be undone.`,
@@ -128,7 +128,7 @@ const UpdatesSection: React.FC<{
 
     try {
       await deleteUpdate(u.id);
-      success('Update deleted.');
+      success('Info post deleted.');
       reload();
     } catch (e) {
       toastError(describeWriteError(e));
@@ -138,18 +138,18 @@ const UpdatesSection: React.FC<{
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-        <Button leftIcon={<PlusIcon />} onClick={startNew}>New update</Button>
+        <Button leftIcon={<PlusIcon />} onClick={startNew}>New info post</Button>
       </div>
 
       <ManagerList
         loading={loading}
         error={error}
         isEmpty={rows.length === 0}
-        emptyTitle="No updates yet"
+        emptyTitle="Nothing posted yet"
         emptyDescription={scope?.classId
           ? 'Post reminders and announcements for this class. Only families in this class see them.'
           : 'Post schedule changes, reminders and announcements. Parents see them newest first, pinned at the top.'}
-        emptyAction={<Button leftIcon={<PlusIcon />} onClick={startNew}>New update</Button>}
+        emptyAction={<Button leftIcon={<PlusIcon />} onClick={startNew}>New info post</Button>}
       >
         {rows.map(u => (
           <Card key={u.id}>
@@ -202,7 +202,7 @@ const UpdatesSection: React.FC<{
       <Modal
         isOpen={draft !== null}
         onClose={() => setDraft(null)}
-        title={draft?.id ? 'Edit update' : 'New update'}
+        title={draft?.id ? 'Edit info post' : 'New info post'}
         size="lg"
         footer={
           <>

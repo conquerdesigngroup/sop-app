@@ -101,7 +101,7 @@ const ProgramGate: React.FC = () => {
   return (
     <PortalLayout
       title={program?.name ?? 'Parent Portal'}
-      subtitle="Enter the studio code to see schedules, updates and documents."
+      subtitle="Enter the studio code to see schedules, info and documents."
       backTo={portalRoutes.home}
     >
       <Card style={{ maxWidth: '440px' }}>

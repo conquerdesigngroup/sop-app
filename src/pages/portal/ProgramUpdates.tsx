@@ -55,7 +55,7 @@ const ProgramUpdates: React.FC = () => {
 
   return (
     <PortalLayout
-      title="Updates"
+      title="Info"
       subtitle={program?.name}
       backTo={portalRoutes.program(slug)}
       slug={slug}
@@ -73,7 +73,7 @@ const ProgramUpdates: React.FC = () => {
 
         {!loading && !error && updates.length === 0 && (
           <EmptyState
-            title="No updates yet"
+            title="Nothing posted yet"
             description="Announcements from the studio and your teachers will show up here."
           />
         )}
