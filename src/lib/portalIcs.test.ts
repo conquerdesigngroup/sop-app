@@ -1,4 +1,4 @@
-import { buildEventIcs } from './portalIcs';
+import { buildEventIcs, googleCalendarUrl, outlookCalendarUrl } from './portalIcs';
 import { PortalEvent } from '../types';
 
 /**
@@ -134,5 +134,99 @@ describe('line structure', () => {
     const ics = buildEventIcs(event({ description: '', location: null }));
     expect(valueOf(ics, 'DESCRIPTION')).toBeUndefined();
     expect(valueOf(ics, 'LOCATION')).toBeUndefined();
+  });
+});
+
+/**
+ * The web handoffs. Same two-part date convention as the .ics, and the same
+ * trap: an all-day end sent as stored is a day short everywhere.
+ */
+
+const paramsOf = (url: string) =>
+  new URLSearchParams(url.slice(url.indexOf('?') + 1));
+
+describe('google calendar link', () => {
+  it('sends an all-day range with an exclusive end', () => {
+    const url = googleCalendarUrl(event({
+      startsAt: '2026-12-21T00:00:00.000Z',
+      endsAt: '2027-01-03T00:00:00.000Z',
+    }));
+    expect(paramsOf(url).get('dates')).toBe('20261221/20270104');
+  });
+
+  it('sends a timed range as UTC instants', () => {
+    const url = googleCalendarUrl(event({
+      isAllDay: false,
+      startsAt: '2026-09-17T01:00:00.000Z',
+      endsAt: '2026-09-17T03:30:00.000Z',
+    }));
+    expect(paramsOf(url).get('dates')).toBe('20260917T010000Z/20260917T033000Z');
+  });
+
+  it('carries the title, details and location unescaped', () => {
+    // URLSearchParams does the encoding. RFC 5545 escaping here would put
+    // literal backslashes in the parent's event.
+    const url = googleCalendarUrl(event({
+      title: 'Comma, semi; here',
+      description: 'line one\nline two',
+      location: 'Studio A; Room 2',
+    }));
+    const p = paramsOf(url);
+    expect(url.startsWith('https://calendar.google.com/calendar/render?')).toBe(true);
+    expect(p.get('action')).toBe('TEMPLATE');
+    expect(p.get('text')).toBe('Comma, semi; here');
+    expect(p.get('details')).toBe('line one\nline two');
+    expect(p.get('location')).toBe('Studio A; Room 2');
+  });
+
+  it('omits optional fields rather than sending them empty', () => {
+    const p = paramsOf(googleCalendarUrl(event({ description: '', location: null })));
+    expect(p.has('details')).toBe(false);
+    expect(p.has('location')).toBe(false);
+  });
+
+  it('writes the date separator literally and spaces as %20', () => {
+    // The reason the query is built by hand. URLSearchParams would emit
+    // `dates=20260831%2F20260901` and `text=Fall+Session+Begins`; both decode
+    // correctly, but only this form matches what Google documents.
+    const url = googleCalendarUrl(event({ title: 'Fall Session Begins' }));
+    expect(url).toContain('dates=20270313/20270314');
+    expect(url).toContain('text=Fall%20Session%20Begins');
+    expect(url).not.toContain('+');
+  });
+});
+
+describe('outlook link', () => {
+  it('flags an all-day event and sends bare dates', () => {
+    // A timestamped all-day event is read by Outlook as a timed one and filed
+    // at midnight.
+    const p = paramsOf(outlookCalendarUrl(event({
+      startsAt: '2026-12-21T00:00:00.000Z',
+      endsAt: '2027-01-03T00:00:00.000Z',
+    })));
+    expect(p.get('allday')).toBe('true');
+    expect(p.get('startdt')).toBe('2026-12-21');
+    expect(p.get('enddt')).toBe('2027-01-04');
+  });
+
+  it('sends a timed event as full ISO instants, with no allday flag', () => {
+    const p = paramsOf(outlookCalendarUrl(event({
+      isAllDay: false,
+      startsAt: '2026-09-17T01:00:00.000Z',
+      endsAt: null,
+    })));
+    expect(p.has('allday')).toBe(false);
+    expect(p.get('startdt')).toBe('2026-09-17T01:00:00.000Z');
+    // The one-hour default, the same one the .ics uses.
+    expect(p.get('enddt')).toBe('2026-09-17T02:00:00.000Z');
+  });
+
+  it('addresses the personal-account host with the compose path', () => {
+    const url = outlookCalendarUrl(event({}));
+    expect(url.startsWith('https://outlook.live.com/calendar/0/deeplink/compose?')).toBe(true);
+    const p = paramsOf(url);
+    expect(p.get('path')).toBe('/calendar/action/compose');
+    expect(p.get('rru')).toBe('addevent');
+    expect(p.get('subject')).toBe('Allstar Showcase');
   });
 });

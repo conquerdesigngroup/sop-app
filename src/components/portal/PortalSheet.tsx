@@ -32,10 +32,19 @@ interface Props {
   title: string;
   /** Pinned under the body, outside its scroll. Actions live here. */
   footer?: React.ReactNode;
+  /**
+   * Raise it above another layer. The default clears PortalBottomNav, which is
+   * all a sheet opened from the page needs. A sheet opened from inside a Modal
+   * needs more: Modal's overlay is 1100 too, so at the default the two are
+   * separated only by which happens to render later in the tree.
+   */
+  zIndex?: number;
   children: React.ReactNode;
 }
 
-const PortalSheet: React.FC<Props> = ({ isOpen, onClose, title, footer, children }) => {
+const PortalSheet: React.FC<Props> = ({
+  isOpen, onClose, title, footer, zIndex = 1100, children,
+}) => {
   // Two flags, not one. `mounted` keeps the panel in the tree for the slide-out;
   // `shown` drives the transform and is flipped a frame later so the browser
   // has an initial value to animate FROM. Setting both at once means the panel
@@ -82,7 +91,7 @@ const PortalSheet: React.FC<Props> = ({ isOpen, onClose, title, footer, children
         // bar sits exactly where this sheet's footer does, so at any lower
         // value the nav paints over "Clear all" and "Show 21 classes" and the
         // sheet has no visible way to close itself.
-        zIndex: 1100,
+        zIndex,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
