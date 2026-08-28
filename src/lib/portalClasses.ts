@@ -390,6 +390,31 @@ export const monthGrid = (year: number, month: number): Date[] => {
   return Array.from({ length: 42 }, (_, i) => new Date(year, month, start + i));
 };
 
+/**
+ * Which weekday the phone opens on.
+ *
+ * Today when the studio runs that day, otherwise the first day it does. The
+ * point is that the schedule opens on an answer — "here is what is on today" —
+ * rather than on a hundred and two classes and a scrollbar.
+ *
+ * `today` is a parameter rather than a call to new Date() so this stays pure
+ * and testable, the same as initialMonth below.
+ */
+export const defaultDay = (days: number[], today: Date): number | null => {
+  if (days.length === 0) return null;
+  const dow = today.getDay();
+  return days.includes(dow) ? dow : days[0];
+};
+
+/**
+ * Is any class running on this date?
+ *
+ * Used to decide whether to mark today on the day strip. Out of season the
+ * mark would be a lie: there is a Thursday schedule, but not this Thursday.
+ */
+export const anyClassOn = (classes: PortalClass[], date: Date): boolean =>
+  classes.some(c => occursOn(c, date));
+
 export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',

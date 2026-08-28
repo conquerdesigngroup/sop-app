@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -18,6 +18,17 @@ import PortalBottomNav from './PortalBottomNav';
  * screen icon, so the header is compact and the safe-area insets are honoured.
  * Those insets only resolve because `viewport-fit=cover` was added to
  * public/index.html — without it env(safe-area-inset-*) evaluates to 0.
+ *
+ * THE HEADER PUBLISHES ITS OWN HEIGHT
+ *
+ * It is `position: sticky; top: 0`, so anything else that wants to stick has to
+ * stick BELOW it — and its height is not a constant: the safe-area inset is 0
+ * in a browser tab and 47px on a notched phone in standalone mode, and it can
+ * change without a reload when the app is rotated. A ResizeObserver writes the
+ * measured height to `--portal-header-h` on the page root, and the class
+ * schedule's day strip uses it for `top`. Hard-coding a number here means the
+ * strip either floats a gap below the header or hides under it, and which one
+ * you get depends on the device.
  */
 
 interface PortalLayoutProps {
@@ -43,8 +54,30 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
   const { isMobileOrTablet } = useResponsive();
   const showTabs = !!slug && isMobileOrTablet;
 
+  const headerRef = useRef<HTMLElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    const root = rootRef.current;
+    if (!header || !root) return;
+
+    const publish = () => {
+      root.style.setProperty('--portal-header-h', `${Math.round(header.getBoundingClientRect().height)}px`);
+    };
+    publish();
+
+    // Not available in jsdom, and not worth a polyfill: the fallback in the
+    // consumer's `top` covers a browser that never fires this.
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
+      ref={rootRef}
       style={{
         minHeight: '100dvh',
         display: 'flex',
@@ -54,6 +87,7 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
       }}
     >
       <header
+        ref={headerRef}
         style={{
           position: 'sticky',
           top: 0,

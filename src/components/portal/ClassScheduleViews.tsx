@@ -306,8 +306,22 @@ export const ClassWeekView: React.FC<ViewProps> = ({ classes, slug, showCategory
  * answers "is anything on", and the list below answers "what".
  */
 export const ClassMonthView: React.FC<
-  ViewProps & { year: number; month: number; onMonthChange: (year: number, month: number) => void }
-> = ({ classes, slug, showCategory, year, month, onMonthChange }) => {
+  ViewProps & {
+    year: number;
+    month: number;
+    onMonthChange: (year: number, month: number) => void;
+    /**
+     * Set on the phone, where this renders inside a sheet.
+     *
+     * With it, tapping a date reports back and the day list below is not
+     * rendered — the sheet closes and the schedule behind it moves to that
+     * day, which is a bigger surface than the sheet could ever be. Without it
+     * the grid owns its own selection and lists the day underneath, which is
+     * the desktop behaviour.
+     */
+    onPickDate?: (date: Date) => void;
+  }
+> = ({ classes, slug, showCategory, year, month, onMonthChange, onPickDate }) => {
   const { isMobileOrTablet } = useResponsive();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -409,7 +423,7 @@ export const ClassMonthView: React.FC<
               key={iso}
               type="button"
               disabled={count === 0}
-              onClick={() => setSelected(isSelected ? null : iso)}
+              onClick={() => (onPickDate ? onPickDate(cell) : setSelected(isSelected ? null : iso))}
               aria-label={`${cell.getDate()} ${MONTH_NAMES[cell.getMonth()]} — ${count} classes`}
               aria-pressed={isSelected}
               style={{
@@ -465,7 +479,7 @@ export const ClassMonthView: React.FC<
         })}
       </div>
 
-      {selected ? (
+      {onPickDate ? null : selected ? (
         <div>
           <DayHeading
             day={new Date(`${selected}T00:00:00`).getDay()}

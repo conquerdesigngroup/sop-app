@@ -3,6 +3,7 @@ import { theme } from '../../theme';
 import { Card, EmptyState, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import ClassFilterBar from '../../components/portal/ClassFilterBar';
+import ClassMobileSchedule from '../../components/portal/ClassMobileSchedule';
 import {
   ClassListView, ClassMonthView, ClassWeekView,
 } from '../../components/portal/ClassScheduleViews';
@@ -27,7 +28,20 @@ import { PortalClass } from '../../types';
  * Academy and TNT only, because company routines are closed. The fetch is
  * scoped by category in PortalContext, so nothing here filters for access.
  *
- * WHY THREE VIEWS
+ * TWO LAYOUTS, NOT ONE RESPONSIVE ONE
+ *
+ * A phone gets ClassMobileSchedule: a sticky day strip, a dense timeline, and
+ * the filters in a bottom sheet. A desktop gets the three views below. That is
+ * a real fork rather than a breakpoint, because the desktop shape reflowed to
+ * 390px put the first class 697 pixels down the page and ran the list to
+ * eighteen thousand — twenty-two phone screens. The header comment in
+ * ClassMobileSchedule has the rest of the reasoning.
+ *
+ * What they share is everything that is not layout: the same fetch, the same
+ * ClassFilters, the same facet controls, the same recurrence maths. Only the
+ * arrangement forks.
+ *
+ * WHY THREE VIEWS ON A DESKTOP
  *
  * A hundred and two classes is past the point where a single list answers a
  * question. "What is on Tuesday" is a week; "is there anything on the 14th" is
@@ -135,8 +149,17 @@ const ProgramClasses: React.FC = () => {
       slug={slug}
     >
       {/* Wider than the rest of the portal: the week view is six columns and
-          the month view is seven, and 720px squeezes both. */}
-      <div style={{ maxWidth: '1100px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          the month view is seven, and 720px squeezes both. The phone gets a
+          tighter gap because its shell is a stack of small pieces rather than
+          three big ones. */}
+      <div
+        style={{
+          maxWidth: '1100px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: isMobileOrTablet ? '12px' : '20px',
+        }}
+      >
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
             <Spinner size={28} color={theme.colors.primary} />
@@ -163,17 +186,19 @@ const ProgramClasses: React.FC = () => {
           />
         )}
 
-        {!loading && !error && classes.length > 0 && (
+        {!loading && !error && classes.length > 0 && isMobileOrTablet && (
+          <ClassMobileSchedule
+            classes={classes}
+            slug={slug}
+            filters={filters}
+            onFiltersChange={setFilters}
+            facets={facets}
+          />
+        )}
+
+        {!loading && !error && classes.length > 0 && !isMobileOrTablet && (
           <>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '12px',
-                alignItems: 'center',
-                justifyContent: isMobileOrTablet ? 'center' : 'flex-start',
-              }}
-            >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
               <ViewSwitch value={view} onChange={chooseView} />
             </div>
 

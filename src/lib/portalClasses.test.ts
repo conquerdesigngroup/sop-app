@@ -1,7 +1,7 @@
 import {
-  applyFilters, ageGroupTokens, buildFacets, durationLabel, EMPTY_FILTERS,
-  groupByDay, initialMonth, instructorNames, isoDate, minutesOfDay, monthGrid,
-  occursOn, sortClasses, timeBandOf,
+  anyClassOn, applyFilters, ageGroupTokens, buildFacets, defaultDay,
+  durationLabel, EMPTY_FILTERS, groupByDay, initialMonth, instructorNames,
+  isoDate, minutesOfDay, monthGrid, occursOn, sortClasses, timeBandOf,
 } from './portalClasses';
 import { PortalClass } from '../types';
 
@@ -241,5 +241,35 @@ describe('initialMonth', () => {
   it('falls back to today when no class has a season', () => {
     const undated = [klass({ seasonStart: null })];
     expect(initialMonth(undated, new Date(2026, 5, 1))).toEqual({ year: 2026, month: 5 });
+  });
+});
+
+describe('defaultDay', () => {
+  const days = [1, 2, 3, 4, 5, 6];
+
+  it('opens on today when the studio runs today', () => {
+    // Thursday 27 August 2026.
+    expect(defaultDay(days, new Date(2026, 7, 27))).toBe(4);
+  });
+
+  it('opens on the first day of the week when today is closed', () => {
+    // Sunday. The studio has no Sunday classes, so Monday is the answer.
+    expect(defaultDay(days, new Date(2026, 7, 30))).toBe(1);
+  });
+
+  it('has nothing to open on when there are no classes', () => {
+    expect(defaultDay([], new Date(2026, 7, 27))).toBeNull();
+  });
+});
+
+describe('anyClassOn', () => {
+  const monday = klass({ dayOfWeek: 1 });
+
+  it('is true for a date inside the season', () => {
+    expect(anyClassOn([monday], new Date(2026, 8, 7))).toBe(true);
+  });
+
+  it('is false before the season, so "today" is not marked out of term', () => {
+    expect(anyClassOn([monday], new Date(2026, 7, 24))).toBe(false);
   });
 });

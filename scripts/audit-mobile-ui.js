@@ -77,6 +77,11 @@ const DEVICES = [
   // Any breakpoint the app switches on needs a sample on BOTH sides of it.
   { name: 'iPhone SE / iPad Slide Over', width: 320, height: 568, statusBar: 20 },
   { name: 'iPad split view', width: 507, height: 768, statusBar: 0 },
+  // Same rule again, one breakpoint up. isMobileOrTablet is width < 768, and
+  // every size above is below it — so with only those six, /classes was
+  // measured six times in its phone layout and never once in the desktop one
+  // it switches to at 768. Not a phone, and not here for the notch.
+  { name: 'iPad portrait', width: 820, height: 1180, statusBar: 0 },
 ];
 
 const PUBLIC_ROUTES = [
@@ -106,11 +111,12 @@ const PUBLIC_ROUTES = [
 // checked with AUDIT_PORTAL_VIEW=list rather than by not checking it.
 const PORTAL_VIEW = process.env.AUDIT_PORTAL_VIEW === 'list' ? 'list' : 'month';
 
-// Same reasoning again for /classes, which has three views rather than two.
-// Month is seven columns inside a phone width; week is a row of side-scrolling
-// day columns and is the one that can push the PAGE sideways if its own
-// overflow container is ever lost. List is a single-column stack and is the
-// least likely to break, so it is the one you have to ask for.
+// Same reasoning again for /classes, but only above 768px: below that the page
+// renders a phone layout with a day strip and no view switch at all, and this
+// setting does nothing. On the iPad portrait sample it picks which of the three
+// desktop views gets measured — month is seven columns, week is a row of
+// side-scrolling day columns and is the one that can push the PAGE sideways if
+// its own overflow container is ever lost, list is a single-column stack.
 //
 // Three runs, not one, before shipping a change to that page:
 //   AUDIT_CLASSES_VIEW=list npm run audit:mobile
@@ -145,13 +151,21 @@ const staticScan = () => {
       if (entry.isDirectory()) { walk(full); continue; }
       if (!/\.(ts|tsx|css)$/.test(entry.name)) continue;
       fs.readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
+        // Comment lines are prose, not layout. The rule below is important
+        // enough that people write it down — PortalSheet's header explains at
+        // length why it uses 88dvh and not 100vh — and flagging the
+        // explanation as the bug it warns against trains everyone to ignore
+        // this check. A commented-out `// height: '100vh'` is skipped too,
+        // which is correct: it is not styling anything.
+        const isComment = /^\s*(\/\/|\*|\/\*)/.test(line);
+
         // ANY vh unit, not just 100vh. A modal at maxHeight: 90vh overflows the
         // visible area on iOS exactly like a container at 100vh does, and pushes
         // its Save button off the bottom of the screen — which is worse, because
         // the page looks fine until you try to use it. calc(100vh - Xpx) is the
         // same bug wearing a hat. Matching a digit immediately before `vh` skips
         // `dvh`, whose preceding character is the d.
-        if (/\dvh\b/.test(line)) {
+        if (!isComment && /\dvh\b/.test(line)) {
           hits.push({ file: path.relative(ROOT, full), line: i + 1, text: line.trim() });
         }
       });
