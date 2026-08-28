@@ -31,15 +31,30 @@ interface TileProps {
   to: string;
   label: string;
   description: string;
-  /** Drawn at 32px inside a 56px well. */
+  /** Drawn at 28px inside a 48/52px well. */
   icon: React.ReactNode;
   /** Marks the tile with the electric accent. Exactly one tile sets this. */
   accent?: boolean;
 }
 
+/**
+ * A square, centre-stacked card: icon over name over description.
+ *
+ * It used to be a wide left-aligned slab on desktop and a row with a chevron on
+ * a phone — two different objects doing one job, and neither of them a shape.
+ * Squares read as a matched pair of choices at a glance, which is the whole
+ * point of this screen.
+ *
+ * minHeight rather than aspect-ratio. A fixed ratio derives the height from the
+ * width and then lets the contents spill out of it when they do not fit, which
+ * at 320px they very nearly do; minHeight gives the same square at every width
+ * that matters and simply grows on the one that does not. A tile a few pixels
+ * off square beats a description hanging out of the bottom of one.
+ */
 const ChooserTile: React.FC<TileProps> = ({ to, label, description, icon, accent = false }) => {
   const [active, setActive] = useState(false);
   const { isMobileOrTablet } = useResponsive();
+  const well = isMobileOrTablet ? '48px' : '52px';
 
   return (
     <Link
@@ -53,25 +68,28 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, description, icon, accent
         backgroundColor: theme.colors.bg.secondary,
         border: `2px solid ${active ? theme.colors.primary : theme.colors.bdr.primary}`,
         borderRadius: theme.borderRadius.lg,
-        padding: isMobileOrTablet ? '24px 20px' : '32px 28px',
+        padding: isMobileOrTablet ? '16px 12px' : '24px 20px',
         transition: 'border-color 0.2s ease, transform 0.2s ease',
         transform: active ? 'translateY(-2px)' : 'none',
 
-        flex: 1,
         display: 'flex',
-        flexDirection: isMobileOrTablet ? 'row' : 'column',
-        alignItems: isMobileOrTablet ? 'center' : 'flex-start',
-        gap: isMobileOrTablet ? '16px' : '20px',
-        minHeight: isMobileOrTablet ? 0 : '220px',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: isMobileOrTablet ? '10px' : '16px',
+        minHeight: isMobileOrTablet ? '158px' : '236px',
+        // A grid item will not shrink below its content's min-content width
+        // without this, and then the row overflows instead of the cell.
+        minWidth: 0,
 
         textDecoration: 'none',
-        textAlign: 'left',
+        textAlign: 'center',
       }}
     >
       <div
         style={{
-          width: '56px',
-          height: '56px',
+          width: well,
+          height: well,
           flexShrink: 0,
           borderRadius: theme.borderRadius.md,
           backgroundColor: accent ? theme.colors.primary : theme.colors.bg.tertiary,
@@ -86,12 +104,13 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, description, icon, accent
         {icon}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ minWidth: 0 }}>
         <div
           style={{
             ...theme.typography.h3,
+            fontSize: isMobileOrTablet ? '17px' : undefined,
             color: theme.colors.txt.primary,
-            marginBottom: '6px',
+            marginBottom: '5px',
           }}
         >
           {label}
@@ -99,25 +118,18 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, description, icon, accent
         <div
           style={{
             ...theme.typography.bodySmall,
+            fontSize: isMobileOrTablet ? '12px' : undefined,
+            lineHeight: 1.35,
             color: theme.colors.txt.tertiary,
             fontFamily: theme.fonts.primary,
+            // 138px of cell at 320px. Nothing here breaks on its own, so say
+            // it may — see the flex/min-content note in CLAUDE.md.
+            overflowWrap: 'anywhere',
           }}
         >
           {description}
         </div>
       </div>
-
-      {isMobileOrTablet && (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
-          <path
-            d="M9 18l6-6-6-6"
-            style={{ stroke: theme.colors.txt.tertiary }}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      )}
     </Link>
   );
 };
@@ -190,21 +202,25 @@ const ChooserPage: React.FC = () => {
           }}
         />
 
-        <ThemeToggle label="Appearance" />
+        <ThemeToggle />
       </div>
 
+      {/* Two equal columns at every width, not a row that stacks. Two squares
+          side by side ARE the choice — stacking them turns one decision into a
+          list you read top to bottom. 1fr twice rather than flex so the pair
+          stays exactly equal whatever is written inside them. */}
       <div
         style={{
-          display: 'flex',
-          flexDirection: isMobileOrTablet ? 'column' : 'row',
-          gap: '16px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: isMobileOrTablet ? '12px' : '20px',
           width: '100%',
-          maxWidth: isMobileOrTablet ? '440px' : '760px',
+          maxWidth: isMobileOrTablet ? '400px' : '520px',
         }}
       >
-        {/* Descriptions are kept to a similar length on purpose: at 375px these
-            stack, and a one-line/three-line pair reads as two different
-            components rather than one choice. */}
+        {/* Descriptions are kept to a similar length on purpose: these sit side
+            by side at every width, and a one-line/three-line pair reads as two
+            different components rather than one choice. */}
         <ChooserTile
           to="/login"
           label="Staff"
