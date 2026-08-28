@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { theme } from '../../theme';
+import { getThemeColors, theme } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes } from '../../lib/portal';
 import InstallAppGuide from '../../components/InstallAppGuide';
 import ThemeToggle from '../../components/ThemeToggle';
+import HalftoneField from '../../components/HalftoneField';
 
 /**
  * The front door.
@@ -26,6 +27,19 @@ import ThemeToggle from '../../components/ThemeToggle';
  * below mirrors Card's spec (bg.secondary, 2px bdr.primary, borderRadius.lg) so
  * it still reads as the same design system.
  */
+
+/**
+ * The panel colour with an alpha, from the literal palette rather than the
+ * `var()` token — see the theming note in CLAUDE.md, which is exactly why you
+ * cannot just append '78' to theme.colors.bg.secondary.
+ */
+const translucentPanel = (mode: 'dark' | 'light', alpha: number) => {
+  const hex = getThemeColors(mode).bg.secondary;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
 
 interface TileProps {
   to: string;
@@ -58,6 +72,7 @@ interface TileProps {
 const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false }) => {
   const [active, setActive] = useState(false);
   const { isMobileOrTablet } = useResponsive();
+  const { mode } = useTheme();
   const well = isMobileOrTablet ? '48px' : '52px';
 
   return (
@@ -68,8 +83,14 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false }) =
       onFocus={() => setActive(true)}
       onBlur={() => setActive(false)}
       style={{
-        // Card's visual contract.
-        backgroundColor: theme.colors.bg.secondary,
+        // Card's visual contract, with one deliberate departure: the panel is
+        // translucent and blurs what is behind it, so the halftone field passes
+        // under the tiles instead of stopping dead at their edges. At 0.78 over
+        // the void the text contrast is unchanged; the blur is over two small
+        // boxes, not the page, so it costs almost nothing.
+        backgroundColor: translucentPanel(mode, 0.78),
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         border: `2px solid ${active ? theme.colors.primary : theme.colors.bdr.primary}`,
         borderRadius: theme.borderRadius.lg,
         padding: isMobileOrTablet ? '16px 12px' : '24px 20px',
@@ -158,6 +179,12 @@ const ChooserPage: React.FC = () => {
     <div
       style={{
         minHeight: '100dvh',
+        // The field behind the content is fixed and sits at z-index -1. Making
+        // this a stacking context is what puts it reliably above the page
+        // background and below everything on the page, without every child
+        // having to opt into a layer of its own.
+        position: 'relative',
+        isolation: 'isolate',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -171,6 +198,8 @@ const ChooserPage: React.FC = () => {
         gap: isMobileOrTablet ? '32px' : '48px',
       }}
     >
+      <HalftoneField />
+
       {/* Logo and toggle are one group with their own tighter gap, rather than
           two children of the page. As siblings they would each take the page's
           32/48px gap, which reads as three unrelated things stacked up and
