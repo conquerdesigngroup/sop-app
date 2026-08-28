@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
-import { theme } from '../theme';
+import { theme, BRAND_MARK } from '../theme';
 import { roleLabel } from '../lib/roles';
 import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
@@ -128,8 +128,8 @@ const Navigation: React.FC = () => {
   const { canEdit: canEditPortal } = usePortalAdmin();
   const { isDark, toggleTheme } = useTheme();
   const colors = useThemeColors();
-  // DIDC brand marks: white outline on dark backgrounds, ink outline on light
-  const brandLogo = isDark ? '/brand/logos/didc-outline-white.svg' : '/brand/logos/didc-outline.svg';
+  // One mark for both modes — it carries its own keyline. See BRAND_MARK.
+  const brandLogo = BRAND_MARK;
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);

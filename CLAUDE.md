@@ -319,7 +319,7 @@ Consequences:
 
 ### DIDC brand (source: public/brand/tokens.json)
 - **Fonts** (Google Fonts, linked in public/index.html): Kanit ExtraBold Italic uppercase = headlines (`theme.fonts.display`, applied globally to h1–h3), Barlow = body/UI (`theme.fonts.primary`), JetBrains Mono = specs/tags (`theme.fonts.mono`).
-- **Logos** live in `public/brand/logos/` — use `didc-outline-white.svg` on dark backgrounds, `didc-outline.svg` on light (pick via `useTheme().isDark`). Never recolor, stretch, rotate, or add effects to the marks.
+- **Logos** live in `public/brand/logos/`. The header mark is `didc-mark-3d.png`, imported as `BRAND_MARK` from `src/theme.ts` — **one file for both modes**, because it carries its own black keyline. Do not reintroduce an `isDark` ternary for it, and do not hardcode the path: Navigation, PortalLayout and Login all read the constant. `didc-thrash-white.svg` / `didc-thrash-pink.svg` are the big wordmark on the front door and DO still swap on `isDark`. (`didc-outline*.svg` are the retired header pair, kept but unused.) Never recolor, stretch, rotate, or add effects to the marks.
 - Keep electric pink to ~5% of any view — accents (buttons, active states, focus), never fills or large surfaces.
 
 ### Colors (dark-mode values shown; light mode swaps automatically)

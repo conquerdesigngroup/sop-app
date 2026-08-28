@@ -17,15 +17,25 @@ export const PORTAL_ADMIN_PATH = '/portal-admin';
 
 // ------------------------------------------------------------------ documents
 
-/** 25 MB — the bucket's own file_size_limit, checked here for a real message. */
-export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+/**
+ * 50 MB — the bucket's own file_size_limit, checked here for a real message.
+ *
+ * Raised from 25 MB with v27, when video became something a teacher can post.
+ * 25 MB is about twenty seconds of phone video, which is not a routine.
+ *
+ * 50 is not a taste decision: it is the per-file ceiling on the Supabase free
+ * plan, so it cannot go higher without changing the plan. Worth knowing that
+ * the same plan caps TOTAL storage at 1 GB — twenty full-size videos fills it,
+ * and nothing in the app warns anyone when it does.
+ */
+export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 
 /**
- * Mirrors allowed_mime_types on the `portal-documents` bucket (v9, section 12).
+ * Mirrors allowed_mime_types on the `portal-documents` bucket (v9 s.12, v27).
  *
  * The bucket rejects anything else regardless, but its error arrives as an
  * opaque failure after the whole file has uploaded. Checking first costs
- * nothing and lets someone with a .mov know why before they wait.
+ * nothing and lets someone with a 60 MB video know why before they wait.
  *
  * Change this and the bucket together, or the two drift apart silently.
  */
@@ -34,9 +44,17 @@ export const ALLOWED_DOCUMENT_MIME: readonly string[] = [
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/gif',
   'image/heic',
   'audio/mpeg',
   'audio/mp4',
+  // Added in v27. quicktime is what an iPhone calls a .mov and is the one a
+  // teacher will reach for first; mp4 is the one that plays on every device
+  // they might send it to. Both are accepted and the upload form says which
+  // is which — see compatibilityWarning in portalMedia.ts.
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/plain',
@@ -44,7 +62,7 @@ export const ALLOWED_DOCUMENT_MIME: readonly string[] = [
 
 /** For the file picker's `accept` and for the hint under it. */
 export const DOCUMENT_ACCEPT = ALLOWED_DOCUMENT_MIME.join(',');
-export const DOCUMENT_HINT = 'PDF, Word, JPG, PNG, HEIC, MP3 or text. 25 MB max.';
+export const DOCUMENT_HINT = 'Photo, video, MP3, PDF, Word or text. 50 MB max.';
 
 /** Null when the file is fine, otherwise the reason to show. */
 export const validateDocumentFile = (file: File): string | null => {

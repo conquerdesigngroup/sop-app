@@ -1031,7 +1031,7 @@ export const Spinner: React.FC<SpinnerProps> = ({
     // theme.colors.bg/txt/bdr token is a var() string, and an SVG presentation
     // attribute cannot resolve var() — it drops the declaration and falls back
     // to `none`, so a caller passing a perfectly good token got an invisible
-    // spinner. DocumentRow was doing exactly that.
+    // spinner. The portal's file rows were doing exactly that.
     style={{ stroke: color, animation: 'spin 1s linear infinite' }}
   >
     <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />

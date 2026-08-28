@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { theme } from '../../theme';
-import { useTheme } from '../../contexts/ThemeContext';
+import { theme, BRAND_MARK } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import { ProgramSlug, portalRoutes } from '../../lib/portal';
 import PortalBottomNav from './PortalBottomNav';
@@ -50,7 +49,6 @@ interface PortalLayoutProps {
 }
 
 const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, slug, children }) => {
-  const { isDark } = useTheme();
   const { isMobileOrTablet } = useResponsive();
   const showTabs = !!slug && isMobileOrTablet;
 
@@ -140,7 +138,7 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
               side is never stranded. */}
           <Link to={portalRoutes.chooser} style={{ display: 'flex', flexShrink: 0 }} aria-label="DIDC home">
             <img
-              src={isDark ? '/brand/logos/didc-outline-white.svg' : '/brand/logos/didc-outline.svg'}
+              src={BRAND_MARK}
               alt="Dancing Images Dance Center"
               style={{ height: '22px', width: 'auto' }}
             />

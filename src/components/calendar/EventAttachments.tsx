@@ -95,6 +95,74 @@ export const useAttachments = (
 
 // ------------------------------------------------------------------- reading
 
+/**
+ * The tappable half of a row.
+ *
+ * A LINK is an anchor, because its destination is already known — nothing to
+ * await, so nothing for a phone to treat as an unsolicited popup. A FILE has to
+ * be signed first, so it stays a button and goes through openFile above.
+ *
+ * Same styling either way; the element differs because what it does differs.
+ */
+const AttachmentLabel: React.FC<{
+  a: EventAttachment;
+  opening: boolean;
+  onOpenFile: () => void;
+}> = ({ a, opening, onOpenFile }) => {
+  const shell: React.CSSProperties = {
+    flex: 1,
+    minWidth: 0,
+    textAlign: 'left',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    color: theme.colors.txt.primary,
+    fontFamily: theme.fonts.primary,
+    textDecoration: 'none',
+    display: 'block',
+  };
+
+  const body = (
+    <>
+      <span style={{
+        display: 'block',
+        fontSize: '14px',
+        fontWeight: 600,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
+        {opening ? 'Opening…' : attachmentTitle(a)}
+      </span>
+      {subtitleFor(a) && (
+        <span style={{
+          display: 'block',
+          fontSize: '12px',
+          fontFamily: theme.fonts.mono,
+          color: theme.colors.txt.tertiary,
+        }}>
+          {subtitleFor(a)}
+        </span>
+      )}
+    </>
+  );
+
+  if (a.kind === 'link' && a.url) {
+    return (
+      <a href={a.url} target="_blank" rel="noopener noreferrer" style={shell}>
+        {body}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onOpenFile} disabled={opening} style={shell}>
+      {body}
+    </button>
+  );
+};
+
 export const AttachmentList: React.FC<{
   items: EventAttachment[];
   onRemove?: (a: EventAttachment) => void;
@@ -103,15 +171,23 @@ export const AttachmentList: React.FC<{
   const [opening, setOpening] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
-  const open = async (a: EventAttachment) => {
+  /**
+   * Files only. A link already knows its URL and is rendered as an anchor
+   * below, which is the whole point: this path has to await a signature, and
+   * window.open() called once that await resolves is no longer part of the tap
+   * that asked for it. iOS discards it silently — the button could be pressed
+   * over and over on a phone and nothing would happen, no error, no clue.
+   *
+   * Navigating instead is never blocked. It also does not leave the page for a
+   * file, because storage answers with Content-Disposition: attachment.
+   */
+  const openFile = async (a: EventAttachment) => {
     setFailed(null);
     setOpening(a.id);
     try {
       const url = await attachmentUrl(a);
       if (!url) throw new Error('That file is no longer available.');
-      // noopener: a page opened with window.open can otherwise reach back
-      // through window.opener and navigate this tab.
-      window.open(url, '_blank', 'noopener,noreferrer');
+      window.location.assign(url);
     } catch (e: any) {
       setFailed(e?.message || 'Could not open that.');
     } finally {
@@ -141,43 +217,11 @@ export const AttachmentList: React.FC<{
             {iconFor(a)}
           </span>
 
-          <button
-            type="button"
-            onClick={() => open(a)}
-            disabled={opening === a.id}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              textAlign: 'left',
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              color: theme.colors.txt.primary,
-              fontFamily: theme.fonts.primary,
-            }}
-          >
-            <span style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: 600,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {opening === a.id ? 'Opening…' : attachmentTitle(a)}
-            </span>
-            {subtitleFor(a) && (
-              <span style={{
-                display: 'block',
-                fontSize: '12px',
-                fontFamily: theme.fonts.mono,
-                color: theme.colors.txt.tertiary,
-              }}>
-                {subtitleFor(a)}
-              </span>
-            )}
-          </button>
+          <AttachmentLabel
+            a={a}
+            opening={opening === a.id}
+            onOpenFile={() => openFile(a)}
+          />
 
           {onRemove && (
             <button
