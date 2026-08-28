@@ -43,6 +43,30 @@ const addDaysUtc = (d: Date, days: number): Date => {
   return out;
 };
 
+/**
+ * Start, and the EXCLUSIVE end.
+ *
+ * Shared by all three exporters below, because iCal, Google and Outlook all
+ * take the same two-part convention and all three get the all-day case wrong
+ * in the same way if you hand them the stored end date. Portal all-day events
+ * are stored LAST-DAY-INCLUSIVE by portal-calendar-sync, which shifts Google's
+ * exclusive end back a day on the way in; every reader wants it shifted
+ * forward again. Computed once here so the three cannot drift apart.
+ *
+ * An hour is the conventional default for a timed event with no stated end.
+ */
+const boundsOf = (event: PortalEvent): { start: Date; end: Date } => {
+  const start = new Date(event.startsAt);
+  const stored = event.endsAt ? new Date(event.endsAt) : null;
+
+  if (event.isAllDay) {
+    const lastDay = stored && stored > start ? stored : start;
+    return { start, end: addDaysUtc(lastDay, 1) };
+  }
+
+  return { start, end: stored ?? new Date(start.getTime() + 60 * 60 * 1000) };
+};
+
 /** RFC 5545 TEXT escaping. Backslash first, or it escapes its own output. */
 const escapeText = (text: string): string =>
   String(text ?? '')
@@ -97,8 +121,7 @@ const fold = (line: string): string => {
 
 /** One VEVENT, wrapped in a VCALENDAR, ready to hand to a phone. */
 export const buildEventIcs = (event: PortalEvent): string => {
-  const start = new Date(event.startsAt);
-  const end = event.endsAt ? new Date(event.endsAt) : null;
+  const { start, end } = boundsOf(event);
 
   const lines: string[] = [
     'BEGIN:VCALENDAR',
@@ -114,19 +137,14 @@ export const buildEventIcs = (event: PortalEvent): string => {
   ];
 
   if (event.isAllDay) {
-    // DTEND is EXCLUSIVE for DATE values — the exact inverse of what
-    // portal-calendar-sync does on the way IN, where it shifts Google's
-    // exclusive end back a day to store the last day inclusively. Skipping
-    // this here drops the final day: a break ending the 3rd would show as
-    // ending the 2nd on the parent's phone.
-    const lastDay = end && end > start ? end : start;
+    // DTEND is EXCLUSIVE for DATE values. boundsOf has already added the day;
+    // skipping that drops the final day, so a break ending the 3rd would show
+    // as ending the 2nd on the parent's phone.
     lines.push(`DTSTART;VALUE=DATE:${dateStamp(start)}`);
-    lines.push(`DTEND;VALUE=DATE:${dateStamp(addDaysUtc(lastDay, 1))}`);
+    lines.push(`DTEND;VALUE=DATE:${dateStamp(end)}`);
   } else {
-    // An hour is the conventional default for an event with no stated end.
-    const finish = end ?? new Date(start.getTime() + 60 * 60 * 1000);
     lines.push(`DTSTART:${utcStamp(start)}`);
-    lines.push(`DTEND:${utcStamp(finish)}`);
+    lines.push(`DTEND:${utcStamp(end)}`);
   }
 
   lines.push(`SUMMARY:${escapeText(event.title)}`);
@@ -136,6 +154,91 @@ export const buildEventIcs = (event: PortalEvent): string => {
   lines.push('END:VEVENT', 'END:VCALENDAR');
 
   return lines.map(fold).join('\r\n') + '\r\n';
+};
+
+// --------------------------------------------------- web calendar handoffs
+
+/** 2026-08-31 — UTC, for the same reason dateStamp reads in UTC. */
+const isoDate = (d: Date): string =>
+  `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+
+/**
+ * A query string, built by hand rather than with URLSearchParams.
+ *
+ * Two differences, and both are the reason:
+ *
+ *   - URLSearchParams writes a space as `+`, which only means space under
+ *     form encoding. `%20` means it everywhere.
+ *   - It also escapes the `/` in Google's `dates` pair to `%2F`. A slash is a
+ *     legal sub-delimiter in a query and Google documents the pair with it
+ *     literal, so `raw` values are passed through untouched and the URL comes
+ *     out looking exactly like the one in Google's own docs.
+ *
+ * Empty values are dropped, so an event with no location does not arrive with
+ * an empty location field.
+ */
+const query = (parts: Array<[string, string | null | undefined, 'raw'?]>): string =>
+  parts
+    .filter(([, value]) => !!value)
+    .map(([key, value, raw]) => `${key}=${raw ? value : encodeURIComponent(value!)}`)
+    .join('&');
+
+/**
+ * Google Calendar's event composer, prefilled.
+ *
+ * This is the route that actually saves a parent some work: it lands on a
+ * filled-in event with a Save button, and on a phone with the app installed
+ * Google opens it there rather than in the browser. No file, no Files app, no
+ * second decision about what to do with a download.
+ *
+ * `dates` takes the same inclusive-start / exclusive-end pair as the .ics, in
+ * the same two shapes — YYYYMMDD for all-day, and a UTC instant otherwise.
+ */
+export const googleCalendarUrl = (event: PortalEvent): string => {
+  const { start, end } = boundsOf(event);
+
+  const dates = event.isAllDay
+    ? `${dateStamp(start)}/${dateStamp(end)}`
+    : `${utcStamp(start)}/${utcStamp(end)}`;
+
+  return 'https://calendar.google.com/calendar/render?' + query([
+    ['action', 'TEMPLATE', 'raw'],
+    ['text', event.title],
+    ['dates', dates, 'raw'],
+    ['details', event.description],
+    ['location', event.location],
+  ]);
+};
+
+/**
+ * Outlook.com's event composer, prefilled.
+ *
+ * outlook.live.com is the personal-account host, which is what a parent has.
+ * A work or school account lives on outlook.office.com and would have to sign
+ * in again here — that is what the .ics rows below are for, and why this is
+ * offered alongside them rather than instead of them.
+ *
+ * All-day events are sent as bare dates with allday=true. Outlook reads a
+ * timestamped all-day event as a timed one and files it at midnight.
+ */
+export const outlookCalendarUrl = (event: PortalEvent): string => {
+  const { start, end } = boundsOf(event);
+
+  return 'https://outlook.live.com/calendar/0/deeplink/compose?' + query([
+    ['path', '/calendar/action/compose'],
+    ['rru', 'addevent', 'raw'],
+    ['subject', event.title],
+    ['allday', event.isAllDay ? 'true' : null, 'raw'],
+    ['startdt', event.isAllDay ? isoDate(start) : start.toISOString(), 'raw'],
+    ['enddt', event.isAllDay ? isoDate(end) : end.toISOString(), 'raw'],
+    ['body', event.description],
+    ['location', event.location],
+  ]);
+};
+
+/** Opened in a new tab, and never with a window handle back to this one. */
+export const openCalendarUrl = (url: string): void => {
+  window.open(url, '_blank', 'noopener,noreferrer');
 };
 
 // ----------------------------------------------------------------- delivery
@@ -152,50 +255,37 @@ const fileName = (event: PortalEvent): string => {
 export type AddOutcome = 'shared' | 'downloaded' | 'cancelled';
 
 /**
- * Hand the event to whatever the parent's device uses for calendars.
+ * Whether the share sheet is the better route on this device.
  *
- * Two routes, and the order matters on a phone. The share sheet is tried first
- * because on iOS — which is most of this studio's parents — a downloaded .ics
- * lands in Files and has to be found and opened again, whereas sharing offers
- * "Add to Calendar" in the sheet itself. Desktop browsers do not advertise file
- * sharing, so they fall through to the download, which is the right behaviour
- * there anyway.
+ * Both halves are needed. canShare({files}) alone is true in desktop Safari,
+ * where the sheet offers AirDrop and Mail and no way at all to add a date —
+ * a Mac wants the file, which opens Calendar on double-click. The coarse
+ * pointer is what separates the phone, where the sheet lists "Add to
+ * Calendar" directly and a download disappears into Files.
  *
- * Must be called directly from a click: both the share sheet and the download
- * are gated on a user gesture.
+ * Probed with an empty stand-in rather than the real file: the question is
+ * whether this browser shares files of this type at all, and building the
+ * .ics to ask is work thrown away on every desktop.
  */
-export const addEventToCalendar = async (event: PortalEvent): Promise<AddOutcome> => {
-  const ics = buildEventIcs(event);
-  const name = fileName(event);
-
-  // File is not constructible in every older browser, and canShare({files}) is
-  // the only reliable way to ask whether files are actually supported —
-  // navigator.share alone is true on browsers that only take text and url.
+const prefersShareSheet = (): boolean => {
   try {
-    if (typeof File === 'function' && navigator.canShare) {
-      const file = new File([ics], name, { type: 'text/calendar' });
-      if (navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: event.title });
-          return 'shared';
-        } catch (err) {
-          // The parent backing out of the sheet is a decision, not a failure.
-          // Falling through to a download here would be the app arguing.
-          if ((err as Error)?.name === 'AbortError') return 'cancelled';
-          // Anything else — a share target that rejected the file — is worth
-          // falling through for.
-        }
-      }
-    }
+    if (typeof File !== 'function' || !navigator.canShare) return false;
+    if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) return false;
+    return navigator.canShare({
+      files: [new File([''], 'probe.ics', { type: 'text/calendar' })],
+    });
   } catch {
-    /* no share support; the download below is the whole fallback */
+    return false;
   }
+};
 
-  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+/** Save the .ics straight to the device, no sheet, no questions. */
+export const downloadEventIcs = (event: PortalEvent): void => {
+  const blob = new Blob([buildEventIcs(event)], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = name;
+  link.download = fileName(event);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -203,6 +293,36 @@ export const addEventToCalendar = async (event: PortalEvent): Promise<AddOutcome
   // been known to cancel an in-flight download when the URL disappears in the
   // same tick as the click.
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
 
+/**
+ * Hand the event to whatever the parent's device uses for calendars.
+ *
+ * The share sheet first on a phone, because on iOS — which is most of this
+ * studio's parents — the sheet offers "Add to Calendar" in place, whereas a
+ * downloaded .ics lands in Files and has to be found and opened again.
+ * Everywhere else the download IS the right answer and the sheet is not.
+ *
+ * Must be called directly from a click: both the share sheet and the download
+ * are gated on a user gesture.
+ */
+export const addEventToCalendar = async (event: PortalEvent): Promise<AddOutcome> => {
+  if (prefersShareSheet()) {
+    try {
+      const file = new File([buildEventIcs(event)], fileName(event), {
+        type: 'text/calendar',
+      });
+      await navigator.share({ files: [file], title: event.title });
+      return 'shared';
+    } catch (err) {
+      // The parent backing out of the sheet is a decision, not a failure.
+      // Falling through to a download here would be the app arguing.
+      if ((err as Error)?.name === 'AbortError') return 'cancelled';
+      // Anything else — a share target that rejected the file — is worth
+      // falling through for.
+    }
+  }
+
+  downloadEventIcs(event);
   return 'downloaded';
 };

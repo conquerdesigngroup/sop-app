@@ -3,7 +3,6 @@ import { theme } from '../../theme';
 import { Button, Modal, CalendarIcon } from '../ui';
 import { formatEventDate, describeEventWhen } from '../../lib/portal';
 import { PortalEvent } from '../../types';
-import { useAddToCalendar } from './useAddToCalendar';
 import {
   AttachmentList,
   useAttachments,
@@ -17,6 +16,11 @@ import {
  * attached to the event, and a labelled "Add to my calendar" rather than the
  * row's bare icon.
  *
+ * Adding the date does not happen here. The button hands the event back up to
+ * the page, which owns the one AddToCalendarSheet both this card and the
+ * calendar rows open — a second copy of that sheet mounted inside this modal
+ * would be a panel inside a dialog, and only one of them can lock body scroll.
+ *
  * Attachments are fetched on open rather than with the calendar. A term is
  * dozens of events and almost none get opened; one small query on tap beats a
  * join nobody reads. RLS decides what comes back — a file on the Staff
@@ -26,6 +30,8 @@ import {
 interface EventCardProps {
   event: PortalEvent | null;
   onClose: () => void;
+  /** Opens the page's add-to-calendar sheet over this card. */
+  onAddToCalendar: (event: PortalEvent) => void;
 }
 
 const Line: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -52,8 +58,7 @@ const Line: React.FC<{ label: string; children: React.ReactNode }> = ({ label, c
   </div>
 );
 
-const EventCard: React.FC<EventCardProps> = ({ event, onClose }) => {
-  const { add, busyId } = useAddToCalendar();
+const EventCard: React.FC<EventCardProps> = ({ event, onClose, onAddToCalendar }) => {
   const { items: attachments } = useAttachments(
     event?.googleCalendarId, event?.googleEventId
   );
@@ -78,8 +83,7 @@ const EventCard: React.FC<EventCardProps> = ({ event, onClose }) => {
           <Button
             variant="primary"
             leftIcon={<CalendarIcon size={16} />}
-            loading={busyId === event.id}
-            onClick={() => add(event)}
+            onClick={() => onAddToCalendar(event)}
           >
             Add to my calendar
           </Button>

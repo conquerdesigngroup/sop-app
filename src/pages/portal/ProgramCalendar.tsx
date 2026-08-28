@@ -6,7 +6,7 @@ import {
 import PortalLayout from '../../components/portal/PortalLayout';
 import EventBar from '../../components/calendar/EventBar';
 import EventCard from '../../components/portal/EventCard';
-import { useAddToCalendar } from '../../components/portal/useAddToCalendar';
+import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import { usePortal } from '../../contexts/PortalContext';
 import {
   portalRoutes,
@@ -107,8 +107,7 @@ const EventRow: React.FC<{
   event: PortalEvent;
   onOpen: (event: PortalEvent) => void;
   onAdd: (event: PortalEvent) => void;
-  adding: boolean;
-}> = ({ event, onOpen, onAdd, adding }) => (
+}> = ({ event, onOpen, onAdd }) => (
   <Card hover onClick={() => onOpen(event)}>
     <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
       {/* Date chip — the thing being scanned for. */}
@@ -163,13 +162,12 @@ const EventRow: React.FC<{
         */}
       </div>
 
-      {/* stopPropagation, or adding the date also opens the card behind the
-          share sheet. flexShrink so it keeps its touch target at 320px while
-          the title column absorbs the squeeze. */}
+      {/* stopPropagation, or choosing a calendar also opens the event card
+          behind the sheet. flexShrink so it keeps its touch target at 320px
+          while the title column absorbs the squeeze. */}
       <button
         type="button"
         aria-label={`Add ${event.title} to my calendar`}
-        disabled={adding}
         onClick={e => { e.stopPropagation(); onAdd(event); }}
         style={{
           flexShrink: 0,
@@ -186,8 +184,7 @@ const EventRow: React.FC<{
           border: `1px solid ${theme.colors.bdr.primary}`,
           borderRadius: theme.borderRadius.md,
           color: theme.colors.txt.secondary,
-          cursor: adding ? 'default' : 'pointer',
-          opacity: adding ? 0.45 : 1,
+          cursor: 'pointer',
         }}
       >
         <CalendarIcon size={15} />
@@ -284,10 +281,9 @@ interface ViewProps {
   events: PortalEvent[];
   onOpen: (event: PortalEvent) => void;
   onAdd: (event: PortalEvent) => void;
-  addingId: string | null;
 }
 
-const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => {
+const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd }) => {
   const todayKey = dateKey(new Date());
 
   const [cursor, setCursor] = useState(() => {
@@ -603,10 +599,7 @@ const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => 
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {listed.map(event => (
-              <EventRow
-                key={event.id} event={event} onOpen={onOpen}
-                onAdd={onAdd} adding={addingId === event.id}
-              />
+              <EventRow key={event.id} event={event} onOpen={onOpen} onAdd={onAdd} />
             ))}
           </div>
         )}
@@ -617,7 +610,7 @@ const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => 
 
 // -------------------------------------------------------------- agenda view
 
-const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => {
+const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd }) => {
   const groups = useMemo(() => {
     const todayKey = dateKey(new Date());
     // Filtered on the LAST day, not the first. A two-week closure that started
@@ -663,10 +656,7 @@ const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {group.events.map(event => (
-              <EventRow
-                key={event.id} event={event} onOpen={onOpen}
-                onAdd={onAdd} adding={addingId === event.id}
-              />
+              <EventRow key={event.id} event={event} onOpen={onOpen} onAdd={onAdd} />
             ))}
           </div>
         </section>
@@ -684,7 +674,12 @@ const ProgramCalendar: React.FC = () => {
 
   const [view, setView] = useState<ViewMode>(readViewMode);
   const [opened, setOpened] = useState<PortalEvent | null>(null);
-  const { add, busyId } = useAddToCalendar();
+  /**
+   * Separate from `opened` on purpose. The sheet is reachable from a row
+   * WITHOUT opening the card, and from inside the card without closing it, so
+   * one piece of state cannot describe both.
+   */
+  const [addingTo, setAddingTo] = useState<PortalEvent | null>(null);
 
   const changeView = useCallback((next: ViewMode) => {
     setView(next);
@@ -692,6 +687,7 @@ const ProgramCalendar: React.FC = () => {
   }, []);
 
   const closeCard = useCallback(() => setOpened(null), []);
+  const closeSheet = useCallback(() => setAddingTo(null), []);
 
   return (
     <PortalLayout
@@ -716,7 +712,7 @@ const ProgramCalendar: React.FC = () => {
         }}>
           Tap an event for full details, or press{' '}
           <span style={{ color: theme.colors.txt.secondary, fontWeight: 600 }}>Add</span>
-          {' '}to save it to your own calendar.
+          {' '}to save it to Google, Apple or Outlook.
         </p>
 
         {loading && (
@@ -740,12 +736,13 @@ const ProgramCalendar: React.FC = () => {
 
         {!loading && !error && (
           view === 'month'
-            ? <MonthView events={events} onOpen={setOpened} onAdd={add} addingId={busyId} />
-            : <ListView events={events} onOpen={setOpened} onAdd={add} addingId={busyId} />
+            ? <MonthView events={events} onOpen={setOpened} onAdd={setAddingTo} />
+            : <ListView events={events} onOpen={setOpened} onAdd={setAddingTo} />
         )}
       </div>
 
-      <EventCard event={opened} onClose={closeCard} />
+      <EventCard event={opened} onClose={closeCard} onAddToCalendar={setAddingTo} />
+      <AddToCalendarSheet event={addingTo} onClose={closeSheet} />
     </PortalLayout>
   );
 };
