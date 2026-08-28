@@ -88,9 +88,18 @@ const describeWhen = (e: PortalEvent): string => {
   return e.isAllDay ? `${day} · All day` : `${day} · ${formatEventTime(e.startsAt, false)}`;
 };
 
-const EventsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }> = ({
-  program, classes,
-}) => {
+/**
+ * `scope` narrows the section to one class and pins new events to it, exactly
+ * as it does in UpdatesSection and DocumentsSection:
+ *
+ *   undefined            the whole program — the Calendar tab
+ *   { classId: '<id>' }  one class only — the class workspace
+ */
+const EventsSection: React.FC<{
+  program: PortalProgram;
+  classes: PortalClass[];
+  scope?: { classId: string };
+}> = ({ program, classes, scope }) => {
   const { fetchEvents, saveEvent, deleteEvent, canEditClass, editableClassIds } = usePortalAdmin();
   const { isAdmin } = useAuth();
   const { success, error: toastError } = useToast();
@@ -106,7 +115,25 @@ const EventsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }
   const [formError, setFormError] = useState('');
   const focusRef = useAutoFocus(draft !== null);
 
-  const defaultClassId = isAdmin ? null : (editableClassIds[0] ?? null);
+  /**
+   * What a new event is attached to before anybody picks.
+   *
+   * A scope pins it. Otherwise an admin starts studio-wide, and a teacher
+   * starts on one of their own classes — but it has to be one in THIS program.
+   * `editableClassIds[0]` was whichever class the grant query returned first
+   * across every program, so an Academy teacher looking at the All-Star
+   * calendar got a draft whose class is not in the dropdown: the picker shows
+   * blank, and saving files the event under the All-Star program_id with an
+   * Academy class_id. The wrong families see it and the right ones never do.
+   */
+  const defaultClassId = scope
+    ? scope.classId
+    : isAdmin
+      ? null
+      : (classes.find(c => editableClassIds.includes(c.id))?.id ?? null);
+
+  // Inside a class, the list is that class's events and nothing else.
+  const rows = scope ? events.filter(e => e.classId === scope.classId) : events;
   const today = startOfToday();
 
   const startNew = () => {
@@ -207,12 +234,12 @@ const EventsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }
       <ManagerList
         loading={loading}
         error={error}
-        isEmpty={events.length === 0}
+        isEmpty={rows.length === 0}
         emptyTitle="Nothing on the calendar"
         emptyDescription="Recitals, competition weekends, studio closures and picture day all live here."
         emptyAction={<Button leftIcon={<PlusIcon />} onClick={startNew}>New event</Button>}
       >
-        {events.map(e => {
+        {rows.map(e => {
           const isPast = new Date(e.startsAt) < today;
           return (
             <Card key={e.id} style={isPast ? { opacity: 0.6 } : undefined}>
@@ -360,14 +387,19 @@ const EventsSection: React.FC<{ program: PortalProgram; classes: PortalClass[] }
               onChange={e => setDraft({ ...draft, description: e.target.value })}
             />
 
-            <ClassSelect
-              classes={classes}
-              value={draft.classId}
-              onChange={classId => setDraft({ ...draft, classId })}
-              allowStudioWide={isAdmin}
-              editableClassIds={editableClassIds}
-              isAdmin={isAdmin}
-            />
+            {/* Redundant inside a scope — the heading already says whose
+                calendar this is, and offering to move the event to another
+                class from in here is a way to lose it. */}
+            {!scope && (
+              <ClassSelect
+                classes={classes}
+                value={draft.classId}
+                onChange={classId => setDraft({ ...draft, classId })}
+                allowStudioWide={isAdmin}
+                editableClassIds={editableClassIds}
+                isAdmin={isAdmin}
+              />
+            )}
 
             <CustomCheckbox
               checked={draft.isPublished}
