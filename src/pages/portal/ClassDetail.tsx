@@ -8,7 +8,7 @@ import { portalRoutes, formatClassSchedule, CLASS_CATEGORY_LABEL } from '../../l
 import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
-import { DocumentRow } from '../../components/portal/DocumentRow';
+import { DocumentList } from '../../components/portal/DocumentList';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
 /**
@@ -18,10 +18,13 @@ import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
  * dancer's class specifically, so the updates are the substance and the
  * schedule is the header.
  *
- * Files sit below the updates. They used to live on a program-wide Documents
+ * Content sits below the updates. It used to live on a program-wide Documents
  * page; a class's music and choreography notes belong with the class, and the
  * teacher who holds it can now post them here rather than asking an admin to
  * upload something studio-wide.
+ *
+ * Photos and videos render in place rather than listing as downloads — see
+ * components/portal/DocumentList.tsx, which decides that per file.
  *
  * THE CLASS AND THE ROUTE CAN BELONG TO DIFFERENT PROGRAMS
  *
@@ -295,12 +298,10 @@ const ClassDetail: React.FC = () => {
                   color: theme.colors.txt.primary,
                   margin: '0 0 12px',
                 }}>
-                  Class files
+                  Class content
                 </h2>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {documents.map(doc => <DocumentRow key={doc.id} doc={doc} />)}
-                </div>
+                <DocumentList documents={documents} />
               </div>
             )}
           </>

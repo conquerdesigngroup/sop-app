@@ -11,6 +11,7 @@ import {
   mapProgram, mapClass, mapUpdate, mapEvent, mapDocument, mapCalendarSource,
 } from '../lib/portalMappers';
 import { buildStoragePath } from '../lib/portalAdmin';
+import { signDocumentUrls } from '../lib/portalStorage';
 
 /**
  * Authoring for the parent portal — the staff half of the portal_* tables.
@@ -171,6 +172,8 @@ interface PortalAdminContextValue {
   saveDocumentMeta: (input: DocumentInput & { id: string }) => Promise<void>;
   deleteDocument: (doc: PortalDocument) => Promise<{ orphanedObject: boolean }>;
   getDocumentUrl: (storagePath: string) => Promise<string | null>;
+  /** Batched signing, so a list can show thumbnails without a request each. */
+  getDocumentUrls: (storagePaths: string[]) => Promise<Record<string, string>>;
 
   /** Returns the class id, so a brand-new class can have its grants set. */
   saveClass: (input: ClassInput) => Promise<string>;
@@ -536,6 +539,11 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   }, []);
 
+  const getDocumentUrls = useCallback(
+    (storagePaths: string[]) => signDocumentUrls(storagePaths),
+    []
+  );
+
   // ---------------------------------------------------------------- classes
 
   const saveClass = useCallback(async (input: ClassInput) => {
@@ -755,7 +763,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchClasses, fetchUpdates, fetchEvents, fetchDocuments,
     saveUpdate, deleteUpdate,
     saveEvent, deleteEvent,
-    uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
+    uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
@@ -764,7 +772,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     programs, programsLoading, reload,
     fetchClasses, fetchUpdates, fetchEvents, fetchDocuments,
     saveUpdate, deleteUpdate, saveEvent, deleteEvent,
-    uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
+    uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,

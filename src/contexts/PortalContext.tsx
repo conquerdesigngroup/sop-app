@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { signDocumentUrls } from '../lib/portalStorage';
 import {
   PortalProgram,
   PortalClass,
@@ -79,6 +80,14 @@ interface PortalContextValue {
   fetchDocuments: (programId: string, classId?: string | null) => Promise<PortalDocument[]>;
   /** Short-lived signed URL for a document in the private bucket. */
   getDocumentUrl: (storagePath: string) => Promise<string | null>;
+  /**
+   * The same, for a whole page of files in one request.
+   *
+   * Photos and videos are rendered rather than tapped, so their URLs have to
+   * exist before the parent touches anything. Keyed by storage path; a path
+   * missing from the result could not be signed.
+   */
+  getDocumentUrls: (storagePaths: string[]) => Promise<Record<string, string>>;
 }
 
 const PortalContext = createContext<PortalContextValue | undefined>(undefined);
@@ -307,6 +316,12 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, []);
 
+  /** Batched, for a page that has to render its files rather than list them. */
+  const getDocumentUrls = useCallback(
+    (storagePaths: string[]) => signDocumentUrls(storagePaths),
+    []
+  );
+
   const value = useMemo<PortalContextValue>(
     () => ({
       programs,
@@ -321,11 +336,12 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       fetchEvents,
       fetchDocuments,
       getDocumentUrl,
+      getDocumentUrls,
     }),
     [
       programs, loading, error, getProgramBySlug, hasAccess, verifyCode,
       forgetAccess, fetchClasses, fetchUpdates, fetchEvents, fetchDocuments,
-      getDocumentUrl,
+      getDocumentUrl, getDocumentUrls,
     ]
   );
 

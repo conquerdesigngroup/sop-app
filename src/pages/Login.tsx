@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { useTheme } from '../contexts/ThemeContext';
-import { theme } from '../theme';
+import { theme, BRAND_MARK } from '../theme';
 import { CustomCheckbox } from '../components/CustomCheckbox';
 
 const Login: React.FC = () => {
@@ -18,7 +17,6 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login, requestPasswordReset } = useAuth();
   const { isMobile, isMobileOrTablet } = useResponsive();
-  const { isDark } = useTheme();
 
   // Load remembered email on mount
   useEffect(() => {
@@ -114,10 +112,10 @@ const Login: React.FC = () => {
   return (
     <div style={responsiveStyles.container}>
       <div style={responsiveStyles.loginCard}>
-        {/* Logo — DIDC brand mark, per-background variant (never recolored) */}
+        {/* Logo — the DIDC mark, one file for both modes (never recolored) */}
         <div style={styles.logoContainer}>
           <img
-            src={isDark ? '/brand/logos/didc-outline-white.svg' : '/brand/logos/didc-outline.svg'}
+            src={BRAND_MARK}
             alt="Dancing Images Dance Center"
             style={responsiveStyles.logo}
           />

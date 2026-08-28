@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
 import { Button, Card, Input, Modal, Textarea, PlusIcon } from '../ui';
 import { CustomCheckbox } from '../CustomCheckbox';
@@ -9,6 +9,7 @@ import { usePortalAdmin, describeWriteError, DocumentInput } from '../../context
 import { PortalClass, PortalDocument, PortalProgram } from '../../types';
 import { formatFileSize } from '../../lib/portal';
 import { DOCUMENT_ACCEPT, DOCUMENT_HINT, validateDocumentFile } from '../../lib/portalAdmin';
+import { compatibilityWarning, mediaKindOf } from '../../lib/portalMedia';
 import { useAdminList } from './useAdminList';
 import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audienceLabel, useAutoFocus } from './shared';
 
@@ -21,11 +22,71 @@ import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audience
  * through a one-hour signed URL, minted when someone taps it, both for parents
  * and on this screen.
  *
+ * Images get a thumbnail in the list, because "did I upload the right costume
+ * photo" is the question this screen is usually open to answer and a file name
+ * does not answer it. Everything else gets its icon.
+ *
  * The file itself cannot be edited after upload — only its title, audience and
  * visibility. Replacing a file means deleting the row and uploading again,
  * which is deliberate: storage_path is UNIQUE and a silent swap under a link
  * someone has already opened is worse than an obvious re-upload.
  */
+
+/**
+ * 56px of "which file is this".
+ *
+ * Images render themselves; everything else gets a glyph on a tinted tile. A
+ * broken image falls back to the glyph too — an admin on a laptop viewing a
+ * HEIC a teacher shot on an iPhone is the case, and a torn-page icon in the
+ * corner of the manager would look like something is wrong when it is not.
+ */
+const Thumb: React.FC<{ doc: PortalDocument; url?: string }> = ({ doc, url }) => {
+  const kind = mediaKindOf(doc.mimeType, doc.fileName);
+  const [broken, setBroken] = useState(false);
+
+  const box: React.CSSProperties = {
+    width: '56px',
+    height: '56px',
+    flexShrink: 0,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.colors.txt.tertiary,
+  };
+
+  if (kind === 'image' && url && !broken) {
+    return (
+      <span style={box}>
+        <img
+          src={url}
+          alt=""
+          onError={() => setBroken(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </span>
+    );
+  }
+
+  const d = kind === 'video'
+    ? 'M23 7l-7 5 7 5V7z M14 5H3a2 2 0 00-2 2v10a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2z'
+    : kind === 'audio'
+      ? 'M9 18V5l12-2v13 M9 18a3 3 0 11-6 0 3 3 0 016 0z M21 16a3 3 0 11-6 0 3 3 0 016 0z'
+      : kind === 'image'
+        ? 'M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2z M8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z M21 15l-5-5L5 21'
+        : 'M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z M13 2v7h7';
+
+  return (
+    <span style={box}>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+};
 
 const emptyMeta = (programId: string, classId: string | null): DocumentInput => ({
   programId,
@@ -48,7 +109,8 @@ const DocumentsSection: React.FC<{
   scope?: { classId: string | null };
 }> = ({ program, classes, scope }) => {
   const {
-    fetchDocuments, uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
+    fetchDocuments, uploadDocument, saveDocumentMeta, deleteDocument,
+    getDocumentUrl, getDocumentUrls,
     canEditClass, editableClassIds,
   } = usePortalAdmin();
   const { isAdmin } = useAuth();
@@ -61,6 +123,29 @@ const DocumentsSection: React.FC<{
 
   // Filtered here rather than refetched per class — see UpdatesSection.
   const rows = scope ? documents.filter(d => d.classId === scope.classId) : documents;
+
+  /**
+   * Signed URLs for the whole list, in one request.
+   *
+   * Feeds the thumbnails, and means Open is a real anchor rather than a button
+   * that signs first — see the note on openDocument below.
+   */
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  const pathKey = rows.map(d => d.storagePath).join(' ');
+
+  useEffect(() => {
+    const paths = rows.map(d => d.storagePath).filter(Boolean);
+    if (paths.length === 0) {
+      setPreviews({});
+      return;
+    }
+    let cancelled = false;
+    getDocumentUrls(paths).then(signed => { if (!cancelled) setPreviews(signed); });
+    return () => { cancelled = true; };
+    // pathKey, not rows: `rows` is a fresh array every render and would
+    // re-sign forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathKey, getDocumentUrls]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -184,6 +269,16 @@ const DocumentsSection: React.FC<{
     }
   };
 
+  /**
+   * The fallback for a file the batch signing did not cover.
+   *
+   * The normal path is the <a href> below, which needs no await and so cannot
+   * be blocked. This one runs after one, and that is exactly the bug it has to
+   * avoid: window.open() called once the await has resolved is no longer part
+   * of the tap that asked for it, and iOS drops it without a word — which is
+   * why the Open button could be pressed over and over on a phone and do
+   * nothing at all. Navigating instead is never blocked.
+   */
   const openDocument = async (doc: PortalDocument) => {
     setOpening(doc.id);
     const url = await getDocumentUrl(doc.storagePath);
@@ -193,7 +288,7 @@ const DocumentsSection: React.FC<{
       toastError('That file could not be opened. It may have been removed from storage.');
       return;
     }
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.location.assign(url);
   };
 
   return (
@@ -215,6 +310,8 @@ const DocumentsSection: React.FC<{
         {rows.map(doc => (
           <Card key={doc.id}>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+              <Thumb doc={doc} url={previews[doc.storagePath]} />
+
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ marginBottom: '6px' }}>
                   <PublishedBadge published={doc.isPublished} />
@@ -237,15 +334,37 @@ const DocumentsSection: React.FC<{
                   {!scope && <span>· {audienceLabel(doc.classId, classes)}</span>}
                 </RowMeta>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  style={{ marginTop: '8px', paddingLeft: 0 }}
-                  loading={opening === doc.id}
-                  onClick={() => openDocument(doc)}
-                >
-                  Open
-                </Button>
+                {previews[doc.storagePath] ? (
+                  /* A plain anchor, because it can be: the URL is already
+                     signed. Nothing to await means nothing for a phone to
+                     treat as an unsolicited popup. */
+                  <a
+                    href={previews[doc.storagePath]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block',
+                      marginTop: '8px',
+                      ...theme.typography.bodySmall,
+                      fontFamily: theme.fonts.primary,
+                      fontWeight: 600,
+                      color: theme.colors.primary,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Open
+                  </a>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    style={{ marginTop: '8px', paddingLeft: 0 }}
+                    loading={opening === doc.id}
+                    onClick={() => openDocument(doc)}
+                  >
+                    Open
+                  </Button>
+                )}
               </div>
 
               {/* Read is program-wide for staff; write is not. See
@@ -311,6 +430,21 @@ const DocumentsSection: React.FC<{
                 }}>
                   {file ? `${file.name} · ${formatFileSize(file.size)}` : DOCUMENT_HINT}
                 </p>
+
+                {/* Said here rather than refused: the bucket takes both, and a
+                    teacher on an iPhone should not be blocked from posting the
+                    photo they have. It only warns about what a parent on the
+                    other platform would get. */}
+                {file && compatibilityWarning(file.type, file.name) && (
+                  <p style={{
+                    ...theme.typography.captionSmall,
+                    fontFamily: theme.fonts.primary,
+                    color: theme.colors.status.warning,
+                    margin: '6px 0 0',
+                  }}>
+                    {compatibilityWarning(file.type, file.name)}
+                  </p>
+                )}
               </div>
             )}
 

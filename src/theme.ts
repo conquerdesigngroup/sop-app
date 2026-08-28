@@ -3,6 +3,26 @@
 // electric #E2144F (accent), void #0B0B0D (page bg), panel #161618 (cards),
 // panel2 #1E1E21 (elevated), ink #111111, chalk #F4F4F5, smoke #9A9AA4.
 
+/**
+ * The mark in the top-left corner, everywhere it appears.
+ *
+ * ONE file for both modes, which is new. The old pair — didc-outline.svg and
+ * didc-outline-white.svg — existed because a single-colour mark has to be
+ * recoloured to survive a light background, and every site that drew it had to
+ * remember to pick. This mark carries its own black keyline, so on the void it
+ * reads as a white wordmark and on chalk the keyline holds the shape. Measured
+ * on #0B0B0D, #161618, #F4F4F5 and #FFFFFF at 22, 36 and 50px.
+ *
+ * A PNG rather than an SVG on purpose: the bevel and contact shadow are raster
+ * effects, and tracing them to vector would either flatten the mark or produce
+ * a heavier file than the 17 KB this is. It ships at 1468x320, about six times
+ * the largest size anything draws it at (50px on the login card), so it stays
+ * sharp on a 3x phone.
+ *
+ * Never recoloured, stretched or filtered — see the brand rules in CLAUDE.md.
+ */
+export const BRAND_MARK = '/brand/logos/didc-mark-3d.png';
+
 // Light mode color palette (chalk surfaces, ink text)
 export const lightColors = {
   bg: {
