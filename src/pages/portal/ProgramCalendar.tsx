@@ -4,6 +4,7 @@ import {
   Card, EmptyState, Spinner, ChevronLeftIcon, CalendarIcon,
 } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import EventBar from '../../components/calendar/EventBar';
 import EventCard from '../../components/portal/EventCard';
 import { useAddToCalendar } from '../../components/portal/useAddToCalendar';
 import { usePortal } from '../../contexts/PortalContext';
@@ -12,12 +13,19 @@ import {
   formatEventDate,
   eventDayOfMonth,
   eventMonthKey,
+  eventDayKey,
   eventDayKeys,
   eventLastDayKey,
   describeEventWhen,
-  monthGridDays,
   dateKey,
 } from '../../lib/portal';
+import {
+  monthWeeks,
+  layoutWeek,
+  hiddenPerColumn,
+  addDays,
+  parseDayKey,
+} from '../../lib/calendarLayout';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
 import { PortalEvent } from '../../types';
 
@@ -42,12 +50,18 @@ type ViewMode = 'list' | 'month';
 
 const VIEW_KEY = 'didc_portal_calendar_view';
 
+/**
+ * Month is the default now. A parent opening this wants to see the shape of
+ * the term — which weeks have something in them — and a list only answers
+ * that by being read end to end. Anyone who prefers the list still gets it:
+ * the choice is remembered, so this only changes the first visit.
+ */
 const readViewMode = (): ViewMode => {
   try {
-    return window.localStorage.getItem(VIEW_KEY) === 'month' ? 'month' : 'list';
+    return window.localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'month';
   } catch {
     // Safari private mode throws on localStorage access.
-    return 'list';
+    return 'month';
   }
 };
 
@@ -252,32 +266,19 @@ const ViewToggle: React.FC<{ value: ViewMode; onChange: (v: ViewMode) => void }>
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-/** Dots rather than titles: seven columns leaves ~48px each on a phone. */
-const DayDots: React.FC<{ count: number; muted: boolean }> = ({ count, muted }) => (
-  <div style={{
-    display: 'flex',
-    // A centred row must be able to wrap — overflow under justifyContent
-    // 'center' is split both ways and the left half is unreachable.
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: '3px',
-    height: '7px',
-    marginTop: '3px',
-  }}>
-    {Array.from({ length: Math.min(count, 3) }, (_, i) => (
-      <span
-        key={i}
-        style={{
-          width: '5px',
-          height: '5px',
-          borderRadius: theme.borderRadius.full,
-          background: muted ? theme.colors.txt.tertiary : theme.colors.primary,
-        }}
-      />
-    ))}
-  </div>
-);
+// Month-row geometry. The bars are absolutely positioned, so their height and
+// the space reserved above them for the date have to add up to the cell.
+const MONTH_BAR_HEIGHT = 13;
+const MONTH_NUMBER_HEIGHT = 18;
+const MONTH_LANES = 3;
+const MONTH_CELL_HEIGHT =
+  MONTH_NUMBER_HEIGHT + MONTH_LANES * (MONTH_BAR_HEIGHT + 2) + 6;
+
+/** Inclusive first and last day an event covers, for the span layout. */
+const spanOf = (event: PortalEvent) => ({
+  start: eventDayKey(event.startsAt, event.isAllDay),
+  end: eventLastDayKey(event.startsAt, event.endsAt, event.isAllDay),
+});
 
 interface ViewProps {
   events: PortalEvent[];
@@ -309,11 +310,6 @@ const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => 
     return map;
   }, [events]);
 
-  const days = useMemo(
-    () => monthGridDays(cursor.getFullYear(), cursor.getMonth()),
-    [cursor]
-  );
-
   // Clamped to what PortalContext actually fetches — a month back and a year
   // forward. Paging past that shows empty months and reads as a bug.
   const { min, max } = useMemo(() => {
@@ -337,18 +333,23 @@ const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => 
   const listed = useMemo(() => {
     if (selectedKey) return eventsByDay.get(selectedKey) ?? [];
 
+    // Walk the month itself rather than the grid, which also carried the
+    // neighbouring months' edge days only to skip them again.
+    const first = dateKey(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+    const last = dateKey(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0));
+
     const seen = new Set<string>();
     const out: PortalEvent[] = [];
-    for (const day of days) {
-      if (day.getMonth() !== cursor.getMonth()) continue;
-      for (const event of eventsByDay.get(dateKey(day)) ?? []) {
+    for (let key = first; key <= last; key = addDays(key, 1)) {
+      for (const event of eventsByDay.get(key) ?? []) {
+        // A multi-day event is filed under every day it covers.
         if (seen.has(event.id)) continue;
         seen.add(event.id);
         out.push(event);
       }
     }
     return out;
-  }, [selectedKey, eventsByDay, days, cursor]);
+  }, [selectedKey, eventsByDay, cursor]);
 
   const arrow = (dir: 'prev' | 'next', enabled: boolean) => (
     <button
@@ -418,75 +419,151 @@ const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => 
           * outside the card's right border. Same trap as the minWidth: 0 rule
           * for flex children, wearing grid's clothes.
           */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '2px' }}>
-          {WEEKDAYS.map((label, i) => (
-            <div
-              key={i}
-              aria-hidden
-              style={{
-                ...theme.typography.captionSmall,
-                fontFamily: theme.fonts.mono,
-                color: theme.colors.txt.tertiary,
-                textAlign: 'center',
-                padding: '4px 0 6px',
-                letterSpacing: '0.04em',
-              }}
-            >
-              {label}
-            </div>
-          ))}
-
-          {days.map(day => {
-            const key = dateKey(day);
-            const inMonth = day.getMonth() === cursor.getMonth();
-            const isToday = key === todayKey;
-            const isSelected = key === selectedKey;
-            const count = eventsByDay.get(key)?.length ?? 0;
-
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSelectedKey(k => (k === key ? null : key))}
-                aria-pressed={isSelected}
-                aria-label={`${day.toLocaleDateString(undefined, {
-                  weekday: 'long', month: 'long', day: 'numeric',
-                })}${count ? `, ${count} event${count === 1 ? '' : 's'}` : ''}`}
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+            {WEEKDAYS.map((label, i) => (
+              <div
+                key={i}
+                aria-hidden
                 style={{
-                  // Both halves are needed, and each is useless alone. The
-                  // track is sized by minmax(0, 1fr) above; this shrinks the
-                  // BUTTON inside it, which defaults to min-width: auto and
-                  // otherwise stays 44px wide in a 35px column and hangs past
-                  // the card's edge.
-                  minWidth: 0,
-                  // Height, not width: 44px is the smallest reliable touch
-                  // target, and a short row is the part that must not shrink.
-                  minHeight: '44px',
-                  padding: '5px 0 4px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'flex-start',
-                  background: isSelected ? theme.colors.primary : 'transparent',
-                  border: isToday && !isSelected
-                    ? `1px solid ${theme.colors.primary}`
-                    : '1px solid transparent',
-                  borderRadius: theme.borderRadius.md,
-                  cursor: 'pointer',
-                  opacity: inMonth ? 1 : 0.38,
+                  ...theme.typography.captionSmall,
+                  fontFamily: theme.fonts.mono,
+                  color: theme.colors.txt.tertiary,
+                  textAlign: 'center',
+                  padding: '4px 0 6px',
+                  letterSpacing: '0.04em',
                 }}
               >
-                <span style={{
-                  ...theme.typography.bodySmall,
-                  fontFamily: theme.fonts.mono,
-                  fontWeight: isToday || isSelected ? 700 : 400,
-                  lineHeight: 1,
-                  color: isSelected ? '#FFFFFF' : theme.colors.txt.primary,
+                {label}
+              </div>
+            ))}
+          </div>
+
+          {/*
+            One positioned row per week, the same shape as the staff calendar:
+            the cells underneath are the tap targets, and every event is drawn
+            in an overlay above them. A day cell can only ever draw its own
+            square, which is why this used to be a dot per day and a week-long
+            closure looked like seven unrelated marks.
+
+            The bars carry no onClick. At 375px a column is about 49px, and a
+            stack of individually tappable 13px bars in that space is a mis-tap
+            generator — the whole cell selects the day, and the list below is
+            where an event is actually opened.
+          */}
+          {monthWeeks(cursor.getFullYear(), cursor.getMonth()).map(weekStart => {
+            const { segments } = layoutWeek(events, weekStart, spanOf);
+            const shown = segments.filter(s => s.lane < MONTH_LANES);
+            const hidden = hiddenPerColumn(segments, MONTH_LANES);
+
+            return (
+              <div key={weekStart} style={{ position: 'relative' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+                  {Array.from({ length: 7 }).map((_, col) => {
+                    const key = addDays(weekStart, col);
+                    const day = parseDayKey(key);
+                    const inMonth = day.getMonth() === cursor.getMonth();
+                    const isToday = key === todayKey;
+                    const isSelected = key === selectedKey;
+                    const count = eventsByDay.get(key)?.length ?? 0;
+
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedKey(k => (k === key ? null : key))}
+                        aria-pressed={isSelected}
+                        aria-label={`${day.toLocaleDateString(undefined, {
+                          weekday: 'long', month: 'long', day: 'numeric',
+                        })}${count ? `, ${count} event${count === 1 ? '' : 's'}` : ''}`}
+                        style={{
+                          // Both halves are needed, and each is useless alone.
+                          // The track is minmax(0, 1fr); this shrinks the
+                          // BUTTON inside it, which defaults to min-width: auto
+                          // and otherwise stays 44px wide in a 35px column and
+                          // hangs past the card's edge.
+                          minWidth: 0,
+                          height: `${MONTH_CELL_HEIGHT}px`,
+                          padding: '3px 0 0',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          background: isSelected ? theme.colors.primary : 'transparent',
+                          border: isToday && !isSelected
+                            ? `1px solid ${theme.colors.primary}`
+                            : '1px solid transparent',
+                          borderRadius: theme.borderRadius.md,
+                          cursor: 'pointer',
+                          opacity: inMonth ? 1 : 0.38,
+                        }}
+                      >
+                        <span style={{
+                          ...theme.typography.bodySmall,
+                          fontFamily: theme.fonts.mono,
+                          fontWeight: isToday || isSelected ? 700 : 400,
+                          lineHeight: 1,
+                          color: isSelected ? '#FFFFFF' : theme.colors.txt.primary,
+                        }}>
+                          {day.getDate()}
+                        </span>
+
+                        {hidden[col] > 0 && (
+                          <span style={{
+                            marginTop: 'auto',
+                            fontFamily: theme.fonts.mono,
+                            fontSize: '8px',
+                            lineHeight: 1,
+                            paddingBottom: '2px',
+                            color: isSelected ? '#FFFFFF' : theme.colors.txt.tertiary,
+                          }}>
+                            +{hidden[col]}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{
+                  position: 'absolute',
+                  top: `${MONTH_NUMBER_HEIGHT}px`,
+                  left: 0,
+                  right: 0,
+                  pointerEvents: 'none',
                 }}>
-                  {day.getDate()}
-                </span>
-                <DayDots count={count} muted={isSelected} />
-              </button>
+                  {shown.map(seg => (
+                    <div
+                      key={`${seg.item.id}-${weekStart}`}
+                      style={{
+                        position: 'absolute',
+                        left: `${(seg.startCol / 7) * 100}%`,
+                        width: `${(seg.span / 7) * 100}%`,
+                        top: `${seg.lane * (MONTH_BAR_HEIGHT + 2)}px`,
+                        height: `${MONTH_BAR_HEIGHT}px`,
+                      }}
+                    >
+                      {/*
+                        A neutral chip rather than the brand pink. The staff
+                        calendar colours bars by which of the three studio
+                        calendars an event came from; a parent sees one
+                        programme, so there is nothing to tell apart — and a
+                        grid of pink bars would blow past the rule that keeps
+                        electric to about 5% of a view. Pink stays on today
+                        and the selected day, where it means something.
+                      */}
+                      <EventBar
+                        title={seg.item.title}
+                        color={theme.colors.bdr.secondary}
+                        filled
+                        continuesBefore={seg.continuesBefore}
+                        continuesAfter={seg.continuesAfter}
+                        compact
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             );
           })}
         </div>
