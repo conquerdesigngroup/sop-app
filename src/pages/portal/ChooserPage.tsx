@@ -167,29 +167,31 @@ const ChooserPage: React.FC = () => {
         gap: isMobileOrTablet ? '32px' : '48px',
       }}
     >
-      {/* Fixed rather than in the flow: the page is one centred column and
-          anything added to it shifts the logo and the tiles off centre. Insets
-          are doubled up with the safe area because index.html sets
-          viewport-fit=cover, so the corner of the viewport is under the notch
-          on a phone held sideways. */}
-      <ThemeToggle
+      {/* Logo and toggle are one group with their own tighter gap, rather than
+          two children of the page. As siblings they would each take the page's
+          32/48px gap, which reads as three unrelated things stacked up and
+          pushes the tiles down a phone screen. */}
+      <div
         style={{
-          position: 'fixed',
-          top: 'calc(12px + env(safe-area-inset-top))',
-          right: 'calc(12px + env(safe-area-inset-right))',
-          zIndex: 10,
-        }}
-      />
-
-      <img
-        src={isDark ? '/brand/logos/didc-thrash-white.svg' : '/brand/logos/didc-thrash-pink.svg'}
-        alt="Dancing Images Dance Center"
-        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: isMobileOrTablet ? '20px' : '24px',
           width: '100%',
-          maxWidth: isMobileOrTablet ? '260px' : '380px',
-          height: 'auto',
         }}
-      />
+      >
+        <img
+          src={isDark ? '/brand/logos/didc-thrash-white.svg' : '/brand/logos/didc-thrash-pink.svg'}
+          alt="Dancing Images Dance Center"
+          style={{
+            width: '100%',
+            maxWidth: isMobileOrTablet ? '260px' : '380px',
+            height: 'auto',
+          }}
+        />
+
+        <ThemeToggle label="Appearance" />
+      </div>
 
       <div
         style={{

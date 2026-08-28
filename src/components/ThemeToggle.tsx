@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { theme } from '../theme';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -14,6 +14,11 @@ import { useTheme } from '../contexts/ThemeContext';
  * Real <button>s with aria-pressed, not a styled div: this is the only control
  * on the front door besides the two tiles, and it has to be reachable by
  * keyboard and announceable.
+ *
+ * `label` renders a visible caption above the pill and becomes the group's
+ * accessible name via aria-labelledby. Two icons alone say what each option is
+ * but not what the pair is FOR, and a bare sun-and-moon pill with no words on it
+ * is a guess — which is what it was, floating unexplained in the corner.
  *
  * Preference lands in localStorage via ThemeProvider, so setting it here holds
  * for the staff app and the parent portal both — which is why the front door is
@@ -79,13 +84,26 @@ const Segment: React.FC<SegmentProps> = ({ label, icon, active, onClick }) => (
   </button>
 );
 
-const ThemeToggle: React.FC<{ style?: React.CSSProperties }> = ({ style }) => {
-  const { isDark, setTheme } = useTheme();
+interface ThemeToggleProps {
+  /** Visible caption above the pill, and the group's accessible name. */
+  label?: string;
+  /** Applied to the outer wrapper, so a caller can place the whole control. */
+  style?: React.CSSProperties;
+}
 
-  return (
+const ThemeToggle: React.FC<ThemeToggleProps> = ({ label, style }) => {
+  const { isDark, setTheme } = useTheme();
+  // Generated rather than hardcoded: a fixed id would collide the moment a
+  // second toggle appears anywhere on the page.
+  const labelId = useId();
+
+  const pill = (
     <div
       role="group"
-      aria-label="Colour theme"
+      // aria-labelledby when there is a visible caption, so the name a screen
+      // reader announces is the words actually on screen rather than a second,
+      // invisible string that can drift away from them.
+      {...(label ? { 'aria-labelledby': labelId } : { 'aria-label': 'Colour theme' })}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -94,7 +112,7 @@ const ThemeToggle: React.FC<{ style?: React.CSSProperties }> = ({ style }) => {
         borderRadius: theme.borderRadius.full,
         backgroundColor: theme.colors.bg.tertiary,
         border: `1px solid ${theme.colors.bdr.primary}`,
-        ...style,
+        ...(label ? undefined : style),
       }}
     >
       <Segment
@@ -109,6 +127,35 @@ const ThemeToggle: React.FC<{ style?: React.CSSProperties }> = ({ style }) => {
         active={isDark}
         onClick={() => setTheme('dark')}
       />
+    </div>
+  );
+
+  if (!label) return pill;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px',
+        ...style,
+      }}
+    >
+      <span
+        id={labelId}
+        style={{
+          fontFamily: theme.fonts.mono,
+          fontSize: '11px',
+          fontWeight: 500,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: theme.colors.txt.tertiary,
+        }}
+      >
+        {label}
+      </span>
+      {pill}
     </div>
   );
 };
