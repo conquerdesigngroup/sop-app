@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { dayKey } from '../lib/calendarLayout';
 import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
@@ -165,15 +166,13 @@ const TaskCalendar: React.FC<{
   };
 
   const getEventsForDate = (day: number) => {
-    const date = new Date(year, month, day);
-    date.setHours(0, 0, 0, 0);
-    return events.filter(event => {
-      const eventStartDate = new Date(event.startDate);
-      eventStartDate.setHours(0, 0, 0, 0);
-      const eventEndDate = event.endDate ? new Date(event.endDate) : eventStartDate;
-      eventEndDate.setHours(0, 0, 0, 0);
-      return date >= eventStartDate && date <= eventEndDate;
-    });
+    // Compared as 'YYYY-MM-DD' strings. `new Date(event.startDate)` reads a
+    // bare date as UTC midnight and put every all-day event on the dashboard a
+    // day early, exactly as it did on the calendar page.
+    const key = dayKey(new Date(year, month, day));
+    return events.filter(
+      event => key >= event.startDate && key <= (event.endDate || event.startDate)
+    );
   };
 
   return (
