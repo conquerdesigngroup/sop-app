@@ -1,21 +1,131 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useMemo, useState } from 'react';
 import { theme } from '../../theme';
 import { Card, EmptyState, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import ClassFilterBar from '../../components/portal/ClassFilterBar';
+import {
+  ClassListView, ClassMonthView, ClassWeekView,
+} from '../../components/portal/ClassScheduleViews';
 import { usePortal } from '../../contexts/PortalContext';
-import { portalRoutes, formatClassSchedule } from '../../lib/portal';
+import { useResponsive } from '../../hooks/useResponsive';
+import { PROGRAM_CLASS_CATEGORIES, portalRoutes } from '../../lib/portal';
+import {
+  ClassFilters, ClassSort, ClassView, EMPTY_FILTERS, applyFilters, buildFacets,
+  initialMonth, readClassView, sortClasses, writeClassView,
+} from '../../lib/portalClasses';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
 import { PortalClass } from '../../types';
 
 /**
- * Every class in a program. Each one links to its own page, where its teacher's
- * updates live.
+ * The schedule.
+ *
+ * WHAT THIS PAGE SHOWS
+ *
+ * Not "this program's classes" — the categories in PROGRAM_CLASS_CATEGORIES.
+ * The All-Star schedule is the whole studio, because a company dancer takes
+ * Academy technique on Tuesday and started in TNT; the Academy/TNT schedule is
+ * Academy and TNT only, because company routines are closed. The fetch is
+ * scoped by category in PortalContext, so nothing here filters for access.
+ *
+ * WHY THREE VIEWS
+ *
+ * A hundred and two classes is past the point where a single list answers a
+ * question. "What is on Tuesday" is a week; "is there anything on the 14th" is
+ * a month; "what Hip Hop could my nine-year-old do" is a filtered list. Each
+ * view reads the same filtered, sorted array — the filters are not per-view,
+ * so switching between them never silently changes what you are looking at.
+ *
+ * Filter state is component state rather than the URL. It resets when a parent
+ * navigates away, which is the right default for something used to answer one
+ * question and then leave. The VIEW does persist — see readClassView.
  */
+
+const VIEWS: { value: ClassView; label: string }[] = [
+  { value: 'list', label: 'List' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+];
+
+const ViewSwitch: React.FC<{ value: ClassView; onChange: (v: ClassView) => void }> = ({
+  value, onChange,
+}) => (
+  <div
+    role="group"
+    aria-label="How to show the schedule"
+    style={{
+      display: 'inline-flex',
+      gap: '2px',
+      padding: '3px',
+      borderRadius: theme.borderRadius.full,
+      backgroundColor: theme.colors.bg.tertiary,
+      border: `1px solid ${theme.colors.bdr.primary}`,
+      maxWidth: '100%',
+    }}
+  >
+    {VIEWS.map(v => {
+      const active = v.value === value;
+      return (
+        <button
+          key={v.value}
+          type="button"
+          onClick={() => onChange(v.value)}
+          aria-pressed={active}
+          style={{
+            padding: '7px 16px',
+            border: 'none',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            borderRadius: theme.borderRadius.full,
+            backgroundColor: active ? theme.colors.primary : 'transparent',
+            // Hardcoded on the crimson — the mode-aware tokens flip dark in
+            // light mode and disappear against the pink.
+            color: active ? '#FFFFFF' : theme.colors.txt.secondary,
+            fontFamily: theme.fonts.primary,
+            fontSize: '13px',
+            fontWeight: 600,
+            transition: 'background-color 0.2s ease, color 0.2s ease',
+          }}
+        >
+          {v.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
 const ProgramClasses: React.FC = () => {
   const { slug, program } = useProgramPage();
   const { fetchClasses } = usePortal();
-  const { data: classes, loading, error } = useProgramQuery<PortalClass[]>(program?.id, fetchClasses, []);
+  const { isMobileOrTablet } = useResponsive();
+
+  // useProgramQuery keys its effect on the program id; slug and id are 1:1, so
+  // this closure is refreshed exactly when the effect re-runs.
+  const run = useCallback(() => fetchClasses(slug), [fetchClasses, slug]);
+  const { data: classes, loading, error } = useProgramQuery<PortalClass[]>(program?.id, run, []);
+
+  // Lazy initialiser: reading localStorage on every render would be wasted
+  // work, and useState calls this once.
+  const [view, setView] = useState<ClassView>(readClassView);
+  const chooseView = useCallback((next: ClassView) => {
+    setView(next);
+    writeClassView(next);
+  }, []);
+  const [filters, setFilters] = useState<ClassFilters>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<ClassSort>('schedule');
+
+  // The month view opens on the start of the season rather than on today, so
+  // that looking at the schedule in August does not show an empty grid.
+  const [cursor, setCursor] = useState<{ year: number; month: number } | null>(null);
+  const month = cursor ?? initialMonth(classes, new Date());
+
+  const facets = useMemo(() => buildFacets(classes), [classes]);
+  const visible = useMemo(
+    () => sortClasses(applyFilters(classes, filters), sort),
+    [classes, filters, sort]
+  );
+
+  // A badge saying "Academy" on a page where everything is Academy is noise.
+  const showCategory = PROGRAM_CLASS_CATEGORIES[slug].length > 1;
 
   return (
     <PortalLayout
@@ -24,7 +134,9 @@ const ProgramClasses: React.FC = () => {
       backTo={portalRoutes.program(slug)}
       slug={slug}
     >
-      <div style={{ maxWidth: '720px' }}>
+      {/* Wider than the rest of the portal: the week view is six columns and
+          the month view is seven, and 720px squeezes both. */}
+      <div style={{ maxWidth: '1100px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
             <Spinner size={28} color={theme.colors.primary} />
@@ -32,7 +144,16 @@ const ProgramClasses: React.FC = () => {
         )}
 
         {!loading && error && (
-          <Card><p style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>{error}</p></Card>
+          <Card>
+            <p style={{
+              ...theme.typography.body,
+              fontFamily: theme.fonts.primary,
+              color: theme.colors.txt.secondary,
+              margin: 0,
+            }}>
+              {error}
+            </p>
+          </Card>
         )}
 
         {!loading && !error && classes.length === 0 && (
@@ -43,65 +164,56 @@ const ProgramClasses: React.FC = () => {
         )}
 
         {!loading && !error && classes.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {classes.map(c => {
-              const schedule = formatClassSchedule(c.dayOfWeek, c.startTime, c.endTime);
-              return (
-                <Link
-                  key={c.id}
-                  to={portalRoutes.classDetail(slug, c.id)}
-                  style={{
-                    backgroundColor: theme.colors.bg.secondary,
-                    border: `2px solid ${theme.colors.bdr.primary}`,
-                    borderRadius: theme.borderRadius.lg,
-                    padding: '18px',
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '14px',
-                  }}
-                >
-                  <span style={{ flex: 1, minWidth: 0, display: 'block' }}>
-                    <span style={{
-                      ...theme.typography.h3,
-                      color: theme.colors.txt.primary,
-                      display: 'block',
-                      marginBottom: '6px',
-                    }}>
-                      {c.name}
-                    </span>
+          <>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '12px',
+                alignItems: 'center',
+                justifyContent: isMobileOrTablet ? 'center' : 'flex-start',
+              }}
+            >
+              <ViewSwitch value={view} onChange={chooseView} />
+            </div>
 
-                    {schedule && (
-                      <span style={{
-                        ...theme.typography.bodySmall,
-                        fontFamily: theme.fonts.mono,
-                        color: theme.colors.txt.secondary,
-                        display: 'block',
-                      }}>
-                        {schedule}
-                      </span>
-                    )}
+            <ClassFilterBar
+              filters={filters}
+              onChange={setFilters}
+              facets={facets}
+              sort={sort}
+              onSortChange={setSort}
+              shown={visible.length}
+              total={classes.length}
+            />
 
-                    {(c.instructorName || c.level || c.location) && (
-                      <span style={{
-                        ...theme.typography.caption,
-                        fontFamily: theme.fonts.primary,
-                        color: theme.colors.txt.tertiary,
-                        display: 'block',
-                        marginTop: '4px',
-                      }}>
-                        {[c.instructorName, c.level, c.location].filter(Boolean).join(' · ')}
-                      </span>
-                    )}
-                  </span>
-
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
-                    <path d="M9 18l6-6-6-6" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </Link>
-              );
-            })}
-          </div>
+            {visible.length === 0 ? (
+              <EmptyState
+                title="Nothing matches those filters"
+                description="Try clearing a filter, or search for the class name instead."
+              />
+            ) : view === 'list' ? (
+              <ClassListView
+                classes={visible}
+                slug={slug}
+                showCategory={showCategory}
+                // Only group under day headings when the list is actually in
+                // day order; grouping a teacher-sorted list would misdescribe it.
+                grouped={sort === 'schedule'}
+              />
+            ) : view === 'week' ? (
+              <ClassWeekView classes={visible} slug={slug} showCategory={showCategory} />
+            ) : (
+              <ClassMonthView
+                classes={visible}
+                slug={slug}
+                showCategory={showCategory}
+                year={month.year}
+                month={month.month}
+                onMonthChange={(year, m) => setCursor({ year, month: m })}
+              />
+            )}
+          </>
         )}
       </div>
     </PortalLayout>

@@ -415,9 +415,21 @@ export interface PortalProgram {
   isActive: boolean;
 }
 
+/**
+ * Which schedule a class appears on.
+ *
+ * Not the same question as programId. programId is where a class is FILED and
+ * therefore who owns its updates and files; category is where it is SHOWN. The
+ * All-Star schedule lists all three, because an All-Star dancer takes Academy
+ * technique too; the Academy/TNT schedule lists academy and tnt only. See
+ * PROGRAM_CLASS_CATEGORIES in lib/portal.ts.
+ */
+export type PortalClassCategory = 'allstars' | 'academy' | 'tnt';
+
 export interface PortalClass {
   id: string;
   programId: string;
+  category: PortalClassCategory;
   name: string;
   /** 0 = Sunday, matching Date.getDay(). Null for classes with no fixed day. */
   dayOfWeek: number | null;
@@ -431,6 +443,33 @@ export interface PortalClass {
   instructorName: string | null;
   sortOrder: number;
   isActive: boolean;
+
+  // --- the catalogue, added in v25 -----------------------------------------
+  // Everything below came from the studio's Enrollio export. Nulls are normal:
+  // a class added by hand in the manager has none of it until somebody fills
+  // it in, and every screen treats each field as optional.
+
+  /** Dance discipline — 'Ballet', 'Hip Hop', 'Turns & Jumps'. */
+  style: string | null;
+  /** Audience band — 'Mini', 'Junior / Teen', 'Tiny Tots', 'Company'. */
+  ageGroup: string | null;
+  ageMinYears: number | null;
+  ageMaxYears: number | null;
+  capacity: number | null;
+  /** Dollars. numeric(10,2) arrives as a string, so the mapper coerces it. */
+  tuitionFee: number | null;
+  registrationFee: number | null;
+  costumeFee: number | null;
+  billingCycle: string | null;
+  billingDay: number | null;
+  /** '2026-2027'. */
+  season: string | null;
+  /** 'YYYY-MM-DD'. Bounds the weekly recurrence the month view draws. */
+  seasonStart: string | null;
+  seasonEnd: string | null;
+  registrationOpens: string | null;
+  /** The class's title in Enrollio, kept as the join key for a re-import. */
+  sourceTitle: string | null;
 }
 
 export interface PortalUpdate {

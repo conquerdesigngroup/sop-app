@@ -1,4 +1,4 @@
-import type { PortalProgramSlug } from '../types';
+import type { PortalProgramSlug, PortalClassCategory } from '../types';
 
 /**
  * Parent-portal constants, route helpers and the access-gate flag.
@@ -40,6 +40,34 @@ export const isProgramSlug = (slug: string | undefined): slug is ProgramSlug =>
  */
 export const ENROLLIO_URL =
   'https://portal.enrollio.ai/login?studioId=02CXn3sR0U7KkN3DSkwZ';
+
+// ------------------------------------------------------------ class categories
+
+/**
+ * Which class categories each schedule shows.
+ *
+ * The All-Star schedule is the whole studio on purpose: a company dancer takes
+ * Academy technique and often started in TNT, and making them hold two portals
+ * open to find a Tuesday class helps nobody. The Academy/TNT schedule is the
+ * mirror of that — it must NOT list company routines, which are closed to
+ * anyone not on a team.
+ *
+ * A class's own program still decides who may post its updates and files. This
+ * only decides where it is listed. See the v25 migration header.
+ */
+export const PROGRAM_CLASS_CATEGORIES: Record<ProgramSlug, readonly PortalClassCategory[]> = {
+  allstars: ['allstars', 'academy', 'tnt'],
+  academy: ['academy', 'tnt'],
+};
+
+export const CLASS_CATEGORY_LABEL: Record<PortalClassCategory, string> = {
+  allstars: 'All-Stars',
+  academy: 'Academy',
+  tnt: 'TNT',
+};
+
+/** Display order wherever all three appear together. */
+export const CLASS_CATEGORY_ORDER: readonly PortalClassCategory[] = ['allstars', 'academy', 'tnt'];
 
 // ---------------------------------------------------------------- routes
 

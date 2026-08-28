@@ -29,9 +29,24 @@ export const mapProgram = (r: any): PortalProgram => ({
   isActive: r.is_active,
 });
 
+/**
+ * PostgREST returns `numeric` as a STRING, not a number — 77.50 arrives as
+ * "77.50". Left alone it compares and formats as text, so a price sorts
+ * "100" < "77.50" and `.toFixed` throws. Every numeric column goes through
+ * here.
+ */
+const num = (v: any): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
 export const mapClass = (r: any): PortalClass => ({
   id: r.id,
   programId: r.program_id,
+  // Rows written before v25 have the column default rather than a considered
+  // value, which is the right fallback: the Academy schedule is the general one.
+  category: r.category ?? 'academy',
   name: r.name,
   dayOfWeek: r.day_of_week,
   startTime: r.start_time,
@@ -42,6 +57,22 @@ export const mapClass = (r: any): PortalClass => ({
   instructorName: r.instructor_name,
   sortOrder: r.sort_order ?? 0,
   isActive: r.is_active,
+
+  style: r.style ?? null,
+  ageGroup: r.age_group ?? null,
+  ageMinYears: num(r.age_min_years),
+  ageMaxYears: num(r.age_max_years),
+  capacity: num(r.capacity),
+  tuitionFee: num(r.tuition_fee),
+  registrationFee: num(r.registration_fee),
+  costumeFee: num(r.costume_fee),
+  billingCycle: r.billing_cycle ?? null,
+  billingDay: num(r.billing_day),
+  season: r.season ?? null,
+  seasonStart: r.season_start ?? null,
+  seasonEnd: r.season_end ?? null,
+  registrationOpens: r.registration_opens ?? null,
+  sourceTitle: r.source_title ?? null,
 });
 
 export const mapUpdate = (r: any): PortalUpdate => ({

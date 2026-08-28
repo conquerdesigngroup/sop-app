@@ -7,9 +7,10 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePortalAdmin, describeWriteError, ClassInput } from '../../contexts/PortalAdminContext';
-import { PortalClass, PortalProgram } from '../../types';
+import { PortalClass, PortalClassCategory, PortalProgram } from '../../types';
 import { isManagementRole, roleLabel } from '../../lib/roles';
 import { DAY_OPTIONS, timeColumnToInput, timeInputToColumn } from '../../lib/portalAdmin';
+import { CLASS_CATEGORY_LABEL, CLASS_CATEGORY_ORDER } from '../../lib/portal';
 import { ManagerList, RowActions, RowMeta, classSummary, FieldPair, useAutoFocus } from './shared';
 
 /**
@@ -30,25 +31,78 @@ import { ManagerList, RowActions, RowMeta, classSummary, FieldPair, useAutoFocus
  * account allowed to publish are not always the same, and conflating them would
  * mean either granting write access by typing a name or exposing account
  * details to parents.
+ *
+ * AND TWO DIFFERENT PLACES
+ *
+ * The same distinction runs through the program/category pair added in v25.
+ * The program a class is filed under owns its updates and files and decides
+ * which half of this manager lists it. Its CATEGORY decides which parent-facing
+ * schedules show it — All-Stars lists all three, Academy/TNT lists two. A TNT
+ * class filed under the Academy program is the normal case, not a mistake.
  */
 
-const emptyDraft = (programId: string, sortOrder: number): ClassInput => ({
-  programId,
-  name: '',
-  dayOfWeek: null,
-  startTime: null,
-  endTime: null,
-  level: '',
-  location: '',
-  description: '',
-  instructorName: '',
-  sortOrder,
-  isActive: true,
-});
+const CATEGORY_OPTIONS = CLASS_CATEGORY_ORDER.map(value => ({
+  value,
+  label: CLASS_CATEGORY_LABEL[value],
+}));
+
+/**
+ * A number field that keeps "cleared" distinct from zero.
+ *
+ * `Number('') === 0`, so the obvious `Number(e.target.value) || null` turns a
+ * deleted price into a free class and a deleted capacity into a class nobody
+ * may join.
+ */
+const numberOrNull = (raw: string): number | null => {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * A new class inherits the season of the ones already in the program.
+ *
+ * Retyping four date fields per class is how a schedule ends up with three
+ * different season end dates and a month view that stops early for no visible
+ * reason. Taken from the first existing class rather than a constant so it
+ * follows the studio into next year without a code change.
+ */
+const emptyDraft = (
+  program: PortalProgram,
+  sortOrder: number,
+  siblings: PortalClass[]
+): ClassInput => {
+  const template = siblings.find(c => c.seasonStart) ?? siblings[0];
+  return {
+    programId: program.id,
+    category: program.slug === 'allstars' ? 'allstars' : 'academy',
+    name: '',
+    dayOfWeek: null,
+    startTime: null,
+    endTime: null,
+    level: '',
+    location: '',
+    description: '',
+    instructorName: '',
+    sortOrder,
+    isActive: true,
+    style: '',
+    ageGroup: '',
+    ageMinYears: null,
+    ageMaxYears: null,
+    capacity: null,
+    tuitionFee: null,
+    season: template?.season ?? '',
+    seasonStart: template?.seasonStart ?? null,
+    seasonEnd: template?.seasonEnd ?? null,
+  };
+};
 
 const toDraft = (c: PortalClass): ClassInput => ({
   id: c.id,
   programId: c.programId,
+  category: c.category,
   name: c.name,
   dayOfWeek: c.dayOfWeek,
   startTime: c.startTime,
@@ -59,6 +113,15 @@ const toDraft = (c: PortalClass): ClassInput => ({
   instructorName: c.instructorName ?? '',
   sortOrder: c.sortOrder,
   isActive: c.isActive,
+  style: c.style ?? '',
+  ageGroup: c.ageGroup ?? '',
+  ageMinYears: c.ageMinYears,
+  ageMaxYears: c.ageMaxYears,
+  capacity: c.capacity,
+  tuitionFee: c.tuitionFee,
+  season: c.season ?? '',
+  seasonStart: c.seasonStart,
+  seasonEnd: c.seasonEnd,
 });
 
 const ClassesSection: React.FC<{
@@ -101,7 +164,7 @@ const ClassesSection: React.FC<{
 
   const startNew = () => {
     setFormError('');
-    setDraft(emptyDraft(program.id, classes.length + 1));
+    setDraft(emptyDraft(program, classes.length + 1, classes));
   };
 
   const handleSave = async () => {
@@ -115,6 +178,17 @@ const ClassesSection: React.FC<{
       setFormError('The class ends before it starts.');
       return;
     }
+    // Both CHECK constraints from v25, caught here so the message is a
+    // sentence rather than a Postgres constraint name.
+    if (draft.ageMinYears !== null && draft.ageMaxYears !== null
+        && draft.ageMaxYears < draft.ageMinYears) {
+      setFormError('The oldest age is younger than the youngest.');
+      return;
+    }
+    if (draft.seasonStart && draft.seasonEnd && draft.seasonEnd < draft.seasonStart) {
+      setFormError('The season ends before it starts.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -123,6 +197,9 @@ const ClassesSection: React.FC<{
         level: draft.level?.trim() || null,
         location: draft.location?.trim() || null,
         instructorName: draft.instructorName?.trim() || null,
+        style: draft.style?.trim() || null,
+        ageGroup: draft.ageGroup?.trim() || null,
+        season: draft.season?.trim() || null,
       });
       await setClassInstructors(classId, instructorIds);
       success(draft.id ? 'Class updated.' : 'Class added.');
@@ -189,6 +266,10 @@ const ClassesSection: React.FC<{
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                  <Badge variant={c.category === 'allstars' ? 'primary' : 'default'} size="sm">
+                    {CLASS_CATEGORY_LABEL[c.category]}
+                  </Badge>
+                  {c.style && <Badge variant="default" size="sm">{c.style}</Badge>}
                   {!c.isActive && <Badge variant="default" size="sm">Hidden</Badge>}
                   {editableClassIds.includes(c.id) && <Badge variant="info" size="sm">Yours</Badge>}
                 </div>
@@ -261,6 +342,26 @@ const ClassesSection: React.FC<{
               onChange={e => setDraft({ ...draft, name: e.target.value })}
             />
 
+            {/* Select has no helperText prop, so the note is its own line —
+                the same shape as the studio-time note under the times below. */}
+            <div>
+              <Select
+                label="Shown on"
+                options={CATEGORY_OPTIONS}
+                value={draft.category}
+                onChange={e => setDraft({ ...draft, category: e.target.value as PortalClassCategory })}
+              />
+              <p style={{
+                ...theme.typography.captionSmall,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.tertiary,
+                margin: '6px 0 0',
+              }}>
+                The All-Star schedule lists all three. The Academy/TNT schedule lists
+                Academy and TNT only.
+              </p>
+            </div>
+
             <Select
               label="Day"
               options={DAY_OPTIONS}
@@ -324,6 +425,116 @@ const ClassesSection: React.FC<{
               placeholder="Jazz shoes and a water bottle every week."
               onChange={e => setDraft({ ...draft, description: e.target.value })}
             />
+
+            <Divider margin="sm" />
+
+            {/* The filters parents actually use. Every one of these is
+                optional and every one is also a facet on the schedule page —
+                a class left with a blank Style simply never appears under a
+                style chip, which is the honest behaviour but worth knowing. */}
+            <div>
+              <h4 style={{
+                ...theme.typography.caption,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.secondary,
+                margin: '0 0 4px',
+              }}>
+                How parents find it
+              </h4>
+              <p style={{
+                ...theme.typography.captionSmall,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.tertiary,
+                margin: '0 0 12px',
+              }}>
+                These become the filters on the schedule. Leave one blank and the class
+                just will not appear under that filter.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <FieldPair stack={isMobileOrTablet}>
+                  <Input
+                    label="Style (optional)"
+                    value={draft.style ?? ''}
+                    placeholder="Hip Hop"
+                    helperText="Ballet, Jazz, Acro, Turns & Jumps…"
+                    onChange={e => setDraft({ ...draft, style: e.target.value })}
+                  />
+                  <Input
+                    label="Age group (optional)"
+                    value={draft.ageGroup ?? ''}
+                    placeholder="Junior / Teen"
+                    helperText="A slash makes it two filters: Junior AND Teen."
+                    onChange={e => setDraft({ ...draft, ageGroup: e.target.value })}
+                  />
+                </FieldPair>
+
+                <FieldPair stack={isMobileOrTablet}>
+                  <Input
+                    label="Youngest age"
+                    type="number"
+                    value={draft.ageMinYears === null ? '' : String(draft.ageMinYears)}
+                    placeholder="7"
+                    onChange={e => setDraft({ ...draft, ageMinYears: numberOrNull(e.target.value) })}
+                  />
+                  <Input
+                    label="Oldest age"
+                    type="number"
+                    value={draft.ageMaxYears === null ? '' : String(draft.ageMaxYears)}
+                    placeholder="18"
+                    helperText="Drives the “my dancer is 8” filter."
+                    onChange={e => setDraft({ ...draft, ageMaxYears: numberOrNull(e.target.value) })}
+                  />
+                </FieldPair>
+
+                <FieldPair stack={isMobileOrTablet}>
+                  <Input
+                    label="Class size (optional)"
+                    type="number"
+                    value={draft.capacity === null ? '' : String(draft.capacity)}
+                    placeholder="20"
+                    onChange={e => setDraft({ ...draft, capacity: numberOrNull(e.target.value) })}
+                  />
+                  <Input
+                    label="Monthly tuition (optional)"
+                    type="number"
+                    value={draft.tuitionFee === null ? '' : String(draft.tuitionFee)}
+                    placeholder="77.50"
+                    helperText="Dollars. Billing itself still lives in Enrollio."
+                    onChange={e => setDraft({ ...draft, tuitionFee: numberOrNull(e.target.value) })}
+                  />
+                </FieldPair>
+
+                {/* The season bounds the weekly recurrence the month view
+                    draws. A class with no dates shows on its weekday forever,
+                    which is right for a class nobody has dated and wrong for
+                    one that stops in June. */}
+                <Input
+                  label="Season (optional)"
+                  value={draft.season ?? ''}
+                  placeholder="2026-2027"
+                  onChange={e => setDraft({ ...draft, season: e.target.value })}
+                />
+
+                <FieldPair stack={isMobileOrTablet}>
+                  <Input
+                    label="First class"
+                    type="date"
+                    value={draft.seasonStart ?? ''}
+                    onChange={e => setDraft({ ...draft, seasonStart: e.target.value || null })}
+                  />
+                  <Input
+                    label="Last class"
+                    type="date"
+                    value={draft.seasonEnd ?? ''}
+                    helperText="Bounds the month calendar. Blank means it runs indefinitely."
+                    onChange={e => setDraft({ ...draft, seasonEnd: e.target.value || null })}
+                  />
+                </FieldPair>
+              </div>
+            </div>
+
+            <Divider margin="sm" />
 
             <FieldPair stack={isMobileOrTablet}>
               <Input

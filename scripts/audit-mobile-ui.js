@@ -106,11 +106,26 @@ const PUBLIC_ROUTES = [
 // checked with AUDIT_PORTAL_VIEW=list rather than by not checking it.
 const PORTAL_VIEW = process.env.AUDIT_PORTAL_VIEW === 'list' ? 'list' : 'month';
 
+// Same reasoning again for /classes, which has three views rather than two.
+// Month is seven columns inside a phone width; week is a row of side-scrolling
+// day columns and is the one that can push the PAGE sideways if its own
+// overflow container is ever lost. List is a single-column stack and is the
+// least likely to break, so it is the one you have to ask for.
+//
+// Three runs, not one, before shipping a change to that page:
+//   AUDIT_CLASSES_VIEW=list npm run audit:mobile
+//   AUDIT_CLASSES_VIEW=week npm run audit:mobile
+//   npm run audit:mobile
+const CLASSES_VIEW = ['list', 'week'].includes(process.env.AUDIT_CLASSES_VIEW)
+  ? process.env.AUDIT_CLASSES_VIEW
+  : 'month';
+
 const PORTAL_ACCESS_INIT = `
   try {
     localStorage.setItem('didc_portal_access_allstars', 'granted');
     localStorage.setItem('didc_portal_access_academy', 'granted');
     localStorage.setItem('didc_portal_calendar_view', '${PORTAL_VIEW}');
+    localStorage.setItem('didc_portal_classes_view', '${CLASSES_VIEW}');
   } catch (e) {}
 `;
 
@@ -325,7 +340,10 @@ const collect = (statusBar) => {
   // ------------------------------------------------------------------ report
   console.log('\nMOBILE UI AUDIT\n' + '='.repeat(64));
   console.log(`base ${BASE}`);
-  console.log(`routes ${routes.length}  devices ${devices.length}  portal calendar in ${PORTAL_VIEW} view`);
+  console.log(
+    `routes ${routes.length}  devices ${devices.length}  ` +
+    `portal calendar in ${PORTAL_VIEW} view, classes in ${CLASSES_VIEW} view`
+  );
   if (!email || !password) {
     console.log(`\n  NOTE: no AUDIT_EMAIL/AUDIT_PASSWORD, so ${AUTH_ROUTES.length} signed-in`);
     console.log('  routes were NOT checked. A clean run below does not cover them.');

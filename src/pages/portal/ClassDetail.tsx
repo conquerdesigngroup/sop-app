@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Card, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Card, EmptyState, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import { usePortal } from '../../contexts/PortalContext';
-import { portalRoutes, formatClassSchedule } from '../../lib/portal';
+import { portalRoutes, formatClassSchedule, CLASS_CATEGORY_LABEL } from '../../lib/portal';
+import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentRow } from '../../components/portal/DocumentRow';
@@ -21,6 +22,15 @@ import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
  * page; a class's music and choreography notes belong with the class, and the
  * teacher who holds it can now post them here rather than asking an admin to
  * upload something studio-wide.
+ *
+ * THE CLASS AND THE ROUTE CAN BELONG TO DIFFERENT PROGRAMS
+ *
+ * The All-Star schedule lists Academy and TNT classes, so /portal/allstars/
+ * classes/:id routinely opens a class filed under the Academy program. Its
+ * updates and files carry the CLASS's program id, not the route's — fetching
+ * them by the route would quietly return an empty page for every Academy class
+ * reached from the All-Star side. So the class is resolved first, and its own
+ * programId drives the two fetches that follow.
  */
 const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
@@ -42,18 +52,30 @@ const ClassDetail: React.FC = () => {
 
     (async () => {
       try {
-        // The class list is small and already indexed by program, so one fetch
-        // and a find beats a second round trip for a single row.
-        const [classes, classUpdates, classDocs] = await Promise.all([
-          fetchClasses(program.id),
-          fetchUpdates(program.id, classId),
-          fetchDocuments(program.id, classId),
-        ]);
+        // Two steps rather than one Promise.all: the second pair of fetches is
+        // scoped by the class's own program, which is not known until the
+        // first has resolved. The list is one indexed query and already in
+        // cache from the schedule page in the common case.
+        const classes = await fetchClasses(slug);
         if (cancelled) return;
 
         const found = classes.find(c => c.id === classId) ?? null;
         setKlass(found);
         setNotFound(!found);
+
+        if (!found) {
+          setUpdates([]);
+          setDocuments([]);
+          setError(null);
+          return;
+        }
+
+        const [classUpdates, classDocs] = await Promise.all([
+          fetchUpdates(found.programId, classId),
+          fetchDocuments(found.programId, classId),
+        ]);
+        if (cancelled) return;
+
         setUpdates(classUpdates);
         setDocuments(classDocs);
         setError(null);
@@ -67,7 +89,8 @@ const ClassDetail: React.FC = () => {
     })();
 
     return () => { cancelled = true; };
-    // fetchClasses/fetchUpdates/fetchDocuments are useCallback-stable.
+    // fetchClasses/fetchUpdates/fetchDocuments are useCallback-stable, and slug
+    // moves with program?.id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program?.id, classId]);
 
@@ -78,7 +101,40 @@ const ClassDetail: React.FC = () => {
   }
 
   const schedule = klass ? formatClassSchedule(klass.dayOfWeek, klass.startTime, klass.endTime) : null;
-  const details = klass ? [klass.instructorName, klass.level, klass.location].filter(Boolean) : [];
+  const details = klass
+    ? [klass.instructorName, klass.level ? `Level ${klass.level}` : null, klass.location]
+        .filter(Boolean)
+    : [];
+
+  /**
+   * The rest of the catalogue, as label/value pairs.
+   *
+   * Each one is dropped when it is missing rather than rendered empty: a class
+   * added by hand in the manager has none of these, and a column of blank
+   * labels reads as a broken page rather than an unfilled one.
+   *
+   * WHAT IS DELIBERATELY NOT HERE
+   *
+   * Tuition, class size and age group. All three are still on the row and
+   * still editable in the manager — the import filled them in and nothing has
+   * thrown them away — but none belongs on a page parents browse. Price and
+   * capacity are Enrollio's job and change without this app hearing about it;
+   * the age GROUP is a filter rather than a fact, and it only ever repeats
+   * what the class name already says. The age RANGE stays, because that is the
+   * one a parent is actually asking about. Matches the card in
+   * ClassScheduleViews — change the two together or they disagree.
+   */
+  const facts: { label: string; value: string }[] = klass
+    ? ([
+        ['Length', durationLabel(klass)],
+        ['Ages', ageRangeLabel(klass)],
+        ['Style', klass.style],
+        ['Studio', klass.location],
+        ['Season', klass.season],
+      ] as [string, string | null][])
+        .filter((pair): pair is [string, string] => !!pair[1])
+        .map(([label, value]) => ({ label, value }))
+    : [];
 
   return (
     <PortalLayout
@@ -100,8 +156,18 @@ const ClassDetail: React.FC = () => {
 
         {!loading && !error && klass && (
           <>
-            {(schedule || details.length > 0 || klass.description) && (
+            {(schedule || details.length > 0 || klass.description || facts.length > 0) && (
               <Card>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                  <Badge
+                    variant={klass.category === 'allstars' ? 'primary' : klass.category === 'tnt' ? 'warning' : 'info'}
+                    size="sm"
+                  >
+                    {CLASS_CATEGORY_LABEL[klass.category]}
+                  </Badge>
+                  {klass.style && <Badge variant="default" size="sm">{klass.style}</Badge>}
+                </div>
+
                 {schedule && (
                   <div style={{
                     ...theme.typography.body,
@@ -133,6 +199,45 @@ const ClassDetail: React.FC = () => {
                   }}>
                     {klass.description}
                   </p>
+                )}
+
+                {facts.length > 0 && (
+                  <dl
+                    style={{
+                      display: 'grid',
+                      // auto-fit rather than a fixed column count: three
+                      // columns on a phone would put "Class size" on four lines.
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                      gap: '12px 18px',
+                      margin: '18px 0 0',
+                      paddingTop: '16px',
+                      borderTop: `1px solid ${theme.colors.bdr.primary}`,
+                    }}
+                  >
+                    {facts.map(fact => (
+                      <div key={fact.label} style={{ minWidth: 0 }}>
+                        <dt style={{
+                          ...theme.typography.captionSmall,
+                          fontFamily: theme.fonts.mono,
+                          color: theme.colors.txt.tertiary,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.06em',
+                          marginBottom: '3px',
+                        }}>
+                          {fact.label}
+                        </dt>
+                        <dd style={{
+                          ...theme.typography.bodySmall,
+                          fontFamily: theme.fonts.primary,
+                          color: theme.colors.txt.primary,
+                          margin: 0,
+                          overflowWrap: 'anywhere',
+                        }}>
+                          {fact.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
                 )}
               </Card>
             )}

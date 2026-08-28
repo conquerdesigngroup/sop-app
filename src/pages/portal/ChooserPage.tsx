@@ -30,7 +30,6 @@ import ThemeToggle from '../../components/ThemeToggle';
 interface TileProps {
   to: string;
   label: string;
-  description: string;
   /** Drawn at 28px inside a 48/52px well. */
   icon: React.ReactNode;
   /** Marks the tile with the electric accent. Exactly one tile sets this. */
@@ -38,7 +37,12 @@ interface TileProps {
 }
 
 /**
- * A square, centre-stacked card: icon over name over description.
+ * A square, centre-stacked card: an icon over the name of the half it opens.
+ *
+ * It carried a line of description under the name — "Tasks, SOPs, hours and
+ * scheduling" — which is a menu for a place you have not arrived at yet. The
+ * two names answer the only question this screen asks, so the line came out
+ * and the tile is down to the two things that make the choice.
  *
  * It used to be a wide left-aligned slab on desktop and a row with a chevron on
  * a phone — two different objects doing one job, and neither of them a shape.
@@ -51,7 +55,7 @@ interface TileProps {
  * that matters and simply grows on the one that does not. A tile a few pixels
  * off square beats a description hanging out of the bottom of one.
  */
-const ChooserTile: React.FC<TileProps> = ({ to, label, description, icon, accent = false }) => {
+const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false }) => {
   const [active, setActive] = useState(false);
   const { isMobileOrTablet } = useResponsive();
   const well = isMobileOrTablet ? '48px' : '52px';
@@ -104,31 +108,19 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, description, icon, accent
         {icon}
       </div>
 
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            ...theme.typography.h3,
-            fontSize: isMobileOrTablet ? '17px' : undefined,
-            color: theme.colors.txt.primary,
-            marginBottom: '5px',
-          }}
-        >
-          {label}
-        </div>
-        <div
-          style={{
-            ...theme.typography.bodySmall,
-            fontSize: isMobileOrTablet ? '12px' : undefined,
-            lineHeight: 1.35,
-            color: theme.colors.txt.tertiary,
-            fontFamily: theme.fonts.primary,
-            // 138px of cell at 320px. Nothing here breaks on its own, so say
-            // it may — see the flex/min-content note in CLAUDE.md.
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {description}
-        </div>
+      <div
+        style={{
+          ...theme.typography.h3,
+          fontSize: isMobileOrTablet ? '17px' : undefined,
+          color: theme.colors.txt.primary,
+          minWidth: 0,
+          // Two words in a 138px cell at 320px. It breaks at the space on its
+          // own; this covers the case where it cannot — see the
+          // flex/min-content note in CLAUDE.md.
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {label}
       </div>
     </Link>
   );
@@ -218,22 +210,11 @@ const ChooserPage: React.FC = () => {
           maxWidth: isMobileOrTablet ? '400px' : '520px',
         }}
       >
-        {/* Descriptions are kept to a similar length on purpose: these sit side
-            by side at every width, and a one-line/three-line pair reads as two
-            different components rather than one choice. */}
-        <ChooserTile
-          to="/login"
-          label="Staff"
-          description="Tasks, SOPs, hours and scheduling."
-          icon={StaffIcon}
-        />
-        <ChooserTile
-          to={portalRoutes.home}
-          label="Dancers"
-          description="Schedules, info and files."
-          icon={TeamIcon}
-          accent
-        />
+        {/* Both labels are two words of the same shape on purpose: they sit
+            side by side at every width, and a one-word/two-word pair reads as
+            two different components rather than one choice. */}
+        <ChooserTile to="/login" label="Staff Portal" icon={StaffIcon} />
+        <ChooserTile to={portalRoutes.home} label="Dancer Portal" icon={TeamIcon} accent />
       </div>
 
       <InstallAppGuide />
