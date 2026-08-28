@@ -46,3 +46,45 @@ export const signDocumentUrls = async (
     return {};
   }
 };
+
+/**
+ * "The object is not there" — which, when you are deleting it, is success.
+ *
+ * The Storage API answers a delete for a path it does not hold with an error,
+ * not a no-op:
+ *
+ *     400  {"statusCode":"404","error":"not_found",
+ *           "message":"Object not found","code":"NoSuchKey"}
+ *
+ * That matters because deleteDocument now removes the object BEFORE the row and
+ * aborts if it cannot. Without this check, a row whose file had already gone
+ * would be permanently undeletable — exactly the kind of trap the reordering
+ * exists to remove, just pointed the other way.
+ *
+ * Matched loosely on purpose. supabase-js has moved this error between `status`,
+ * `statusCode` and the message across versions, and being wrong here means a
+ * row nobody can delete; being generous means at worst a row is deleted while
+ * its file survives, which is the recoverable direction and is visible in the
+ * bucket.
+ */
+export const isMissingObjectError = (err: unknown): boolean => {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { status?: unknown; statusCode?: unknown; message?: unknown; code?: unknown };
+  if (e.status === 404 || String(e.statusCode) === '404') return true;
+  if (String(e.code) === 'NoSuchKey') return true;
+  return /not.?found|nosuchkey/i.test(String(e.message ?? ''));
+};
+
+/**
+ * Delete the file, and treat "already gone" as done.
+ *
+ * Throws for anything else — no permission, no network — so the caller can
+ * leave the database row where it is. A row that still points at a live file
+ * can be retried; a file with no row pointing at it cannot be reached by the
+ * app at all, because Supabase blocks direct DELETEs on storage.objects
+ * (trigger storage.protect_delete) and the only listing the app does is by row.
+ */
+export const removeStorageObject = async (bucket: string, storagePath: string): Promise<void> => {
+  const { error } = await supabase.storage.from(bucket).remove([storagePath]);
+  if (error && !isMissingObjectError(error)) throw error;
+};

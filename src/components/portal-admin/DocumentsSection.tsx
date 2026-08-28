@@ -114,7 +114,7 @@ const DocumentsSection: React.FC<{
     canEditClass, editableClassIds,
   } = usePortalAdmin();
   const { isAdmin } = useAuth();
-  const { success, error: toastError, warning } = useToast();
+  const { success, error: toastError } = useToast();
   const { confirm, confirmDialog } = useConfirm();
 
   const { data: documents, loading, error, reload } = useAdminList<PortalDocument[]>(
@@ -258,11 +258,10 @@ const DocumentsSection: React.FC<{
     if (!ok) return;
 
     try {
-      const { orphanedObject } = await deleteDocument(doc);
-      // The row is gone either way, so parents can no longer reach the file —
-      // this is housekeeping, not a failure to hand back to the user as one.
-      if (orphanedObject) warning('Removed from the portal. The stored file could not be deleted.');
-      else success('File deleted.');
+      // Throws if the stored file could not be removed, and the row is still
+      // there when it does — so this is a real error now, not housekeeping.
+      await deleteDocument(doc);
+      success('File deleted.');
       reload();
     } catch (e) {
       toastError(describeWriteError(e));
