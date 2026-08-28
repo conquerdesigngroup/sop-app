@@ -4,10 +4,14 @@
  */
 
 import { CalendarEvent, JobTask } from '../types';
+import { parseDayKey, addDays } from '../lib/calendarLayout';
 
 // Format date for Google Calendar URL (YYYYMMDDTHHmmssZ format)
 const formatDateForGoogle = (dateStr: string, timeStr?: string, isAllDay?: boolean): string => {
-  const date = new Date(dateStr);
+  // parseDayKey, not new Date(str): a bare 'YYYY-MM-DD' parses as UTC
+  // midnight, the previous afternoon west of Greenwich. This feeds the file
+  // that lands in someone's own calendar, so a day's drift is not cosmetic.
+  const date = parseDayKey(dateStr);
 
   if (isAllDay || !timeStr) {
     // For all-day events, use YYYYMMDD format
@@ -33,7 +37,10 @@ const formatDateForGoogle = (dateStr: string, timeStr?: string, isAllDay?: boole
 
 // Format date for ICS file (YYYYMMDDTHHmmss format in local time, or YYYYMMDD for all-day)
 const formatDateForICS = (dateStr: string, timeStr?: string, isAllDay?: boolean): string => {
-  const date = new Date(dateStr);
+  // parseDayKey, not new Date(str): a bare 'YYYY-MM-DD' parses as UTC
+  // midnight, the previous afternoon west of Greenwich. This feeds the file
+  // that lands in someone's own calendar, so a day's drift is not cosmetic.
+  const date = parseDayKey(dateStr);
 
   if (isAllDay || !timeStr) {
     const year = date.getFullYear();
@@ -86,12 +93,9 @@ export const generateGoogleCalendarUrl = (event: CalendarEvent): string => {
 
   if (event.isAllDay) {
     // For all-day events, end date should be the next day
-    const end = event.endDate ? new Date(event.endDate) : new Date(event.startDate);
-    end.setDate(end.getDate() + 1);
-    const year = end.getFullYear();
-    const month = String(end.getMonth() + 1).padStart(2, '0');
-    const day = String(end.getDate()).padStart(2, '0');
-    endDate = `${year}${month}${day}`;
+    // DTEND is exclusive for an all-day event: the last covered day plus one.
+    // Done on the string, so there is no Date and no zone to shift it.
+    endDate = addDays(event.endDate || event.startDate, 1).replace(/-/g, '');
   } else {
     endDate = formatDateForGoogle(
       event.endDate || event.startDate,
@@ -101,7 +105,7 @@ export const generateGoogleCalendarUrl = (event: CalendarEvent): string => {
 
     // If no end time, default to 1 hour after start
     if (!event.endTime && event.startTime) {
-      const date = new Date(event.startDate);
+      const date = parseDayKey(event.startDate);
       const [hours, minutes] = event.startTime.split(':').map(Number);
       date.setHours(hours + 1, minutes, 0, 0);
       endDate = formatDateForGoogle(event.startDate, `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`, false);
@@ -177,18 +181,15 @@ export const generateICSForEvent = (event: CalendarEvent): string => {
   let endDate: string;
 
   if (event.isAllDay) {
-    const end = event.endDate ? new Date(event.endDate) : new Date(event.startDate);
-    end.setDate(end.getDate() + 1);
-    const year = end.getFullYear();
-    const month = String(end.getMonth() + 1).padStart(2, '0');
-    const day = String(end.getDate()).padStart(2, '0');
-    endDate = `${year}${month}${day}`;
+    // DTEND is exclusive for an all-day event: the last covered day plus one.
+    // Done on the string, so there is no Date and no zone to shift it.
+    endDate = addDays(event.endDate || event.startDate, 1).replace(/-/g, '');
   } else {
     if (event.endTime) {
       endDate = formatDateForICS(event.endDate || event.startDate, event.endTime, false);
     } else if (event.startTime) {
       // Default to 1 hour
-      const date = new Date(event.startDate);
+      const date = parseDayKey(event.startDate);
       const [hours, minutes] = event.startTime.split(':').map(Number);
       date.setHours(hours + 1, minutes);
       endDate = formatDateForICS(event.startDate, `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`, false);

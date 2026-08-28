@@ -6,6 +6,7 @@ import { useEvent } from '../contexts/EventContext';
 import { useToast } from '../contexts/ToastContext';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { AttachmentList, useAttachments } from './calendar/EventAttachments';
+import { parseDayKey } from '../lib/calendarLayout';
 import {
   generateGoogleCalendarUrl,
   generateICSForEvent,
@@ -55,7 +56,11 @@ const EventDetailModal: React.FC<EventDetailModalProps> = ({
 
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    // parseDayKey, not new Date(str). A bare 'YYYY-MM-DD' parses as UTC
+    // midnight, which is the previous afternoon in California — so this modal
+    // called an event on the 31st "Sunday, August 30" while the grid beside it
+    // said Monday the 31st.
+    const date = parseDayKey(dateStr);
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
