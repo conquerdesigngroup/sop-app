@@ -7,6 +7,7 @@ import { PortalClass, PortalProgram } from '../../types';
 import { TabRow, classSummary } from './shared';
 import UpdatesSection from './UpdatesSection';
 import DocumentsSection from './DocumentsSection';
+import EventsSection from './EventsSection';
 
 /**
  * One class, and the content that belongs to it.
@@ -28,6 +29,12 @@ import DocumentsSection from './DocumentsSection';
  *
  * Updates lead rather than files, matching the parent-facing class page, whose
  * own note says the updates are the substance and the schedule is the header.
+ * Calendar came last and for the same reason it is here at all: a class's
+ * events were only ever reachable from the program-wide Calendar section, via a
+ * dropdown, which meant the one screen named after a class could not answer
+ * "when is their recital". Nothing new is enforced — EventsSection already
+ * carried an optional class on every row and already refused a studio-wide save
+ * from a non-admin.
  *
  * The open class lives in the query string, so a refresh or a pasted link lands
  * back on it. The Updates/Files choice is deliberately local state instead: it
@@ -35,11 +42,12 @@ import DocumentsSection from './DocumentsSection';
  * switch pushed a history entry for the back button to walk through.
  */
 
-type Tab = 'updates' | 'files';
+type Tab = 'updates' | 'files' | 'calendar';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'updates', label: 'Info' },
   { key: 'files', label: 'Files' },
+  { key: 'calendar', label: 'Calendar' },
 ];
 
 const ClassWorkspace: React.FC<{
@@ -112,6 +120,9 @@ const ClassWorkspace: React.FC<{
         )}
         {tab === 'files' && (
           <DocumentsSection program={program} classes={classes} scope={scope} />
+        )}
+        {tab === 'calendar' && (
+          <EventsSection program={program} classes={classes} scope={scope} />
         )}
       </div>
     </>

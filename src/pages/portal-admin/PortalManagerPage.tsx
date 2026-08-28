@@ -53,7 +53,12 @@ type SectionKey = 'classes' | 'updates' | 'calendar' | 'access';
  */
 const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
   { key: 'classes', label: 'Classes' },
-  { key: 'updates', label: 'Info' },
+  // Admin-only, because a program-wide post has class_id NULL and
+  // can_edit_portal_class(NULL) is false for everybody but an admin. Without
+  // this a teacher saw a "New info post" button whose every save came back
+  // "Pick one of your own classes" — a button that cannot work. Their posts go
+  // through the class workspace, which is the right place for them anyway.
+  { key: 'updates', label: 'Info', adminOnly: true },
   { key: 'calendar', label: 'Calendar' },
   { key: 'access', label: 'Access', adminOnly: true },
 ];

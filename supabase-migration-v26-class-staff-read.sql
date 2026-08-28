@@ -1,0 +1,72 @@
+-- =============================================================================
+-- v26 -- staff can see a hidden class
+--
+-- THE BUG
+--
+-- portal_classes has exactly one SELECT policy, from v9:
+--
+--     CREATE POLICY portal_classes_read ON public.portal_classes
+--       FOR SELECT TO anon, authenticated USING (is_active);
+--
+-- Policies for the same command are OR'd, and there is no second one. So
+-- `is_active = false` hides the row from EVERY role -- not just from parents,
+-- but from the admin who just unticked the box, and from the teacher who holds
+-- the class.
+--
+-- The three sibling tables all got this right. portal_updates,
+-- portal_documents and portal_events each carry a public `_read` policy on
+-- is_published AND a `_read_staff` policy on
+-- (is_admin() OR can_edit_portal_class(class_id)), which is how a teacher can
+-- see their own unpublished drafts. portal_classes was simply missed.
+--
+-- WHAT IT COSTS
+--
+-- The manager fetches a program's classes with no is_active filter
+-- (PortalAdminContext.fetchClasses), and ClassesSection renders a hidden one at
+-- 60% opacity behind a "Hidden" badge -- code that could never run. Unticking
+-- "Show on the schedule" therefore does not hide a class, it loses it: no row
+-- in the list, no Edit, no Open, no workspace, no way to untick it back. The
+-- only route to it is the SQL editor.
+--
+-- Worse, the app recommends the trap. The delete confirmation in
+-- ClassesSection reads: "To take a class off the schedule without losing any of
+-- that, edit it and untick Show on the schedule instead."
+--
+-- THE FIX
+--
+-- The missing sibling policy. An admin sees every class; a teacher additionally
+-- sees the ones granted to them in portal_class_instructors, active or not.
+-- Nothing here widens what a PARENT can see: `anon` is not in this policy, so
+-- an inactive class stays invisible to the portal exactly as before.
+--
+-- Verification and rollback are at the bottom of the file.
+-- =============================================================================
+
+DROP POLICY IF EXISTS portal_classes_read_staff ON public.portal_classes;
+
+CREATE POLICY portal_classes_read_staff ON public.portal_classes
+  FOR SELECT TO authenticated
+  USING (public.is_admin() OR public.can_edit_portal_class(id));
+
+-- =============================================================================
+-- VERIFY
+--
+--   SELECT policyname, cmd, roles::text, qual
+--     FROM pg_policies
+--    WHERE schemaname = 'public' AND tablename = 'portal_classes'
+--    ORDER BY policyname;
+--   -- portal_classes_read        SELECT  {anon,authenticated}  is_active
+--   -- portal_classes_read_staff  SELECT  {authenticated}       (is_admin() OR ...)
+--   -- portal_classes_write       ALL     {authenticated}       is_admin()
+--
+--   -- And the shape now matches its three siblings:
+--   SELECT tablename, count(*) FILTER (WHERE policyname LIKE '%read_staff') AS staff_read
+--     FROM pg_policies
+--    WHERE schemaname = 'public'
+--      AND tablename IN ('portal_classes','portal_updates','portal_documents','portal_events')
+--    GROUP BY 1 ORDER BY 1;                       -- every row should read 1
+--
+-- ROLLBACK
+--
+--   DROP POLICY IF EXISTS portal_classes_read_staff ON public.portal_classes;
+-- =============================================================================

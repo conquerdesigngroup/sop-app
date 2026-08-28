@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { theme } from '../../theme';
-import { Button, Card, Input, Modal, Select, Textarea, Badge, Divider, PlusIcon } from '../ui';
+import {
+  Button, Card, Input, Modal, Select, Textarea, Badge, Divider, EmptyState,
+  PlusIcon, SearchInput,
+} from '../ui';
 import { CustomCheckbox } from '../CustomCheckbox';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -10,7 +13,7 @@ import { usePortalAdmin, describeWriteError, ClassInput } from '../../contexts/P
 import { PortalClass, PortalClassCategory, PortalProgram } from '../../types';
 import { isManagementRole, roleLabel } from '../../lib/roles';
 import { DAY_OPTIONS, timeColumnToInput, timeInputToColumn } from '../../lib/portalAdmin';
-import { CLASS_CATEGORY_LABEL, CLASS_CATEGORY_ORDER } from '../../lib/portal';
+import { CLASS_CATEGORY_LABEL, CLASS_CATEGORY_ORDER, dayName } from '../../lib/portal';
 import { ManagerList, RowActions, RowMeta, classSummary, FieldPair, useAutoFocus } from './shared';
 
 /**
@@ -68,6 +71,17 @@ const numberOrNull = (raw: string): number | null => {
  * reason. Taken from the first existing class rather than a constant so it
  * follows the studio into next year without a code change.
  */
+/**
+ * One past the highest, not one past the count.
+ *
+ * `classes.length + 1` collides the moment anything has ever been deleted, and
+ * after the v25 import the numbers are the schedule order 1..102 — so a new
+ * class numbered 73 lands in the middle of Thursday evening rather than at the
+ * end of the list.
+ */
+const nextSortOrder = (siblings: PortalClass[]): number =>
+  siblings.reduce((max, c) => Math.max(max, c.sortOrder), 0) + 1;
+
 const emptyDraft = (
   program: PortalProgram,
   sortOrder: number,
@@ -143,28 +157,76 @@ const ClassesSection: React.FC<{
 
   const [draft, setDraft] = useState<ClassInput | null>(null);
   const [instructorIds, setInstructorIds] = useState<string[]>([]);
+  /**
+   * Whether the tick boxes below reflect the database yet.
+   *
+   * setClassInstructors treats the array it is given as the whole truth and
+   * DELETEs anything missing from it. The list starts empty and arrives from an
+   * async fetch, so a Save in that window — or any time after the fetch failed
+   * — used to hand it `[]` and silently revoke every teacher on the class,
+   * while the toast said "Class updated." An empty list and an unloaded list
+   * look identical on screen; this is the flag that tells them apart.
+   */
+  const [grantsLoaded, setGrantsLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [search, setSearch] = useState('');
   const focusRef = useAutoFocus(draft !== null);
 
   const staff = users.filter(u => u.isActive !== false);
 
+  /**
+   * A search box, because this list is now 72 rows in Academy and 30 in
+   * All-Stars where it used to be nine.
+   *
+   * Deliberately not the parent-facing filter bar. An admin arrives knowing
+   * which class they want and needs to reach it in one action; browsing by
+   * style and age band is the parent's job. Matching the day name as well as
+   * the fields means "thursday" and "studio 3" both work, which is how
+   * somebody who only knows when a class runs will look for it.
+   */
+  const needle = search.trim().toLowerCase();
+  const visible = needle
+    ? classes.filter(c =>
+        [c.name, c.instructorName, c.style, c.level, c.ageGroup, c.location,
+         dayName(c.dayOfWeek), CLASS_CATEGORY_LABEL[c.category]]
+          .filter(Boolean).join(' ').toLowerCase().includes(needle))
+    : classes;
+
   // Existing grants for the class being edited. A new class starts with none.
   useEffect(() => {
     if (!draft?.id) {
+      // A new class genuinely has no grants, so there is nothing to wait for.
       setInstructorIds([]);
+      setGrantsLoaded(true);
       return;
     }
     let cancelled = false;
+    setGrantsLoaded(false);
+    setInstructorIds([]);
     fetchClassInstructors(draft.id)
-      .then(ids => { if (!cancelled) setInstructorIds(ids); })
-      .catch(e => console.error('Could not load class instructors:', e));
+      .then(ids => {
+        if (cancelled) return;
+        setInstructorIds(ids);
+        setGrantsLoaded(true);
+      })
+      .catch(e => {
+        console.error('Could not load class instructors:', e);
+        // Left false on purpose. The class record can still be saved; the grant
+        // write is the part that must not run on a guess.
+        if (!cancelled) {
+          setFormError(
+            'Could not load who can post to this class. You can still save the class — ' +
+            'reopen it to change who posts.'
+          );
+        }
+      });
     return () => { cancelled = true; };
   }, [draft?.id, fetchClassInstructors]);
 
   const startNew = () => {
     setFormError('');
-    setDraft(emptyDraft(program, classes.length + 1, classes));
+    setDraft(emptyDraft(program, nextSortOrder(classes), classes));
   };
 
   const handleSave = async () => {
@@ -185,6 +247,18 @@ const ClassesSection: React.FC<{
       setFormError('The oldest age is younger than the youngest.');
       return;
     }
+    // All three are smallint. Without this, "2.5" reaches Postgres and the
+    // whole save fails — the times and description too — under the message
+    // `invalid input syntax for type smallint: "2.5"`.
+    const whole = [draft.ageMinYears, draft.ageMaxYears, draft.capacity];
+    if (whole.some(n => n !== null && !Number.isInteger(n))) {
+      setFormError('Ages and class size have to be whole numbers.');
+      return;
+    }
+    if (whole.some(n => n !== null && (n < 0 || n > 999))) {
+      setFormError('Ages and class size have to be between 0 and 999.');
+      return;
+    }
     if (draft.seasonStart && draft.seasonEnd && draft.seasonEnd < draft.seasonStart) {
       setFormError('The season ends before it starts.');
       return;
@@ -201,7 +275,9 @@ const ClassesSection: React.FC<{
         ageGroup: draft.ageGroup?.trim() || null,
         season: draft.season?.trim() || null,
       });
-      await setClassInstructors(classId, instructorIds);
+      // Only when the boxes are known to reflect the database. Writing an
+      // unloaded list here deletes every grant on the class.
+      if (grantsLoaded) await setClassInstructors(classId, instructorIds);
       success(draft.id ? 'Class updated.' : 'Class added.');
       setDraft(null);
       reload();
@@ -253,6 +329,38 @@ const ClassesSection: React.FC<{
         </p>
       )}
 
+      {/* Only once the list is long enough to need it. Three classes and a
+          search box is furniture. */}
+      {classes.length > 8 && (
+        <div style={{ marginBottom: '16px' }}>
+          <SearchInput
+            placeholder="Search by name, teacher, day or studio"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onClear={() => setSearch('')}
+            aria-label="Search classes"
+          />
+          <p style={{
+            ...theme.typography.captionSmall,
+            fontFamily: theme.fonts.mono,
+            color: theme.colors.txt.tertiary,
+            margin: '8px 0 0',
+          }}>
+            {needle ? `${visible.length} of ${classes.length}` : `${classes.length} classes`}
+          </p>
+        </div>
+      )}
+
+      {/* A search that matches nothing is not the same as a program with no
+          classes, and offering "New class" here would be answering the wrong
+          question. */}
+      {needle && visible.length === 0 && classes.length > 0 && (
+        <EmptyState
+          title="No classes match that"
+          description="Try a teacher’s name, a day, or part of the class name."
+        />
+      )}
+
       <ManagerList
         loading={loading}
         error={error}
@@ -261,7 +369,7 @@ const ClassesSection: React.FC<{
         emptyDescription="Add the class list and it becomes the schedule parents see."
         emptyAction={isAdmin ? <Button leftIcon={<PlusIcon />} onClick={startNew}>New class</Button> : undefined}
       >
-        {classes.map(c => (
+        {visible.map(c => (
           <Card key={c.id} style={c.isActive ? undefined : { opacity: 0.6 }}>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -287,6 +395,10 @@ const ClassesSection: React.FC<{
                   <span>{classSummary(c)}</span>
                   {c.location && <span>· {c.location}</span>}
                   {c.instructorName && <span>· {c.instructorName}</span>}
+                  {/* The three "Combo" rows and the six "Creative Movement"
+                      ones are told apart by day, time, studio and teacher —
+                      all of which are on this line. */}
+                  {c.ageGroup && <span>· {c.ageGroup}</span>}
                 </RowMeta>
               </div>
 
@@ -473,6 +585,7 @@ const ClassesSection: React.FC<{
                   <Input
                     label="Youngest age"
                     type="number"
+                    step="1" min="0" max="99"
                     value={draft.ageMinYears === null ? '' : String(draft.ageMinYears)}
                     placeholder="7"
                     onChange={e => setDraft({ ...draft, ageMinYears: numberOrNull(e.target.value) })}
@@ -480,6 +593,7 @@ const ClassesSection: React.FC<{
                   <Input
                     label="Oldest age"
                     type="number"
+                    step="1" min="0" max="99"
                     value={draft.ageMaxYears === null ? '' : String(draft.ageMaxYears)}
                     placeholder="18"
                     helperText="Drives the “my dancer is 8” filter."
@@ -491,6 +605,7 @@ const ClassesSection: React.FC<{
                   <Input
                     label="Class size (optional)"
                     type="number"
+                    step="1" min="0" max="999"
                     value={draft.capacity === null ? '' : String(draft.capacity)}
                     placeholder="20"
                     onChange={e => setDraft({ ...draft, capacity: numberOrNull(e.target.value) })}

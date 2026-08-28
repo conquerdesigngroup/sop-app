@@ -21,7 +21,7 @@
  * - EmptyState: Empty content placeholders
  */
 
-import React, { forwardRef, useState, useEffect, useCallback } from 'react';
+import React, { forwardRef, useState, useEffect, useCallback, useId } from 'react';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 
@@ -274,6 +274,22 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   style,
   ...props
 }, ref) => {
+  /**
+   * A <label> with no htmlFor labels nothing.
+   *
+   * Every labelled field in this app used to render `<label>Class name</label>`
+   * next to an `<input>` with no id — so a screen reader announced the field as
+   * unnamed, tapping the label did not focus the input, and a test could not
+   * find the control by the words printed above it. useId gives a stable,
+   * SSR-safe id; a caller that passes its own `id` still wins, because the
+   * spread below comes after this.
+   */
+  const generatedId = useId();
+  const fieldId = (props as { id?: string }).id ?? generatedId;
+  // Point the field at whichever of the two lines is actually rendered, so the
+  // "must be a whole number" under a box is read out with it rather than being
+  // visual-only.
+  const describedBy = error ? `${fieldId}-error` : helperText ? `${fieldId}-help` : undefined;
   const { isMobileOrTablet } = useResponsive();
 
   const getSizeStyles = () => {
@@ -316,18 +332,26 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
 
   return (
     <div style={{ width: fullWidth ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {label && <label style={labelStyle}>{label}</label>}
+      {label && <label htmlFor={fieldId} style={labelStyle}>{label}</label>}
       <div style={{ position: 'relative', minWidth: 0 }}>
         {leftIcon && (
           <div style={{ ...iconContainerStyle, left: '14px' }}>{leftIcon}</div>
         )}
-        <input ref={ref} style={inputStyle} disabled={disabled} {...props} />
+        <input
+          id={fieldId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          ref={ref}
+          style={inputStyle}
+          disabled={disabled}
+          {...props}
+        />
         {rightIcon && (
           <div style={{ ...iconContainerStyle, right: '14px' }}>{rightIcon}</div>
         )}
       </div>
-      {error && <span style={errorStyle}>{error}</span>}
-      {helperText && !error && <span style={helperStyle}>{helperText}</span>}
+      {error && <span id={`${fieldId}-error`} style={errorStyle}>{error}</span>}
+      {helperText && !error && <span id={`${fieldId}-help`} style={helperStyle}>{helperText}</span>}
     </div>
   );
 });
@@ -429,6 +453,18 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({
   style,
   ...props
 }, ref) => {
+  /**
+   * A <label> with no htmlFor labels nothing.
+   *
+   * Every labelled field in this app used to render `<label>Class name</label>`
+   * next to an `<input>` with no id — so a screen reader announced the field as
+   * unnamed, tapping the label did not focus the input, and a test could not
+   * find the control by the words printed above it. useId gives a stable,
+   * SSR-safe id; a caller that passes its own `id` still wins, because the
+   * spread below comes after this.
+   */
+  const generatedId = useId();
+  const fieldId = (props as { id?: string }).id ?? generatedId;
   const getSizeStyles = () => {
     const sizes = {
       sm: { padding: '8px 36px 8px 12px', fontSize: '14px' },
@@ -458,8 +494,16 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({
 
   return (
     <div style={{ width: fullWidth ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {label && <label style={labelStyle}>{label}</label>}
-      <select ref={ref} style={selectStyle} disabled={disabled} {...props}>
+      {label && <label htmlFor={fieldId} style={labelStyle}>{label}</label>}
+      <select
+        id={fieldId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${fieldId}-error` : undefined}
+        ref={ref}
+        style={selectStyle}
+        disabled={disabled}
+        {...props}
+      >
         {placeholder && <option value="" disabled>{placeholder}</option>}
         {options.map((option) => (
           <option key={option.value} value={option.value} disabled={option.disabled}>
@@ -467,7 +511,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({
           </option>
         ))}
       </select>
-      {error && <span style={errorStyle}>{error}</span>}
+      {error && <span id={`${fieldId}-error`} style={errorStyle}>{error}</span>}
     </div>
   );
 });
@@ -493,6 +537,22 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(({
   style,
   ...props
 }, ref) => {
+  /**
+   * A <label> with no htmlFor labels nothing.
+   *
+   * Every labelled field in this app used to render `<label>Class name</label>`
+   * next to an `<input>` with no id — so a screen reader announced the field as
+   * unnamed, tapping the label did not focus the input, and a test could not
+   * find the control by the words printed above it. useId gives a stable,
+   * SSR-safe id; a caller that passes its own `id` still wins, because the
+   * spread below comes after this.
+   */
+  const generatedId = useId();
+  const fieldId = (props as { id?: string }).id ?? generatedId;
+  // Point the field at whichever of the two lines is actually rendered, so the
+  // "must be a whole number" under a box is read out with it rather than being
+  // visual-only.
+  const describedBy = error ? `${fieldId}-error` : helperText ? `${fieldId}-help` : undefined;
   const textareaStyle: React.CSSProperties = {
     width: '100%',
     minHeight: '100px',
@@ -511,10 +571,18 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(({
 
   return (
     <div style={{ width: fullWidth ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {label && <label style={labelStyle}>{label}</label>}
-      <textarea ref={ref} style={textareaStyle} disabled={disabled} {...props} />
-      {error && <span style={errorStyle}>{error}</span>}
-      {helperText && !error && <span style={helperStyle}>{helperText}</span>}
+      {label && <label htmlFor={fieldId} style={labelStyle}>{label}</label>}
+      <textarea
+        id={fieldId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        ref={ref}
+        style={textareaStyle}
+        disabled={disabled}
+        {...props}
+      />
+      {error && <span id={`${fieldId}-error`} style={errorStyle}>{error}</span>}
+      {helperText && !error && <span id={`${fieldId}-help`} style={helperStyle}>{helperText}</span>}
     </div>
   );
 });
