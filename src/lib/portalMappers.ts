@@ -70,6 +70,8 @@ export const mapEvent = (r: any): PortalEvent => ({
   location: r.location,
   source: r.source,
   isPublished: r.is_published,
+  googleCalendarId: r.google_calendar_id ?? null,
+  googleEventId: r.google_event_id ?? null,
 });
 
 export const mapDocument = (r: any): PortalDocument => ({

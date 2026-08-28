@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { theme } from '../../theme';
+import { AttachmentManager } from './EventAttachments';
 import { Button, Modal, Input, Select, Textarea } from '../ui';
 import { useEvent, EventDraft } from '../../contexts/EventContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -307,6 +308,44 @@ const EventEditor: React.FC<EventEditorProps> = ({ open, onClose, event, default
           onChange={e => set('description', e.target.value)}
           fullWidth
         />
+
+        {/*
+          Only on an event that already exists in Google. An attachment is
+          filed under the event's Google id, and a new event has none until
+          the save comes back — so offering the control while creating would
+          be offering somewhere for the file to go that does not exist yet.
+
+          Recurrence instances are excluded for the same reason the Edit button
+          is: `<uid>::<time>` is not an id Google would recognise.
+        */}
+        {event?.googleCalendarId && event?.googleEventId
+          && !event.googleEventId.includes('::') ? (
+          <div>
+            <div style={{
+              ...theme.typography.captionSmall,
+              fontFamily: theme.fonts.mono,
+              color: theme.colors.txt.tertiary,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginBottom: '8px',
+            }}>
+              Links and files
+            </div>
+            <AttachmentManager
+              googleCalendarId={event.googleCalendarId}
+              googleEventId={event.googleEventId}
+            />
+          </div>
+        ) : (
+          <p style={{
+            ...theme.typography.bodySmall,
+            fontFamily: theme.fonts.primary,
+            color: theme.colors.txt.tertiary,
+            margin: 0,
+          }}>
+            Save this event, then reopen it to attach a link or a file.
+          </p>
+        )}
       </div>
       </Modal>
     </>

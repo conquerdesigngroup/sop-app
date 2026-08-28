@@ -462,6 +462,16 @@ export interface PortalEvent {
   /** 'google' rows are owned by the phase-4 sync and will be overwritten. */
   source: 'manual' | 'google';
   isPublished: boolean;
+  /**
+   * How this event is named on the Google side. Null on 'manual' rows.
+   *
+   * Carried through so the portal can find the event's attachments, which hang
+   * off the (calendar, event) pair rather than off a row id — the staff
+   * calendar and the portal are different tables and that pair is the only
+   * identity they share. See the v22 migration.
+   */
+  googleCalendarId: string | null;
+  googleEventId: string | null;
 }
 
 /**

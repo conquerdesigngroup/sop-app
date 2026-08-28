@@ -18,6 +18,8 @@ const event = (over: Partial<PortalEvent>): PortalEvent => ({
   endsAt: null,
   isAllDay: true,
   location: null,
+  googleCalendarId: null,
+  googleEventId: null,
   source: 'google',
   isPublished: true,
   ...over,
