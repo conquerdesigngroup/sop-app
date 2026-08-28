@@ -48,8 +48,15 @@ type SectionKey = 'classes' | 'updates' | 'calendar' | 'access';
  * Classes lead: it is the way in to most of what anyone comes here to do, and
  * for a teacher it is the only section they can write to.
  *
- * Access is not a fourth content section — it is the program's access code — but
+ * Access code is not a fourth content section — it is the program's gate — but
  * it has nowhere better to live and is admin-only, so it sits last.
+ *
+ * Labelled "Access code" rather than "Access", because the owner asked for a
+ * way to change the parent portal's password that had been sitting behind that
+ * tab since v11. One word made the difference between a feature existing and a
+ * feature being findable. Both things on that screen are about the code — what
+ * it is, and whether one is required at all — so the longer label is no less
+ * accurate. TabRow wraps, so it costs nothing on a phone.
  */
 const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
   { key: 'classes', label: 'Classes' },
@@ -60,7 +67,7 @@ const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
   // through the class workspace, which is the right place for them anyway.
   { key: 'updates', label: 'Info', adminOnly: true },
   { key: 'calendar', label: 'Calendar' },
-  { key: 'access', label: 'Access', adminOnly: true },
+  { key: 'access', label: 'Access code', adminOnly: true },
 ];
 
 const PortalManagerPage: React.FC = () => {
