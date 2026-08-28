@@ -15,9 +15,10 @@
  *
  * A PNG rather than an SVG on purpose: the bevel and contact shadow are raster
  * effects, and tracing them to vector would either flatten the mark or produce
- * a heavier file than the 17 KB this is. It ships at 1468x320, about six times
- * the largest size anything draws it at (50px on the login card), so it stays
- * sharp on a 3x phone.
+ * a heavier file than the 17 KB this is. It ships at 1468x320, and the largest
+ * anything draws it is the front door — 300px wide on a phone and 440px on a
+ * desktop, so 65px and 96px tall. The phone case is the one that has to survive
+ * a 3x screen and asks for 900x196 of the source, which leaves it well ahead.
  *
  * Never recoloured, stretched or filtered — see the brand rules in CLAUDE.md.
  */
