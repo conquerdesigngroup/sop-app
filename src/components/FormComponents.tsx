@@ -65,7 +65,9 @@ export const FormInput = forwardRef<HTMLInputElement, FormInputProps>(({
     ...(isMobileOrTablet ? theme.components.input.mobile : {}),
     ...(size === 'sm' ? { padding: '8px 12px', fontSize: '14px' } : {}),
     ...(size === 'lg' ? { padding: '16px 20px', fontSize: '16px' } : {}),
-    ...(error ? { borderColor: theme.colors.status.error } : {}),
+    // Always present, never spread in conditionally: a property that exists
+    // in one state and vanishes in the other is written as '' on the way out.
+    borderColor: error ? theme.colors.status.error : theme.colors.bdr.primary,
     ...(disabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
     ...style,
   };
@@ -121,7 +123,9 @@ export const FormTextarea = forwardRef<HTMLTextAreaElement, FormTextareaProps>((
     ...(isMobileOrTablet ? theme.components.input.mobile : {}),
     minHeight: '100px',
     resize: 'vertical',
-    ...(error ? { borderColor: theme.colors.status.error } : {}),
+    // Always present, never spread in conditionally: a property that exists
+    // in one state and vanishes in the other is written as '' on the way out.
+    borderColor: error ? theme.colors.status.error : theme.colors.bdr.primary,
     ...(disabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
     ...style,
   };
@@ -198,7 +202,9 @@ export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(({
     backgroundPosition: 'right 16px center',
     paddingRight: '44px',
     cursor: 'pointer',
-    ...(error ? { borderColor: theme.colors.status.error } : {}),
+    // Always present, never spread in conditionally: a property that exists
+    // in one state and vanishes in the other is written as '' on the way out.
+    borderColor: error ? theme.colors.status.error : theme.colors.bdr.primary,
     ...(disabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
     ...style,
   };

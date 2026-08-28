@@ -801,7 +801,7 @@ const WorkHoursPage: React.FC = () => {
                 return (
                   <div style={{
                     ...(isMobileOrTablet ? styles.dayViewCardMobile : styles.dayViewCard),
-                    ...(isToday ? { borderColor: theme.colors.primary } : {}),
+                    borderColor: isToday ? theme.colors.primary : theme.colors.bdr.primary,
                   }}>
                     {dayWorkDays.length === 0 ? (
                       <div style={isMobileOrTablet ? styles.dayViewEmptyMobile : styles.dayViewEmpty}>
@@ -2393,14 +2393,22 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   dayViewCard: {
     backgroundColor: theme.colors.bg.tertiary,
-    border: `2px solid ${theme.colors.bdr.primary}`,
+    // Longhands: the day view overrides borderColor for today, and a shorthand
+    // here loses the resting colour the moment that override goes away.
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: theme.colors.bdr.primary,
     borderRadius: theme.borderRadius.lg,
     padding: '24px',
     minHeight: '200px',
   },
   dayViewCardMobile: {
     backgroundColor: theme.colors.bg.tertiary,
-    border: `2px solid ${theme.colors.bdr.primary}`,
+    // Longhands: the day view overrides borderColor for today, and a shorthand
+    // here loses the resting colour the moment that override goes away.
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: theme.colors.bdr.primary,
     borderRadius: theme.borderRadius.lg,
     padding: '16px',
     minHeight: '150px',
