@@ -112,6 +112,8 @@ export interface CalendarSourceInput {
 
 export interface SyncRunResult {
   programId: string;
+  /** Which of the program's calendars this result is about (v23). */
+  calendarId?: string;
   fetched?: number;
   upserted?: number;
   removed?: number;
@@ -158,10 +160,18 @@ interface PortalAdminContextValue {
   fetchClassInstructors: (classId: string) => Promise<string[]>;
   setClassInstructors: (classId: string, profileIds: string[]) => Promise<void>;
 
-  fetchCalendarSource: (programId: string) => Promise<PortalCalendarSource | null>;
-  saveCalendarSource: (input: CalendarSourceInput) => Promise<void>;
-  removeCalendarSource: (programId: string) => Promise<void>;
-  /** Runs the sync now. The cron runs the same function on its own schedule. */
+  /** Every calendar feeding this program, oldest first. Empty when none. */
+  fetchCalendarSources: (programId: string) => Promise<PortalCalendarSource[]>;
+  /**
+   * `originalGoogleCalendarId` identifies the row being edited. Omit it to add
+   * a calendar; pass it to change one, including changing its id.
+   */
+  saveCalendarSource: (
+    input: CalendarSourceInput,
+    originalGoogleCalendarId?: string,
+  ) => Promise<void>;
+  removeCalendarSource: (programId: string, googleCalendarId: string) => Promise<void>;
+  /** Runs the sync now, for every calendar the program reads. */
   runCalendarSync: (programId: string) => Promise<SyncRunResult[]>;
 
   setRequiresCode: (programId: string, requiresCode: boolean) => Promise<void>;
@@ -592,32 +602,59 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   // -------------------------------------------------------- calendar sync
 
-  const fetchCalendarSource = useCallback(async (programId: string) => {
+  /**
+   * A program reads several calendars since v23 — All-Stars takes the All-Stars
+   * calendar and the Studio one. This was .maybeSingle() and would now throw
+   * the moment a second row appeared.
+   */
+  const fetchCalendarSources = useCallback(async (programId: string) => {
     const { data, error } = await supabase
       .from('portal_calendar_sources')
       .select('*')
       .eq('program_id', programId)
-      .maybeSingle();
+      .order('created_at', { ascending: true });
     if (error) throw error;
-    return data ? mapCalendarSource(data) : null;
+    return (data ?? []).map(mapCalendarSource);
   }, []);
 
   /**
-   * One row per program, so this is an upsert on the primary key rather than an
-   * insert-or-update dance: pointing a program at a different calendar is the
-   * same operation as pointing it at one for the first time.
+   * Add a calendar, or change one.
+   *
+   * The key is (program_id, google_calendar_id) since v23, which makes an
+   * upsert alone wrong for an edit: changing the id would leave the old row
+   * behind and the program would then sync both the old calendar and the new
+   * one. So a rename is an UPDATE of the identified row, and everything else is
+   * an upsert.
    */
-  const saveCalendarSource = useCallback(async (input: CalendarSourceInput) => {
+  const saveCalendarSource = useCallback(async (
+    input: CalendarSourceInput,
+    originalGoogleCalendarId?: string,
+  ) => {
+    const googleCalendarId = input.googleCalendarId.trim();
+    const row = {
+      google_calendar_id: googleCalendarId,
+      is_enabled: input.isEnabled,
+      days_back: input.daysBack,
+      days_ahead: input.daysAhead,
+      publish_imported: input.publishImported,
+    };
+
+    if (originalGoogleCalendarId && originalGoogleCalendarId !== googleCalendarId) {
+      const { error } = await supabase
+        .from('portal_calendar_sources')
+        .update(row)
+        .eq('program_id', input.programId)
+        .eq('google_calendar_id', originalGoogleCalendarId);
+      if (error) throw error;
+      return;
+    }
+
     const { error } = await supabase
       .from('portal_calendar_sources')
-      .upsert({
-        program_id: input.programId,
-        google_calendar_id: input.googleCalendarId.trim(),
-        is_enabled: input.isEnabled,
-        days_back: input.daysBack,
-        days_ahead: input.daysAhead,
-        publish_imported: input.publishImported,
-      }, { onConflict: 'program_id' });
+      .upsert(
+        { program_id: input.programId, ...row },
+        { onConflict: 'program_id,google_calendar_id' },
+      );
     if (error) throw error;
   }, []);
 
@@ -627,11 +664,18 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
    * changed a setting would be worse than leaving rows that no longer refresh.
    * Delete them in the calendar list if they are not wanted.
    */
-  const removeCalendarSource = useCallback(async (programId: string) => {
+  const removeCalendarSource = useCallback(async (
+    programId: string,
+    googleCalendarId: string,
+  ) => {
     const { error } = await supabase
       .from('portal_calendar_sources')
       .delete()
-      .eq('program_id', programId);
+      .eq('program_id', programId)
+      // Scoped to the one calendar. Without this it would disconnect every
+      // calendar the program reads, which is a much bigger button than the one
+      // the admin thought they were pressing.
+      .eq('google_calendar_id', googleCalendarId);
     if (error) throw error;
   }, []);
 
@@ -685,7 +729,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveEvent, deleteEvent,
     uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
-    fetchCalendarSource, saveCalendarSource, removeCalendarSource, runCalendarSync,
+    fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   }), [
     canEdit, checking, editableClassIds, canEditClass,
@@ -694,7 +738,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveUpdate, deleteUpdate, saveEvent, deleteEvent,
     uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
-    fetchCalendarSource, saveCalendarSource, removeCalendarSource, runCalendarSync,
+    fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   ]);
 
