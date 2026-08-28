@@ -556,6 +556,10 @@ const MonthView: React.FC<ViewProps> = ({ events, onOpen, onAdd, addingId }) => 
                         title={seg.item.title}
                         color={theme.colors.bdr.secondary}
                         filled
+                        /* The bar is neutral here, not saturated, so the
+                           default white label would sit on #CFCFD6 in light
+                           mode. This one has to re-theme with the page. */
+                        textColor={theme.colors.txt.primary}
                         continuesBefore={seg.continuesBefore}
                         continuesAfter={seg.continuesAfter}
                         compact

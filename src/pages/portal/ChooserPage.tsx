@@ -5,6 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes } from '../../lib/portal';
 import InstallAppGuide from '../../components/InstallAppGuide';
+import ThemeToggle from '../../components/ThemeToggle';
 
 /**
  * The front door.
@@ -166,6 +167,20 @@ const ChooserPage: React.FC = () => {
         gap: isMobileOrTablet ? '32px' : '48px',
       }}
     >
+      {/* Fixed rather than in the flow: the page is one centred column and
+          anything added to it shifts the logo and the tiles off centre. Insets
+          are doubled up with the safe area because index.html sets
+          viewport-fit=cover, so the corner of the viewport is under the notch
+          on a phone held sideways. */}
+      <ThemeToggle
+        style={{
+          position: 'fixed',
+          top: 'calc(12px + env(safe-area-inset-top))',
+          right: 'calc(12px + env(safe-area-inset-right))',
+          zIndex: 10,
+        }}
+      />
+
       <img
         src={isDark ? '/brand/logos/didc-thrash-white.svg' : '/brand/logos/didc-thrash-pink.svg'}
         alt="Dancing Images Dance Center"

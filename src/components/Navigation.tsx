@@ -793,7 +793,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: theme.colors.overlay,
     // Above BottomNavigation (1000): this is a modal surface, and the
     // persistent bottom bar must not show through its backdrop.
     zIndex: 1098,

@@ -295,7 +295,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   iconButtonActive: {
     borderColor: theme.colors.primary,
-    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    backgroundColor: `${theme.colors.primary}26`,
     color: theme.colors.primary,
   },
   icon: {

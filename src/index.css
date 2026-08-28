@@ -18,6 +18,11 @@
   --c-shadow: rgba(0, 0, 0, 0.8);
   --c-overlay: rgba(0, 0, 0, 0.8);
   --c-hover-tint: rgba(255, 255, 255, 0.05);
+  /* Hover lifts a surface toward the light on a dark ground and toward the dark
+     on a light one. One direction cannot serve both: brightness(1.1) in light
+     mode pushes a secondary button to clipped white and it vanishes into the
+     card it sits on. ThemeProvider flips this the way it flips the palette. */
+  --btn-hover-filter: brightness(1.1);
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.7);
@@ -226,7 +231,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  filter: brightness(1.1);
+  filter: var(--btn-hover-filter, brightness(1.1));
 }
 
 button:active:not(:disabled) {
@@ -242,7 +247,7 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):hover,
 nav button:not([style*="background-color: rgb(226, 20, 79)"]):focus,
 nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
   background-color: transparent !important;
-  filter: brightness(1.1);
+  filter: var(--btn-hover-filter, brightness(1.1));
 }
 
 /* Explicit hover class for stronger effects */

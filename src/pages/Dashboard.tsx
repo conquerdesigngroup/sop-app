@@ -869,7 +869,7 @@ const dayActionStyles: { [key: string]: React.CSSProperties } = {
     border: `2px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.lg,
     padding: '12px',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    boxShadow: theme.shadows.lg,
     minWidth: '200px',
   },
   header: {
@@ -1390,7 +1390,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.primary,
   },
   calendarDayHover: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: 'var(--c-hover-tint, rgba(255, 255, 255, 0.05))',
     cursor: 'pointer',
   },
   dayNumber: {

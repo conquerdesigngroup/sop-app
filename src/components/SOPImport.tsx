@@ -393,7 +393,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: theme.colors.overlay,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -543,7 +543,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'background-color 0.15s ease',
   },
   previewItemSelected: {
-    backgroundColor: 'rgba(255, 102, 0, 0.1)',
+    backgroundColor: `${theme.colors.primary}1A`,
   },
   checkbox: {
     width: '20px',

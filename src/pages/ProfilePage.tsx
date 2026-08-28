@@ -124,9 +124,13 @@ const ProfilePage: React.FC = () => {
             <h2 style={styles.userName}>
               {currentUser.firstName} {currentUser.lastName}
             </h2>
+            {/* Colour is set beside the background it has to pair with, so
+                the two cannot drift apart. White belongs on the crimson
+                management pill only; on the neutral pill it was invisible. */}
             <span style={{
               ...styles.roleBadge,
               backgroundColor: isManagementRole(currentUser.role) ? theme.colors.primary : theme.colors.bg.tertiary,
+              color: isManagementRole(currentUser.role) ? '#FFFFFF' : theme.colors.txt.primary,
             }}>
               {roleLabel(currentUser.role)}
             </span>
@@ -400,7 +404,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '20px',
     fontSize: '13px',
     fontWeight: 600,
-    color: '#FFFFFF',
     width: 'fit-content',
   },
   card: {

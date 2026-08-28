@@ -2012,7 +2012,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#333333',
+    backgroundColor: theme.colors.bg.tertiary,
     border: `1px solid transparent`,
     borderRadius: theme.borderRadius.sm,
     cursor: 'pointer',
@@ -2020,7 +2020,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'relative',
     padding: '6px 2px',
     minHeight: '36px',
-    color: '#FFFFFF',
+    color: theme.colors.txt.primary,
   },
   scheduleCalendarDayOther: {
     opacity: 0.3,
@@ -2052,7 +2052,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   scheduleCalendarDayNum: {
     fontSize: '13px',
     fontWeight: 500,
-    color: '#FFFFFF',
+    // No colour: inherited from the tile. The unselected tile is txt.primary
+    // and the status fills below each set their own '#FFFFFF', so pinning a
+    // value here would be wrong on one of the two in every mode.
   },
   scheduleDayIndicator: {
     fontSize: '6px',
@@ -2069,7 +2071,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: '1px',
   },
   scheduleCalendarDaySelected: {
-    outline: '3px solid #FFFFFF',
+    // Has to read against the neutral tile AND against the saturated status
+    // fills. White worked on both only while the tile was charcoal; txt.primary
+    // is the one value that contrasts with all of them in both modes.
+    outline: `3px solid ${theme.colors.txt.primary}`,
     outlineOffset: '-3px',
     boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
   },

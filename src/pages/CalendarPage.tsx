@@ -845,7 +845,15 @@ const CalendarPage: React.FC = () => {
                       ...(isCurrentDay ? styles.weekDayHeaderToday : {}),
                     }}
                   >
-                    <span style={styles.weekDayName}>{dayNames[date.getDay()]}</span>
+                    {/* White on today's crimson header, matching
+                        weekDayNumberToday. txt.secondary would flip to near
+                        black in light mode and smudge into the pink. */}
+                    <span style={{
+                      ...styles.weekDayName,
+                      ...(isCurrentDay ? { color: '#FFFFFF' } : {}),
+                    }}>
+                      {dayNames[date.getDay()]}
+                    </span>
                     <span style={{
                       ...styles.weekDayNumber,
                       ...(isCurrentDay ? styles.weekDayNumberToday : {}),
@@ -1310,7 +1318,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.primary,
   },
   calendarDayHover: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: 'var(--c-hover-tint, rgba(255, 255, 255, 0.05))',
     cursor: 'pointer',
   },
   dayNumber: {

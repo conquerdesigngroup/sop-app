@@ -75,6 +75,13 @@ export const applyThemeMode = (mode: 'dark' | 'light') => {
     mode === 'light' ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)'
   );
 
+  // Button hover, same reasoning as the tint above and the same inversion:
+  // lighten on a dark ground, darken on a light one. See index.css.
+  root.style.setProperty(
+    '--btn-hover-filter',
+    mode === 'light' ? 'brightness(0.96)' : 'brightness(1.1)'
+  );
+
   // Shadows are much softer in light mode
   const s = mode === 'light'
     ? { sm: '0.08', md: '0.10', lg: '0.12', xl: '0.16' }
