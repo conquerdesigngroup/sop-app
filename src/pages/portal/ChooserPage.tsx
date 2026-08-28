@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getThemeColors, theme } from '../../theme';
+import { BRAND_MARK, getThemeColors, theme } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes } from '../../lib/portal';
@@ -172,7 +172,6 @@ const TeamIcon = (
 );
 
 const ChooserPage: React.FC = () => {
-  const { isDark } = useTheme();
   const { isMobileOrTablet } = useResponsive();
 
   return (
@@ -213,12 +212,21 @@ const ChooserPage: React.FC = () => {
           width: '100%',
         }}
       >
+        {/* The same mark the app wears in its top-left corner, rather than a
+            second wordmark that only this screen used. One mark for both modes
+            — it carries its own black keyline, which is why there is no isDark
+            ternary here and must not be one added. See BRAND_MARK in theme.ts.
+
+            It is squatter than the wordmark it replaces (4.6:1 against 3.9:1),
+            so the widths go up to keep the same presence at the top of the
+            page. 400px on a 3x phone asks for 1200 device pixels against the
+            file's 1468, so it is still drawn under its native size. */}
         <img
-          src={isDark ? '/brand/logos/didc-thrash-white.svg' : '/brand/logos/didc-thrash-pink.svg'}
+          src={BRAND_MARK}
           alt="Dancing Images Dance Center"
           style={{
             width: '100%',
-            maxWidth: isMobileOrTablet ? '260px' : '380px',
+            maxWidth: isMobileOrTablet ? '300px' : '440px',
             height: 'auto',
           }}
         />
