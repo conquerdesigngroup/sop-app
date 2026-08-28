@@ -4,9 +4,23 @@
     {
       "name": "sop-app",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeArgs": [
+        "start"
+      ],
       "port": 3002,
       "autoPort": true
+    },
+    {
+      "name": "sop-app-build",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "serve",
+        "-s",
+        "build",
+        "-l",
+        "3004"
+      ],
+      "port": 3004
     }
   ]
 }

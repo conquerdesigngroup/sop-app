@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { CalendarEvent, CalendarSource } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 import { buildEventPayload } from '../lib/googleEventMap';
 
 /**
@@ -184,6 +185,7 @@ const mapSource = (row: any): CalendarSource => ({
 });
 
 export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [googleConnection, setGoogleConnection] = useState<GoogleConnection>({ state: 'loading' });
   const [sources, setSources] = useState<CalendarSource[]>([]);
@@ -229,7 +231,31 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  /**
+   * The staff calendar, and only for staff.
+   *
+   * This used to be `useEffect(() => { load(); }, [load])` with no condition at
+   * all. DataProvider sits above the Router in App.tsx, so it mounts on every
+   * route including the parent portal — which meant every parent's phone asked
+   * for calendar_events on every page and was told, correctly,
+   * "permission denied for table calendar_events". Two failed requests and a
+   * red console on a screen that has its own calendar in portal_events and
+   * never wanted this one.
+   *
+   * Same shape as SOPContext and TaskContext: wait for auth to settle, then
+   * load only with a session. setLoading(false) on the signed-out path matters
+   * — without it a spinner would wait for a fetch that is never coming.
+   */
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+
+    load();
+  }, [load, authLoading, isAuthenticated]);
 
   const syncNow = useCallback(async (): Promise<SyncRunResult[]> => {
     if (!isSupabaseConfigured() || !supabase) return [];

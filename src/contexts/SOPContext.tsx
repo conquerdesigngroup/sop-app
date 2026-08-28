@@ -737,6 +737,12 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
   // Subscribe to real-time SOP changes
   useEffect(() => {
     if (!useSupabase) return;
+    // No session, nothing to subscribe to. Realtime delivers rows through
+    // RLS, so a signed-out device — a parent on /portal, anyone on the login
+    // screen — can only ever be sent nothing. What it DOES get is a websocket
+    // that fails and then retries on a backoff for as long as the page is
+    // open. Same guard as WorkHoursContext, which had this fixed first.
+    if (!isAuthenticated) return;
 
     const channel = supabase
       .channel('sops_changes')
@@ -757,7 +763,7 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase, loadSOPs]);
+  }, [useSupabase, loadSOPs, isAuthenticated]);
 
   // Save to localStorage when SOPs change (for non-Supabase mode)
   useEffect(() => {

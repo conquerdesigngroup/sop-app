@@ -364,6 +364,12 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   // Subscribe to real-time changes for task templates
   useEffect(() => {
     if (!useSupabase) return;
+    // No session, nothing to subscribe to. Realtime delivers rows through
+    // RLS, so a signed-out device — a parent on /portal, anyone on the login
+    // screen — can only ever be sent nothing. What it DOES get is a websocket
+    // that fails and then retries on a backoff for as long as the page is
+    // open. Same guard as WorkHoursContext, which had this fixed first.
+    if (!isAuthenticated) return;
 
     const channel = supabase
       .channel('task_templates_changes')
@@ -383,11 +389,17 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase, loadTaskTemplates]);
+  }, [useSupabase, loadTaskTemplates, isAuthenticated]);
 
   // Subscribe to real-time changes for job tasks
   useEffect(() => {
     if (!useSupabase) return;
+    // No session, nothing to subscribe to. Realtime delivers rows through
+    // RLS, so a signed-out device — a parent on /portal, anyone on the login
+    // screen — can only ever be sent nothing. What it DOES get is a websocket
+    // that fails and then retries on a backoff for as long as the page is
+    // open. Same guard as WorkHoursContext, which had this fixed first.
+    if (!isAuthenticated) return;
 
     const channel = supabase
       .channel('job_tasks_changes')
@@ -407,7 +419,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [useSupabase, loadJobTasks]);
+  }, [useSupabase, loadJobTasks, isAuthenticated]);
 
   // Save templates to localStorage (fallback mode only)
   useEffect(() => {
