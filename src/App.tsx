@@ -15,7 +15,9 @@ import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
 import { PortalProvider } from './contexts/PortalContext';
+import { PortalAuthProvider } from './contexts/PortalAuthContext';
 import { PortalAdminProvider } from './contexts/PortalAdminContext';
+import { CLIENT_AUTH_ENABLED } from './lib/clientAuth';
 import './App.css';
 
 // Lazy load page components for code splitting
@@ -37,7 +39,8 @@ const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 
-// Client-facing portal — public, no account required.
+// Client-facing portal — public with the access-code gate; with
+// REACT_APP_CLIENT_AUTH on, sits behind the family sign-in instead.
 const ChooserPage = lazy(() => import('./pages/portal/ChooserPage'));
 const PortalHome = lazy(() => import('./pages/portal/PortalHome'));
 const ProgramGate = lazy(() => import('./pages/portal/ProgramGate'));
@@ -47,9 +50,17 @@ const ClassDetail = lazy(() => import('./pages/portal/ClassDetail'));
 const ProgramUpdates = lazy(() => import('./pages/portal/ProgramUpdates'));
 const ProgramCalendar = lazy(() => import('./pages/portal/ProgramCalendar'));
 
+// Client login build. Only registered when the flag is on, so with it off the
+// pages are not merely gated — the routes do not exist.
+const PortalLogin = lazy(() => import('./pages/portal/PortalLogin'));
+const PortalSignUp = lazy(() => import('./pages/portal/PortalSignUp'));
+const PortalUpdatePassword = lazy(() => import('./pages/portal/PortalUpdatePassword'));
+const PortalAccount = lazy(() => import('./pages/portal/PortalAccount'));
+
 // The staff side of the portal. Reachable by admins and by any employee holding
 // a class, which is why its route is a plain ProtectedRoute — see the page.
 const PortalManagerPage = lazy(() => import('./pages/portal-admin/PortalManagerPage'));
+const ClientAccountsPage = lazy(() => import('./pages/portal-admin/ClientAccountsPage'));
 
 // Page loading fallback - simple centered spinner.
 // theme.colors resolve to CSS variables, so this is theme-aware automatically.
@@ -190,9 +201,23 @@ const AppContent: React.FC = () => {
           {/* Parent portal. Public by design: these pages read only portal_*
               tables, which are the sole anon-readable surface in the schema.
               PortalProvider is mounted here rather than at the app root so a
-              signed-out parent does not pay for the staff data contexts. */}
-          <Route element={<PortalProvider><Outlet /></PortalProvider>}>
+              signed-out parent does not pay for the staff data contexts.
+              PortalAuthProvider reads the (shared) Supabase session for the
+              client-login build; with the flag off it is inert. */}
+          <Route element={<PortalProvider><PortalAuthProvider><Outlet /></PortalAuthProvider></PortalProvider>}>
             <Route path="/portal" element={<PortalHome />} />
+
+            {/* The client login build. Static segments, so they win over the
+                /portal/:program matcher regardless of order — but they are
+                only registered at all when the flag is on. */}
+            {CLIENT_AUTH_ENABLED && (
+              <>
+                <Route path="/portal/login" element={<PortalLogin />} />
+                <Route path="/portal/signup" element={<PortalSignUp />} />
+                <Route path="/portal/update-password" element={<PortalUpdatePassword />} />
+                <Route path="/portal/account" element={<PortalAccount />} />
+              </>
+            )}
 
             {/* ProgramGate is a layout route: it validates the :program slug
                 and checks the access code once, then renders whichever child
@@ -329,6 +354,17 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <PortalManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* Family logins and the enrollment roster. Unlike the manager above
+              this IS adminOnly: per-class instructors have no business in
+              other families' account details. */}
+          <Route
+            path="/portal-admin/clients"
+            element={
+              <ProtectedRoute adminOnly>
+                <ClientAccountsPage />
               </ProtectedRoute>
             }
           />

@@ -1,1161 +1,614 @@
-import React, { useState, useEffect, ReactElement } from 'react';
-import { useActivityLog, ActivityLog, EntityType, ActionType } from '../contexts/ActivityLogContext';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
+import { useConfirm } from '../hooks/useConfirm';
+import { useToast } from '../contexts/ToastContext';
+import { useActivityLog, ActivityLog, LogFilters } from '../contexts/ActivityLogContext';
+import { logActivity as writeLog } from '../lib/activityLog';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  SearchInput,
+  Select,
+  Spinner,
+} from '../components/ui';
 
-const ActivityLogPage: React.FC = () => {
-  const { logs, loading, totalCount, fetchLogs, fetchMoreLogs, clearFilters } = useActivityLog();
-  const { users } = useAuth();
-  const { isMobile, isMobileOrTablet } = useResponsive();
+/**
+ * Super-admin overwatch (AUDIT-LOG-SPEC.md §6). The bar it is built to: pick
+ * any person, any document, any day, and get the answer in under three clicks.
+ *
+ *  - Filters live in the URL, so a filtered view is a LINK an admin can send
+ *    to another admin.
+ *  - Clicking an actor is drill-down one: everything that person ever did.
+ *    ?entity= deep-links the other direction (a document's history).
+ *  - Pagination is keyset (see ActivityLogContext) — scrolling a live log
+ *    never repeats or skips a row.
+ *  - Export warns before producing a file, because the file is full of
+ *    families' and students' names, and the export itself is logged.
+ */
 
-  // Filters
-  const [selectedUser, setSelectedUser] = useState<string>('all');
-  const [selectedEntityType, setSelectedEntityType] = useState<string>('all');
-  const [selectedAction, setSelectedAction] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+// ---------------------------------------------------------------- sentences
 
-  // Load logs on mount
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
-
-  // Apply filters
-  const handleApplyFilters = () => {
-    fetchLogs({
-      userId: selectedUser !== 'all' ? selectedUser : undefined,
-      entityType: selectedEntityType !== 'all' ? selectedEntityType as EntityType : undefined,
-      action: selectedAction !== 'all' ? selectedAction : undefined,
-      searchQuery: searchQuery || undefined,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
-    });
-  };
-
-  const handleClearFilters = () => {
-    setSelectedUser('all');
-    setSelectedEntityType('all');
-    setSelectedAction('all');
-    setSearchQuery('');
-    setStartDate('');
-    setEndDate('');
-    clearFilters();
-  };
-
-  // Get action display info
-  const getActionInfo = (action: ActionType): { label: string; color: string; icon: ReactElement } => {
-    const actionMap: Record<string, { label: string; color: string; icon: ReactElement }> = {
-      // SOP actions
-      sop_created: {
-        label: 'Created SOP',
-        color: theme.colors.status.success,
-        icon: <PlusIcon />,
-      },
-      sop_updated: {
-        label: 'Updated SOP',
-        color: theme.colors.status.info,
-        icon: <EditIcon />,
-      },
-      sop_deleted: {
-        label: 'Deleted SOP',
-        color: theme.colors.status.error,
-        icon: <TrashIcon />,
-      },
-      sop_published: {
-        label: 'Published SOP',
-        color: theme.colors.status.success,
-        icon: <PublishIcon />,
-      },
-      sop_archived: {
-        label: 'Archived SOP',
-        color: theme.colors.status.warning,
-        icon: <ArchiveIcon />,
-      },
-      sop_restored: {
-        label: 'Restored SOP',
-        color: theme.colors.status.info,
-        icon: <RestoreIcon />,
-      },
-      sop_imported: {
-        label: 'Imported SOPs',
-        color: theme.colors.status.success,
-        icon: <ImportIcon />,
-      },
-      // Task actions
-      task_created: {
-        label: 'Created Task',
-        color: theme.colors.status.success,
-        icon: <PlusIcon />,
-      },
-      task_updated: {
-        label: 'Updated Task',
-        color: theme.colors.status.info,
-        icon: <EditIcon />,
-      },
-      task_deleted: {
-        label: 'Deleted Task',
-        color: theme.colors.status.error,
-        icon: <TrashIcon />,
-      },
-      task_assigned: {
-        label: 'Assigned Task',
-        color: theme.colors.status.info,
-        icon: <AssignIcon />,
-      },
-      task_completed: {
-        label: 'Completed Task',
-        color: theme.colors.status.success,
-        icon: <CheckIcon />,
-      },
-      task_started: {
-        label: 'Started Task',
-        color: theme.colors.status.info,
-        icon: <PlayIcon />,
-      },
-      task_archived: {
-        label: 'Archived Task',
-        color: theme.colors.status.warning,
-        icon: <ArchiveIcon />,
-      },
-      task_restored: {
-        label: 'Restored Task',
-        color: theme.colors.status.info,
-        icon: <RestoreIcon />,
-      },
-      task_step_completed: {
-        label: 'Completed Step',
-        color: theme.colors.status.success,
-        icon: <CheckIcon />,
-      },
-      // Job actions
-      job_created: {
-        label: 'Created Job',
-        color: theme.colors.status.success,
-        icon: <PlusIcon />,
-      },
-      job_updated: {
-        label: 'Updated Job',
-        color: theme.colors.status.info,
-        icon: <EditIcon />,
-      },
-      job_deleted: {
-        label: 'Deleted Job',
-        color: theme.colors.status.error,
-        icon: <TrashIcon />,
-      },
-      job_completed: {
-        label: 'Completed Job',
-        color: theme.colors.status.success,
-        icon: <CheckIcon />,
-      },
-      job_archived: {
-        label: 'Archived Job',
-        color: theme.colors.status.warning,
-        icon: <ArchiveIcon />,
-      },
-      job_restored: {
-        label: 'Restored Job',
-        color: theme.colors.status.info,
-        icon: <RestoreIcon />,
-      },
-      // Template actions
-      template_created: {
-        label: 'Created Template',
-        color: theme.colors.status.success,
-        icon: <PlusIcon />,
-      },
-      template_updated: {
-        label: 'Updated Template',
-        color: theme.colors.status.info,
-        icon: <EditIcon />,
-      },
-      template_deleted: {
-        label: 'Deleted Template',
-        color: theme.colors.status.error,
-        icon: <TrashIcon />,
-      },
-      // User actions
-      user_login: {
-        label: 'Logged In',
-        color: theme.colors.status.success,
-        icon: <LoginIcon />,
-      },
-      user_logout: {
-        label: 'Logged Out',
-        color: theme.colors.textMuted,
-        icon: <LogoutIcon />,
-      },
-      user_created: {
-        label: 'Created User',
-        color: theme.colors.status.success,
-        icon: <UserPlusIcon />,
-      },
-      user_updated: {
-        label: 'Updated User',
-        color: theme.colors.status.info,
-        icon: <EditIcon />,
-      },
-      user_deleted: {
-        label: 'Deleted User',
-        color: theme.colors.status.error,
-        icon: <TrashIcon />,
-      },
-      user_role_changed: {
-        label: 'Changed Role',
-        color: theme.colors.status.warning,
-        icon: <RoleIcon />,
-      },
-      user_password_changed: {
-        label: 'Changed Password',
-        color: theme.colors.status.info,
-        icon: <KeyIcon />,
-      },
-    };
-
-    return actionMap[action] || {
-      label: action.replace(/_/g, ' '),
-      color: theme.colors.textMuted,
-      icon: <DefaultIcon />,
-    };
-  };
-
-  const formatRelativeTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return `${diffDays}d ago`;
-  };
-
-  const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    });
-  };
-
-  const formatFullTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  // Parse user agent to get readable browser/OS info
-  const parseUserAgent = (userAgent?: string) => {
-    if (!userAgent) return null;
-
-    let browser = 'Unknown Browser';
-    let os = 'Unknown OS';
-
-    // Detect browser
-    if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
-      const match = userAgent.match(/Chrome\/(\d+)/);
-      browser = `Chrome ${match ? match[1] : ''}`;
-    } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
-      const match = userAgent.match(/Version\/(\d+)/);
-      browser = `Safari ${match ? match[1] : ''}`;
-    } else if (userAgent.includes('Firefox')) {
-      const match = userAgent.match(/Firefox\/(\d+)/);
-      browser = `Firefox ${match ? match[1] : ''}`;
-    } else if (userAgent.includes('Edg')) {
-      const match = userAgent.match(/Edg\/(\d+)/);
-      browser = `Edge ${match ? match[1] : ''}`;
-    }
-
-    // Detect OS
-    if (userAgent.includes('Windows')) {
-      os = 'Windows';
-    } else if (userAgent.includes('Mac OS')) {
-      os = 'macOS';
-    } else if (userAgent.includes('Linux')) {
-      os = 'Linux';
-    } else if (userAgent.includes('Android')) {
-      os = 'Android';
-    } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
-      os = 'iOS';
-    }
-
-    return { browser, os };
-  };
-
-  const getEntityTypeLabel = (type: EntityType) => {
-    const labels: Record<EntityType, string> = {
-      sop: 'SOP',
-      task: 'Task',
-      job: 'Job',
-      template: 'Template',
-      user: 'User',
-      system: 'System',
-    };
-    return labels[type] || type;
-  };
-
-  // Action categories for filter
-  const actionCategories = [
-    { value: 'all', label: 'All Actions' },
-    { value: 'created', label: 'Created' },
-    { value: 'updated', label: 'Updated' },
-    { value: 'deleted', label: 'Deleted' },
-    { value: 'archived', label: 'Archived' },
-    { value: 'restored', label: 'Restored' },
-    { value: 'completed', label: 'Completed' },
-    { value: 'login', label: 'Login' },
-    { value: 'logout', label: 'Logout' },
-  ];
-
-  return (
-    <div style={{
-      ...styles.container,
-      padding: isMobileOrTablet ? '16px' : '32px 40px',
-    }}>
-      <div style={styles.content}>
-        {/* Header */}
-        <div style={{
-          ...styles.header,
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? '16px' : '0',
-        }}>
-          <div>
-            <h1 style={{
-              ...styles.title,
-              fontSize: isMobile ? '24px' : '28px',
-            }}>
-              <svg
-                width={isMobile ? '24' : '28'}
-                height={isMobile ? '24' : '28'}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={theme.colors.primary}
-                strokeWidth="2"
-                style={{ marginRight: '12px' }}
-              >
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <path d="M14 2v6h6" />
-                <path d="M16 13H8" />
-                <path d="M16 17H8" />
-                <path d="M10 9H8" />
-              </svg>
-              Activity Log
-            </h1>
-            <p style={styles.subtitle}>
-              Track all user actions and changes across the system
-            </p>
-          </div>
-          <div style={styles.stats}>
-            <div style={styles.statItem}>
-              <span style={styles.statNumber}>{totalCount}</span>
-              <span style={styles.statLabel}>Total Events</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div style={{
-          ...styles.filtersCard,
-          flexDirection: isMobile ? 'column' : 'row',
-        }}>
-          <div style={{
-            ...styles.filtersRow,
-            flexDirection: isMobile ? 'column' : 'row',
-          }}>
-            {/* Search */}
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>Search</label>
-              <div style={styles.searchInputWrapper}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ ...styles.searchIcon, stroke: theme.colors.textMuted }}>
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.35-4.35" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search by name or title..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={styles.searchInput}
-                />
-              </div>
-            </div>
-
-            {/* User Filter */}
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>User</label>
-              <select
-                value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
-                style={styles.select}
-              >
-                <option value="all">All Users</option>
-                {users.map(user => (
-                  <option key={user.id} value={user.id}>
-                    {user.firstName} {user.lastName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Entity Type Filter */}
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>Type</label>
-              <select
-                value={selectedEntityType}
-                onChange={(e) => setSelectedEntityType(e.target.value)}
-                style={styles.select}
-              >
-                <option value="all">All Types</option>
-                <option value="sop">SOPs</option>
-                <option value="task">Tasks</option>
-                <option value="job">Jobs</option>
-                <option value="template">Templates</option>
-                <option value="user">Users</option>
-              </select>
-            </div>
-
-            {/* Action Filter */}
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>Action</label>
-              <select
-                value={selectedAction}
-                onChange={(e) => setSelectedAction(e.target.value)}
-                style={styles.select}
-              >
-                {actionCategories.map(cat => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div style={{
-            ...styles.filtersRow,
-            flexDirection: isMobile ? 'column' : 'row',
-          }}>
-            {/* Date Range */}
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>From Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={styles.dateInput}
-              />
-            </div>
-
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>To Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                style={styles.dateInput}
-              />
-            </div>
-
-            {/* Filter Buttons */}
-            <div style={{
-              ...styles.filterButtons,
-              marginLeft: isMobile ? '0' : 'auto',
-              width: isMobile ? '100%' : 'auto',
-            }}>
-              <button onClick={handleClearFilters} style={styles.clearButton}>
-                Clear
-              </button>
-              <button onClick={handleApplyFilters} style={styles.applyButton}>
-                Apply Filters
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Log List */}
-        <div style={styles.logList}>
-          {loading && logs.length === 0 ? (
-            <div style={styles.loadingState}>
-              <div style={styles.spinner} />
-              <p>Loading activity logs...</p>
-            </div>
-          ) : logs.length === 0 ? (
-            <div style={styles.emptyState}>
-              <svg
-                width="64"
-                height="64"
-                viewBox="0 0 24 24"
-                fill="none"
-                style={{ stroke: theme.colors.textMuted }}
-                strokeWidth="1.5"
-              >
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <path d="M14 2v6h6" />
-                <path d="M16 13H8" />
-                <path d="M16 17H8" />
-              </svg>
-              <h3 style={styles.emptyTitle}>No activity logs found</h3>
-              <p style={styles.emptyText}>
-                Activity will appear here as users interact with the system
-              </p>
-            </div>
-          ) : (
-            <>
-              {logs.map((log, index) => {
-                const actionInfo = getActionInfo(log.action);
-                const userAgentInfo = parseUserAgent(log.user_agent);
-                return (
-                  <div
-                    key={log.id}
-                    style={{
-                      ...styles.logItem,
-                      borderBottom: index === logs.length - 1 ? 'none' : `1px solid ${theme.colors.bdr.primary}`,
-                    }}
-                  >
-                    {/* Left: Icon */}
-                    <div style={{
-                      ...styles.logIcon,
-                      // Only a literal hex can carry an alpha suffix. Logout
-                      // and every unmapped action use textMuted, which is a
-                      // var() string — `var(...)20` is invalid CSS and the
-                      // whole declaration was being dropped, leaving those
-                      // rows with a bare glyph and no tile.
-                      backgroundColor: actionInfo.color.startsWith('#')
-                        ? `${actionInfo.color}20`
-                        : theme.colors.bg.tertiary,
-                      color: actionInfo.color,
-                    }}>
-                      {actionInfo.icon}
-                    </div>
-
-                    {/* Center: Main content */}
-                    <div style={styles.logContent}>
-                      {/* Row 1: User, Action, Entity */}
-                      <div style={styles.logMain}>
-                        <span style={styles.logUser}>{log.user_name}</span>
-                        <span style={{ ...styles.logAction, color: actionInfo.color }}>
-                          {actionInfo.label}
-                        </span>
-                        {log.entity_title && (
-                          <>
-                            <span style={styles.logSeparator}>-</span>
-                            <span style={styles.logEntity}>{log.entity_title}</span>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Row 2: Metadata chips (all in one row) */}
-                      <div style={styles.logMetaRow}>
-                        <span style={styles.logType}>
-                          {getEntityTypeLabel(log.entity_type as EntityType)}
-                        </span>
-                        {log.entity_id && (
-                          <span style={styles.logChip} title={log.entity_id}>
-                            ID: {log.entity_id.slice(0, 8)}...
-                          </span>
-                        )}
-                        {log.user_email && (
-                          <span style={styles.logChip}>
-                            {log.user_email}
-                          </span>
-                        )}
-                        {userAgentInfo && (
-                          <span style={styles.logChip}>
-                            {userAgentInfo.browser} · {userAgentInfo.os}
-                          </span>
-                        )}
-                        {log.ip_address && (
-                          <span style={styles.logChip}>
-                            IP: {log.ip_address}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Row 3: Details (collapsible style, compact) */}
-                      {log.details && Object.keys(log.details).length > 0 && (
-                        <div style={styles.logDetailsCompact}>
-                          {Object.entries(log.details).map(([key, value], i) => (
-                            <span key={key} style={styles.logDetailItem}>
-                              {i > 0 && <span style={styles.detailSeparator}>•</span>}
-                              <strong>{key.replace(/_/g, ' ')}:</strong> {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right: Timestamp column */}
-                    <div style={styles.logTimeColumn}>
-                      <div style={styles.logTimeDate}>{formatDate(log.created_at)}</div>
-                      <div style={styles.logTimeExact}>{formatTime(log.created_at)}</div>
-                      <div style={styles.logTimeRelative}>{formatRelativeTime(log.created_at)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {logs.length < totalCount && (
-                <div style={styles.loadMore}>
-                  <button
-                    onClick={fetchMoreLogs}
-                    disabled={loading}
-                    style={styles.loadMoreButton}
-                  >
-                    {loading ? 'Loading...' : `Load More (${totalCount - logs.length} remaining)`}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
+/**
+ * action → plain-English template. One map, not strings sprinkled through the
+ * component; {entity} is the row's entity_title. Anything unmapped falls back
+ * to the snake_case humanised, so a brand-new action is readable before
+ * anyone remembers to add it here.
+ */
+const SENTENCES: Record<string, string> = {
+  user_login: 'signed in',
+  user_signed_in: 'signed in',
+  user_logout: 'signed out',
+  user_signed_out: 'signed out',
+  user_sign_in_failed: 'failed to sign in',
+  user_created: 'created the account {entity}',
+  user_updated: 'updated the account {entity}',
+  user_deleted: 'removed the account {entity}',
+  user_role_changed: 'changed the role of {entity}',
+  user_password_changed: 'changed the password for {entity}',
+  user_password_reset_requested: 'requested a password reset',
+  user_email_changed: 'changed the email for {entity}',
+  user_activated: 'reactivated the account {entity}',
+  user_deactivated: 'disabled the account {entity}',
+  client_signed_up: 'created their family account',
+  client_signup_rejected: 'had a sign-up attempt rejected',
+  client_email_verified: 'verified their email address',
+  client_otp_resent: 'was sent a new sign-up code',
+  roster_imported: 'imported the roster {entity}',
+  roster_row_deactivated: 'deactivated the roster row for {entity}',
+  roster_row_unlinked: 'unlinked the roster row for {entity}',
+  portal_admin_denied: 'was refused portal-admin access',
+  admin_viewed_activity_log: 'opened the activity log',
+  activity_log_exported: 'exported the activity log',
+  sop_created: 'created the SOP {entity}',
+  sop_updated: 'updated the SOP {entity}',
+  sop_deleted: 'deleted the SOP {entity}',
+  sop_published: 'published the SOP {entity}',
+  sop_archived: 'archived the SOP {entity}',
+  sop_restored: 'restored the SOP {entity}',
+  sop_imported: 'imported the SOP {entity}',
+  task_created: 'created the task {entity}',
+  task_updated: 'updated the task {entity}',
+  task_deleted: 'deleted the task {entity}',
+  task_assigned: 'assigned the task {entity}',
+  task_completed: 'completed the task {entity}',
+  task_started: 'started the task {entity}',
+  job_created: 'created the job {entity}',
+  job_updated: 'updated the job {entity}',
+  job_completed: 'completed the job {entity}',
+  job_deleted: 'deleted the job {entity}',
 };
 
-// Icon Components
-const PlusIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <line x1="12" y1="5" x2="12" y2="19" />
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-);
+const humanise = (s: string) => s.replace(/_/g, ' ');
 
-const EditIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-  </svg>
-);
+const sentenceFor = (log: ActivityLog): React.ReactNode => {
+  const template = SENTENCES[log.action];
+  const entity = log.entity_title;
+  if (!template) {
+    return <>{humanise(log.action)}{entity ? <> — <strong>{entity}</strong></> : null}</>;
+  }
+  if (!template.includes('{entity}')) return <>{template}</>;
+  const [before, after] = template.split('{entity}');
+  return <>{before}<strong>{entity ?? '(untitled)'}</strong>{after}</>;
+};
 
-const TrashIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="3 6 5 6 21 6" />
-    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-  </svg>
-);
+// ---------------------------------------------------------------- dates
 
-const ArchiveIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 8v13H3V8" />
-    <path d="M1 3h22v5H1z" />
-    <path d="M10 12h4" />
-  </svg>
-);
+const startOfLocalDay = (d = new Date()) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
 
-const RestoreIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5" />
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-  </svg>
-);
+const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
-const PublishIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M12 2l9 4.5v6a9 9 0 0 1-18 0v-6L12 2z" />
-    <path d="M12 22v-10" />
-    <path d="M12 12l-3-3" />
-    <path d="M12 12l3-3" />
-  </svg>
-);
+const PRESETS = [
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'all', label: 'All time' },
+  { value: 'custom', label: 'Custom range' },
+];
 
-const ImportIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
-  </svg>
-);
+/** ISO range for a preset; custom reads the date inputs. `to` is exclusive. */
+const rangeFor = (preset: string, fromDate: string, toDate: string): { from?: string; to?: string } => {
+  switch (preset) {
+    case 'today': return { from: startOfLocalDay().toISOString() };
+    case '7d': return { from: daysAgo(7).toISOString() };
+    case '30d': return { from: daysAgo(30).toISOString() };
+    case 'custom': {
+      const out: { from?: string; to?: string } = {};
+      if (fromDate) out.from = new Date(`${fromDate}T00:00:00`).toISOString();
+      if (toDate) {
+        const end = new Date(`${toDate}T00:00:00`);
+        end.setDate(end.getDate() + 1);
+        out.to = end.toISOString();
+      }
+      return out;
+    }
+    default: return {};
+  }
+};
 
-const CheckIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M20 6L9 17l-5-5" />
-  </svg>
-);
+// ---------------------------------------------------------------- views
 
-const PlayIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="5 3 19 12 5 21 5 3" />
-  </svg>
-);
+interface SavedView { name: string; params: string }
 
-const AssignIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="8.5" cy="7" r="4" />
-    <line x1="20" y1="8" x2="20" y2="14" />
-    <line x1="23" y1="11" x2="17" y2="11" />
-  </svg>
-);
+const BUILTIN_VIEWS: SavedView[] = [
+  { name: 'Failed sign-ins (7d)', params: 'preset=7d&result=failure&action=user_sign_in_failed' },
+  { name: 'Client activity (24h)', params: 'preset=today&kind=client' },
+  { name: 'Account changes (30d)', params: 'preset=30d&type=user' },
+];
 
-const LoginIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-    <polyline points="10 17 15 12 10 7" />
-    <line x1="15" y1="12" x2="3" y2="12" />
-  </svg>
-);
+const VIEWS_KEY = 'didc_activity_saved_views';
 
-const LogoutIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
+const loadSavedViews = (): SavedView[] => {
+  try {
+    return JSON.parse(localStorage.getItem(VIEWS_KEY) || '[]');
+  } catch { return []; }
+};
 
-const UserPlusIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="8.5" cy="7" r="4" />
-    <line x1="20" y1="8" x2="20" y2="14" />
-    <line x1="23" y1="11" x2="17" y2="11" />
-  </svg>
-);
+// ---------------------------------------------------------------- page
 
-const RoleIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-  </svg>
-);
+const EXPORT_CAP = 10000;
 
-const KeyIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-  </svg>
-);
+const ActivityLogPage: React.FC = () => {
+  const { isMobileOrTablet } = useResponsive();
+  const { confirm, confirmDialog } = useConfirm();
+  const { success, error: toastError } = useToast();
+  const {
+    logs, loading, hasMore, error, facets,
+    fetchLogs, fetchMoreLogs, fetchPage, refreshFacets,
+  } = useActivityLog();
 
-const DefaultIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="12" />
-    <line x1="12" y1="16" x2="12.01" y2="16" />
-  </svg>
-);
+  const [params, setParams] = useSearchParams();
+  const [savedViews, setSavedViews] = useState<SavedView[]>(loadSavedViews);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    minHeight: '100dvh',
-    backgroundColor: theme.colors.background,
-  },
-  content: {
-    maxWidth: theme.pageLayout.maxWidth,
-    margin: '0 auto',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: theme.pageLayout.sectionMargin.desktop,
-  },
-  title: {
-    ...theme.typography.h1,
-    color: theme.colors.txt.primary,
-    margin: 0,
-    marginBottom: theme.spacing.sm,
-    display: 'flex',
-    alignItems: 'center',
-  },
-  subtitle: {
-    ...theme.typography.subtitle,
-    color: theme.colors.textSecondary,
-    margin: 0,
-  },
-  stats: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-    padding: '12px 20px',
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.md,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  statItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '2px',
-  },
-  statNumber: {
-    fontSize: '24px',
-    fontWeight: 700,
-    color: theme.colors.primary,
-  },
-  statLabel: {
-    fontSize: '12px',
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  filtersCard: {
-    ...theme.components.card.base,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.pageLayout.filterGap.desktop,
-    marginBottom: theme.pageLayout.sectionMargin.desktop,
-  },
-  filtersRow: {
-    display: 'flex',
-    gap: theme.pageLayout.filterGap.desktop,
-    alignItems: 'flex-end',
-    flexWrap: 'wrap',
-  },
-  filterGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    flex: 1,
-    minWidth: '150px',
-  },
-  filterLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  searchInputWrapper: {
-    position: 'relative',
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: '12px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-  },
-  searchInput: {
-    width: '100%',
-    padding: '10px 12px 10px 36px',
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    outline: 'none',
-    boxSizing: 'border-box',
-  },
-  select: {
-    padding: '10px 12px',
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  dateInput: {
-    padding: '10px 12px',
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    outline: 'none',
-  },
-  filterButtons: {
-    display: 'flex',
-    gap: '8px',
-  },
-  clearButton: {
-    padding: '10px 20px',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.textSecondary,
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-  },
-  applyButton: {
-    padding: '10px 20px',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#FFFFFF',
-    backgroundColor: theme.colors.primary,
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-  },
-  logList: {
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    overflow: 'hidden',
-  },
-  loadingState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '60px 20px',
-    color: theme.colors.textMuted,
-  },
-  spinner: {
-    width: '32px',
-    height: '32px',
-    border: `3px solid ${theme.colors.bdr.primary}`,
-    borderTopColor: theme.colors.primary,
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-    marginBottom: '16px',
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '80px 20px',
-    textAlign: 'center',
-  },
-  emptyTitle: {
-    color: theme.colors.txt.primary,
-    fontSize: '18px',
-    fontWeight: 600,
-    margin: '24px 0 8px 0',
-  },
-  emptyText: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-    margin: 0,
-    maxWidth: '300px',
-  },
-  logItem: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '12px',
-    padding: '12px 16px',
-    transition: 'background-color 0.2s',
-  },
-  logIcon: {
-    width: '32px',
-    height: '32px',
-    borderRadius: theme.borderRadius.sm,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  logContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-  logMain: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    flexWrap: 'wrap',
-    marginBottom: '6px',
-  },
-  logUser: {
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-    fontSize: '13px',
-  },
-  logAction: {
-    fontSize: '13px',
-    fontWeight: 500,
-  },
-  logSeparator: {
-    color: theme.colors.textMuted,
-    fontSize: '13px',
-  },
-  logEntity: {
-    color: theme.colors.txt.secondary,
-    fontSize: '13px',
-  },
-  logMetaRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  logType: {
-    padding: '2px 6px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '10px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    color: theme.colors.textMuted,
-  },
-  logChip: {
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-    backgroundColor: theme.colors.bg.tertiary,
-    padding: '2px 6px',
-    borderRadius: theme.borderRadius.sm,
-    fontFamily: 'inherit',
-  },
-  logDetailsCompact: {
-    marginTop: '6px',
-    fontSize: '11px',
-    color: theme.colors.textSecondary,
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-  },
-  logDetailItem: {
-    display: 'inline',
-    // A flex item will not shrink below its content's min-content width, and a
-    // JSON detail value like ["title","description","category"] has no space to
-    // break at — so it rendered 711px wide inside a 258px column and was simply
-    // cut off. minWidth lets the item shrink; overflowWrap lets the token break.
-    minWidth: 0,
-    overflowWrap: 'anywhere',
-  },
-  detailSeparator: {
-    color: theme.colors.textMuted,
-    margin: '0 4px',
-  },
-  logTimeColumn: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: '1px',
-    flexShrink: 0,
-    minWidth: '120px',
-  },
-  logTimeDate: {
-    fontSize: '12px',
-    fontWeight: 500,
-    color: theme.colors.txt.secondary,
-  },
-  logTimeExact: {
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-  },
-  logTimeRelative: {
-    fontSize: '10px',
-    color: theme.colors.textMuted,
-    fontStyle: 'italic',
-  },
-  // Legacy styles kept for compatibility
-  logMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-  },
-  logTimestamp: {
-    cursor: 'help',
-  },
-  logEntityId: {
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-    fontFamily: 'monospace',
-    backgroundColor: theme.colors.bg.tertiary,
-    padding: '2px 6px',
-    borderRadius: theme.borderRadius.sm,
-  },
-  timestampSection: {
-    marginTop: '6px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  timestampRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '12px',
-  },
-  timestampDate: {
-    color: theme.colors.txt.secondary,
-    fontWeight: 500,
-  },
-  timestampTime: {
-    color: theme.colors.txt.secondary,
-  },
-  timestampRelative: {
-    color: theme.colors.textMuted,
-    fontSize: '11px',
-  },
-  metadataSection: {
-    marginTop: '6px',
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  metadataItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    fontSize: '11px',
-    color: theme.colors.textMuted,
-    backgroundColor: theme.colors.bg.tertiary,
-    padding: '4px 8px',
-    borderRadius: theme.borderRadius.sm,
-  },
-  logDetails: {
-    marginTop: '8px',
-    padding: '8px 10px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '11px',
-    color: theme.colors.textSecondary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  detailsHeader: {
-    fontSize: '10px',
-    fontWeight: 600,
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    marginBottom: '6px',
-    paddingBottom: '4px',
-    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  logDetail: {
-    display: 'block',
-    marginBottom: '2px',
-  },
-  loadMore: {
-    padding: '16px 20px',
-    borderTop: `1px solid ${theme.colors.bdr.primary}`,
-    textAlign: 'center',
-  },
-  loadMoreButton: {
-    padding: '10px 24px',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-  },
+  const preset = params.get('preset') ?? '7d';
+  const fromDate = params.get('from') ?? '';
+  const toDate = params.get('to') ?? '';
+  const kind = params.get('kind') ?? '';
+  const action = params.get('action') ?? '';
+  const entityType = params.get('type') ?? '';
+  const actor = params.get('actor') ?? '';
+  const result = params.get('result') ?? '';
+  const entityId = params.get('entity') ?? '';
+  const q = params.get('q') ?? '';
+
+  const filters: LogFilters = useMemo(() => {
+    const range = rangeFor(preset, fromDate, toDate);
+    return {
+      ...range,
+      actorKinds: kind ? [kind] : undefined,
+      actions: action ? [action] : undefined,
+      entityTypes: entityType ? [entityType] : undefined,
+      actorIds: actor ? [actor] : undefined,
+      result: result === 'failure' ? 'failure' : undefined,
+      entityId: entityId || undefined,
+      search: q || undefined,
+    };
+  }, [preset, fromDate, toDate, kind, action, entityType, actor, result, entityId, q]);
+
+  // Search is debounced; everything else refetches immediately.
+  useEffect(() => {
+    const t = setTimeout(() => { fetchLogs(filters); }, q ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [fetchLogs, filters, q]);
+
+  // Facets follow the date range only — they exist to populate the dropdowns
+  // with values that actually occur in the window.
+  useEffect(() => {
+    refreshFacets(filters.from, filters.to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshFacets, filters.from, filters.to]);
+
+  // Watching the watchers: opening this page is itself an event, once per visit.
+  const viewLogged = useRef(false);
+  useEffect(() => {
+    if (!viewLogged.current) {
+      viewLogged.current = true;
+      void writeLog({ action: 'admin_viewed_activity_log', entityType: 'system' });
+    }
+  }, []);
+
+  const setParam = useCallback((key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
+  const clearAll = () => setParams(new URLSearchParams(), { replace: true });
+
+  // ------------------------------------------------------------- export
+
+  const runExport = async () => {
+    const ok = await confirm({
+      title: 'Export this view to CSV?',
+      message: 'The file will contain client and student names. Handle it like the record it is — no shared drives, no email attachments. The export itself is logged.',
+      confirmLabel: 'Export',
+    });
+    if (!ok) return;
+
+    setExporting(true);
+    try {
+      const all: ActivityLog[] = [];
+      let cursor: { ts: string; id: string } | null = null;
+      while (all.length < EXPORT_CAP) {
+        const page: ActivityLog[] = await fetchPage(filters, cursor, 200);
+        all.push(...page);
+        if (page.length < 200) break;
+        const last = page[page.length - 1];
+        cursor = { ts: last.created_at, id: last.id };
+      }
+      const rows = all.slice(0, EXPORT_CAP);
+
+      const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const csv = [
+        ['time', 'actor', 'email', 'kind', 'role', 'action', 'result', 'entity_type', 'entity_id', 'entity_title', 'details'].join(','),
+        ...rows.map(r => [
+          esc(r.created_at), esc(r.user_name), esc(r.user_email), esc(r.actor_kind), esc(r.actor_role),
+          esc(r.action), esc(r.result), esc(r.entity_type), esc(r.entity_id), esc(r.entity_title),
+          esc(JSON.stringify(r.details ?? {})),
+        ].join(',')),
+      ].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `activity-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      void writeLog({
+        action: 'activity_log_exported',
+        entityType: 'system',
+        details: { rows: rows.length, truncated: all.length >= EXPORT_CAP, filters: params.toString() || 'none' },
+      });
+      success(`Exported ${rows.length} rows${all.length >= EXPORT_CAP ? ' (capped at 10,000)' : ''}`);
+    } catch (e: any) {
+      toastError(e.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const saveCurrentView = () => {
+    const name = window.prompt('Name this view:');
+    if (!name?.trim()) return;
+    const next = [...savedViews, { name: name.trim(), params: params.toString() }];
+    setSavedViews(next);
+    try { localStorage.setItem(VIEWS_KEY, JSON.stringify(next)); } catch { /* convenience only */ }
+  };
+
+  const removeSavedView = (name: string) => {
+    const next = savedViews.filter(v => v.name !== name);
+    setSavedViews(next);
+    try { localStorage.setItem(VIEWS_KEY, JSON.stringify(next)); } catch { /* convenience only */ }
+  };
+
+  // ------------------------------------------------------------- render
+
+  const kindBadge = (k: string) =>
+    k === 'client' ? <Badge variant="info" size="sm">Client</Badge>
+      : k === 'system' ? <Badge variant="default" size="sm">System</Badge>
+        : <Badge variant="primary" size="sm">Staff</Badge>;
+
+  const actorOptions = useMemo(() => {
+    const list = facets?.actors ?? [];
+    const group = (want: string, label: string) =>
+      list.filter(a => a.kind === want).map(a => ({
+        value: a.id,
+        label: `${label} · ${a.name || a.email || a.id} (${a.count})`,
+      }));
+    return [
+      { value: '', label: 'Everyone' },
+      ...group('staff', 'Staff'),
+      ...group('client', 'Client'),
+      ...group('system', 'System'),
+    ];
+  }, [facets]);
+
+  const actionOptions = useMemo(() => [
+    { value: '', label: 'Every action' },
+    ...(facets?.actions ?? []).map(a => ({ value: a.action, label: `${humanise(a.action)} (${a.count})` })),
+  ], [facets]);
+
+  const typeOptions = useMemo(() => [
+    { value: '', label: 'Every entity' },
+    ...(facets?.entity_types ?? []).map(t => ({ value: t.entity_type, label: `${t.entity_type} (${t.count})` })),
+  ], [facets]);
+
+  // Day separators
+  const byDay = useMemo(() => {
+    const groups: { day: string; rows: ActivityLog[] }[] = [];
+    logs.forEach(log => {
+      const day = new Date(log.created_at).toLocaleDateString(undefined, {
+        weekday: 'long', month: 'short', day: 'numeric',
+      });
+      const last = groups[groups.length - 1];
+      if (last && last.day === day) last.rows.push(log);
+      else groups.push({ day, rows: [log] });
+    });
+    return groups;
+  }, [logs]);
+
+  const filtersActive = params.toString().length > 0;
+
+  return (
+    <div style={{ padding: isMobileOrTablet ? '16px' : '40px', maxWidth: '1100px', margin: '0 auto' }}>
+      {confirmDialog}
+      <PageHeader
+        title="Activity Log"
+        subtitle="Every action, every account — staff, clients and the system itself"
+        actions={
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <Button variant="outline" size="sm" onClick={saveCurrentView} disabled={!filtersActive}>
+              Save view
+            </Button>
+            <Button variant="outline" size="sm" loading={exporting} onClick={runExport}>
+              Export CSV
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Saved views */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 12px' }}>
+        {[...BUILTIN_VIEWS, ...savedViews].map(v => (
+          <span key={v.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Button
+              variant={params.toString() === v.params ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setParams(new URLSearchParams(v.params), { replace: true })}
+            >
+              {v.name}
+            </Button>
+            {savedViews.includes(v) && (
+              <button
+                onClick={() => removeSavedView(v.name)}
+                aria-label={`Delete saved view ${v.name}`}
+                style={{ background: 'none', border: 'none', color: theme.colors.txt.tertiary, cursor: 'pointer', padding: '2px' }}
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+
+      {/* Filter bar — sticky below the app header, wraps on phones. */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 5,
+        backgroundColor: theme.colors.bg.primary,
+        padding: '8px 0 12px',
+        display: 'flex',
+        gap: '8px',
+        flexWrap: 'wrap',
+        alignItems: 'flex-end',
+      }}>
+        <div style={{ flex: '0 1 160px', minWidth: '140px' }}>
+          <Select options={PRESETS} value={preset} onChange={e => setParam('preset', e.target.value)} />
+        </div>
+        {preset === 'custom' && (
+          <>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={e => setParam('from', e.target.value)}
+              style={{
+                padding: '10px', borderRadius: theme.borderRadius.md,
+                border: `1px solid ${theme.colors.bdr.primary}`,
+                backgroundColor: theme.colors.bg.tertiary, color: theme.colors.txt.primary,
+                fontFamily: theme.fonts.primary, fontSize: '14px',
+              }}
+            />
+            <input
+              type="date"
+              value={toDate}
+              onChange={e => setParam('to', e.target.value)}
+              style={{
+                padding: '10px', borderRadius: theme.borderRadius.md,
+                border: `1px solid ${theme.colors.bdr.primary}`,
+                backgroundColor: theme.colors.bg.tertiary, color: theme.colors.txt.primary,
+                fontFamily: theme.fonts.primary, fontSize: '14px',
+              }}
+            />
+          </>
+        )}
+        <div style={{ flex: '0 1 150px', minWidth: '130px' }}>
+          <Select
+            options={[
+              { value: '', label: 'Everyone' },
+              { value: 'staff', label: 'Staff only' },
+              { value: 'client', label: 'Clients only' },
+              { value: 'system', label: 'System only' },
+            ]}
+            value={kind}
+            onChange={e => setParam('kind', e.target.value)}
+          />
+        </div>
+        <div style={{ flex: '1 1 190px', minWidth: '160px' }}>
+          <Select options={actorOptions} value={actor} onChange={e => setParam('actor', e.target.value)} />
+        </div>
+        <div style={{ flex: '1 1 190px', minWidth: '160px' }}>
+          <Select options={actionOptions} value={action} onChange={e => setParam('action', e.target.value)} />
+        </div>
+        <div style={{ flex: '0 1 150px', minWidth: '130px' }}>
+          <Select options={typeOptions} value={entityType} onChange={e => setParam('type', e.target.value)} />
+        </div>
+        <Button
+          variant={result === 'failure' ? 'danger' : 'outline'}
+          size="sm"
+          onClick={() => setParam('result', result === 'failure' ? '' : 'failure')}
+        >
+          Failures only
+        </Button>
+        <div style={{ flex: '1 1 200px', minWidth: '170px' }}>
+          <SearchInput
+            placeholder="Search names, emails, titles…"
+            value={q}
+            onChange={e => setParam('q', e.target.value)}
+            onClear={() => setParam('q', '')}
+          />
+        </div>
+        {filtersActive && (
+          <Button variant="ghost" size="sm" onClick={clearAll}>Clear</Button>
+        )}
+      </div>
+
+      {entityId && (
+        <p style={{
+          ...theme.typography.bodySmall, fontFamily: theme.fonts.mono,
+          color: theme.colors.txt.tertiary, margin: '0 0 12px', overflowWrap: 'anywhere',
+        }}>
+          Showing the history of entity <strong>{entityId}</strong> —{' '}
+          <button
+            onClick={() => setParam('entity', '')}
+            style={{ background: 'none', border: 'none', color: theme.colors.primary, cursor: 'pointer', padding: 0, font: 'inherit' }}
+          >
+            show everything
+          </button>
+        </p>
+      )}
+
+      {/* Results */}
+      {error && (
+        <Card><p style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, color: theme.colors.status.error, margin: 0 }}>{error}</p></Card>
+      )}
+
+      {!error && logs.length === 0 && !loading && (
+        <EmptyState title="Nothing here" description="No activity matches these filters." />
+      )}
+
+      {byDay.map(group => (
+        <div key={group.day}>
+          <p style={{
+            ...theme.typography.caption,
+            fontFamily: theme.fonts.mono,
+            color: theme.colors.txt.tertiary,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            margin: '20px 0 8px',
+          }}>
+            {group.day}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {group.rows.map(log => {
+              const isOpen = expanded === log.id;
+              const failed = log.result === 'failure';
+              return (
+                <Card
+                  key={log.id}
+                  padding="sm"
+                  style={failed ? { borderColor: theme.colors.status.error } : undefined}
+                >
+                  <div
+                    onClick={() => setExpanded(isOpen ? null : log.id)}
+                    style={{ cursor: 'pointer', display: 'flex', gap: '10px', alignItems: 'baseline', flexWrap: 'wrap' }}
+                  >
+                    <span style={{ ...theme.typography.caption, fontFamily: theme.fonts.mono, color: theme.colors.txt.tertiary, whiteSpace: 'nowrap' }}>
+                      {new Date(log.created_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                    {kindBadge(log.actor_kind)}
+                    {failed && <Badge variant="danger" size="sm">failed</Badge>}
+                    <span style={{
+                      ...theme.typography.bodySmall,
+                      fontFamily: theme.fonts.primary,
+                      color: theme.colors.txt.secondary,
+                      minWidth: 0,
+                      overflowWrap: 'anywhere',
+                      flex: '1 1 200px',
+                    }}>
+                      <button
+                        onClick={e => { e.stopPropagation(); setParam('actor', log.user_id); }}
+                        title="Everything this person has done"
+                        style={{
+                          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                          color: theme.colors.txt.primary, fontWeight: 600, font: 'inherit',
+                        }}
+                      >
+                        {log.user_name || log.user_email || log.user_id}
+                      </button>
+                      {' '}{sentenceFor(log)}
+                    </span>
+                  </div>
+
+                  {isOpen && (
+                    <div style={{
+                      marginTop: '10px',
+                      paddingTop: '10px',
+                      borderTop: `1px solid ${theme.colors.bdr.primary}`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                    }}>
+                      {log.details && Object.keys(log.details).length > 0 && (
+                        <pre style={{
+                          margin: 0,
+                          padding: '10px',
+                          backgroundColor: theme.colors.bg.tertiary,
+                          borderRadius: theme.borderRadius.md,
+                          fontFamily: theme.fonts.mono,
+                          fontSize: '12px',
+                          color: theme.colors.txt.secondary,
+                          overflowX: 'auto',
+                        }}>
+                          {JSON.stringify(log.details, null, 2)}
+                        </pre>
+                      )}
+                      <span style={{ ...theme.typography.caption, fontFamily: theme.fonts.mono, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' }}>
+                        {log.actor_role && `role ${log.actor_role} · `}
+                        {log.entity_id && (
+                          <>
+                            entity{' '}
+                            <button
+                              onClick={() => setParam('entity', log.entity_id!)}
+                              title="Everything that happened to this entity"
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: theme.colors.primary, font: 'inherit' }}
+                            >
+                              {log.entity_id}
+                            </button>
+                            {' · '}
+                          </>
+                        )}
+                        {log.request_id && `request ${log.request_id} · `}
+                        {log.ip_address && `ip ${log.ip_address} · `}
+                        {log.user_agent ?? ''}
+                      </span>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
+          <Spinner size={28} color={theme.colors.primary} />
+        </div>
+      )}
+
+      {!loading && hasMore && (
+        <div style={{ marginTop: '16px' }}>
+          <Button variant="outline" fullWidth onClick={fetchMoreLogs}>
+            Load more
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default ActivityLogPage;

@@ -4,6 +4,7 @@ import { isManagementRole, isSuperAdminRole } from '../lib/roles';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { logActivity } from '../utils/activityLogger';
+import { reportSignInFailure } from '../lib/clientAuth';
 import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
 
 interface AddUserResult {
@@ -100,9 +101,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!useSupabase) return;
 
     try {
+      // Staff directory only. Client (parent) profiles are visible to staff
+      // under RLS, but they are not team members — listing them here would put
+      // every parent in Team Management and the assignment pickers. They are
+      // managed in Client Accounts (/portal-admin/clients).
       const { data: profiles, error } = await supabase
         .from('profiles')
         .select('*')
+        .neq('role', 'client')
         .order('created_at', { ascending: false });
 
       if (profiles && !error) {
@@ -180,23 +186,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             .eq('id', session.user.id)
             .single();
 
-          if (profile && !error) {
+          // A client (parent) session belongs to the portal, not the staff
+          // app. Leaving currentUser null keeps isAuthenticated false, which
+          // is what gates the staff chrome, every ProtectedRoute and — because
+          // the data contexts key off it — the staff table fetches and
+          // realtime channels a client's RLS would return nothing for. The
+          // session itself stays valid; PortalAuthContext is what reads it.
+          if (profile && !error && profile.role !== 'client') {
             setCurrentUser(mapProfileToUser(profile, session.user));
-          }
 
-          // Load all users (for admin features).
-          //
-          // Deliberately inside the session branch. This used to run
-          // unconditionally, so every logged-out visitor's browser pulled the
-          // entire staff directory — and the profiles SELECT policy was
-          // USING (true) with no TO clause, so the `anon` role actually got the
-          // rows. Migration v8 closes that at the database; this stops the app
-          // asking for something it cannot use. Login is unaffected: the
-          // SIGNED_IN handler below calls loadUsers() again once there is a
-          // session, and signInWithPassword completes before any profile read.
-          console.log('[Auth] Loading users...');
-          await loadUsers();
-          console.log('[Auth] Users loaded');
+            // Load all users (for admin features).
+            //
+            // Deliberately inside the session branch. This used to run
+            // unconditionally, so every logged-out visitor's browser pulled the
+            // entire staff directory — and the profiles SELECT policy was
+            // USING (true) with no TO clause, so the `anon` role actually got the
+            // rows. Migration v8 closes that at the database; this stops the app
+            // asking for something it cannot use. Login is unaffected: the
+            // SIGNED_IN handler below calls loadUsers() again once there is a
+            // session, and signInWithPassword completes before any profile read.
+            console.log('[Auth] Loading users...');
+            await loadUsers();
+            console.log('[Auth] Users loaded');
+          }
         }
 
         console.log('[Auth] Initialization complete - setting loading to false');
@@ -231,7 +243,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 .eq('id', session.user.id)
                 .single();
 
-              if (profile) {
+              // Same rule as initializeAuth: a client session never becomes
+              // the staff currentUser. Without this, a parent signing in on
+              // the portal would flip isAuthenticated and grow staff chrome.
+              if (profile && profile.role !== 'client') {
                 setCurrentUser(mapProfileToUser(profile, session.user));
               }
             }, 0);
@@ -330,6 +345,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Login error:', error);
+        // Fire-and-forget telemetry for the audit log. GoTrue keeps no audit
+        // trail on this project, so failed sign-ins are reported app-side.
+        // Never awaited: a logging hiccup must not change how login fails.
+        reportSignInFailure(email);
         return false;
       }
 
@@ -357,6 +376,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             profile = profileByEmail;
             profileError = null;
           }
+        }
+
+        // A client (parent) hitting the STAFF login gets turned away with the
+        // session revoked — their door is /portal/login. Without the signOut
+        // the password grant would leave a live session behind a login screen
+        // that just told them "no".
+        if (profile && !profileError && profile.role === 'client') {
+          await supabase.auth.signOut();
+          return false;
         }
 
         if (profile && !profileError && profile.is_active !== false) {

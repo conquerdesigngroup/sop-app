@@ -1,91 +1,90 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { useAuth } from './AuthContext';
-import { supabase, isSupabaseConfigured, hasActivityLogsTable } from '../lib/supabase';
+import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { logActivity as logViaRpc } from '../lib/activityLog';
 
-export type EntityType = 'sop' | 'task' | 'job' | 'template' | 'user' | 'system';
+/**
+ * Audit-log state: the one write path and the super-admin read path.
+ *
+ * v29 moved both ends into the database. Writes go through the log_activity()
+ * RPC (identity comes from the JWT — see src/lib/activityLog.ts); reads go
+ * through admin_activity_search() / admin_activity_facets(), which are
+ * SECURITY DEFINER and refuse anyone below super_admin, so this context can be
+ * mounted app-wide without ever being the thing that protects the data.
+ *
+ * PAGINATION IS KEYSET, NOT OFFSET
+ *
+ * The cursor is (created_at, id) of the last row. Offset pagination
+ * double-counts and skips on a table that is being written to constantly —
+ * which a live audit log is, by definition. fetchMore() can therefore be
+ * pressed forever without repeating or losing a row.
+ *
+ * The old localStorage mirror is gone: it predated the activity_logs table and
+ * a browser-local "audit log" that only that browser can read is not an audit
+ * log. Without Supabase, reads return nothing and writes are dropped.
+ */
 
-export type ActionType =
-  // SOP actions
-  | 'sop_created'
-  | 'sop_updated'
-  | 'sop_deleted'
-  | 'sop_published'
-  | 'sop_archived'
-  | 'sop_restored'
-  | 'sop_imported'
-  // Task actions
-  | 'task_created'
-  | 'task_updated'
-  | 'task_deleted'
-  | 'task_assigned'
-  | 'task_completed'
-  | 'task_started'
-  | 'task_archived'
-  | 'task_restored'
-  | 'task_step_completed'
-  // Job actions
-  | 'job_created'
-  | 'job_updated'
-  | 'job_deleted'
-  | 'job_completed'
-  | 'job_archived'
-  | 'job_restored'
-  // Template actions
-  | 'template_created'
-  | 'template_updated'
-  | 'template_deleted'
-  // User actions
-  | 'user_login'
-  | 'user_logout'
-  | 'user_created'
-  | 'user_updated'
-  | 'user_deleted'
-  | 'user_role_changed'
-  | 'user_password_changed'
-  // System actions
-  | 'system_backup'
-  | 'system_restore';
+export type EntityType = 'sop' | 'task' | 'job' | 'template' | 'user' | 'system' | 'roster' | 'document' | 'class';
+
+export type ActionType = string;
 
 export interface ActivityLog {
   id: string;
   user_id: string;
-  user_email: string;
-  user_name: string;
-  action: ActionType;
-  entity_type: EntityType;
-  entity_id?: string;
-  entity_title?: string;
-  details?: Record<string, any>;
-  ip_address?: string;
-  user_agent?: string;
+  user_email: string | null;
+  user_name: string | null;
+  actor_kind: 'staff' | 'client' | 'system';
+  actor_role: string | null;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  entity_title?: string | null;
+  details?: Record<string, any> | null;
+  result: 'success' | 'failure';
+  request_id?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
   created_at: string;
+}
+
+export interface LogFilters {
+  /** ISO timestamps. `to` is exclusive. */
+  from?: string;
+  to?: string;
+  actorIds?: string[];
+  actorKinds?: string[];
+  actions?: string[];
+  entityTypes?: string[];
+  entityId?: string;
+  result?: 'success' | 'failure';
+  search?: string;
+}
+
+export interface LogFacets {
+  actions: { action: string; count: number }[];
+  entity_types: { entity_type: string; count: number }[];
+  actors: { id: string; name: string | null; email: string | null; kind: string; count: number }[];
 }
 
 interface ActivityLogContextType {
   logs: ActivityLog[];
   loading: boolean;
-  totalCount: number;
+  hasMore: boolean;
+  error: string | null;
+  facets: LogFacets | null;
+
   logActivity: (
-    action: ActionType,
+    action: string,
     entityType: EntityType,
     entityId?: string,
     entityTitle?: string,
     details?: Record<string, any>
   ) => Promise<void>;
-  fetchLogs: (options?: FetchLogsOptions) => Promise<void>;
-  fetchMoreLogs: () => Promise<void>;
-  clearFilters: () => void;
-}
 
-interface FetchLogsOptions {
-  userId?: string;
-  entityType?: EntityType;
-  action?: string;
-  startDate?: string;
-  endDate?: string;
-  searchQuery?: string;
-  limit?: number;
-  offset?: number;
+  fetchLogs: (filters: LogFilters) => Promise<void>;
+  fetchMoreLogs: () => Promise<void>;
+  /** One page of rows for the current filters WITHOUT touching state — export. */
+  fetchPage: (filters: LogFilters, cursor: { ts: string; id: string } | null, limit: number) => Promise<ActivityLog[]>;
+  refreshFacets: (from?: string, to?: string) => Promise<void>;
 }
 
 const ActivityLogContext = createContext<ActivityLogContextType | undefined>(undefined);
@@ -98,317 +97,125 @@ export const useActivityLog = () => {
   return context;
 };
 
-interface ActivityLogProviderProps {
-  children: ReactNode;
-}
-
 const LOGS_PER_PAGE = 50;
-const STORAGE_KEY = 'mediamaple_activity_logs';
 
-// Initialize sample logs if localStorage is empty
-const initializeSampleLogs = () => {
-  const existingLogs = localStorage.getItem(STORAGE_KEY);
-  if (!existingLogs || existingLogs === '[]') {
-    const sampleLogs: ActivityLog[] = [
-      {
-        id: 'sample_1',
-        user_id: 'system',
-        user_email: 'system@mediamaple.com',
-        user_name: 'System',
-        action: 'system_restore',
-        entity_type: 'system',
-        entity_title: 'Activity Log System',
-        details: { message: 'Activity logging initialized' },
-        created_at: new Date().toISOString(),
-      },
-    ];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sampleLogs));
-  }
-};
+const toRpcArgs = (filters: LogFilters, cursor: { ts: string; id: string } | null, limit: number) => ({
+  p_from: filters.from ?? null,
+  p_to: filters.to ?? null,
+  p_actor_ids: filters.actorIds?.length ? filters.actorIds : null,
+  p_actor_kinds: filters.actorKinds?.length ? filters.actorKinds : null,
+  p_actions: filters.actions?.length ? filters.actions : null,
+  p_entity_types: filters.entityTypes?.length ? filters.entityTypes : null,
+  p_entity_id: filters.entityId ?? null,
+  p_result: filters.result ?? null,
+  p_search: filters.search?.trim() || null,
+  p_cursor_ts: cursor?.ts ?? null,
+  p_cursor_id: cursor?.id ?? null,
+  p_limit: limit,
+});
 
-export const ActivityLogProvider: React.FC<ActivityLogProviderProps> = ({ children }) => {
+export const ActivityLogProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
-  const [currentOffset, setCurrentOffset] = useState(0);
-  const [currentFilters, setCurrentFilters] = useState<FetchLogsOptions>({});
-  const { currentUser } = useAuth();
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [facets, setFacets] = useState<LogFacets | null>(null);
 
-  // Initialize sample logs on first load
-  useEffect(() => {
-    initializeSampleLogs();
-  }, []);
+  // Refs rather than state: fetchMore needs the CURRENT filters and cursor,
+  // not the ones a stale closure captured.
+  const filtersRef = useRef<LogFilters>({});
+  const cursorRef = useRef<{ ts: string; id: string } | null>(null);
+  // Guards against a slow page-1 response landing after the user has already
+  // changed filters (it would overwrite the newer list with the older query).
+  const fetchSeq = useRef(0);
 
-  // Log an activity (using Supabase with localStorage fallback)
   const logActivity = useCallback(async (
-    action: ActionType,
+    action: string,
     entityType: EntityType,
     entityId?: string,
     entityTitle?: string,
     details?: Record<string, any>
   ) => {
-    const newLog: ActivityLog = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-      user_id: currentUser?.id || 'unknown',
-      user_email: currentUser?.email || 'unknown',
-      user_name: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown User',
-      action,
-      entity_type: entityType,
-      entity_id: entityId,
-      entity_title: entityTitle,
-      details,
-      user_agent: navigator.userAgent,
-      created_at: new Date().toISOString(),
-    };
-
-    // Try to save to Supabase first (only if table exists)
-    if (isSupabaseConfigured() && supabase && hasActivityLogsTable) {
-      try {
-        const { error } = await supabase.from('activity_logs').insert({
-          user_id: currentUser?.id,
-          user_email: newLog.user_email,
-          user_name: newLog.user_name,
-          action: newLog.action,
-          entity_type: newLog.entity_type,
-          entity_id: newLog.entity_id,
-          entity_title: newLog.entity_title,
-          details: newLog.details || {},
-          user_agent: newLog.user_agent,
-        });
-        if (error) {
-          // Silently fall back to localStorage - table may not exist
-          saveToLocalStorage(newLog);
-        }
-      } catch {
-        // Silently fall back to localStorage
-        saveToLocalStorage(newLog);
-      }
-    } else {
-      // Use localStorage as fallback
-      saveToLocalStorage(newLog);
-    }
-  }, [currentUser]);
-
-  // Helper to save to localStorage
-  const saveToLocalStorage = (newLog: ActivityLog) => {
-    const localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    localLogs.unshift(newLog);
-    // Keep only last 1000 logs in localStorage
-    if (localLogs.length > 1000) {
-      localLogs.pop();
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs));
-  };
-
-  // Fetch logs with filters (from Supabase with localStorage fallback)
-  const fetchLogs = useCallback(async (options: FetchLogsOptions = {}) => {
-    setLoading(true);
-    setCurrentFilters(options);
-    setCurrentOffset(0);
-
-    // Try Supabase first (only if table exists)
-    if (isSupabaseConfigured() && supabase && hasActivityLogsTable) {
-      try {
-        // Build the query
-        let query = supabase
-          .from('activity_logs')
-          .select('*', { count: 'exact' });
-
-        // Apply filters
-        if (options.userId) {
-          query = query.eq('user_id', options.userId);
-        }
-        if (options.entityType) {
-          query = query.eq('entity_type', options.entityType);
-        }
-        if (options.action && options.action !== 'all') {
-          query = query.ilike('action', `%${options.action}%`);
-        }
-        if (options.searchQuery) {
-          // Search across multiple fields using OR.
-          // Strip PostgREST filter metacharacters — a raw comma or paren in the
-          // query would break out of the .or() filter expression.
-          const q = options.searchQuery.replace(/[,()%\\]/g, ' ').trim();
-          if (q) {
-            query = query.or(`user_name.ilike.%${q}%,entity_title.ilike.%${q}%,action.ilike.%${q}%`);
-          }
-        }
-        if (options.startDate) {
-          query = query.gte('created_at', options.startDate);
-        }
-        if (options.endDate) {
-          // Add time to include the full end date
-          query = query.lte('created_at', `${options.endDate}T23:59:59.999Z`);
-        }
-
-        // Order by created_at descending and apply pagination
-        query = query
-          .order('created_at', { ascending: false })
-          .range(0, (options.limit || LOGS_PER_PAGE) - 1);
-
-        const { data, error, count } = await query;
-
-        if (error) {
-          // Silently fall back to localStorage - table may not exist
-          fetchLogsFromLocalStorage(options);
-        } else {
-          setTotalCount(count || 0);
-          setLogs(data || []);
-          setLoading(false);
-        }
-      } catch {
-        // Silently fall back to localStorage
-        fetchLogsFromLocalStorage(options);
-      }
-    } else {
-      // Use localStorage as fallback
-      fetchLogsFromLocalStorage(options);
-    }
+    await logViaRpc({ action, entityType, entityId, entityTitle, details });
   }, []);
 
-  // Helper to fetch from localStorage
-  const fetchLogsFromLocalStorage = (options: FetchLogsOptions) => {
-    const rawLogs = localStorage.getItem(STORAGE_KEY);
-    let localLogs: ActivityLog[] = JSON.parse(rawLogs || '[]');
+  const fetchPage = useCallback(async (
+    filters: LogFilters,
+    cursor: { ts: string; id: string } | null,
+    limit: number
+  ): Promise<ActivityLog[]> => {
+    if (!isSupabaseConfigured() || !supabase) return [];
+    const { data, error: err } = await supabase.rpc('admin_activity_search', toRpcArgs(filters, cursor, limit));
+    if (err) throw new Error(err.message);
+    return (data ?? []) as ActivityLog[];
+  }, []);
 
-    // Apply filters
-    if (options.userId) {
-      localLogs = localLogs.filter(log => log.user_id === options.userId);
-    }
-    if (options.entityType) {
-      localLogs = localLogs.filter(log => log.entity_type === options.entityType);
-    }
-    if (options.action && options.action !== 'all') {
-      localLogs = localLogs.filter(log => log.action.includes(options.action!));
-    }
-    if (options.searchQuery) {
-      const query = options.searchQuery.toLowerCase();
-      localLogs = localLogs.filter(log =>
-        log.user_name.toLowerCase().includes(query) ||
-        log.entity_title?.toLowerCase().includes(query) ||
-        log.action.toLowerCase().includes(query)
-      );
-    }
-    if (options.startDate) {
-      localLogs = localLogs.filter(log => new Date(log.created_at) >= new Date(options.startDate!));
-    }
-    if (options.endDate) {
-      localLogs = localLogs.filter(log => new Date(log.created_at) <= new Date(options.endDate!));
-    }
-
-    setTotalCount(localLogs.length);
-    setLogs(localLogs.slice(0, options.limit || LOGS_PER_PAGE));
-    setLoading(false);
-  };
-
-  // Fetch more logs (pagination)
-  const fetchMoreLogs = useCallback(async () => {
-    if (loading || logs.length >= totalCount) return;
-
+  const fetchLogs = useCallback(async (filters: LogFilters) => {
+    const seq = ++fetchSeq.current;
+    filtersRef.current = filters;
+    cursorRef.current = null;
     setLoading(true);
-    const newOffset = currentOffset + LOGS_PER_PAGE;
+    setError(null);
 
-    // Try Supabase first (only if table exists)
-    if (isSupabaseConfigured() && supabase && hasActivityLogsTable) {
-      try {
-        let query = supabase
-          .from('activity_logs')
-          .select('*');
-
-        // Apply same filters as current
-        if (currentFilters.userId) {
-          query = query.eq('user_id', currentFilters.userId);
-        }
-        if (currentFilters.entityType) {
-          query = query.eq('entity_type', currentFilters.entityType);
-        }
-        if (currentFilters.action && currentFilters.action !== 'all') {
-          query = query.ilike('action', `%${currentFilters.action}%`);
-        }
-        if (currentFilters.searchQuery) {
-          const q = currentFilters.searchQuery.replace(/[,()%\\]/g, ' ').trim();
-          if (q) {
-            query = query.or(`user_name.ilike.%${q}%,entity_title.ilike.%${q}%,action.ilike.%${q}%`);
-          }
-        }
-        if (currentFilters.startDate) {
-          query = query.gte('created_at', currentFilters.startDate);
-        }
-        if (currentFilters.endDate) {
-          query = query.lte('created_at', `${currentFilters.endDate}T23:59:59.999Z`);
-        }
-
-        query = query
-          .order('created_at', { ascending: false })
-          .range(newOffset, newOffset + LOGS_PER_PAGE - 1);
-
-        const { data, error } = await query;
-
-        if (error) {
-          // Silently fall back to localStorage - table may not exist
-          fetchMoreLogsFromLocalStorage(newOffset);
-        } else {
-          setLogs(prev => [...prev, ...(data || [])]);
-          setCurrentOffset(newOffset);
-          setLoading(false);
-        }
-      } catch {
-        // Silently fall back to localStorage
-        fetchMoreLogsFromLocalStorage(newOffset);
-      }
-    } else {
-      fetchMoreLogsFromLocalStorage(newOffset);
+    try {
+      const rows = await fetchPage(filters, null, LOGS_PER_PAGE);
+      if (seq !== fetchSeq.current) return;
+      setLogs(rows);
+      setHasMore(rows.length === LOGS_PER_PAGE);
+      const last = rows[rows.length - 1];
+      cursorRef.current = last ? { ts: last.created_at, id: last.id } : null;
+    } catch (e: any) {
+      if (seq !== fetchSeq.current) return;
+      setLogs([]);
+      setHasMore(false);
+      setError(e.message || 'Could not load the activity log');
+    } finally {
+      if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [loading, logs.length, totalCount, currentOffset, currentFilters]);
+  }, [fetchPage]);
 
-  // Helper to fetch more from localStorage
-  const fetchMoreLogsFromLocalStorage = (newOffset: number) => {
-    let localLogs: ActivityLog[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  const fetchMoreLogs = useCallback(async () => {
+    if (loading || !cursorRef.current) return;
+    const seq = fetchSeq.current;
+    setLoading(true);
+    try {
+      const rows = await fetchPage(filtersRef.current, cursorRef.current, LOGS_PER_PAGE);
+      if (seq !== fetchSeq.current) return;
+      setLogs(prev => [...prev, ...rows]);
+      setHasMore(rows.length === LOGS_PER_PAGE);
+      const last = rows[rows.length - 1];
+      if (last) cursorRef.current = { ts: last.created_at, id: last.id };
+    } catch (e: any) {
+      if (seq === fetchSeq.current) setError(e.message || 'Could not load more');
+    } finally {
+      if (seq === fetchSeq.current) setLoading(false);
+    }
+  }, [loading, fetchPage]);
 
-    // Apply same filters as current
-    if (currentFilters.userId) {
-      localLogs = localLogs.filter(log => log.user_id === currentFilters.userId);
+  const refreshFacets = useCallback(async (from?: string, to?: string) => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    try {
+      const { data, error: err } = await supabase.rpc('admin_activity_facets', {
+        p_from: from ?? null,
+        p_to: to ?? null,
+      });
+      if (!err && data) setFacets(data as LogFacets);
+    } catch (e) {
+      console.error('admin_activity_facets failed:', e);
     }
-    if (currentFilters.entityType) {
-      localLogs = localLogs.filter(log => log.entity_type === currentFilters.entityType);
-    }
-    if (currentFilters.action && currentFilters.action !== 'all') {
-      localLogs = localLogs.filter(log => log.action.includes(currentFilters.action!));
-    }
-    if (currentFilters.searchQuery) {
-      const query = currentFilters.searchQuery.toLowerCase();
-      localLogs = localLogs.filter(log =>
-        log.user_name.toLowerCase().includes(query) ||
-        log.entity_title?.toLowerCase().includes(query) ||
-        log.action.toLowerCase().includes(query)
-      );
-    }
-    if (currentFilters.startDate) {
-      localLogs = localLogs.filter(log => new Date(log.created_at) >= new Date(currentFilters.startDate!));
-    }
-    if (currentFilters.endDate) {
-      localLogs = localLogs.filter(log => new Date(log.created_at) <= new Date(currentFilters.endDate!));
-    }
-
-    const moreLogs = localLogs.slice(newOffset, newOffset + LOGS_PER_PAGE);
-    setLogs(prev => [...prev, ...moreLogs]);
-    setCurrentOffset(newOffset);
-    setLoading(false);
-  };
-
-  const clearFilters = useCallback(() => {
-    setCurrentFilters({});
-    fetchLogs({});
-  }, [fetchLogs]);
+  }, []);
 
   const value: ActivityLogContextType = {
     logs,
     loading,
-    totalCount,
+    hasMore,
+    error,
+    facets,
     logActivity,
     fetchLogs,
     fetchMoreLogs,
-    clearFilters,
+    fetchPage,
+    refreshFacets,
   };
 
   return (

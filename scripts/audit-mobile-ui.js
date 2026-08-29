@@ -86,6 +86,12 @@ const DEVICES = [
 
 const PUBLIC_ROUTES = [
   '/', '/login', '/reset-password', '/portal',
+  // The client login build (W1 of CLIENT-AUTH-BUILD.md). These routes only
+  // exist when the app was BUILT with REACT_APP_CLIENT_AUTH=true — with the
+  // flag off they fall through to the portal home redirect and the audit
+  // measures that redirect instead of the pages. Run the audit against a
+  // flag-on build before shipping changes to them.
+  '/portal/login', '/portal/signup', '/portal/update-password',
   // The parent portal's program pages. Left out until the calendar grew a month
   // view and it turned out nothing here had ever been measured on a phone — the
   // portal is the half of this app that is ONLY ever opened on one.
@@ -139,6 +145,10 @@ const AUTH_ROUTES = [
   '/dashboard', '/sop', '/job-tasks', '/task-library', '/my-tasks',
   '/calendar', '/hours-input', '/hours', '/alerts', '/archive',
   '/team', '/settings', '/profile', '/activity-log', '/portal-admin',
+  // Admin-only client roster page. /portal/account is signed-in-CLIENT-only,
+  // which the audit's staff session cannot reach (staff get redirected), so
+  // it has no row here — check it by hand on a phone with a client login.
+  '/portal-admin/clients',
 ];
 
 // ---------------------------------------------------------------- static scan

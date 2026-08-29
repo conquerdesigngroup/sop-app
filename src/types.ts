@@ -34,8 +34,13 @@ export interface SOP {
  * Ordered most privileged first. super_admin was added in v13; see
  * src/lib/roles.ts for what each one means and supabase-migration-v13 for
  * what the database enforces.
+ *
+ * 'client' (v28) is a parent account for the portal, not a staff tier: it
+ * never appears in staff pickers (AuthContext.loadUsers excludes it) and every
+ * staff policy tests is_active_staff(), which is false for it. Managed in
+ * Client Accounts, not Team Management.
  */
-export type UserRole = 'super_admin' | 'admin' | 'team';
+export type UserRole = 'super_admin' | 'admin' | 'team' | 'client';
 
 export interface User {
   id: string;
