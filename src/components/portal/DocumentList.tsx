@@ -127,8 +127,12 @@ const Meta: React.FC<{ doc: PortalDocument; failed?: boolean }> = ({ doc, failed
  * because the card is now something you look at. Tapping a video should play
  * it, and a parent who wants the file still needs somewhere to say so.
  */
-const MediaCaption: React.FC<{ doc: PortalDocument; downloadUrl: string | null }> = ({
-  doc, downloadUrl,
+const MediaCaption: React.FC<{
+  doc: PortalDocument;
+  downloadUrl: string | null;
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({
+  doc, downloadUrl, onDownload,
 }) => (
   <div style={{
     display: 'flex',
@@ -145,6 +149,9 @@ const MediaCaption: React.FC<{ doc: PortalDocument; downloadUrl: string | null }
     {downloadUrl && (
       <a
         href={downloadUrl}
+        // Fires alongside the download, never instead of it — onClick on an
+        // <a href> does not swallow the navigation (see DocumentList.test).
+        onClick={() => onDownload?.(doc)}
         // No target: the URL carries Content-Disposition: attachment, so the
         // browser downloads it and stays put. _blank would open a tab that
         // immediately closes itself.
@@ -181,7 +188,8 @@ const ImageBlock: React.FC<{
   doc: PortalDocument;
   url: string;
   onUndisplayable: () => void;
-}> = ({ doc, url, onUndisplayable }) => {
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({ doc, url, onUndisplayable, onDownload }) => {
   const [loaded, setLoaded] = useState(false);
 
   return (
@@ -190,6 +198,7 @@ const ImageBlock: React.FC<{
         href={url}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={() => onDownload?.(doc)}
         style={{
           display: 'block',
           backgroundColor: theme.colors.bg.tertiary,
@@ -207,7 +216,7 @@ const ImageBlock: React.FC<{
           style={{ display: 'block', width: '100%', height: 'auto' }}
         />
       </a>
-      <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} />
+      <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
     </div>
   );
 };
@@ -228,7 +237,8 @@ const VideoBlock: React.FC<{
   doc: PortalDocument;
   url: string;
   onUndisplayable: () => void;
-}> = ({ doc, url, onUndisplayable }) => (
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({ doc, url, onUndisplayable, onDownload }) => (
   <div style={CARD}>
     <video
       src={url}
@@ -245,7 +255,7 @@ const VideoBlock: React.FC<{
         backgroundColor: '#000000',
       }}
     />
-    <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} />
+    <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
   </div>
 );
 
@@ -254,7 +264,8 @@ const AudioBlock: React.FC<{
   doc: PortalDocument;
   url: string;
   onUndisplayable: () => void;
-}> = ({ doc, url, onUndisplayable }) => (
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({ doc, url, onUndisplayable, onDownload }) => (
   <div style={CARD}>
     <div style={{ padding: '14px 14px 0' }}>
       <audio
@@ -265,7 +276,7 @@ const AudioBlock: React.FC<{
         style={{ display: 'block', width: '100%' }}
       />
     </div>
-    <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} />
+    <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
   </div>
 );
 
@@ -276,8 +287,13 @@ const AudioBlock: React.FC<{
  * newly uploaded row, or a signing call that failed. That path navigates
  * rather than opening a window, for the reason in the file header.
  */
-const FileRow: React.FC<{ doc: PortalDocument; url: string | null; kind: MediaKind }> = ({
-  doc, url, kind,
+const FileRow: React.FC<{
+  doc: PortalDocument;
+  url: string | null;
+  kind: MediaKind;
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({
+  doc, url, kind, onDownload,
 }) => {
   const { getDocumentUrl } = usePortal();
   const [busy, setBusy] = useState(false);
@@ -323,7 +339,7 @@ const FileRow: React.FC<{ doc: PortalDocument; url: string | null; kind: MediaKi
   };
 
   if (url) {
-    return <a href={withDownload(url, doc.fileName)} style={shell}>{body}</a>;
+    return <a href={withDownload(url, doc.fileName)} onClick={() => onDownload?.(doc)} style={shell}>{body}</a>;
   }
 
   const openLate = async () => {
@@ -336,6 +352,7 @@ const FileRow: React.FC<{ doc: PortalDocument; url: string | null; kind: MediaKi
       setFailed(true);
       return;
     }
+    onDownload?.(doc);
     // assign(), not window.open(): the tap that started this is long over by
     // the time the signature arrives, and a popup opened now is dropped by
     // iOS without a word. The URL asks for an attachment, so the browser
@@ -356,7 +373,11 @@ const FileRow: React.FC<{ doc: PortalDocument; url: string | null; kind: MediaKi
 
 // -------------------------------------------------------------------- list
 
-const DocumentItem: React.FC<{ doc: PortalDocument; url: string | null }> = ({ doc, url }) => {
+const DocumentItem: React.FC<{
+  doc: PortalDocument;
+  url: string | null;
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({ doc, url, onDownload }) => {
   // Set by a media block's error event. Once a browser has said it cannot show
   // this file, it is a download for the rest of the visit.
   const [undisplayable, setUndisplayable] = useState(false);
@@ -369,12 +390,12 @@ const DocumentItem: React.FC<{ doc: PortalDocument; url: string | null }> = ({ d
   const degrade = () => setUndisplayable(true);
 
   if (url && !undisplayable) {
-    if (kind === 'image') return <ImageBlock doc={doc} url={url} onUndisplayable={degrade} />;
-    if (kind === 'video') return <VideoBlock doc={doc} url={url} onUndisplayable={degrade} />;
-    if (kind === 'audio') return <AudioBlock doc={doc} url={url} onUndisplayable={degrade} />;
+    if (kind === 'image') return <ImageBlock doc={doc} url={url} onUndisplayable={degrade} onDownload={onDownload} />;
+    if (kind === 'video') return <VideoBlock doc={doc} url={url} onUndisplayable={degrade} onDownload={onDownload} />;
+    if (kind === 'audio') return <AudioBlock doc={doc} url={url} onUndisplayable={degrade} onDownload={onDownload} />;
   }
 
-  return <FileRow doc={doc} url={url} kind={kind} />;
+  return <FileRow doc={doc} url={url} kind={kind} onDownload={onDownload} />;
 };
 
 /**
@@ -385,7 +406,15 @@ const DocumentItem: React.FC<{ doc: PortalDocument; url: string | null }> = ({ d
  * like, and reordering into a gallery would take that arrangement away from
  * the teacher who chose it.
  */
-export const DocumentList: React.FC<{ documents: PortalDocument[] }> = ({ documents }) => {
+export const DocumentList: React.FC<{
+  documents: PortalDocument[];
+  /**
+   * Fired when a parent actually opens or saves a file (not when the list is
+   * pre-signed for rendering). ClassDetail passes the audit logger; other
+   * callers may omit it. See AUDIT-LOG-SPEC.md §4 — "who downloaded what".
+   */
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({ documents, onDownload }) => {
   const { getDocumentUrls } = usePortal();
   const [urls, setUrls] = useState<Record<string, string>>({});
 
@@ -409,7 +438,7 @@ export const DocumentList: React.FC<{ documents: PortalDocument[] }> = ({ docume
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {documents.map(doc => (
-        <DocumentItem key={doc.id} doc={doc} url={urls[doc.storagePath] ?? null} />
+        <DocumentItem key={doc.id} doc={doc} url={urls[doc.storagePath] ?? null} onDownload={onDownload} />
       ))}
     </div>
   );

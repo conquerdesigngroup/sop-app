@@ -57,6 +57,8 @@ export const roleLabel = (role?: UserRole | null): string => {
       return 'Admin';
     case 'team':
       return 'Team Member';
+    case 'client':
+      return 'Client';
     default:
       return 'Unknown';
   }

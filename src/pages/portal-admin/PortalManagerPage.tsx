@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Button, PageHeader, Spinner } from '../../components/ui';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -140,14 +140,23 @@ const PortalManagerPage: React.FC = () => {
         title="Portal"
         subtitle="What families see when they open the parent portal"
         actions={
-          program && isProgramSlug(program.slug) ? (
-            <Button
-              variant="outline"
-              onClick={() => window.open(portalRoutes.program(program.slug), '_blank', 'noopener,noreferrer')}
-            >
-              View as a parent
-            </Button>
-          ) : undefined
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Admin-only like its route: instructors manage classes here, not
+                other families' logins. */}
+            {isAdmin && (
+              <Link to="/portal-admin/clients" style={{ textDecoration: 'none' }}>
+                <Button variant="outline">Client accounts</Button>
+              </Link>
+            )}
+            {program && isProgramSlug(program.slug) && (
+              <Button
+                variant="outline"
+                onClick={() => window.open(portalRoutes.program(program.slug), '_blank', 'noopener,noreferrer')}
+              >
+                View as a parent
+              </Button>
+            )}
+          </div>
         }
       />
 

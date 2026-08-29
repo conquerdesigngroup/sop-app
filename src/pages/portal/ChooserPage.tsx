@@ -4,6 +4,7 @@ import { BRAND_MARK, getThemeColors, theme } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes } from '../../lib/portal';
+import { CLIENT_AUTH_ENABLED } from '../../lib/clientAuth';
 import InstallAppGuide from '../../components/InstallAppGuide';
 import ThemeToggle from '../../components/ThemeToggle';
 import HalftoneField from '../../components/HalftoneField';
@@ -268,6 +269,37 @@ const ChooserPage: React.FC = () => {
       >
         You are your only limit
       </p>
+
+      {/* Separate, low-prominence entrance to the NEW family-login flow, sat
+          below everything and deliberately apart from the two main tiles. It
+          only exists when the client-auth build is enabled, and it does NOT
+          change the Dancer Portal tile — that still opens the current
+          access-code portal every real family uses. This is the door for
+          testing the login with a handful of test accounts while everyone else
+          carries on unaffected. When the flow becomes mandatory (REQUIRED +
+          v30) the Dancer Portal itself routes through the login and this can be
+          removed. */}
+      {CLIENT_AUTH_ENABLED && (
+        <Link
+          to="/portal/login"
+          style={{
+            ...theme.typography.caption,
+            fontFamily: theme.fonts.mono,
+            color: theme.colors.txt.tertiary,
+            textDecoration: 'none',
+            border: `1px solid ${theme.colors.bdr.primary}`,
+            borderRadius: theme.borderRadius.full,
+            padding: isMobileOrTablet ? '8px 16px' : '9px 18px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            // A footnote, not a third choice.
+            minHeight: '36px',
+          }}
+        >
+          Client login · beta
+        </Link>
+      )}
     </div>
   );
 };

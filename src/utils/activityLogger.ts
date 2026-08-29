@@ -1,6 +1,22 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { logActivity as logViaRpc } from '../lib/activityLog';
 
-export type EntityType = 'sop' | 'task' | 'job' | 'template' | 'user' | 'system';
+/**
+ * Legacy logging entry point, kept for its call sites (AuthContext, SOPContext,
+ * TaskContext). Since v29 every entry goes through the log_activity() RPC — see
+ * src/lib/activityLog.ts, which is the canonical helper new code should import.
+ *
+ * The identity parameters (userId/userEmail/userName) are accepted and
+ * DISCARDED: the RPC resolves the actor from the JWT precisely so that no
+ * caller can attribute an action to someone else. They stay in the signature
+ * only so a dozen existing call sites did not need editing in the same change
+ * that moved the write path.
+ *
+ * The old localStorage fallback is gone with the direct insert: it predates the
+ * activity_logs table existing, and a browser-local log that only that browser
+ * can see is not an audit trail. Supabase-less demo mode simply does not log.
+ */
+
+export type EntityType = 'sop' | 'task' | 'job' | 'template' | 'user' | 'system' | 'roster' | 'document' | 'class';
 
 export type ActionType =
   // SOP actions
@@ -55,65 +71,18 @@ interface LogActivityParams {
   details?: Record<string, any>;
 }
 
-const STORAGE_KEY = 'mediamaple_activity_logs';
-
-// Helper to save to localStorage - no cap, logs persist until admin clears them
-const saveToLocalStorage = (newLog: Record<string, any>) => {
-  const localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  localLogs.unshift(newLog);
-  // No cap - logs persist until admin manually clears them
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs));
-};
-
 export const logActivity = async ({
-  userId,
-  userEmail,
-  userName,
   action,
   entityType,
   entityId,
   entityTitle,
   details,
 }: LogActivityParams): Promise<void> => {
-  const newLog = {
-    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-    user_id: userId,
-    user_email: userEmail,
-    user_name: userName,
+  await logViaRpc({
     action,
-    entity_type: entityType,
-    entity_id: entityId,
-    entity_title: entityTitle,
+    entityType,
+    entityId,
+    entityTitle,
     details,
-    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-    created_at: new Date().toISOString(),
-  };
-
-  // Try to save to Supabase first
-  if (isSupabaseConfigured() && supabase) {
-    try {
-      const { error } = await supabase.from('activity_logs').insert({
-        user_id: userId,
-        user_email: userEmail,
-        user_name: userName,
-        action,
-        entity_type: entityType,
-        entity_id: entityId,
-        entity_title: entityTitle,
-        details: details || {},
-        user_agent: newLog.user_agent,
-      });
-      if (error) {
-        console.error('Failed to log activity to Supabase:', error);
-        // Fall back to localStorage
-        saveToLocalStorage(newLog);
-      }
-    } catch (err) {
-      console.error('Error logging activity to Supabase:', err);
-      saveToLocalStorage(newLog);
-    }
-  } else {
-    // Use localStorage as fallback
-    saveToLocalStorage(newLog);
-  }
+  });
 };

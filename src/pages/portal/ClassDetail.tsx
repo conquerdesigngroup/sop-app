@@ -9,6 +9,8 @@ import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
+import { usePortalAuth } from '../../contexts/PortalAuthContext';
+import { logActivity } from '../../lib/activityLog';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
 /**
@@ -39,6 +41,10 @@ const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const { slug, program } = useProgramPage();
   const { fetchClasses, fetchUpdates, fetchDocuments } = usePortal();
+  // Only a signed-in CLIENT's opens are the "who downloaded what" the audit log
+  // is for. Staff previewing the portal, and the flag-off anon path, do not log
+  // — isClient is false for both.
+  const { isClient } = usePortalAuth();
 
   const [klass, setKlass] = useState<PortalClass | null>(null);
   const [updates, setUpdates] = useState<PortalUpdate[]>([]);
@@ -301,7 +307,20 @@ const ClassDetail: React.FC = () => {
                   Class content
                 </h2>
 
-                <DocumentList documents={documents} />
+                <DocumentList
+                  documents={documents}
+                  onDownload={isClient ? (doc) => {
+                    // Fire-and-forget; a logging hiccup must never block a
+                    // parent opening their child's file.
+                    void logActivity({
+                      action: 'document_downloaded',
+                      entityType: 'document',
+                      entityId: doc.id,
+                      entityTitle: doc.title,
+                      details: { classId: klass?.id, className: klass?.name, fileName: doc.fileName },
+                    });
+                  } : undefined}
+                />
               </div>
             )}
           </>

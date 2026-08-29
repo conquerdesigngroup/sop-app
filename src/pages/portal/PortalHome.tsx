@@ -1,20 +1,45 @@
 import React from 'react';
+import { Navigate } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Card, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
 import { usePortal } from '../../contexts/PortalContext';
+import { usePortalAuth } from '../../contexts/PortalAuthContext';
+import { CLIENT_AUTH_ENABLED, CLIENT_AUTH_REQUIRED } from '../../lib/clientAuth';
 import { ENROLLIO_URL, portalRoutes, ProgramSlug } from '../../lib/portal';
 
 /**
  * Parent portal home — the three compartments of the studio.
  *
  * Billing & Admin leaves the app for Enrollio; the two dancer programs stay
- * here behind the studio access code. Program names come from the database, so
- * renaming a section does not need a deploy.
+ * here behind the studio access code — or, with client auth on, behind the
+ * family sign-in. Program names come from the database, so renaming a section
+ * does not need a deploy.
  */
 const PortalHome: React.FC = () => {
   const { programs, loading, error } = usePortal();
+  const { loading: authLoading, hasSession, isClient, profile } = usePortalAuth();
+
+  // FULL LAUNCH only: the whole portal sits behind the sign-in. In the parallel
+  // TEST stage (ENABLED but not REQUIRED) this page renders normally for
+  // everyone — real families see the program list with no login, exactly as
+  // before — and a logged-in tester additionally gets the "My Account" tile
+  // below.
+  if (CLIENT_AUTH_REQUIRED) {
+    if (authLoading) {
+      return (
+        <PortalLayout title="Parent Portal">
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
+            <Spinner size={32} color={theme.colors.primary} />
+          </div>
+        </PortalLayout>
+      );
+    }
+    if (!hasSession) {
+      return <Navigate to="/portal/login" replace />;
+    }
+  }
 
   return (
     <PortalLayout
@@ -57,6 +82,16 @@ const PortalHome: React.FC = () => {
             to={portalRoutes.program(program.slug as ProgramSlug)}
           />
         ))}
+
+        {/* Clients manage their own login here. Staff previewing the portal
+            keep their account on the staff side, so no tile for them. */}
+        {CLIENT_AUTH_ENABLED && isClient && (
+          <NavTile
+            label="My Account"
+            description={profile?.email ?? 'Password and sign-out.'}
+            to="/portal/account"
+          />
+        )}
       </div>
     </PortalLayout>
   );

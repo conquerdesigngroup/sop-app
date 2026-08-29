@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Navigate, Outlet, useParams } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import { usePortal } from '../../contexts/PortalContext';
+import { usePortalAuth } from '../../contexts/PortalAuthContext';
+import { CLIENT_AUTH_ENABLED, CLIENT_AUTH_REQUIRED } from '../../lib/clientAuth';
 import { isProgramSlug, portalRoutes } from '../../lib/portal';
 import PortalLayout from '../../components/portal/PortalLayout';
 import { Button, Card, Input, Spinner } from '../../components/ui';
@@ -28,8 +30,10 @@ import { Button, Card, Input, Spinner } from '../../components/ui';
  */
 const ProgramGate: React.FC = () => {
   const { program: slug } = useParams<{ program: string }>();
+  const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
   const { programs, loading, error, getProgramBySlug, hasAccess, verifyCode } = usePortal();
+  const portalAuth = usePortalAuth();
 
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
@@ -74,6 +78,37 @@ const ProgramGate: React.FC = () => {
   // or renamed without updating PROGRAM_SLUGS.
   if (programs.length > 0 && !program) {
     return <Navigate to={portalRoutes.home} replace />;
+  }
+
+  // FULL LAUNCH (REQUIRED): the gate is a real login rather than a shared code.
+  // Any signed-in account passes; nobody else does; the access-code path is
+  // gone. Pairs with the v30 migration closing the anon door.
+  if (CLIENT_AUTH_REQUIRED) {
+    if (portalAuth.loading) {
+      return (
+        <PortalLayout title={program?.name ?? 'Parent Portal'} backTo={portalRoutes.home}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
+            <Spinner size={32} color={theme.colors.primary} />
+          </div>
+        </PortalLayout>
+      );
+    }
+    if (!portalAuth.hasSession) {
+      return <Navigate to="/portal/login" state={{ from: location.pathname }} replace />;
+    }
+    return <Outlet />;
+  }
+
+  // PARALLEL TEST (ENABLED, not REQUIRED): a signed-in tester skips the studio
+  // code, which is how the new login gets exercised as a real access mechanism
+  // — while every real family still uses the code exactly as before. Not gated
+  // on portalAuth.loading on purpose: a real client will never be signed in, so
+  // making them wait on a session check before the code form appears would tax
+  // the majority for the few who test. A logged-in tester reaching a program by
+  // deep link may see the code form for one frame before the session resolves;
+  // reaching it from the portal home (the normal path) they will not.
+  if (CLIENT_AUTH_ENABLED && portalAuth.hasSession) {
+    return <Outlet />;
   }
 
   if (hasAccess(slug)) {
