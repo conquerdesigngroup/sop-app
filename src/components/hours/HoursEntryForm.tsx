@@ -91,6 +91,12 @@ const HoursEntryForm: React.FC<HoursEntryFormProps> = ({
 
     if (!values.workDate) {
       next.workDate = 'Pick a date.';
+    } else if (values.workDate > todayISO()) {
+      // The input's max only marks a typed future date :invalid — with
+      // noValidate it does not block the submit. Hours are logged after
+      // they are worked; a future entry would sit in payroll as time
+      // nobody has worked yet.
+      next.workDate = 'That date has not happened yet — log hours after you work them.';
     }
     if (values.endTime <= values.startTime) {
       // The model is one date plus two clock times, so a shift that runs

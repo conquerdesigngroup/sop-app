@@ -82,9 +82,11 @@ const HoursInputPage: React.FC = () => {
   );
 
   // Excludes rejected entries — see sumPayableHours. Anything sent back
-  // does not count until it is corrected and returns to 'pending'.
+  // does not count until it is corrected and returns to 'pending'. Days
+  // follow the same rule, or a day whose only entry was sent back would
+  // read as "worked" beside a total that excludes it.
   const periodTotal = sumPayableHours(visibleEntries);
-  const periodDays = countDays(visibleEntries);
+  const periodDays = countDays(visibleEntries.filter(e => e.status !== 'rejected'));
   const pendingTotal = sumHours(visibleEntries.filter(e => e.status === 'pending'));
   const rejectedTotal = sumHours(visibleEntries.filter(e => e.status === 'rejected'));
 

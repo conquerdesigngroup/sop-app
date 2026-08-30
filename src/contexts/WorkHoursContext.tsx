@@ -580,6 +580,44 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
       setWorkHours(prev => prev.map(wh =>
         wh.id === id ? mapSupabaseWorkHours(data[0]) : wh
       ));
+
+      // Keep the pay cache in step with the freeze trigger (v7 §12). The
+      // trigger writes work_hours_pay in the same transaction as this
+      // update, but that table is in no realtime publication and nothing
+      // re-reads it after load — so an admin who approved entries and
+      // exported straight away got a CSV with no amounts on exactly the
+      // rows they had just approved, and a corrected approved entry kept
+      // showing its pre-correction amount. Only an admin's write can land
+      // as 'approved', so the extra query never runs on an employee's
+      // device; RLS would return it zero rows anyway.
+      if (hasV7Schema) {
+        if (data[0].status === 'approved') {
+          try {
+            const { data: payRow } = await supabase
+              .from('work_hours_pay')
+              .select('*')
+              .eq('work_hours_id', id)
+              .maybeSingle();
+            if (payRow) {
+              setWorkHoursPay(prev => [
+                ...prev.filter(p => p.workHoursId !== id),
+                mapSupabaseWorkHoursPay(payRow),
+              ]);
+            }
+          } catch {
+            // The update itself landed; a failed cache refresh must not
+            // report it as a failure. The next full load catches up.
+          }
+        } else {
+          // Sent back or returned to pending: the trigger just deleted any
+          // frozen row, so drop the local copy too.
+          setWorkHoursPay(prev =>
+            prev.some(p => p.workHoursId === id)
+              ? prev.filter(p => p.workHoursId !== id)
+              : prev
+          );
+        }
+      }
     } else {
       const updated = existing ? { ...existing, ...finalUpdates } : undefined;
       setWorkHours(prev => prev.map(wh =>
@@ -637,6 +675,13 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     } else {
       setWorkHours(prev => prev.filter(wh => wh.id !== id));
     }
+    // A deleted approved entry takes its frozen pay row with it
+    // (ON DELETE CASCADE); drop any local copy so the rollups agree.
+    setWorkHoursPay(prev =>
+      prev.some(p => p.workHoursId === id)
+        ? prev.filter(p => p.workHoursId !== id)
+        : prev
+    );
   }, [useSupabase]);
 
   // Approving locks the entry: migration v7's RLS policy lets an employee

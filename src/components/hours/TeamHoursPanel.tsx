@@ -84,6 +84,9 @@ const TeamHoursPanel: React.FC = () => {
   // for the whole team as if nobody had logged anything.
   const rangeReversed = Boolean(customStart && customEnd && customStart > customEnd);
   const usingCustom = Boolean(customStart && customEnd) && !rangeReversed;
+  // The all-time range is a pair of sentinel dates ('0000-01-01' …), which
+  // read as gibberish anywhere they are formatted for a person.
+  const isAllTime = !usingCustom && preset === 'all';
 
   const range = useMemo(() => {
     if (usingCustom) {
@@ -350,7 +353,10 @@ const TeamHoursPanel: React.FC = () => {
       rows.push([`WARNING: ${missingRateTotal} approved entr${missingRateTotal === 1 ? 'y' : 'ies'} had no rate set and were locked at 0.00`, '', '', '', '', '', '', '', '', '', '', '']);
     }
 
-    downloadCSV(`hours_${range.start}_to_${range.end}.csv`, toCSV(rows));
+    downloadCSV(
+      `hours_${isAllTime ? 'all_time' : `${range.start}_to_${range.end}`}.csv`,
+      toCSV(rows)
+    );
     showToast(`Exported ${entryCount} ${entryCount === 1 ? 'entry' : 'entries'}`, 'success');
   };
 
@@ -642,7 +648,9 @@ const TeamHoursPanel: React.FC = () => {
                     // lands here — the one screen that already owns hours.
                     allowEditingApproved
                     emptyTitle="Nothing logged this period"
-                    emptyDescription={`${r.name} has not entered any hours between ${formatDateShort(range.start)} and ${formatDateShort(range.end)}.`}
+                    emptyDescription={isAllTime
+                      ? `${r.name} has not entered any hours yet.`
+                      : `${r.name} has not entered any hours between ${formatDateShort(range.start)} and ${formatDateShort(range.end)}.`}
                   />
                 </div>
               )}
