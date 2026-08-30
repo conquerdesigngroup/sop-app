@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { theme, BRAND_MARK } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import { ProgramSlug, portalRoutes } from '../../lib/portal';
+import { usePortalAuth } from '../../contexts/PortalAuthContext';
+import { CLIENT_AUTH_ENABLED } from '../../lib/clientAuth';
 import PortalBottomNav from './PortalBottomNav';
 
 /**
@@ -51,6 +53,12 @@ interface PortalLayoutProps {
 const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, slug, children }) => {
   const { isMobileOrTablet } = useResponsive();
   const showTabs = !!slug && isMobileOrTablet;
+  // Any portal session gets a persistent way out. Gated on the flag so the
+  // access-code-only portal (no sessions) shows nothing. hasSession is true for
+  // a client and for staff previewing — both need to be able to sign out, and
+  // /portal/account handles which is which.
+  const { hasSession } = usePortalAuth();
+  const showAccount = CLIENT_AUTH_ENABLED && hasSession;
 
   const headerRef = useRef<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -144,24 +152,58 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
             />
           </Link>
 
-          {/* Orientation for sub-pages, where the h1 is a program name and
-              nothing else says which half of the app you are in. Suppressed on
-              the portal home, whose own h1 already reads "Parent Portal" —
-              printing it twice just eats vertical space on a phone. */}
-          {backTo && (
-            <span
-              style={{
-                marginLeft: 'auto',
-                ...theme.typography.captionSmall,
-                fontFamily: theme.fonts.mono,
-                color: theme.colors.txt.tertiary,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}
-            >
-              Parent Portal
-            </span>
-          )}
+          {/* Right cluster: the section label and the account button. The
+              cluster owns the marginLeft:auto so both sit at the right edge
+              whether one or both are present. */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '14px' }}>
+            {/* Orientation for sub-pages, where the h1 is a program name and
+                nothing else says which half of the app you are in. Suppressed on
+                the portal home, whose own h1 already reads "Parent Portal" —
+                printing it twice just eats vertical space on a phone. */}
+            {backTo && (
+              <span
+                style={{
+                  ...theme.typography.captionSmall,
+                  fontFamily: theme.fonts.mono,
+                  color: theme.colors.txt.tertiary,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Parent Portal
+              </span>
+            )}
+
+            {showAccount && (
+              <Link
+                to="/portal/account"
+                aria-label="My account"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  flexShrink: 0,
+                  marginRight: '-6px',
+                  borderRadius: theme.borderRadius.full,
+                  border: `1px solid ${theme.colors.bdr.primary}`,
+                  color: theme.colors.txt.secondary,
+                  textDecoration: 'none',
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

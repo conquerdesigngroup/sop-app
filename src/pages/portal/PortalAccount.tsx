@@ -45,10 +45,10 @@ const PortalAccount: React.FC = () => {
     return <Navigate to="/portal/login" state={{ from: '/portal/account' }} replace />;
   }
 
-  // Staff previewing the portal manage their account on the staff side.
-  if (!isClient) {
-    return <Navigate to={portalRoutes.home} replace />;
-  }
+  // Note: no !isClient redirect. Staff previewing the portal reach this page too
+  // and need to be able to sign out — the only sign-out the portal has. Their
+  // view is trimmed below (no password change; that belongs to the staff app),
+  // but the sign-out is universal.
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,11 +120,15 @@ const PortalAccount: React.FC = () => {
             color: theme.colors.txt.tertiary,
             margin: 0,
           }}>
-            Need to change your email? It comes from the studio’s enrollment
-            records — ask us at the front desk and we’ll move your account over.
+            {isClient
+              ? 'Need to change your email? It comes from the studio’s enrollment records — ask us at the front desk and we’ll move your account over.'
+              : 'You’re signed in as a staff account previewing the portal. Manage this account from the staff app — here you can sign out.'}
           </p>
         </Card>
 
+        {/* Password change is a client concern; staff manage theirs in the staff
+            app, so this card is hidden for a staff-preview session. */}
+        {isClient && (
         <Card>
           <h2 style={{ ...theme.typography.h3, color: theme.colors.txt.primary, margin: '0 0 16px' }}>
             Change password
@@ -181,6 +185,7 @@ const PortalAccount: React.FC = () => {
             </div>
           </form>
         </Card>
+        )}
 
         <Button variant="outline" fullWidth loading={signingOut} onClick={handleSignOut}>
           Sign out
