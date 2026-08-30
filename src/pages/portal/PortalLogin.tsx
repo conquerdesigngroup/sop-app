@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import PortalLayout from '../../components/portal/PortalLayout';
-import { Button, Card, Input } from '../../components/ui';
+import { Button, Card, Input, Spinner } from '../../components/ui';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { portalRoutes } from '../../lib/portal';
 
@@ -40,6 +40,19 @@ const PortalLogin: React.FC = () => {
   // login form is not for them.
   if (!loading && hasSession) {
     return <Navigate to={from ?? portalRoutes.home} replace />;
+  }
+
+  // While the session check is in flight, show a spinner rather than the sign-in
+  // form. Otherwise an already-signed-in visitor sees the form flash for an
+  // instant before the redirect above fires.
+  if (loading) {
+    return (
+      <PortalLayout title="Sign in" backTo={portalRoutes.chooser}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
+          <Spinner size={32} color={theme.colors.primary} />
+        </div>
+      </PortalLayout>
+    );
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

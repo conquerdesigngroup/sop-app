@@ -333,10 +333,30 @@ Deno.serve(async (req: Request) => {
     // ------------------------------------------------------------ resend
     // "Send me a new code" on the verification screen. Same silence: a resend
     // for an address with no account sends nothing and says nothing.
+    //
+    // It also sends nothing for an address that HAS an account but is not a
+    // client. signInWithOtp(shouldCreateUser:false) will happily mail a
+    // working sign-in code to ANY existing user, so without this guard a
+    // resend aimed at a staff address would log that staff account straight
+    // into the portal — bypassing the roster gate that register enforces. The
+    // register path files a family as role='client'; resend only proceeds when
+    // it finds exactly that. Everything else is indistinguishable from an
+    // address with no account, preserving the enumeration silence.
     case 'resend': {
       defer(
         (async () => {
           if (await overLimit('resend', 5, 20)) return;
+
+          const { data: profs } = await admin
+            .from('profiles')
+            .select('role')
+            .ilike('email', escapeLike(email))
+            .limit(1);
+          if (profs?.[0]?.role !== 'client') {
+            await log('client_otp_resent', 'failure', { email, reason: 'not_a_client' });
+            return;
+          }
+
           const { error } = await anon.auth.signInWithOtp({
             email,
             options: { shouldCreateUser: false },
