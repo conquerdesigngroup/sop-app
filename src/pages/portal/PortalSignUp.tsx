@@ -249,11 +249,11 @@ const PortalSignUp: React.FC = () => {
                 address you enrolled with, or ask us at the front desk.
               </p>
               <Input
-                label="6-digit code"
+                label="Code from your email"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 value={code}
-                onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
                 error={error || undefined}
                 disabled={busy}
                 style={{ ...inputFontFix, letterSpacing: '0.25em', fontFamily: theme.fonts.mono }}
