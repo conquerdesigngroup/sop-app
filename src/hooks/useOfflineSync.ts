@@ -7,6 +7,7 @@ import {
   PendingChange,
 } from '../lib/indexedDB';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { logActivity } from '../lib/activityLog';
 
 export const useOfflineSync = () => {
   const [isOnline, setIsOnline] = useState(checkIsOnline());
@@ -97,6 +98,30 @@ export const useOfflineSync = () => {
 
     switch (changeType) {
       case 'create':
+        if (tableName === 'work_hours') {
+          // A replayed submission is the deferred half of addWorkHours —
+          // the online path logs its own insert, so this is the only place
+          // a queued entry's audit trail can come from. .select() recovers
+          // the DB-assigned id the queued payload does not carry.
+          const { data: inserted, error: createWorkHoursError } = await supabase
+            .from(tableName)
+            .insert(dbData)
+            .select()
+            .single();
+          if (createWorkHoursError) throw createWorkHoursError;
+          void logActivity({
+            action: 'work_hours_submitted',
+            entityType: 'work_hours',
+            entityId: inserted?.id,
+            entityTitle: dbData.work_date,
+            details: {
+              employeeId: dbData.employee_id,
+              workDate: dbData.work_date,
+              offlineReplay: true,
+            },
+          });
+          break;
+        }
         const { error: createError } = await supabase.from(tableName).insert(dbData);
         if (createError) throw createError;
         break;

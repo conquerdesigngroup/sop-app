@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePortalAdmin, describeWriteError, DocumentInput } from '../../contexts/PortalAdminContext';
 import { PortalClass, PortalDocument, PortalProgram } from '../../types';
 import { formatFileSize } from '../../lib/portal';
+import { logActivity } from '../../lib/activityLog';
 import { DOCUMENT_ACCEPT, DOCUMENT_HINT, validateDocumentFile } from '../../lib/portalAdmin';
 import { compatibilityWarning, mediaKindOf } from '../../lib/portalMedia';
 import { useAdminList } from './useAdminList';
@@ -268,6 +269,16 @@ const DocumentsSection: React.FC<{
     }
   };
 
+  const logDownload = (doc: PortalDocument) => {
+    void logActivity({
+      action: 'document_downloaded',
+      entityType: 'document',
+      entityId: doc.id,
+      entityTitle: doc.title,
+      details: { fileName: doc.fileName, via: 'manager' },
+    });
+  };
+
   /**
    * The fallback for a file the batch signing did not cover.
    *
@@ -287,6 +298,7 @@ const DocumentsSection: React.FC<{
       toastError('That file could not be opened. It may have been removed from storage.');
       return;
     }
+    logDownload(doc);
     window.location.assign(url);
   };
 
@@ -341,6 +353,9 @@ const DocumentsSection: React.FC<{
                     href={previews[doc.storagePath]}
                     target="_blank"
                     rel="noopener noreferrer"
+                    // Fires alongside the navigation, never instead of it —
+                    // onClick on an <a href> does not swallow the tap.
+                    onClick={() => logDownload(doc)}
                     style={{
                       display: 'inline-block',
                       marginTop: '8px',

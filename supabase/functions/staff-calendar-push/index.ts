@@ -195,11 +195,50 @@ Deno.serve(async (req: Request) => {
   // past the auth check rather than being scoped to it.
   let actor = 'cron';
 
-  if (!isService) {
-    const caller = createClient(url, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
+  // Hoisted out of the auth block because the audit log writes through it:
+  // with a session, log_activity takes the actor from the JWT, so the rows
+  // name the real person whatever this code claims.
+  const caller = isService
+    ? null
+    : createClient(url, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false },
+      });
+
+  // Parsed before the role check so a denied attempt can be logged with what
+  // it tried to do, as portal-admin does.
+  let body: PushBody;
+  try {
+    body = await req.json();
+  } catch {
+    return json(400, { error: 'Body must be JSON' });
+  }
+
+  // Same helper as portal-admin. The service role has no session for the RPC
+  // to read, so that path must name itself via the attribution parameters.
+  const log = async (
+    action: string,
+    entityType: string,
+    entityId: string | null,
+    entityTitle: string | null,
+    details: Record<string, unknown>,
+    result: 'success' | 'failure' = 'success',
+  ) => {
+    const params = {
+      p_action: action,
+      p_entity_type: entityType,
+      p_entity_id: entityId,
+      p_entity_title: entityTitle,
+      p_details: details,
+      p_result: result,
+    };
+    const { error } = caller
+      ? await caller.rpc('log_activity', params)
+      : await admin.rpc('log_activity', { ...params, p_actor_kind: 'system', p_actor_id: 'cron' });
+    if (error) console.error('staff-calendar-push could not write log:', error.message);
+  };
+
+  if (caller) {
     const { data: userData, error: userErr } = await caller.auth.getUser();
     if (userErr || !userData?.user) return json(401, { error: 'Invalid or expired session' });
 
@@ -208,17 +247,17 @@ Deno.serve(async (req: Request) => {
 
     const isManagement = profile?.role === 'admin' || profile?.role === 'super_admin';
     if (!profile || !isManagement || profile.is_active === false) {
+      // A signed-in non-admin probing this endpoint is a fact worth keeping,
+      // like portal-admin's denial row. The session names them.
+      await log('calendar_push_denied', 'system', userData.user.id, null, {
+        attemptedAction: body?.action ?? 'unknown',
+        calendarId: body?.calendarId ?? null,
+        reason: 'not_admin',
+      }, 'failure');
       return json(403, { error: 'Only admins can change the studio calendar.' });
     }
 
     actor = userData.user.id;
-  }
-
-  let body: PushBody;
-  try {
-    body = await req.json();
-  } catch {
-    return json(400, { error: 'Body must be JSON' });
   }
 
   if (!['create', 'update', 'delete'].includes(body.action)) {
@@ -299,6 +338,12 @@ Deno.serve(async (req: Request) => {
     if (!res.ok && res.status !== 410) {
       const detail = await res.text().catch(() => '');
       console.error('Google delete failed:', res.status, detail.slice(0, 300));
+      await log('event_deleted', 'event', body.eventId ?? null, null, {
+        calendarId: body.calendarId,
+        googleEventId: body.googleEventId,
+        reason: 'google_refused',
+        status: res.status,
+      }, 'failure');
       return json(res.status, { error: 'Google refused the delete.', status: res.status });
     }
 
@@ -328,14 +373,23 @@ Deno.serve(async (req: Request) => {
       .update({ last_used_at: new Date().toISOString(), last_error: null })
       .eq('id', 'calendar');
 
+    // The delete body carries no title, so the Google ids are the identity.
+    await log('event_deleted', 'event', body.eventId ?? null, null, {
+      calendarId: body.calendarId,
+      googleEventId: body.googleEventId,
+      warning: rowWarning,
+    });
+
     return json(200, { deleted: true, warning: rowWarning });
   }
 
   // -------------------------------------------------------- create / update
   const cleaned = cleanGoogleEvent(body.googleEvent);
   if ('error' in cleaned) return json(400, { error: cleaned.error });
+  const summary = String(cleaned.event.summary);
 
   const isUpdate = body.action === 'update';
+  const pushAction = isUpdate ? 'event_updated' : 'event_created';
   if (isUpdate && !body.googleEventId) {
     return json(400, { error: 'googleEventId is required to update' });
   }
@@ -369,6 +423,12 @@ Deno.serve(async (req: Request) => {
 
   if (!res.ok) {
     console.error('Google write failed:', res.status, saved?.error?.message);
+    await log(pushAction, 'event', body.eventId ?? null, summary, {
+      calendarId: body.calendarId,
+      reason: 'google_refused',
+      status: res.status,
+      message: saved?.error?.message ?? null,
+    }, 'failure');
     return json(res.status, {
       error: 'Google refused the change.',
       description: saved?.error?.message ?? null,
@@ -414,11 +474,18 @@ Deno.serve(async (req: Request) => {
   // success. The undefined-id case was already guarded above for exactly this
   // reason; this is the same hole one step along.
   if (!writeErr && isUpdate && !written) {
+    const warning = 'Saved to Google, but the app copy was not found to update. The next sync will bring it back in.';
+    await log(pushAction, 'event', body.eventId ?? null, summary, {
+      calendarId: body.calendarId,
+      calendarLabel: source.label,
+      googleEventId: row.google_event_id,
+      warning,
+    });
     return json(200, {
       googleEventId: row.google_event_id,
       googleApiEventId: saved.id,
       row: null,
-      warning: 'Saved to Google, but the app copy was not found to update. The next sync will bring it back in.',
+      warning,
     });
   }
 
@@ -426,17 +493,31 @@ Deno.serve(async (req: Request) => {
     // Google is already updated, so this is not a failure the studio can
     // retry into a clean state — say so plainly. The next sync reconciles it.
     console.error('Row write failed after a successful Google write:', writeErr.message);
+    const warning = 'Saved to Google, but the app copy did not update. The next sync will correct it.';
+    await log(pushAction, 'event', body.eventId ?? null, summary, {
+      calendarId: body.calendarId,
+      calendarLabel: source.label,
+      googleEventId: row.google_event_id,
+      warning,
+    });
     return json(200, {
       googleEventId: row.google_event_id,
       googleApiEventId: saved.id,
       row: null,
-      warning: 'Saved to Google, but the app copy did not update. The next sync will correct it.',
+      warning,
     });
   }
 
   await admin.from('google_credentials')
     .update({ last_used_at: new Date().toISOString(), last_error: null })
     .eq('id', 'calendar');
+
+  await log(pushAction, 'event', body.eventId ?? written?.id ?? null, summary, {
+    calendarId: body.calendarId,
+    calendarLabel: source.label,
+    googleEventId: row.google_event_id,
+    warning: null,
+  });
 
   return json(200, {
     googleEventId: row.google_event_id,

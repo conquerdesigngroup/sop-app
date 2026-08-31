@@ -4,7 +4,8 @@ import { isManagementRole, isSuperAdminRole } from '../lib/roles';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { logActivity } from '../utils/activityLogger';
-import { reportSignInFailure } from '../lib/clientAuth';
+import { logActivity as logViaRpc } from '../lib/activityLog';
+import { reportSignInFailure, reportResetRequested } from '../lib/clientAuth';
 import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
 
 interface AddUserResult {
@@ -383,6 +384,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // the password grant would leave a live session behind a login screen
         // that just told them "no".
         if (profile && !profileError && profile.role === 'client') {
+          // Awaited, and before the signOut: the log RPC attributes the actor
+          // from the JWT, which the signOut is about to destroy.
+          await logViaRpc({
+            action: 'user_sign_in_failed',
+            entityType: 'user',
+            entityId: data.user.id,
+            entityTitle: email,
+            result: 'failure',
+            details: { reason: 'client_role_on_staff_login' },
+          });
           await supabase.auth.signOut();
           return false;
         }
@@ -405,6 +416,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return true;
         } else {
           console.error('Profile lookup failed:', { profileError, profile, userId: data.user.id });
+          void logViaRpc({
+            action: 'user_sign_in_failed',
+            entityType: 'user',
+            entityId: data.user.id,
+            entityTitle: email,
+            result: 'failure',
+            details: { reason: profile ? 'account_deactivated' : 'profile_missing' },
+          });
         }
       }
 
@@ -612,6 +631,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       if (error) console.error('Password reset request failed:', error);
+      // Logged whether or not the address exists. The visitor is anon here and
+      // v29 revokes log_activity from anon, so the server writes the row —
+      // same reporter the portal's requestReset uses.
+      reportResetRequested(email.trim());
       return { success: true };
     } catch (error: any) {
       console.error('Password reset request failed:', error);
@@ -848,6 +871,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (signInError || !user) {
         console.error('Current password verification failed:', signInError);
+        void logViaRpc({
+          action: 'user_password_changed',
+          entityType: 'user',
+          entityId: currentUser?.id,
+          entityTitle: currentUser?.email,
+          result: 'failure',
+          details: { reason: 'wrong_current_password' },
+        });
         return { success: false, error: 'Current password is incorrect' };
       }
 
@@ -858,6 +889,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Error changing password:', error);
+        void logViaRpc({
+          action: 'user_password_changed',
+          entityType: 'user',
+          entityId: currentUser?.id,
+          entityTitle: currentUser?.email,
+          result: 'failure',
+          details: { reason: 'update_rejected' },
+        });
         return { success: false, error: error.message };
       }
 

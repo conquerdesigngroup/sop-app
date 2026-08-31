@@ -7,7 +7,9 @@ import {
   PORTAL_UPDATE_PASSWORD_PATH,
   portalRegister,
   portalResendCode,
+  reportResetRequested,
   reportSignInFailure,
+  reportVerifyFailure,
 } from '../lib/clientAuth';
 
 /**
@@ -124,6 +126,14 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
       // even though new sign-ins are banned. Treat the profile flag as the
       // truth and end the session rather than showing them empty pages.
       if (p && p.role === 'client' && !p.isActive) {
+        // Awaited BEFORE signOut: the RPC attributes the actor from the JWT,
+        // which signOut revokes. logActivity never throws.
+        await logActivity({
+          action: 'user_signed_out',
+          entityType: 'user',
+          entityId: p.id,
+          details: { surface: 'portal', forced: true, reason: 'deactivated' },
+        });
         await supabase.auth.signOut();
         setProfile(null);
       } else {
@@ -179,6 +189,16 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
 
     const p = await loadProfile(data.user.id);
     if (p && p.role === 'client' && !p.isActive) {
+      // Awaited BEFORE signOut: the RPC attributes the actor from the JWT,
+      // which signOut revokes. logActivity never throws.
+      await logActivity({
+        action: 'user_sign_in_failed',
+        entityType: 'user',
+        entityId: data.user.id,
+        entityTitle: cleanEmail,
+        result: 'failure',
+        details: { surface: 'portal', reason: 'deactivated' },
+      });
       await supabase.auth.signOut();
       return { ok: false, error: 'This account has been disabled. Please contact the studio.' };
     }
@@ -230,6 +250,9 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
     });
 
     if (error || !data?.session) {
+      // The browser is anon here and v29 revokes log_activity from anon, so
+      // the failure is reported via portal-signup instead.
+      reportVerifyFailure(email.trim().toLowerCase());
       // Wrong code and nonexistent account read identically here, which is
       // exactly right — this screen must not become the roster oracle the
       // signup endpoint refuses to be.
@@ -256,11 +279,10 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
         return { ok: false, error: 'Too many attempts. Please wait a minute and try again.' };
       }
       if (error) console.error('Portal reset request failed:', error);
-      void logActivity({
-        action: 'user_password_reset_requested',
-        entityType: 'user',
-        details: { surface: 'portal' },
-      });
+      // Logged server-side via portal-signup: this form only renders signed
+      // out (PortalLogin redirects sessions away), and v29 revokes
+      // log_activity from anon, so a logActivity here would be dropped.
+      reportResetRequested(email.trim().toLowerCase());
       return { ok: true };
     } catch (e) {
       console.error('Portal reset request threw:', e);
@@ -281,6 +303,14 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
       password: current,
     });
     if (reauthErr) {
+      void logActivity({
+        action: 'user_password_changed',
+        entityType: 'user',
+        entityId: profile.id,
+        entityTitle: `${profile.firstName} ${profile.lastName}`.trim() || profile.email,
+        result: 'failure',
+        details: { surface: 'portal', reason: 'wrong_current_password' },
+      });
       return { ok: false, error: 'Your current password is not right.' };
     }
 

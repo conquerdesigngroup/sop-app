@@ -879,7 +879,6 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
           entityTitle: sopData.title || existingSOP.title,
           details: {
             changedFields,
-            changes: sopData,
           },
         });
       }
@@ -909,20 +908,20 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
         throw error;
       }
 
-      // Log activity
-      if (currentUser && existingSOP) {
+      // Log activity — the DB update above ran even if the SOP is missing from
+      // local state, so don't gate the log on existingSOP
+      if (currentUser) {
         const changedFields = Object.keys(sopData).filter(key => key !== 'updatedAt');
         logActivity({
           userId: currentUser.id,
           userEmail: currentUser.email,
           userName: `${currentUser.firstName} ${currentUser.lastName}`,
           action: 'sop_updated',
-          entityType: existingSOP.isTemplate ? 'template' : 'sop',
+          entityType: existingSOP?.isTemplate ? 'template' : 'sop',
           entityId: id,
-          entityTitle: sopData.title || existingSOP.title,
+          entityTitle: sopData.title || existingSOP?.title,
           details: {
             changedFields,
-            changes: sopData,
           },
         });
       }

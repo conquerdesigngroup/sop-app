@@ -1,0 +1,29 @@
+-- =============================================================================
+-- Migration v31 — audit log truly immutable: close the TRUNCATE door
+-- =============================================================================
+--
+-- Independent of v30 (which waits for launch day). Apply this one immediately.
+--
+-- AUDIT-LOG-SPEC.md §8.10 requires that updating a log row is impossible for
+-- everybody and deleting one is possible only as super_admin. v29 revoked
+-- UPDATE and left DELETE behind an is_super_admin() policy — but a grants
+-- check on the live table showed anon and authenticated still holding
+-- TRUNCATE, TRIGGER and REFERENCES, inherited from the schema's original
+-- blanket GRANT ALL.
+--
+-- TRUNCATE is the one that matters: row-level security does not apply to
+-- TRUNCATE at all (it is not a row-level operation), so the privilege — not
+-- any policy — is the only thing standing between an API role and an empty
+-- audit table. PostgREST does not expose TRUNCATE today, which is why this
+-- has not been exploitable, but an immutability guarantee that depends on
+-- what PostgREST happens not to expose is not a guarantee.
+--
+-- TRIGGER and REFERENCES go for the same hygiene reason: no API role creates
+-- triggers on or foreign keys into the audit table, so no API role holds the
+-- right to.
+--
+-- INSERT stays (the WITH CHECK policy is the backstop behind log_activity),
+-- SELECT stays (policy: super_admin only), DELETE stays (policy: super_admin
+-- only).
+
+revoke truncate, trigger, references on public.activity_logs from anon, authenticated;

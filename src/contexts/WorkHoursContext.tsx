@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { queueWorkHoursOffline, getQueuedWorkHours } from '../lib/indexedDB';
 import { isNetworkFailure } from '../lib/networkErrors';
+import { logActivity } from '../lib/activityLog';
 
 interface WorkHoursContextType {
   workHours: WorkHoursEntry[];
@@ -515,6 +516,15 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         throw thrown;
       }
 
+      if (error || !data) {
+        void logActivity({
+          action: 'work_hours_submitted',
+          entityType: 'work_hours',
+          entityTitle: newEntry.workDate,
+          result: 'failure',
+          details: { reason: 'rls_refused' },
+        });
+      }
       raise(error, 'Could not save these hours');
       if (!data) {
         throw new Error(
@@ -523,6 +533,19 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         );
       }
       setWorkHours(prev => [mapSupabaseWorkHours(data), ...prev]);
+      void logActivity({
+        action: 'work_hours_submitted',
+        entityType: 'work_hours',
+        entityId: data.id,
+        entityTitle: newEntry.workDate,
+        details: {
+          employeeId: newEntry.employeeId,
+          workDate: newEntry.workDate,
+          startTime: newEntry.startTime,
+          endTime: newEntry.endTime,
+          breakMinutes: newEntry.breakMinutes,
+        },
+      });
     } else {
       setWorkHours(prev => [newEntry, ...prev]);
     }
@@ -569,7 +592,23 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         .select();
 
       raise(error, 'Could not update these hours');
+
+      // Logged here rather than in approveWorkHours/rejectWorkHours: both
+      // wrappers route through this function, so this single status-aware
+      // call covers plain edits, approvals and rejections without doubling.
+      const logAction = finalUpdates.status === 'approved' ? 'work_hours_approved'
+        : finalUpdates.status === 'rejected' ? 'work_hours_rejected'
+        : 'work_hours_updated';
+
       if (!data || data.length === 0) {
+        void logActivity({
+          action: logAction,
+          entityType: 'work_hours',
+          entityId: id,
+          entityTitle: existing?.workDate,
+          result: 'failure',
+          details: { reason: 'rls_refused_or_locked' },
+        });
         throw new Error(
           'Could not update these hours: no matching entry. ' +
           'Approved entries are locked, and you can only change your own.'
@@ -580,6 +619,29 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
       setWorkHours(prev => prev.map(wh =>
         wh.id === id ? mapSupabaseWorkHours(data[0]) : wh
       ));
+
+      const logDetails: Record<string, unknown> = {
+        employeeId: existing?.employeeId,
+        workDate: existing?.workDate,
+        totalHours: existing?.totalHours,
+      };
+      (['status', 'workDate', 'startTime', 'endTime', 'breakMinutes', 'categoryId'] as const)
+        .forEach(field => {
+          const to = finalUpdates[field];
+          if (to !== undefined && to !== existing?.[field]) {
+            logDetails[field] = { from: existing?.[field] ?? null, to };
+          }
+        });
+      if (finalUpdates.rejectionReason) {
+        logDetails.rejectionReason = finalUpdates.rejectionReason;
+      }
+      void logActivity({
+        action: logAction,
+        entityType: 'work_hours',
+        entityId: id,
+        entityTitle: existing?.workDate,
+        details: logDetails,
+      });
     } else {
       const updated = existing ? { ...existing, ...finalUpdates } : undefined;
       setWorkHours(prev => prev.map(wh =>
@@ -628,12 +690,33 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       raise(error, 'Could not delete this entry');
       if (!data || data.length === 0) {
+        void logActivity({
+          action: 'work_hours_deleted',
+          entityType: 'work_hours',
+          entityId: id,
+          result: 'failure',
+          details: { reason: 'rls_refused_or_locked' },
+        });
         throw new Error(
           'Could not delete this entry: no matching entry. ' +
           'Approved entries are locked, and you can only delete your own.'
         );
       }
       setWorkHours(prev => prev.filter(wh => wh.id !== id));
+      // status makes deletions of approved entries — which also remove the
+      // frozen pay against them — visible in the log.
+      void logActivity({
+        action: 'work_hours_deleted',
+        entityType: 'work_hours',
+        entityId: id,
+        entityTitle: data[0].work_date,
+        details: {
+          employeeId: data[0].employee_id,
+          workDate: data[0].work_date,
+          status: data[0].status,
+          totalHours: data[0].total_hours,
+        },
+      });
     } else {
       setWorkHours(prev => prev.filter(wh => wh.id !== id));
     }
@@ -961,6 +1044,10 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     const rate = Math.round(hourlyRate * 100) / 100;
 
     if (useSupabase) {
+      const prevRate = employeePayRates.find(
+        r => r.employeeId === employeeId && r.categoryId === categoryId
+      )?.hourlyRate;
+
       const { data, error } = await supabase
         .from('employee_pay_rates')
         .upsert(
@@ -970,6 +1057,15 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         .select()
         .single();
 
+      if (error || !data) {
+        void logActivity({
+          action: 'pay_rate_changed',
+          entityType: 'user',
+          entityId: employeeId,
+          result: 'failure',
+          details: { employeeId, categoryId, reason: 'rls_refused' },
+        });
+      }
       raise(error, 'Could not save this rate');
       if (!data) throw new Error('Could not save this rate: only admins can change pay rates.');
 
@@ -977,6 +1073,16 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
       setEmployeePayRates(prev => {
         const without = prev.filter(r => !(r.employeeId === employeeId && r.categoryId === categoryId));
         return [...without, mapped];
+      });
+      void logActivity({
+        action: 'pay_rate_changed',
+        entityType: 'user',
+        entityId: employeeId,
+        details: {
+          employeeId,
+          categoryId,
+          hourlyRate: { from: prevRate ?? null, to: rate },
+        },
       });
     } else {
       setEmployeePayRates(prev => {
@@ -990,7 +1096,7 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         }];
       });
     }
-  }, [useSupabase]);
+  }, [useSupabase, employeePayRates]);
 
   /** The configured rate, or undefined when none is set (which pays 0). */
   const getEmployeePayRate = useCallback((employeeId: string, categoryId?: string | null) => {

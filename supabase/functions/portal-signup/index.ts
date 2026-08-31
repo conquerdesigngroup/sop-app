@@ -96,7 +96,7 @@ const defer = (p: Promise<unknown>): Promise<unknown> | void => {
 };
 
 interface BaseBody {
-  action: 'check' | 'register' | 'resend' | 'signin_failed';
+  action: 'check' | 'register' | 'resend' | 'signin_failed' | 'verify_failed' | 'reset_requested';
   email?: string;
   password?: string;
   firstName?: string;
@@ -230,6 +230,11 @@ Deno.serve(async (req: Request) => {
 
           if (rosterErr) {
             console.error('portal-signup roster lookup failed:', rosterErr.message);
+            await log('client_signup_rejected', 'failure', {
+              email,
+              reason: 'roster_lookup_failed',
+              message: rosterErr.message,
+            });
             return;
           }
           if (!rows || rows.length === 0) {
@@ -345,7 +350,10 @@ Deno.serve(async (req: Request) => {
     case 'resend': {
       defer(
         (async () => {
-          if (await overLimit('resend', 5, 20)) return;
+          if (await overLimit('resend', 5, 20)) {
+            await log('client_otp_resent', 'failure', { email, reason: 'rate_limited', ip });
+            return;
+          }
 
           const { data: profs } = await admin
             .from('profiles')
@@ -363,6 +371,13 @@ Deno.serve(async (req: Request) => {
           });
           if (!error) {
             await log('client_otp_resent', 'success', { email });
+          } else {
+            console.error('portal-signup resend OTP failed:', error.message);
+            await log('client_otp_resent', 'failure', {
+              email,
+              reason: 'send_failed',
+              message: error.message,
+            });
           }
         })(),
       );
@@ -380,6 +395,36 @@ Deno.serve(async (req: Request) => {
         (async () => {
           if (await overLimit('signin_failed', 10, 20)) return;
           await log('user_sign_in_failed', 'failure', { email, source: 'client_reported', ip });
+        })(),
+      );
+      return respondOk();
+    }
+
+    // ----------------------------------------------------- verify_failed
+    // Same telemetry as signin_failed, for the verify screen. The browser's
+    // verifyOtp error is identical for a wrong code and a nonexistent account
+    // (deliberately), and the browser is anon there — v29 revokes log_activity
+    // from anon — so without this row, brute-forcing codes is invisible to the
+    // audit log while failed sign-ins are not. Never the attempted code.
+    case 'verify_failed': {
+      defer(
+        (async () => {
+          if (await overLimit('verify_failed', 10, 20)) return;
+          await log('client_email_verify_failed', 'failure', { email, source: 'client_reported', ip });
+        })(),
+      );
+      return respondOk();
+    }
+
+    // ---------------------------------------------------- reset_requested
+    // The reset form only renders signed out (PortalLogin redirects sessions
+    // away), so the same anon constraint applies: the browser cannot write
+    // this row itself and reports it here instead.
+    case 'reset_requested': {
+      defer(
+        (async () => {
+          if (await overLimit('reset_requested', 5, 20)) return;
+          await log('user_password_reset_requested', 'success', { email, source: 'client_reported', ip });
         })(),
       );
       return respondOk();

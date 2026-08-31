@@ -12,6 +12,7 @@ import {
 } from '../lib/portalMappers';
 import { buildStoragePath } from '../lib/portalAdmin';
 import { signDocumentUrls, removeStorageObject } from '../lib/portalStorage';
+import { logActivity } from '../lib/activityLog';
 
 /**
  * Authoring for the parent portal — the staff half of the portal_* tables.
@@ -231,6 +232,12 @@ export const describeWriteError = (e: any): string => {
   return msg || 'That did not save. Please try again.';
 };
 
+/** Log-details reason for a refused write. RLS is the one worth naming. */
+const failureReason = (e: any): string =>
+  e?.code === '42501' || /row-level security/i.test(e?.message ?? '')
+    ? 'rls_refused'
+    : 'db_error';
+
 export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { isAuthenticated, currentUser, isAdmin } = useAuth();
 
@@ -393,20 +400,43 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       published_at: input.isPublished ? (input.publishedAt ?? new Date().toISOString()) : null,
     };
 
+    const log = {
+      action: input.isPublished ? 'update_posted' : 'update_updated',
+      entityType: 'update',
+      entityTitle: row.title,
+      details: {
+        programId: input.programId,
+        classId: input.classId,
+        isPublished: input.isPublished,
+        isPinned: input.isPinned,
+      },
+    };
+
     if (input.id) {
       const { error } = await supabase.from('portal_updates').update(row).eq('id', input.id);
-      if (error) throw error;
+      if (error) {
+        void logActivity({ ...log, entityId: input.id, result: 'failure', details: { reason: failureReason(error) } });
+        throw error;
+      }
+      void logActivity({ ...log, entityId: input.id });
     } else {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('portal_updates')
-        .insert({ ...row, author_id: authorId });
-      if (error) throw error;
+        .insert({ ...row, author_id: authorId })
+        .select('id')
+        .single();
+      if (error) {
+        void logActivity({ ...log, result: 'failure', details: { reason: failureReason(error) } });
+        throw error;
+      }
+      void logActivity({ ...log, entityId: data.id as string });
     }
   }, [authorId]);
 
   const deleteUpdate = useCallback(async (id: string) => {
     const { error } = await supabase.from('portal_updates').delete().eq('id', id);
     if (error) throw error;
+    void logActivity({ action: 'update_deleted', entityType: 'update', entityId: id });
   }, []);
 
   // ----------------------------------------------------------------- events
@@ -424,20 +454,40 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       is_published: input.isPublished,
     };
 
+    const details = {
+      programId: input.programId,
+      classId: input.classId,
+      startsAt: input.startsAt,
+      isPublished: input.isPublished,
+    };
+
     if (input.id) {
       const { error } = await supabase.from('portal_events').update(row).eq('id', input.id);
       if (error) throw error;
+      void logActivity({
+        action: 'event_updated', entityType: 'event', entityId: input.id,
+        entityTitle: row.title, details,
+      });
     } else {
       // source stays at its 'manual' default. The phase-4 Google sync owns
       // 'google' rows and overwrites them; it must never touch these.
-      const { error } = await supabase.from('portal_events').insert(row);
+      const { data, error } = await supabase
+        .from('portal_events')
+        .insert(row)
+        .select('id')
+        .single();
       if (error) throw error;
+      void logActivity({
+        action: 'event_created', entityType: 'event', entityId: data.id as string,
+        entityTitle: row.title, details,
+      });
     }
   }, []);
 
   const deleteEvent = useCallback(async (id: string) => {
     const { error } = await supabase.from('portal_events').delete().eq('id', id);
     if (error) throw error;
+    void logActivity({ action: 'event_deleted', entityType: 'event', entityId: id });
   }, []);
 
   // -------------------------------------------------------------- documents
@@ -474,7 +524,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     if (uploadErr) throw uploadErr;
 
     onProgress?.('saving');
-    const { error: rowErr } = await supabase.from('portal_documents').insert({
+    const { data, error: rowErr } = await supabase.from('portal_documents').insert({
       program_id: meta.programId,
       class_id: meta.classId,
       title: meta.title.trim(),
@@ -487,13 +537,31 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       sort_order: meta.sortOrder,
       is_published: meta.isPublished,
       uploaded_by: authorId,
-    });
+    }).select('id').single();
 
     if (rowErr) {
       await supabase.storage.from('portal-documents').remove([storagePath])
         .catch(() => { /* leaves an invisible object; the row is what matters */ });
+      void logActivity({
+        action: 'document_uploaded', entityType: 'document', entityTitle: meta.title.trim(),
+        result: 'failure',
+        details: { fileName: file.name, reason: failureReason(rowErr) },
+      });
       throw rowErr;
     }
+
+    void logActivity({
+      action: 'document_uploaded', entityType: 'document', entityId: data.id as string,
+      entityTitle: meta.title.trim(),
+      details: {
+        programId: meta.programId,
+        classId: meta.classId,
+        fileName: file.name,
+        sizeBytes: file.size,
+        category: meta.category,
+        isPublished: meta.isPublished,
+      },
+    });
   }, [authorId]);
 
   /** Title, class, category and visibility. The file itself is immutable. */
@@ -510,6 +578,15 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       })
       .eq('id', input.id);
     if (error) throw error;
+    // The save cannot see whether is_published changed, so it is logged as the
+    // visibility it left the row in — which is what a parent experiences.
+    void logActivity({
+      action: input.isPublished ? 'document_published' : 'document_unpublished',
+      entityType: 'document',
+      entityId: input.id,
+      entityTitle: input.title.trim(),
+      details: { classId: input.classId, category: input.category, isPublished: input.isPublished },
+    });
   }, []);
 
   /**
@@ -539,6 +616,11 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     const { error } = await supabase.from('portal_documents').delete().eq('id', doc.id);
     if (error) throw error;
+    void logActivity({
+      action: 'document_deleted', entityType: 'document', entityId: doc.id,
+      entityTitle: doc.title,
+      details: { fileName: doc.fileName, storagePath: doc.storagePath, sizeBytes: doc.sizeBytes },
+    });
   }, []);
 
   const getDocumentUrl = useCallback(async (storagePath: string) => {
@@ -589,6 +671,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     if (input.id) {
       const { error } = await supabase.from('portal_classes').update(row).eq('id', input.id);
       if (error) throw error;
+      void logActivity({
+        action: 'class_updated', entityType: 'class', entityId: input.id, entityTitle: row.name,
+        details: { programId: input.programId, isActive: input.isActive, season: input.season },
+      });
       return input.id;
     }
 
@@ -601,12 +687,20 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       .select('id')
       .single();
     if (error) throw error;
+    void logActivity({
+      action: 'class_created', entityType: 'class', entityId: data.id as string, entityTitle: row.name,
+      details: { programId: input.programId, isActive: input.isActive, season: input.season },
+    });
     return data.id as string;
   }, []);
 
   const deleteClass = useCallback(async (id: string) => {
     const { error } = await supabase.from('portal_classes').delete().eq('id', id);
     if (error) throw error;
+    void logActivity({
+      action: 'class_deleted', entityType: 'class', entityId: id,
+      details: { cascades: 'documents_and_updates' },
+    });
   }, []);
 
   const fetchClassInstructors = useCallback(async (classId: string) => {
@@ -645,6 +739,13 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
         .eq('class_id', classId)
         .in('profile_id', removed);
       if (error) throw error;
+    }
+
+    if (added.length || removed.length) {
+      void logActivity({
+        action: 'class_updated', entityType: 'class', entityId: classId,
+        details: { instructors: { granted: added.length, revoked: removed.length } },
+      });
     }
 
     // The signed-in admin may have just granted or revoked their own access.
@@ -748,8 +849,14 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       .update({ requires_code: requiresCode })
       .eq('id', programId);
     if (error) throw error;
+    const program = programs.find(p => p.id === programId);
+    void logActivity({
+      action: 'portal_gate_toggled', entityType: 'program', entityId: programId,
+      entityTitle: program?.name,
+      details: { requiresCode: { from: program?.requiresCode, to: requiresCode } },
+    });
     setPrograms(prev => prev.map(p => (p.id === programId ? { ...p, requiresCode } : p)));
-  }, []);
+  }, [programs]);
 
   /**
    * The code is hashed inside Postgres and never comes back out. This function
@@ -758,6 +865,12 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
   const setAccessCode = useCallback(async (slug: PortalProgramSlug, code: string) => {
     const { error } = await supabase.rpc('set_portal_code', { p_slug: slug, p_code: code });
     if (error) throw error;
+    // Only the fact of the change is logged — the code itself must never
+    // appear in details, same allowlist rule as the hash-only column above.
+    void logActivity({
+      action: 'portal_code_changed', entityType: 'program', entityTitle: slug,
+      details: { program: slug },
+    });
   }, []);
 
   const programHasCode = useCallback(async (slug: PortalProgramSlug) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
 import { Spinner } from '../ui';
 import { usePortal } from '../../contexts/PortalContext';
@@ -238,26 +238,39 @@ const VideoBlock: React.FC<{
   url: string;
   onUndisplayable: () => void;
   onDownload?: (doc: PortalDocument) => void;
-}> = ({ doc, url, onUndisplayable, onDownload }) => (
-  <div style={CARD}>
-    <video
-      src={url}
-      controls
-      playsInline
-      preload="metadata"
-      onError={onUndisplayable}
-      style={{
-        display: 'block',
-        width: '100%',
-        maxHeight: '70dvh',
-        // Literal black, not a theme token: letterboxing around a frame is
-        // black in both light and dark mode, the way every video player does it.
-        backgroundColor: '#000000',
-      }}
-    />
-    <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
-  </div>
-);
+}> = ({ doc, url, onUndisplayable, onDownload }) => {
+  // Pressing play is the open — it is when the file's content actually gets
+  // fetched. First play only: pausing and resuming re-fires onPlay, and one
+  // watch should be one onDownload.
+  const played = useRef(false);
+
+  return (
+    <div style={CARD}>
+      <video
+        src={url}
+        controls
+        playsInline
+        preload="metadata"
+        onPlay={() => {
+          if (!played.current) {
+            played.current = true;
+            onDownload?.(doc);
+          }
+        }}
+        onError={onUndisplayable}
+        style={{
+          display: 'block',
+          width: '100%',
+          maxHeight: '70dvh',
+          // Literal black, not a theme token: letterboxing around a frame is
+          // black in both light and dark mode, the way every video player does it.
+          backgroundColor: '#000000',
+        }}
+      />
+      <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
+    </div>
+  );
+};
 
 /** Music and voice notes. Same idea, and <audio> needs no frame. */
 const AudioBlock: React.FC<{
@@ -265,20 +278,31 @@ const AudioBlock: React.FC<{
   url: string;
   onUndisplayable: () => void;
   onDownload?: (doc: PortalDocument) => void;
-}> = ({ doc, url, onUndisplayable, onDownload }) => (
-  <div style={CARD}>
-    <div style={{ padding: '14px 14px 0' }}>
-      <audio
-        src={url}
-        controls
-        preload="metadata"
-        onError={onUndisplayable}
-        style={{ display: 'block', width: '100%' }}
-      />
+}> = ({ doc, url, onUndisplayable, onDownload }) => {
+  // First play only — see VideoBlock.
+  const played = useRef(false);
+
+  return (
+    <div style={CARD}>
+      <div style={{ padding: '14px 14px 0' }}>
+        <audio
+          src={url}
+          controls
+          preload="metadata"
+          onPlay={() => {
+            if (!played.current) {
+              played.current = true;
+              onDownload?.(doc);
+            }
+          }}
+          onError={onUndisplayable}
+          style={{ display: 'block', width: '100%' }}
+        />
+      </div>
+      <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
     </div>
-    <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
-  </div>
-);
+  );
+};
 
 /**
  * Everything else: one row, the whole of it a download link.

@@ -6,6 +6,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { logActivity } from '../lib/activityLog';
 
 // Types for integrity check results
 export interface IntegrityIssue {
@@ -94,13 +95,26 @@ async function checkTaskProgressConsistency(): Promise<IntegrityIssue[]> {
           fixAction: async () => {
             // Mark all steps as completed and set progress to 100%
             const allStepIds = steps.map((s: any) => s.id);
-            await supabase
+            const { error: fixError } = await supabase
               .from('job_tasks')
               .update({
                 progress_percentage: 100,
                 completed_steps: allStepIds
               })
               .eq('id', task.id);
+            if (!fixError) {
+              void logActivity({
+                action: 'task_updated',
+                entityType: 'task',
+                entityId: task.id,
+                entityTitle: task.title,
+                details: {
+                  autofix: 'completed_task_not_at_100',
+                  completed_steps: { from: completedCount, to: allStepIds.length },
+                  progress_percentage: { from: actualProgress, to: 100 },
+                },
+              });
+            }
           },
         });
       }
@@ -154,10 +168,23 @@ async function checkOrphanedAssignments(): Promise<IntegrityIssue[]> {
           autoFixable: true,
           fixAction: async () => {
             const validAssignees = assignedTo.filter((userId: string) => validUserIds.has(userId));
-            await supabase
+            const { error: fixError } = await supabase
               .from('job_tasks')
               .update({ assigned_to: validAssignees })
               .eq('id', task.id);
+            if (!fixError) {
+              void logActivity({
+                action: 'task_updated',
+                entityType: 'task',
+                entityId: task.id,
+                entityTitle: task.title,
+                details: {
+                  autofix: 'orphaned_assignment',
+                  removedAssigneeIds: invalidAssignees,
+                  assigneeCount: { from: assignedTo.length, to: validAssignees.length },
+                },
+              });
+            }
           },
         });
       }
@@ -358,10 +385,23 @@ async function checkSOPIntegrity(): Promise<IntegrityIssue[]> {
               id: s.id || `step_${Date.now()}_${i}`,
               order: i + 1,
             }));
-            await supabase
+            const { error: fixError } = await supabase
               .from('sops')
               .update({ steps: fixedSteps })
               .eq('id', sop.id);
+            if (!fixError) {
+              void logActivity({
+                action: 'sop_updated',
+                entityType: 'sop',
+                entityId: sop.id,
+                entityTitle: sop.title,
+                details: {
+                  autofix: 'missing_step_ids',
+                  changedFields: ['steps'],
+                  stepsGivenIds: missingIds.length,
+                },
+              });
+            }
           },
         });
       }
@@ -383,10 +423,23 @@ async function checkSOPIntegrity(): Promise<IntegrityIssue[]> {
               ...s,
               order: i + 1,
             }));
-            await supabase
+            const { error: fixError } = await supabase
               .from('sops')
               .update({ steps: fixedSteps })
               .eq('id', sop.id);
+            if (!fixError) {
+              void logActivity({
+                action: 'sop_updated',
+                entityType: 'sop',
+                entityId: sop.id,
+                entityTitle: sop.title,
+                details: {
+                  autofix: 'duplicate_step_orders',
+                  changedFields: ['steps'],
+                  stepsRenumbered: steps.length,
+                },
+              });
+            }
           },
         });
       }

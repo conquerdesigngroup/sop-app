@@ -104,3 +104,20 @@ export const portalResendCode = (email: string): Promise<boolean> =>
 export const reportSignInFailure = (email: string): void => {
   void invokeSignup({ action: 'signin_failed', email });
 };
+
+/**
+ * Failed OTP verification telemetry. Same contract as reportSignInFailure —
+ * the browser is anon on the verify screen and v29 revokes log_activity from
+ * anon, so the server writes the row (marked client_reported, rate limited).
+ */
+export const reportVerifyFailure = (email: string): void => {
+  void invokeSignup({ action: 'verify_failed', email });
+};
+
+/**
+ * Password-reset-request telemetry. The reset form only renders signed out,
+ * so the same anon constraint applies and the server writes the row.
+ */
+export const reportResetRequested = (email: string): void => {
+  void invokeSignup({ action: 'reset_requested', email });
+};

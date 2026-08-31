@@ -16,6 +16,9 @@ const mockRemove = jest.fn();
 const mockEq = jest.fn();
 
 jest.mock('./supabase', () => ({
+  // Not configured, so the fire-and-forget logActivity inside removeAttachment
+  // no-ops instead of reaching for an rpc this mock does not provide.
+  isSupabaseConfigured: () => false,
   supabase: {
     storage: {
       from: () => ({ remove: (...a: unknown[]) => mockRemove(...a) }),
