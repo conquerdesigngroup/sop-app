@@ -133,10 +133,6 @@ Deno.serve(async (req: Request) => {
     callerProfile.role === 'admin' || callerProfile.role === 'super_admin';
   const callerIsSuperAdmin = callerProfile.role === 'super_admin';
 
-  if (!callerIsManagement || callerProfile.is_active === false) {
-    return json(403, { error: 'Admin access required' });
-  }
-
   // ------------------------------------------------------------- dispatch
   let body: Body;
   try {
@@ -145,20 +141,43 @@ Deno.serve(async (req: Request) => {
     return json(400, { error: 'Body must be JSON' });
   }
 
-  const logActivity = async (action: string, entityId: string, entityTitle: string, details: unknown) => {
-    // Through `caller`: the activity_logs INSERT policy requires
-    // user_id = auth.uid(), so the service role could not write this row.
-    await caller.from('activity_logs').insert({
-      user_id: callerId,
-      user_email: callerProfile.email,
-      user_name: `${callerProfile.first_name} ${callerProfile.last_name}`.trim(),
-      action,
-      entity_type: 'user',
-      entity_id: entityId,
-      entity_title: entityTitle,
-      details,
+  // Through `caller`: with a session, log_activity takes identity from the
+  // JWT, so these rows name the real person whatever this code claims.
+  const logActivity = async (
+    action: string,
+    entityId: string | null,
+    entityTitle: string | null,
+    details: Record<string, unknown>,
+    result: 'success' | 'failure' = 'success',
+    entityType = 'user',
+  ) => {
+    const { error } = await caller.rpc('log_activity', {
+      p_action: action,
+      p_entity_type: entityType,
+      p_entity_id: entityId,
+      p_entity_title: entityTitle,
+      p_details: details,
+      p_result: result,
     });
+    if (error) console.error('admin-users could not write log:', error.message);
   };
+
+  if (!callerIsManagement || callerProfile.is_active === false) {
+    // A refused probe of a privileged endpoint is a fact worth keeping. The
+    // caller has a session, so the row names them.
+    await logActivity(
+      'admin_users_denied',
+      null,
+      null,
+      {
+        attemptedAction: body?.action ?? 'unknown',
+        reason: callerIsManagement ? 'account_deactivated' : 'not_admin',
+      },
+      'failure',
+      'system',
+    );
+    return json(403, { error: 'Admin access required' });
+  }
 
   try {
     switch (body.action) {
@@ -198,6 +217,13 @@ Deno.serve(async (req: Request) => {
         if (createErr || !created?.user) {
           const msg = createErr?.message ?? 'Could not create the account';
           const dup = /already|registered|exists/i.test(msg);
+          await logActivity(
+            'user_created',
+            null,
+            `${firstName ?? ''} ${lastName ?? ''}`.trim(),
+            { newUserEmail: email, reason: dup ? 'already_registered' : msg },
+            'failure',
+          );
           return json(dup ? 409 : 400, {
             error: dup ? 'A user with this email already exists' : msg,
           });
@@ -229,6 +255,15 @@ Deno.serve(async (req: Request) => {
 
         if (!patchErr && (!patched || patched.length === 0)) {
           await admin.auth.admin.deleteUser(newId);
+          // The account existed briefly and was destroyed — one failure row
+          // keeps the create/delete pair from vanishing without trace.
+          await logActivity(
+            'user_created',
+            newId,
+            `${firstName ?? ''} ${lastName ?? ''}`.trim(),
+            { newUserEmail: email, reason: 'profile_update_refused', rolledBack: true },
+            'failure',
+          );
           return json(500, {
             error: 'Account was created but its profile could not be set — the '
               + 'update was refused. The account has been removed, please try again.',
@@ -239,6 +274,13 @@ Deno.serve(async (req: Request) => {
           // The auth user exists but its profile is wrong. Roll back rather than
           // leaving a half-made account that logs in as the wrong role.
           await admin.auth.admin.deleteUser(newId);
+          await logActivity(
+            'user_created',
+            newId,
+            `${firstName ?? ''} ${lastName ?? ''}`.trim(),
+            { newUserEmail: email, reason: patchErr.message, rolledBack: true },
+            'failure',
+          );
           return json(500, {
             error: `Account was created but its profile could not be set (${patchErr.message}). The account has been removed — please try again.`,
           });
@@ -276,11 +318,27 @@ Deno.serve(async (req: Request) => {
         // later — so the target's tier is checked even though the caller's is
         // not yet. Inert until v13 promotes anyone; wrong to add afterwards.
         if (target.role === 'super_admin' && !callerIsSuperAdmin) {
+          await logActivity(
+            'user_password_changed',
+            userId,
+            `${target.first_name} ${target.last_name}`.trim(),
+            { resetByAdmin: true, targetEmail: target.email, reason: 'target_super_admin' },
+            'failure',
+          );
           return json(403, { error: "Only a super admin may reset a super admin's password" });
         }
 
         const { error: pwErr } = await admin.auth.admin.updateUserById(userId, { password });
-        if (pwErr) return json(400, { error: pwErr.message });
+        if (pwErr) {
+          await logActivity(
+            'user_password_changed',
+            userId,
+            `${target.first_name} ${target.last_name}`.trim(),
+            { resetByAdmin: true, targetEmail: target.email, reason: pwErr.message },
+            'failure',
+          );
+          return json(400, { error: pwErr.message });
+        }
 
         await logActivity(
           'user_password_changed',

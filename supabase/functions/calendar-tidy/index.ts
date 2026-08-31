@@ -89,11 +89,17 @@ Deno.serve(async (req: Request) => {
   const bearer = authHeader.replace(/^Bearer\s+/i, '');
   const isCron = bearer === serviceKey || jwtRole(bearer) === 'service_role';
 
-  if (!isCron) {
-    const caller = createClient(url, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
+  // Hoisted out of the auth block because the non-dry run is audit-logged
+  // through it: with a session, log_activity names the super admin from the
+  // JWT rather than from anything this code claims.
+  const caller = isCron
+    ? null
+    : createClient(url, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false },
+      });
+
+  if (caller) {
     const { data: userData, error: userErr } = await caller.auth.getUser();
     if (userErr || !userData?.user) return json(401, { error: 'Invalid or expired session' });
 
@@ -179,6 +185,20 @@ Deno.serve(async (req: Request) => {
       failures.push({ title: row.title, status: res.status, detail });
     }
   }
+
+  // One audit row for the whole run: a bulk change to parent-visible events.
+  // The dry-run branch above is a read and returned before this. Cron has no
+  // session, so that path names itself via the attribution parameters.
+  const logParams = {
+    p_action: 'event_updated',
+    p_entity_type: 'event',
+    p_details: { match, matched: rows.length, cleared, failureCount: failures.length, bulk: true },
+    p_result: rows.length > 0 && cleared === 0 ? 'failure' : 'success',
+  };
+  const { error: logErr } = caller
+    ? await caller.rpc('log_activity', logParams)
+    : await admin.rpc('log_activity', { ...logParams, p_actor_kind: 'system', p_actor_id: 'cron' });
+  if (logErr) console.error('calendar-tidy could not write log:', logErr.message);
 
   return json(200, { match, dryRun: false, matched: rows.length, cleared, failures });
 });

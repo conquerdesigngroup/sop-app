@@ -224,7 +224,10 @@ Deno.serve(async (req: Request) => {
           .update({ status: 'inactive' })
           .eq('id', body.rosterId)
           .select('id, email, student_name');
-        if (error) return json(400, { error: error.message });
+        if (error) {
+          await log('roster_row_deactivated', 'roster', body.rosterId, null, { reason: error.message }, 'failure');
+          return json(400, { error: error.message });
+        }
         if (!rows || rows.length === 0) return json(404, { error: 'No such roster row' });
 
         await log('roster_row_deactivated', 'roster', body.rosterId, rows[0].student_name, {
@@ -245,7 +248,10 @@ Deno.serve(async (req: Request) => {
           .update({ status: 'active' })
           .eq('id', body.rosterId)
           .select('id, email, student_name');
-        if (error) return json(400, { error: error.message });
+        if (error) {
+          await log('roster_row_reactivated', 'roster', body.rosterId, null, { reason: error.message }, 'failure');
+          return json(400, { error: error.message });
+        }
         if (!rows || rows.length === 0) return json(404, { error: 'No such roster row' });
 
         await log('roster_row_reactivated', 'roster', body.rosterId, rows[0].student_name, {
@@ -291,6 +297,14 @@ Deno.serve(async (req: Request) => {
           .neq('id', target!.id)
           .limit(1);
         if (clash && clash.length > 0) {
+          await log(
+            'user_email_changed',
+            'user',
+            target!.id,
+            `${target!.first_name} ${target!.last_name}`.trim() || oldEmail,
+            { reason: 'email_in_use' },
+            'failure',
+          );
           return json(409, { error: 'Another account already uses that email' });
         }
 
@@ -315,6 +329,18 @@ Deno.serve(async (req: Request) => {
           // Roll the auth email back rather than leaving auth and profile
           // disagreeing about who this account belongs to.
           await admin.auth.admin.updateUserById(target!.id, { email: oldEmail, email_confirm: true });
+          await log(
+            'user_email_changed',
+            'user',
+            target!.id,
+            `${target!.first_name} ${target!.last_name}`.trim() || oldEmail,
+            {
+              email: { from: oldEmail, to: newEmail },
+              rolledBack: true,
+              reason: patchErr?.message ?? 'profile_update_refused',
+            },
+            'failure',
+          );
           return json(500, {
             error: 'The account email could not be updated in the profile — the change has been rolled back',
           });
@@ -379,6 +405,14 @@ Deno.serve(async (req: Request) => {
           .select('id');
         if (patchErr) return json(400, { error: patchErr.message });
         if (!patched || patched.length === 0) {
+          await log(
+            body.isActive ? 'user_activated' : 'user_deactivated',
+            'user',
+            target!.id,
+            `${target!.first_name} ${target!.last_name}`.trim() || target!.email,
+            { reason: 'profile_update_refused' },
+            'failure',
+          );
           return json(500, { error: 'The profile update was refused' });
         }
 
@@ -390,6 +424,14 @@ Deno.serve(async (req: Request) => {
         if (banErr) {
           // Revert the profile so the two levers never disagree.
           await caller.from('profiles').update({ is_active: !body.isActive }).eq('id', target!.id).select('id');
+          await log(
+            body.isActive ? 'user_activated' : 'user_deactivated',
+            'user',
+            target!.id,
+            `${target!.first_name} ${target!.last_name}`.trim() || target!.email,
+            { reverted: true, reason: banErr.message },
+            'failure',
+          );
           return json(500, { error: `Could not ${body.isActive ? 'unban' : 'ban'} the account: ${banErr.message}` });
         }
 
@@ -412,7 +454,10 @@ Deno.serve(async (req: Request) => {
           .update({ claimed_by: null, claimed_at: null })
           .eq('id', body.rosterId)
           .select('id, email, student_name');
-        if (error) return json(400, { error: error.message });
+        if (error) {
+          await log('roster_row_unlinked', 'roster', body.rosterId, null, { reason: error.message }, 'failure');
+          return json(400, { error: error.message });
+        }
         if (!rows || rows.length === 0) return json(404, { error: 'No such roster row' });
 
         await log('roster_row_unlinked', 'roster', body.rosterId, rows[0].student_name, {

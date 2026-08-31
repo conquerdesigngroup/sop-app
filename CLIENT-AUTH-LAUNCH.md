@@ -66,6 +66,22 @@ rows ran in **0.5ms**, no password/OTP/token/secret in any log row, logs are
 un-updatable by everyone and deletable only by super_admin. Existing staff calendar
 reads and the full profile directory still work.
 
+**Coverage pass (2026-08-30).** AUDIT-LOG-SPEC §8.11 ("every mutation logs")
+was audited function-by-function across every mutation family; 64 confirmed
+gaps were wired: work hours (submit/edit/delete/approve/reject + pay rates),
+all portal-admin content mutations (documents, classes incl. the cascading
+delete, updates, events, gate + access-code changes), staff and client
+auth failure paths, calendar events and attachments, the settings data wipe,
+the data-integrity auto-fixes, and `document_downloaded` on staff opens and
+portal media plays. `admin-users` now logs through the `log_activity` RPC like
+every other function (its direct-insert side door is gone), and denials/
+rollbacks in all four edge functions write `result='failure'` rows.
+`v31_audit_log_truncate` additionally revokes TRUNCATE/TRIGGER/REFERENCES on
+`activity_logs` from the API roles — TRUNCATE ignores RLS, so immutability
+must not depend on PostgREST simply not exposing it. Known limit, by design:
+anon portal visitors (the access-code stage) cannot write log rows at all;
+`document_downloaded` becomes complete only once client login is the path.
+
 ## You must do these in the dashboard (launch blockers)
 
 1. **Custom SMTP first** (Authentication → Settings). Supabase's built-in mailer

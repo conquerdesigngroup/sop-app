@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme } from '../theme';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { logActivity } from '../lib/activityLog';
 import { useResponsive } from '../hooks/useResponsive';
 import { Button, Card, Input, Spinner } from '../components/ui';
 
@@ -77,13 +78,20 @@ const ResetPassword: React.FC = () => {
     }
 
     setStatus('saving');
-    const { error: updateErr } = await supabase.auth.updateUser({ password });
+    const { data, error: updateErr } = await supabase.auth.updateUser({ password });
 
     if (updateErr) {
       setError(updateErr.message || 'Could not update your password');
       setStatus('ready');
       return;
     }
+
+    void logActivity({
+      action: 'user_password_changed',
+      entityType: 'user',
+      entityId: data?.user?.id,
+      details: { surface: 'staff', via: 'reset_link' },
+    });
 
     setStatus('done');
     // Straight to the dashboard: updateUser leaves them signed in, so bouncing

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { removeStorageObject } from './portalStorage';
+import { logActivity } from './activityLog';
 
 /**
  * Links and files hung on a calendar event.
@@ -112,6 +113,26 @@ export const addLink = async (
     .single();
 
   if (error) throw new Error(error.message);
+  // Hostname only in details — the full URL can be a secret (unlisted doc,
+  // pre-signed share) and the log allowlist forbids those.
+  let host: string | null = null;
+  try {
+    host = new URL(trimmed).hostname;
+  } catch {
+    // Passed the scheme regex but not the URL parser; log without a host.
+  }
+  void logActivity({
+    action: 'event_updated',
+    entityType: 'event',
+    entityId: googleEventId,
+    details: {
+      change: 'attachment_added',
+      kind: 'link',
+      label: label.trim() || null,
+      host,
+      calendarId: googleCalendarId,
+    },
+  });
   return mapRow(data as any);
 };
 
@@ -173,6 +194,21 @@ export const uploadAttachment = async (
     await supabase.storage.from(ATTACHMENT_BUCKET).remove([path]).catch(() => {});
     throw new Error(error.message);
   }
+  // Logged after the insert, not the storage upload: a failed insert removes
+  // the orphan object above, so only a completed mutation reaches the log.
+  void logActivity({
+    action: 'document_uploaded',
+    entityType: 'document',
+    entityId: (data as Row).id,
+    entityTitle: file.name,
+    details: {
+      fileName: file.name,
+      mimeType: file.type || null,
+      sizeBytes: file.size,
+      googleEventId,
+      calendarId: googleCalendarId,
+    },
+  });
   return mapRow(data as any);
 };
 
@@ -194,6 +230,24 @@ export const removeAttachment = async (a: EventAttachment): Promise<void> => {
     .delete()
     .eq('id', a.id);
   if (error) throw new Error(error.message);
+  // Never attachmentTitle here: for a label-less link it falls back to the
+  // full URL, which can be a secret (unlisted doc, pre-signed share) — the
+  // same value addLink refuses to log. Label, filename or hostname only.
+  let title = a.fileName ?? a.label;
+  if (a.kind === 'link' && !title) {
+    try {
+      title = a.url ? new URL(a.url).hostname : null;
+    } catch {
+      title = null;
+    }
+  }
+  void logActivity({
+    action: 'document_deleted',
+    entityType: 'document',
+    entityId: a.id,
+    entityTitle: title ?? undefined,
+    details: { kind: a.kind, fileName: a.fileName },
+  });
 };
 
 /**

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
 import { supabase } from '../../lib/supabase';
+import { logActivity } from '../../lib/activityLog';
 import {
   EventAttachment,
   fetchAttachments,
@@ -187,6 +188,16 @@ export const AttachmentList: React.FC<{
     try {
       const url = await attachmentUrl(a);
       if (!url) throw new Error('That file is no longer available.');
+      // On the anonymous portal the log RPC is revoked from anon, so this
+      // degrades to a console error there — only signed-in opens produce rows,
+      // the same trade ClassDetail makes.
+      void logActivity({
+        action: 'document_downloaded',
+        entityType: 'document',
+        entityId: a.id,
+        entityTitle: attachmentTitle(a),
+        details: { fileName: a.fileName, sizeBytes: a.sizeBytes },
+      });
       window.location.assign(url);
     } catch (e: any) {
       setFailed(e?.message || 'Could not open that.');

@@ -11,6 +11,7 @@ import { FormButton } from '../components/FormComponents';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { logActivity } from '../lib/activityLog';
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -243,33 +244,72 @@ const SettingsPage: React.FC = () => {
       // Clear from Supabase if configured
       if (isSupabaseConfigured() && supabase) {
         // Delete all SOPs
-        const { error: sopsError } = await supabase
+        const { data: deletedSops, error: sopsError } = await supabase
           .from('sops')
           .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all (neq with impossible ID)
+          .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all (neq with impossible ID)
+          .select('id');
 
         if (sopsError) {
           console.error('Error clearing SOPs from Supabase:', sopsError);
+          await logActivity({
+            action: 'sop_deleted',
+            entityType: 'sop',
+            details: { bulk: true, scope: 'clear_all_data', reason: 'delete_failed' },
+            result: 'failure',
+          });
+        } else {
+          await logActivity({
+            action: 'sop_deleted',
+            entityType: 'sop',
+            details: { bulk: true, scope: 'clear_all_data', count: deletedSops?.length ?? 0 },
+          });
         }
 
         // Delete all job tasks
-        const { error: tasksError } = await supabase
+        const { data: deletedTasks, error: tasksError } = await supabase
           .from('job_tasks')
           .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000');
+          .neq('id', '00000000-0000-0000-0000-000000000000')
+          .select('id');
 
         if (tasksError) {
           console.error('Error clearing tasks from Supabase:', tasksError);
+          await logActivity({
+            action: 'task_deleted',
+            entityType: 'task',
+            details: { bulk: true, scope: 'clear_all_data', reason: 'delete_failed' },
+            result: 'failure',
+          });
+        } else {
+          await logActivity({
+            action: 'task_deleted',
+            entityType: 'task',
+            details: { bulk: true, scope: 'clear_all_data', count: deletedTasks?.length ?? 0 },
+          });
         }
 
         // Delete all task templates
-        const { error: templatesError } = await supabase
+        const { data: deletedTemplates, error: templatesError } = await supabase
           .from('task_templates')
           .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000');
+          .neq('id', '00000000-0000-0000-0000-000000000000')
+          .select('id');
 
         if (templatesError) {
           console.error('Error clearing task templates from Supabase:', templatesError);
+          await logActivity({
+            action: 'template_deleted',
+            entityType: 'template',
+            details: { bulk: true, scope: 'clear_all_data', reason: 'delete_failed' },
+            result: 'failure',
+          });
+        } else {
+          await logActivity({
+            action: 'template_deleted',
+            entityType: 'template',
+            details: { bulk: true, scope: 'clear_all_data', count: deletedTemplates?.length ?? 0 },
+          });
         }
       }
 

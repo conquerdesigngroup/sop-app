@@ -37,9 +37,11 @@ export interface LogActivityInput {
 }
 
 export async function logActivity(input: LogActivityInput): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-
+  // The guard lives INSIDE the try: callers use `void logActivity(...)`, so
+  // anything escaping here — including a broken module mock in a test —
+  // becomes an unhandled rejection instead of a swallowed logging failure.
   try {
+    if (!isSupabaseConfigured() || !supabase) return;
     const { error } = await supabase.rpc('log_activity', {
       p_action: input.action,
       p_entity_type: input.entityType,
