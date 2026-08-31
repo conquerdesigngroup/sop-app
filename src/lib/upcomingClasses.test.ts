@@ -3,6 +3,7 @@ import {
   buildUpcoming,
   clockTime,
   nextOccurrences,
+  googleSeriesUrl,
   nextPerClass,
   relativeDay,
 } from './upcomingClasses';
@@ -198,6 +199,20 @@ describe('wording', () => {
   });
 });
 
+describe('googleSeriesUrl', () => {
+  const item = nextPerClass(
+    [{ student, klass: klass(), enrollment: enrollment(), sessions: [] }],
+    SUNDAY,
+  )[0];
+
+  it('sends wall-clock times with an explicit timezone, not UTC', () => {
+    const url = decodeURIComponent(googleSeriesUrl(item));
+    expect(url).toContain('dates=20260901T163000/20260901T173000');
+    expect(url).toContain('recur=RRULE:FREQ=WEEKLY;UNTIL=20260930T235900');
+    expect(url).toContain('ctz=');
+  });
+});
+
 describe('buildSeriesIcs', () => {
   const item = nextPerClass(
     [{ student, klass: klass(), enrollment: enrollment(), sessions: [] }],
@@ -208,23 +223,46 @@ describe('buildSeriesIcs', () => {
     const ics = buildSeriesIcs(item, []);
     expect(ics).toContain('BEGIN:VEVENT');
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
-    // UNTIL is asserted as an INSTANT, not as a literal stamp. RFC 5545 wants
-    // it in UTC when DTSTART is, so the printed digits depend on the machine's
-    // timezone — hardcoding them writes a test that passes in one office and
-    // fails in another. What must be true is that it lands on the last moment
-    // of the season's final day, wherever the reader is.
-    const until = ics.match(/UNTIL=(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
-    expect(until).not.toBeNull();
-    const [, y, mo, d, hh, mm] = until!;
-    expect(Date.UTC(+y, +mo - 1, +d, +hh, +mm))
-      .toBe(new Date(2026, 8, 30, 23, 59).getTime());
+    // Floating wall time, so the literal stamp is timezone-independent and can
+    // be asserted directly: the season's last day at 23:59, with no Z.
+    expect(ics).toContain('RRULE:FREQ=WEEKLY;UNTIL=20260930T235900');
     expect(ics).toContain('SUMMARY:Junior Ballet — Maya');
     expect(ics).toContain('LOCATION:Studio A');
   });
 
   it('excludes known closures rather than dropping them silently', () => {
     const ics = buildSeriesIcs(item, ['2026-09-08']);
-    expect(ics).toMatch(/EXDATE:20260908T/);
+    // At the class's own start time: a bare date matches no occurrence.
+    expect(ics).toContain('EXDATE:20260908T163000');
+  });
+
+  // The bug this guards is invisible unless a season crosses a clock change,
+  // which ours did not — it ended in September.
+  it('keeps its wall-clock time across a daylight-saving change', () => {
+    const winter = nextPerClass(
+      [{
+        student,
+        klass: klass({ seasonEnd: '2026-12-15' }),
+        enrollment: enrollment(),
+        sessions: [],
+      }],
+      SUNDAY,
+    )[0];
+    const ics = buildSeriesIcs(winter, []);
+
+    // A UTC-anchored DTSTART fixes an instant, so every occurrence after the
+    // November change lands an hour early — 4:30 becomes 3:30 on every phone.
+    // Floating local time is re-read against the clock at each occurrence.
+    expect(ics).toContain('DTSTART:20260901T163000');
+    expect(ics).toContain('DTEND:20260901T173000');
+    expect(ics).toContain('UNTIL=20261215T235900');
+
+    // No Z on anything the recurrence is measured from. DTSTAMP may keep its
+    // Z — it is a real instant, not a time of day.
+    const recurrence = ics.split('\r\n')
+      .filter(l => /^(DTSTART|DTEND|EXDATE|RRULE)/.test(l));
+    expect(recurrence).not.toHaveLength(0);
+    recurrence.forEach(line => expect(line).not.toContain('Z'));
   });
 
   it('does not exclude a closure that already passed', () => {

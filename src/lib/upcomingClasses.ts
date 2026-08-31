@@ -253,9 +253,42 @@ export const occurrenceEvent = (u: UpcomingClass): PortalEvent => ({
 const icsEscape = (text: string): string =>
   text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 
+const pad = (n: number): string => `${n}`.padStart(2, '0');
+
+/**
+ * 'YYYYMMDDTHHMMSS' in LOCAL wall time. The missing trailing Z is the point.
+ *
+ * WHY NOT UTC — THIS WAS A REAL BUG
+ *
+ * A UTC-anchored DTSTART with FREQ=WEEKLY fixes every occurrence to an
+ * instant, not to a time of day. The moment the clocks change the whole series
+ * shifts: a 4:30 PM class that ran from September would start showing up at
+ * 3:30 PM from the first week of November, on every parent's phone, every
+ * year. It is invisible in testing unless the fixture season happens to cross
+ * a DST boundary — ours ended in September, so it did not.
+ *
+ * "Every Tuesday at 4:30" is a wall-clock statement, so it is written as one.
+ * A floating time is re-read against local time at each occurrence and follows
+ * the clock change on its own.
+ *
+ * The strictly complete form is DTSTART;TZID=America/New_York plus a VTIMEZONE
+ * block carrying the DST rules. That needs the studio's timezone, which no
+ * table stores, and hand-rolled VTIMEZONE is its own source of bugs. Floating
+ * is wrong only for a parent reading the schedule from another timezone, which
+ * corrects itself the moment they are home — a far smaller and rarer error
+ * than being an hour off for everyone all winter.
+ *
+ * RFC 5545: when DTSTART is floating, UNTIL and EXDATE must be floating too,
+ * so every stamp in the series goes through this one function.
+ */
+const localStamp = (d: Date): string =>
+  `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+  + `T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+
+/** DTSTAMP is a real instant — when the file was produced — so it stays UTC. */
 const utcStamp = (d: Date): string =>
-  `${d.getUTCFullYear()}${`${d.getUTCMonth() + 1}`.padStart(2, '0')}${`${d.getUTCDate()}`.padStart(2, '0')}`
-  + `T${`${d.getUTCHours()}`.padStart(2, '0')}${`${d.getUTCMinutes()}`.padStart(2, '0')}00Z`;
+  `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`
+  + `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
 
 /**
  * The whole remaining season as ONE recurring event.
@@ -285,9 +318,9 @@ export const buildSeriesIcs = (
     'BEGIN:VEVENT',
     `UID:series-${u.klass.id}-${u.student.id}@didc.app`,
     `DTSTAMP:${utcStamp(new Date())}`,
-    `DTSTART:${utcStamp(u.startsAt)}`,
-    `DTEND:${utcStamp(end)}`,
-    until ? `RRULE:FREQ=WEEKLY;UNTIL=${utcStamp(until)}` : 'RRULE:FREQ=WEEKLY',
+    `DTSTART:${localStamp(u.startsAt)}`,
+    `DTEND:${localStamp(end)}`,
+    until ? `RRULE:FREQ=WEEKLY;UNTIL=${localStamp(until)}` : 'RRULE:FREQ=WEEKLY',
     `SUMMARY:${icsEscape(event.title)}`,
     event.description ? `DESCRIPTION:${icsEscape(event.description)}` : null,
     event.location ? `LOCATION:${icsEscape(event.location)}` : null,
@@ -298,11 +331,20 @@ export const buildSeriesIcs = (
   cancelled
     .filter(date => date >= u.date)
     .forEach(date => {
-      lines.push(`EXDATE:${utcStamp(withTime(parseIso(date), u.klass.startTime))}`);
+      lines.push(`EXDATE:${localStamp(withTime(parseIso(date), u.klass.startTime))}`);
     });
 
   lines.push('END:VEVENT', 'END:VCALENDAR');
   return lines.join('\r\n');
+};
+
+/** The viewer's IANA zone, or null where Intl is unavailable. Never throws. */
+export const browserTimeZone = (): string | null => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
 };
 
 /** Google's composer, prefilled with the recurrence rather than one week. */
@@ -314,10 +356,16 @@ export const googleSeriesUrl = (u: UpcomingClass): string => {
   const params = new URLSearchParams();
   params.set('action', 'TEMPLATE');
   params.set('text', event.title);
-  params.set('dates', `${utcStamp(u.startsAt)}/${utcStamp(end)}`);
+  params.set('dates', `${localStamp(u.startsAt)}/${localStamp(end)}`);
+
+  // Google reads a Z-less range in the timezone named by ctz, falling back to
+  // the viewer's calendar setting. Naming it explicitly means the event lands
+  // at 4:30 PM even for a parent whose Google account is set elsewhere.
+  const zone = browserTimeZone();
+  if (zone) params.set('ctz', zone);
   if (event.description) params.set('details', event.description);
   if (event.location) params.set('location', event.location);
-  if (until) params.set('recur', `RRULE:FREQ=WEEKLY;UNTIL=${utcStamp(until)}`);
+  if (until) params.set('recur', `RRULE:FREQ=WEEKLY;UNTIL=${localStamp(until)}`);
 
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 };

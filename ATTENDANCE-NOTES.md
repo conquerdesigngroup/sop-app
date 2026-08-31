@@ -119,6 +119,16 @@ in place first, so the two implementations are known to agree.
 
 ---
 
+## If the studio's timezone ever gets stored
+
+Calendar exports use floating local time (`DTSTART:20260901T163000`, no `Z`),
+which is what "every Tuesday at 4:30" means and which follows the daylight-
+saving change on its own. The strictly complete form is
+`DTSTART;TZID=America/New_York` plus a `VTIMEZONE` block — worth upgrading to
+if a timezone column ever lands on the studio or program record. Until then
+floating is correct for everyone except a parent reading the schedule from
+another timezone, and that corrects itself when they are home.
+
 ## Explicitly decided against
 
 - **A materialized view for the summary.** At studio scale a plain view with the
