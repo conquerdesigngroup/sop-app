@@ -1,0 +1,139 @@
+# Attendance / profile — open items
+
+Working notes for this branch. Written 2026-08-31, while the work is parked
+waiting on a real Enrolio export. Read this before picking it back up.
+
+The three defects found in review are **fixed** and are not listed here. What
+follows is what is still outstanding, in the order I would do it.
+
+---
+
+## Must happen at v33 (the attendance core migration)
+
+### 1. Index the foreign keys
+
+Postgres indexes primary keys and unique constraints automatically. It does
+**not** index foreign key columns. `portal_attendance_summary` joins students →
+enrollments → sessions → attendance, so without these it will sequential-scan
+every table. It will look fine on the seed fixture and degrade the first real
+season, which is the worst possible time to find out.
+
+```sql
+create index on portal_enrollments (student_id);
+create index on portal_enrollments (class_id);
+create index on portal_attendance   (class_id);
+create index on portal_attendance   (session_id);
+create index on portal_students     (household_id);
+create index on portal_household_members (profile_id);
+```
+
+`portal_attendance (student_id, session_id)` and
+`portal_class_sessions (class_id, session_date)` are already covered by their
+unique constraints — do not add duplicates.
+
+### 2. Wrap the RLS helpers in a subselect
+
+```sql
+-- calls the function once per ROW
+using (can_see_student(student_id))
+
+-- evaluates once as an InitPlan
+using ((select can_see_student(student_id)))
+```
+
+Identical semantics, large difference on any scan wider than a handful of rows.
+Apply it to every policy using `can_see_student()` / `is_household_member()`.
+
+### 3. A contract test between the SQL view and `attendanceSummary.ts`
+
+**This is the highest-value correctness work available and it is not optional.**
+
+There are two implementations of the percentage:
+
+- `portal_attendance_summary` (SQL, to be written in v33) — what §3.6 asked for
+- `src/lib/attendanceSummary.ts` (TS) — drives the fixture, and computes the
+  per-session exclusion markers the detail view needs, which a summary view
+  cannot provide
+
+They can silently disagree — rounding is the obvious one (`Math.round` vs SQL
+truncation), excused handling is the dangerous one. The symptom is a percentage
+that is *plausible and wrong*, which is exactly the failure this whole feature
+was designed to prevent.
+
+Seed `attendance_demo.sql` from the same constants as
+`src/lib/attendanceFixture.ts`, run both implementations over it, assert
+identical `attended` / `counted` / `percent` per enrollment.
+
+### 4. Wire `excused_counts_against`
+
+Modelled in `AttendanceSettings` and honoured throughout the arithmetic, but
+nothing reads it from `portal_settings` yet — it is a constant today. §3.6 is
+explicit that it is a studio policy question, not a code decision.
+
+### 5. Decide what a makeup class is
+
+§7 flags a possible fifth attendance status. Today an unrecognised status counts
+as not-attended, silently. Decide before the importer ships whether a makeup
+credits the original session, and widen `AttendanceStatus` if so.
+
+---
+
+## Performance
+
+### 6. Collapse the profile reads into one RPC
+
+Cold load of `/portal/profile` in live mode is currently ~6 requests. The
+duplicated household fetch is fixed, and `portal_students` /
+`portal_household_members` now run in parallel, so the waterfall is shallow —
+but it is still several trips.
+
+A `get_household_profile()` returning students, membership, summaries, updates
+and documents as one JSON payload takes it to 1. Keep it `security invoker` so
+RLS still governs it.
+
+Worth doing once the schema is real. Not worth doing against a schema that may
+still change.
+
+### 7. Stop refetching on every range toggle
+
+Each *This month / This season / All time* tap refires
+`loadStudentProgress`. Fetching once and clipping with the existing shared
+`clipToRange` would remove it. That is not the frontend inventing arithmetic —
+it is the one definition being reused — but it does depend on item 3 above being
+in place first, so the two implementations are known to agree.
+
+---
+
+## Polish — components that already exist and are not being used
+
+- **`CardSkeleton`** (`src/components/Skeleton.tsx`) instead of the spinners.
+  Cards resolve independently, so the page currently assembles raggedly.
+- **`PullToRefresh`** (`src/components/PullToRefresh.tsx`, already wired in
+  `MyTasksPage`). This is the page people will pull on.
+- **Per-update read marking.** `UpdatesCard` uses one global localStorage
+  watermark, so opening the profile marks every update seen — including ones
+  never expanded. It is deliberately not a server-side read receipt; per-update
+  local marking would be the right middle ground.
+- **Offline read** via the existing `src/lib/indexedDB.ts` + service worker.
+  Attendance is read-mostly and suits cache-then-network.
+
+---
+
+## Explicitly decided against
+
+- **A materialized view for the summary.** At studio scale a plain view with the
+  indexes above is fine, and a matview buys refresh scheduling for nothing.
+- **Server-side read receipts** for the NEW badge. localStorage is the right
+  cost for that feature.
+- **Notification preference toggles** before there is any delivery mechanism.
+  See the push analysis: iOS delivers web push only to a home-screen install,
+  which is what `supabase-migration-v32-install-telemetry.sql` exists to measure.
+
+---
+
+## Testing gap worth naming
+
+The live query path has no tests. It cannot meaningfully have any until the v33
+tables exist — mocking it today would pin the shape of a schema that is still
+waiting on the Enrolio export to be finalised. Item 3 is the test that matters,
+and it becomes writable the moment v33 lands.

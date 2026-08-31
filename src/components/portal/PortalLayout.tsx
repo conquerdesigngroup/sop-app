@@ -5,6 +5,7 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { ProgramSlug, portalRoutes } from '../../lib/portal';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { CLIENT_AUTH_ENABLED } from '../../lib/clientAuth';
+import { recordInstallPing } from '../../lib/displayMode';
 import PortalBottomNav from './PortalBottomNav';
 
 /**
@@ -62,6 +63,18 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
 
   const headerRef = useRef<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Anonymous, once per browser per day: is this a Home Screen app or a tab?
+  //
+  // It lives here rather than in index.tsx because the number that matters is
+  // the PARENT install rate, and this shell wraps every parent-facing page and
+  // nothing else. Counting staff sessions would dilute the very figure the
+  // measurement exists to produce. See lib/displayMode.ts for why we need it —
+  // iOS web push reaches installed apps only — and the v32 migration for how
+  // little is stored.
+  useEffect(() => {
+    void recordInstallPing();
+  }, []);
 
   useEffect(() => {
     const header = headerRef.current;

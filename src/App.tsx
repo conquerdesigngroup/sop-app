@@ -56,6 +56,7 @@ const PortalLogin = lazy(() => import('./pages/portal/PortalLogin'));
 const PortalSignUp = lazy(() => import('./pages/portal/PortalSignUp'));
 const PortalUpdatePassword = lazy(() => import('./pages/portal/PortalUpdatePassword'));
 const PortalAccount = lazy(() => import('./pages/portal/PortalAccount'));
+const PortalProfile = lazy(() => import('./pages/portal/Profile'));
 
 // The staff side of the portal. Reachable by admins and by any employee holding
 // a class, which is why its route is a plain ProtectedRoute — see the page.
@@ -206,6 +207,16 @@ const AppContent: React.FC = () => {
               client-login build; with the flag off it is inert. */}
           <Route element={<PortalProvider><PortalAuthProvider><Outlet /></PortalAuthProvider></PortalProvider>}>
             <Route path="/portal" element={<PortalHome />} />
+
+            {/* The profile is registered outside the CLIENT_AUTH block on
+                purpose: it is the one portal page that has something to show
+                before client logins are switched on, because its attendance
+                cards read the in-repo seed fixture. The page itself sends a
+                signed-out visitor to the login in a production build — see
+                DEMO_ALLOWED there — so this route is not a way around the
+                gate, only a way to review the cards before there is anything
+                real behind them. */}
+            <Route path="/portal/profile" element={<PortalProfile />} />
 
             {/* The client login build. Static segments, so they win over the
                 /portal/:program matcher regardless of order — but they are
