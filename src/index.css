@@ -585,3 +585,32 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
     box-shadow: none;
   }
 }
+
+/* ============================================
+   Always-visible scrollbar
+   ============================================
+   macOS hides overlay scrollbars until you scroll, so a list that is taller
+   than its box gives no hint that it continues. Anything that must make its
+   overflow obvious (the pay-rates person list, for one) opts in here.
+
+   Chrome and Safari only draw a permanent bar through the -webkit pseudo
+   elements, and Chrome ignores those the moment the standard scrollbar-width
+   or scrollbar-color is set on the same element — so the standard properties
+   are confined to browsers that lack the -webkit selector (Firefox). */
+.scroll-visible::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-visible::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-visible::-webkit-scrollbar-thumb {
+  background: var(--c-bdr-secondary, #36363D);
+  border-radius: 4px;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .scroll-visible {
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-bdr-secondary, #36363D) transparent;
+  }
+}
