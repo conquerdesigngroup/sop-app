@@ -7,6 +7,7 @@ import PortalLayout from '../../components/portal/PortalLayout';
 import EventBar from '../../components/calendar/EventBar';
 import EventCard from '../../components/portal/EventCard';
 import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
+import SubscribeSheet from '../../components/portal/SubscribeSheet';
 import { usePortal } from '../../contexts/PortalContext';
 import {
   portalRoutes,
@@ -258,6 +259,90 @@ const ViewToggle: React.FC<{ value: ViewMode; onChange: (v: ViewMode) => void }>
     </div>
   );
 };
+
+// ---------------------------------------------------------------- subscribe
+
+/**
+ * The one thing on this page that keeps working after the app is closed.
+ *
+ * Everything else here — the grid, the agenda, the Add button — needs a parent
+ * to come back and look. A subscription does not: the studio's next edit
+ * arrives in their own calendar on its own. So it gets the page's only pink,
+ * and it sits above the fold rather than at the bottom with the housekeeping.
+ *
+ * NOT DISMISSIBLE, deliberately. The handoff leaves this app — webcal:// goes
+ * to the OS, the others open a vendor tab — so nothing here can ever learn
+ * whether the parent actually finished subscribing. A banner that hides itself
+ * on tap would vanish for the family who opened the sheet and changed their
+ * mind, and they would never find it again. One 56px row on a page that scrolls
+ * a whole term is a cheaper mistake than that.
+ */
+const SubscribeBanner: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
+  <button
+    type="button"
+    onClick={onOpen}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      width: '100%',
+      minHeight: '56px',
+      padding: '12px 14px',
+      marginBottom: '12px',
+      textAlign: 'left',
+      background: theme.colors.bg.secondary,
+      border: `1px solid ${theme.colors.primary}`,
+      borderRadius: theme.borderRadius.lg,
+      cursor: 'pointer',
+    }}
+  >
+    <span
+      aria-hidden="true"
+      style={{
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '24px',
+        color: theme.colors.primary,
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4" />
+      </svg>
+    </span>
+
+    {/* minWidth: 0 AND overflowWrap: a flex item will not shrink below its
+        content's min-content width. Both, or this overflows at 320px. */}
+    <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+      <span style={{
+        display: 'block',
+        ...theme.typography.body,
+        fontFamily: theme.fonts.primary,
+        fontWeight: 600,
+        color: theme.colors.txt.primary,
+      }}>
+        Subscribe to this calendar
+      </span>
+      <span style={{
+        display: 'block',
+        ...theme.typography.captionSmall,
+        fontFamily: theme.fonts.mono,
+        color: theme.colors.txt.tertiary,
+        marginTop: '2px',
+      }}>
+        New dates arrive on their own
+      </span>
+    </span>
+
+    <span aria-hidden="true" style={{ flexShrink: 0, display: 'flex', color: theme.colors.txt.tertiary }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polyline points="9 18 15 12 9 6" />
+      </svg>
+    </span>
+  </button>
+);
 
 // -------------------------------------------------------------- month grid
 
@@ -680,6 +765,7 @@ const ProgramCalendar: React.FC = () => {
    * one piece of state cannot describe both.
    */
   const [addingTo, setAddingTo] = useState<PortalEvent | null>(null);
+  const [subscribing, setSubscribing] = useState(false);
 
   const changeView = useCallback((next: ViewMode) => {
     setView(next);
@@ -688,6 +774,8 @@ const ProgramCalendar: React.FC = () => {
 
   const closeCard = useCallback(() => setOpened(null), []);
   const closeSheet = useCallback(() => setAddingTo(null), []);
+  const openSubscribe = useCallback(() => setSubscribing(true), []);
+  const closeSubscribe = useCallback(() => setSubscribing(false), []);
 
   return (
     <PortalLayout
@@ -698,6 +786,8 @@ const ProgramCalendar: React.FC = () => {
     >
       <div style={{ maxWidth: '720px' }}>
         <ViewToggle value={view} onChange={changeView} />
+
+        <SubscribeBanner onOpen={openSubscribe} />
 
         {/*
           Said once here rather than repeated on every row. The calendar
@@ -712,7 +802,7 @@ const ProgramCalendar: React.FC = () => {
         }}>
           Tap an event for full details, or press{' '}
           <span style={{ color: theme.colors.txt.secondary, fontWeight: 600 }}>Add</span>
-          {' '}to save it to Google, Apple or Outlook.
+          {' '}to save one date to Google, Apple or Outlook.
         </p>
 
         {loading && (
@@ -743,6 +833,12 @@ const ProgramCalendar: React.FC = () => {
 
       <EventCard event={opened} onClose={closeCard} onAddToCalendar={setAddingTo} />
       <AddToCalendarSheet event={addingTo} onClose={closeSheet} />
+      <SubscribeSheet
+        isOpen={subscribing}
+        onClose={closeSubscribe}
+        slug={slug}
+        programName={program?.name ?? 'Calendar'}
+      />
     </PortalLayout>
   );
 };
