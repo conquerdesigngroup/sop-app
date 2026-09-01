@@ -23,11 +23,29 @@ import { ProgramSlug } from './portal';
  * being a subscription — it would keep doing so silently for a year.
  */
 
-/** Empty when Supabase is unconfigured; every builder below returns '' too. */
+/**
+ * Empty when Supabase is unconfigured; every builder below returns '' too.
+ *
+ * ALL whitespace is stripped, not just trailing slashes.
+ *
+ * Vercel's REACT_APP_SUPABASE_URL carries a trailing newline. Nothing else in
+ * the app has ever noticed, because the URL parser drops tabs and newlines when
+ * it parses — so every fetch supabase-js makes works fine and always has. It
+ * only becomes visible HERE, because these builders percent-ENCODE the URL into
+ * somebody else's query string, where a newline survives as a literal %0A and
+ * Google is handed a cid it cannot resolve.
+ *
+ * Caught on production, not in a test: a local .env.local has no newline, so
+ * every check up to and including the live smoke test of the feed itself passed
+ * while the Google and Outlook links were broken.
+ *
+ * A URL can never legally contain raw whitespace, so removing all of it is
+ * always safe and does not depend on the newline being at the end.
+ */
 const functionsBase = (): string => {
   const url = process.env.REACT_APP_SUPABASE_URL;
   if (!url) return '';
-  return `${url.replace(/\/+$/, '')}/functions/v1`;
+  return `${url.replace(/\s+/g, '').replace(/\/+$/, '')}/functions/v1`;
 };
 
 /**
