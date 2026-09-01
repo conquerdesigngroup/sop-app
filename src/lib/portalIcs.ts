@@ -151,6 +151,27 @@ export const buildEventIcs = (event: PortalEvent): string => {
   if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`);
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
 
+  // A reminder the parent did not have to set.
+  //
+  // Without this, "Add" produced an event that sits silently in the calendar
+  // and never says anything — which is most of the value a parent thought they
+  // were getting when they pressed it.
+  //
+  // Two hours before a timed event is the leave-the-house nudge. For an all-day
+  // one, DTSTART is midnight, so -PT14H is 10am the day before — while there is
+  // still time to wash a costume, rather than at midnight when there is not.
+  //
+  // The same block is emitted by supabase/functions/portal-calendar-feed. It is
+  // honoured reliably HERE, on the import path; a subscription may strip it
+  // (iOS offers "Remove Alarms", Google substitutes the viewer's defaults).
+  lines.push(
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    `DESCRIPTION:${escapeText(event.title)}`,
+    `TRIGGER:${event.isAllDay ? '-PT14H' : '-PT2H'}`,
+    'END:VALARM'
+  );
+
   lines.push('END:VEVENT', 'END:VCALENDAR');
 
   return lines.map(fold).join('\r\n') + '\r\n';

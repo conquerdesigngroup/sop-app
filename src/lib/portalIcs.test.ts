@@ -27,8 +27,31 @@ const event = (over: Partial<PortalEvent>): PortalEvent => ({
 
 /** Unfold before asserting: a folded line is still one logical value. */
 const unfold = (ics: string) => ics.replace(/\r\n /g, '');
+
+const linesOf = (ics: string) => unfold(ics).split('\r\n');
+
+/**
+ * A property of the EVENT, not of the alarm nested inside it.
+ *
+ * The scoping is load-bearing rather than tidiness: a DISPLAY alarm is REQUIRED
+ * to carry its own DESCRIPTION, so an unscoped search for one finds the alarm's
+ * copy of the title and reports a description on an event that has none. That
+ * is exactly how the "omits optional fields" test below started passing for the
+ * wrong reason.
+ */
+const between = (ics: string, open: string, close: string, prop: string) => {
+  const lines = linesOf(ics);
+  const from = lines.indexOf(open);
+  if (from === -1) return undefined;
+  const to = lines.indexOf(close, from);
+  return lines.slice(from + 1, to === -1 ? undefined : to).find(l => l.startsWith(prop));
+};
+
 const valueOf = (ics: string, prop: string) =>
-  unfold(ics).split('\r\n').find(l => l.startsWith(prop));
+  between(ics, 'BEGIN:VEVENT', 'BEGIN:VALARM', prop);
+
+const alarmOf = (ics: string, prop: string) =>
+  between(ics, 'BEGIN:VALARM', 'END:VALARM', prop);
 
 describe('all-day events', () => {
   it('ends the day AFTER the last day, because DTEND is exclusive', () => {
@@ -76,6 +99,30 @@ describe('timed events', () => {
       endsAt: null,
     }));
     expect(valueOf(ics, 'DTEND')).toBe('DTEND:20260917T020000Z');
+  });
+});
+
+describe('reminders', () => {
+  it('nudges a timed event two hours before', () => {
+    const ics = buildEventIcs(event({
+      isAllDay: false,
+      startsAt: '2027-03-13T17:00:00.000Z',
+    }));
+    expect(alarmOf(ics, 'TRIGGER')).toBe('TRIGGER:-PT2H');
+  });
+
+  it('nudges an all-day event the morning before, not at midnight', () => {
+    // DTSTART is midnight for a DATE value, so -PT14H is 10am the previous
+    // day. -P1D would fire at midnight, when nothing can be done about it.
+    const ics = buildEventIcs(event({ isAllDay: true }));
+    expect(alarmOf(ics, 'TRIGGER')).toBe('TRIGGER:-PT14H');
+  });
+
+  it('puts the alarm inside the event, not beside it', () => {
+    // A VALARM after END:VEVENT is a file the phone rejects outright.
+    const lines = unfold(buildEventIcs(event({}))).split('\r\n');
+    expect(lines.indexOf('BEGIN:VALARM')).toBeGreaterThan(lines.indexOf('BEGIN:VEVENT'));
+    expect(lines.indexOf('END:VALARM')).toBeLessThan(lines.indexOf('END:VEVENT'));
   });
 });
 
