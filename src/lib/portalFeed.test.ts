@@ -38,6 +38,30 @@ describe('feed url', () => {
     );
   });
 
+  it('survives a trailing newline on the configured url', () => {
+    // Not hypothetical. Vercel's REACT_APP_SUPABASE_URL has one, and it shipped:
+    // every fetch worked (the URL parser drops newlines when it parses) while
+    // Google was handed cid=webcal://…supabase.co%0A/functions/… and could not
+    // resolve it. Encoding the URL into someone else's query string is the one
+    // place the newline survives.
+    process.env.REACT_APP_SUPABASE_URL = 'https://example.supabase.co\n';
+    expect(feedUrl('allstars')).toBe(
+      'https://example.supabase.co/functions/v1/portal-calendar-feed?program=allstars'
+    );
+    expect(googleSubscribeUrl('allstars')).not.toContain('%0A');
+    expect(outlookSubscribeUrl('allstars', 'DIDC')).not.toContain('%0A');
+  });
+
+  it('survives surrounding spaces too', () => {
+    process.env.REACT_APP_SUPABASE_URL = '  https://example.supabase.co  ';
+    expect(feedUrl('academy')).toBe(
+      'https://example.supabase.co/functions/v1/portal-calendar-feed?program=academy'
+    );
+    expect(webcalUrl('academy')).toBe(
+      'webcal://example.supabase.co/functions/v1/portal-calendar-feed?program=academy'
+    );
+  });
+
   it('is empty when supabase is not configured, rather than a broken url', () => {
     // The sheet checks for this and says so. A half-built "undefined/functions"
     // link would look subscribable and fail in the calendar app instead.
