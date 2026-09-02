@@ -28,6 +28,7 @@ import {
   sendHouseholdNote,
   studentFullName,
 } from '../../../lib/portalViewer';
+import { useAutoFocus } from '../shared';
 import { CategoryChips, ChipRow, DetailField } from './ViewerShared';
 
 /**
@@ -73,8 +74,10 @@ const HouseholdPanel: React.FC<{
   programs: PortalProgram[];
   canSendNotes: boolean;
   today: Date;
+  /** Where Back actually goes — a family can be opened from a class roster. */
+  backLabel: string;
   onBack: () => void;
-}> = ({ householdId, programs, canSendNotes, today, onBack }) => {
+}> = ({ householdId, programs, canSendNotes, today, backLabel, onBack }) => {
   const { isMobileOrTablet } = useResponsive();
   const toast = useToast();
   const { confirm, confirmDialog } = useConfirm();
@@ -89,6 +92,11 @@ const HouseholdPanel: React.FC<{
   const [programId, setProgramId] = useState('');
   const [sending, setSending] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // Every other editor in portal-admin focuses its first field when it opens.
+  // This one did not, so a keyboard or screen-reader user landed behind the
+  // overlay with nothing focused.
+  const titleRef = useAutoFocus(composing);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -145,7 +153,11 @@ const HouseholdPanel: React.FC<{
     });
 
     setComposing(false);
-    toast.success('Note sent — they will see it next time they open the portal.');
+    toast.success(
+      detail?.household.linkedLogins === 0
+        ? 'Note saved — it is waiting for them to sign up.'
+        : 'Note sent — they will see it next time they open the portal.',
+    );
     void reload();
   };
 
@@ -196,8 +208,11 @@ const HouseholdPanel: React.FC<{
 
   return (
     <>
+      {/* Named after the destination, not after this screen. Opening a dancer
+           from a roster and being offered "All families" was a promise the
+           button did not keep — it went back to the roster. */}
       <Button variant="ghost" size="sm" leftIcon={<ChevronLeftIcon size={16} />} onClick={onBack}>
-        All families
+        {backLabel}
       </Button>
 
       <Card style={{ marginTop: theme.spacing.sm }}>
@@ -228,7 +243,11 @@ const HouseholdPanel: React.FC<{
         }}>
           <DetailField label="Email">{household.email}</DetailField>
           <DetailField label="Enrolio account">{household.externalAccountId ?? '—'}</DetailField>
-          <DetailField label="Dancers">{household.studentCount}</DetailField>
+          {/* students.length, NOT household.studentCount: the overview view
+               counts only ACTIVE children while the list below shows every
+               child on the account, so a family with a withdrawn dancer read
+               "2" above a list of three. Both now come from one array. */}
+          <DetailField label="Dancers">{students.length}</DetailField>
           <DetailField label="Active enrollments">{household.enrollmentCount}</DetailField>
         </div>
 
@@ -368,6 +387,12 @@ const HouseholdPanel: React.FC<{
                 }}>
                   {plainDate(student.dateOfBirth)}{age !== null ? ` · age ${age}` : ''}
                 </div>
+                {/* Withdrawn children stay on this screen — they explain an
+                    attendance history that would otherwise have no owner — but
+                    they must be labelled, or the count above looks wrong. */}
+                {student.status !== 'active' && (
+                  <ChipRow><Badge variant="warning" size="sm">Inactive</Badge></ChipRow>
+                )}
 
                 {enrollments.length === 0 ? (
                   <p style={{
@@ -441,7 +466,12 @@ const HouseholdPanel: React.FC<{
         size="md"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setComposing(false)}>Cancel</Button>
+            {/* Disabled mid-send: the insert is already on its way, so a
+                 Cancel that only closed the modal cancelled nothing and told
+                 the sender it had. */}
+            <Button variant="secondary" disabled={sending} onClick={() => setComposing(false)}>
+              Cancel
+            </Button>
             <Button variant="primary" loading={sending} onClick={() => void handleSend()}>
               Send note
             </Button>
@@ -458,7 +488,24 @@ const HouseholdPanel: React.FC<{
           is not a message they can reply to.
         </p>
 
+        {/* The note saves fine and nobody can read it, because nobody has an
+            account yet. Saying "they will see it next time they open the
+            portal" to a family that cannot open the portal is the one lie this
+            screen is in a position to tell, and it already knows better. */}
+        {household.linkedLogins === 0 && (
+          <p style={{
+            ...theme.typography.bodySmall,
+            fontFamily: theme.fonts.primary,
+            color: theme.colors.status.warning,
+            margin: `0 0 ${theme.spacing.md}`,
+          }}>
+            Nobody has signed up for this account yet, so this note will sit
+            unread until someone does. It will be waiting for them.
+          </p>
+        )}
+
         <Input
+          ref={titleRef}
           label="Title"
           placeholder="Costume fitting on Saturday"
           value={title}

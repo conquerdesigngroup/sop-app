@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { theme } from '../../../theme';
 import { Badge, SearchInput } from '../../ui';
 import { ManagerList } from '../shared';
@@ -26,6 +26,14 @@ import { CategoryChips, ChipRow, ResultCount, RowSub, RowTitle, ViewerRow } from
  *
  * Filtering is local. Every list is fetched whole (343 / 388 / 103 rows) and
  * searched in memory, so typing is instant and costs no requests.
+ *
+ * THE QUERY IS OWNED BY THE PAGE, NOT BY THESE COMPONENTS
+ *
+ * Opening a family REPLACES the list rather than sitting under it, so a list
+ * holding its own search state was unmounted on every drill-down and came back
+ * empty. Typing "Kettenbrink" again after each family is the exact friction
+ * local search existed to remove, so the page holds the query and hands it
+ * down.
  */
 
 // ------------------------------------------------------------------ families
@@ -35,8 +43,9 @@ export const HouseholdList: React.FC<{
   loading: boolean;
   error: string | null;
   onOpen: (id: string) => void;
-}> = ({ households, loading, error, onOpen }) => {
-  const [query, setQuery] = useState('');
+  query: string;
+  setQuery: (value: string) => void;
+}> = ({ households, loading, error, onOpen, query, setQuery }) => {
 
   const shown = useMemo(
     () => households.filter(h => householdMatches(h, query)),
@@ -99,8 +108,9 @@ export const StudentList: React.FC<{
   error: string | null;
   today: Date;
   onOpenHousehold: (id: string) => void;
-}> = ({ students, loading, error, today, onOpenHousehold }) => {
-  const [query, setQuery] = useState('');
+  query: string;
+  setQuery: (value: string) => void;
+}> = ({ students, loading, error, today, onOpenHousehold, query, setQuery }) => {
 
   const shown = useMemo(
     () => students.filter(s => studentMatches(s, query)),
@@ -164,8 +174,9 @@ export const ClassList: React.FC<{
   loading: boolean;
   error: string | null;
   onOpen: (id: string) => void;
-}> = ({ classes, loading, error, onOpen }) => {
-  const [query, setQuery] = useState('');
+  query: string;
+  setQuery: (value: string) => void;
+}> = ({ classes, loading, error, onOpen, query, setQuery }) => {
 
   const shown = useMemo(
     () => classes.filter(c => classMatches(c, query)),

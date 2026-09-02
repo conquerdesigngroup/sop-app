@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Button, PageHeader } from '../../components/ui';
@@ -76,6 +76,15 @@ const PortalViewerPage: React.FC = () => {
    */
   const [today] = useState(() => new Date());
 
+  // One query per list, held here so a drill-down and back does not wipe it.
+  const [queries, setQueries] = useState<Record<ViewKey, string>>({
+    families: '', dancers: '', classes: '',
+  });
+  const setQuery = useCallback(
+    (key: ViewKey) => (value: string) => setQueries(q => ({ ...q, [key]: value })),
+    [],
+  );
+
   const requestedView = params.get('view') as ViewKey | null;
   const view: ViewKey = VIEWS.some(v => v.key === requestedView)
     ? (requestedView as ViewKey)
@@ -85,14 +94,28 @@ const PortalViewerPage: React.FC = () => {
   const openClassId = params.get('class');
   const openClass = openClassId ? classes.find(c => c.id === openClassId) ?? null : null;
 
-  const setParam = useCallback((next: Record<string, string | null>) => {
+  /**
+   * `push` decides whether the phone's back gesture can undo this.
+   *
+   * Switching tabs replaces: a row of tabs is one screen, and stacking a
+   * history entry per tap turns Back into "undo my last five taps".
+   *
+   * Opening or closing a detail panel PUSHES. The panel replaces the list
+   * rather than sitting under it, so to a parent — and to the phone — it is a
+   * new screen, and with replace the back gesture left the Portal viewer
+   * entirely instead of returning to the 343 families they were looking at.
+   * Closing pushes too: two entries per drill-down is a little history, and
+   * the alternative (replace on close) puts Back on a panel the user has just
+   * dismissed.
+   */
+  const setParam = useCallback((next: Record<string, string | null>, push = false) => {
     const merged = new URLSearchParams(params);
     Object.keys(next).forEach(k => {
       const value = next[k];
       if (value === null) merged.delete(k);
       else merged.set(k, value);
     });
-    setParams(merged, { replace: true });
+    setParams(merged, { replace: !push });
   }, [params, setParams]);
 
   // All three lists load together and are then searched locally. Three
@@ -113,9 +136,32 @@ const PortalViewerPage: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
+  /**
+   * Opening a family does NOT clear `class`.
+   *
+   * It used to. Opening a dancer from a class roster therefore dropped the
+   * roster, and Back — labelled "All families" — landed on the list of classes
+   * instead. Keeping the parameter means the panel stack unwinds the way it was
+   * built: roster to family, family back to the same roster.
+   */
   const openHousehold = useCallback((id: string) => {
-    setParam({ household: id, class: null });
+    setParam({ household: id }, true);
   }, [setParam]);
+
+  /**
+   * A detail panel replaces the list, and the page keeps the scroll position
+   * it had. Tapping the 200th of 343 families therefore opened their record
+   * already scrolled past its own heading, somewhere in the middle of the
+   * dancers. scrollIntoView on the panel rather than window.scrollTo, because
+   * which element actually scrolls depends on the layout this page is mounted
+   * inside and guessing wrong is a silent no-op.
+   */
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const openKey = `${openHouseholdId ?? ''}|${openClassId ?? ''}`;
+  useEffect(() => {
+    if (!openHouseholdId && !openClassId) return;
+    panelRef.current?.scrollIntoView({ block: 'start' });
+  }, [openKey, openHouseholdId, openClassId]);
 
   const subtitle = useMemo(() => {
     if (loading || error) return 'Every account, dancer and roster in the portal';
@@ -142,19 +188,23 @@ const PortalViewerPage: React.FC = () => {
 
       {/* A detail panel replaces the list rather than sitting under it: on a
           phone a list of 343 above a detail is a scroll nobody finishes. */}
+      <div ref={panelRef}>
       {openHouseholdId ? (
         <HouseholdPanel
           householdId={openHouseholdId}
           programs={programs}
           canSendNotes={isSuperAdmin}
           today={today}
-          onBack={() => setParam({ household: null })}
+          // A family can be reached from the family list OR from a class
+          // roster, and Back must name wherever it will actually land.
+          backLabel={openClass ? `Back to ${openClass.name}` : 'All families'}
+          onBack={() => setParam({ household: null }, true)}
         />
       ) : openClass ? (
         <RosterPanel
           klass={openClass}
           today={today}
-          onBack={() => setParam({ class: null })}
+          onBack={() => setParam({ class: null }, true)}
           onOpenHousehold={openHousehold}
         />
       ) : (
@@ -173,6 +223,8 @@ const PortalViewerPage: React.FC = () => {
                 loading={loading}
                 error={error}
                 onOpen={openHousehold}
+                query={queries.families}
+                setQuery={setQuery('families')}
               />
             )}
             {view === 'dancers' && (
@@ -182,6 +234,8 @@ const PortalViewerPage: React.FC = () => {
                 error={error}
                 today={today}
                 onOpenHousehold={openHousehold}
+                query={queries.dancers}
+                setQuery={setQuery('dancers')}
               />
             )}
             {view === 'classes' && (
@@ -189,12 +243,16 @@ const PortalViewerPage: React.FC = () => {
                 classes={classes}
                 loading={loading}
                 error={error}
-                onOpen={id => setParam({ class: id, household: null })}
+                onOpen={id => setParam({ class: id, household: null }, true)}
+                query={queries.classes}
+                setQuery={setQuery('classes')}
               />
             )}
           </div>
         </>
       )}
+
+      </div>
 
       <p style={{
         ...theme.typography.captionSmall,

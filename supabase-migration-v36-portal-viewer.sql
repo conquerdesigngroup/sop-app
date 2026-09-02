@@ -152,8 +152,14 @@ select
   h.display_name,
   h.status,
   h.created_at,
+  -- EVERY child on the account, not just the active ones. The family detail
+  -- screen lists them all — a withdrawn dancer is kept because she explains an
+  -- attendance history that would otherwise have no owner — so counting only
+  -- the active ones here put "2 dancers" in the list above a detail page
+  -- showing three. Two screens disagreeing about a family is worse than either
+  -- number alone. Withdrawn children are marked in the detail instead.
   (select count(*) from public.portal_students s
-    where s.household_id = h.id and s.status = 'active')::int as student_count,
+    where s.household_id = h.id)::int as student_count,
   -- The honest answer to "have they got in yet?", without touching auth.users:
   -- a member row exists only after a signed-in client claims the household.
   (select count(*) from public.portal_household_members m

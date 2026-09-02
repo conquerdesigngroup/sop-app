@@ -14,13 +14,27 @@ import { Badge, Card } from '../../ui';
  * the mobile audit was built to catch.
  */
 
-/** A tappable list row. Whole-card target, because this is used on a phone. */
+/**
+ * A tappable list row. Whole-card target, because this is used on a phone.
+ *
+ * ONE CLICK TARGET, NOT TWO
+ *
+ * This first passed onClick to the Card AS WELL AS to the button inside it.
+ * Card renders a plain <div onClick>, so a tap ran the button's handler and
+ * then bubbled to the div and ran it again — every row fired twice. It happened
+ * to be harmless because opening a household is idempotent, and it would have
+ * stopped being harmless the first time a row toggled anything.
+ *
+ * So the button is the only handler, and it is stretched to fill the card:
+ * the whole row is still the target, but there is exactly one of it, and a
+ * <div onClick> no longer wraps a real control.
+ */
 export const ViewerRow: React.FC<{
   onClick: () => void;
   label: string;
   children: React.ReactNode;
 }> = ({ onClick, label, children }) => (
-  <Card hover padding="sm" onClick={onClick}>
+  <Card hover padding="none">
     <button
       type="button"
       aria-label={label}
@@ -29,8 +43,10 @@ export const ViewerRow: React.FC<{
         appearance: 'none',
         background: 'none',
         border: 'none',
-        padding: 0,
         margin: 0,
+        // The padding Card would have applied, moved onto the button so the
+        // tap target covers the row rather than sitting inside a dead margin.
+        padding: '12px 16px',
         width: '100%',
         textAlign: 'left',
         cursor: 'pointer',
