@@ -9,9 +9,10 @@ import { isManagementRole, isSuperAdminRole, roleLabel } from '../lib/roles';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { useConfirm } from '../hooks/useConfirm';
 import { Button, Input, Modal } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 const TeamManagementPage: React.FC = () => {
-  const { users, addUser, updateUser, deleteUser, adminResetPassword, currentUser, isSuperAdmin } = useAuth();
+  const { users, addUser, updateUser, deleteUser, adminResetPassword, refreshUsers, currentUser, isSuperAdmin } = useAuth();
   const { success, error } = useToast();
   const { isMobile, isTablet, isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
@@ -421,6 +422,7 @@ const TeamManagementPage: React.FC = () => {
       {/* Users Table/Cards */}
       {isMobileOrTablet ? (
         // Mobile Card View
+        <PullToRefresh onRefresh={refreshUsers}>
         <div>
           {filteredUsers.length === 0 ? (
             <div style={styles.emptyState}>
@@ -542,6 +544,7 @@ const TeamManagementPage: React.FC = () => {
             ))
           )}
         </div>
+        </PullToRefresh>
       ) : (
         // Desktop Table View
         <div style={styles.tableCard}>

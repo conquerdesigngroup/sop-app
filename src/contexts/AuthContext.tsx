@@ -30,6 +30,8 @@ interface AuthContextType {
   getUserById: (id: string) => User | undefined;
   getUsersByDepartment: (department: string) => User[];
   getUsersByRole: (role: UserRole) => User[];
+  /** Re-read the staff directory. Pull-to-refresh on Team. */
+  refreshUsers: () => Promise<void>;
   isAuthenticated: boolean;
   /** Management or above — admin AND super_admin. Mirrors is_admin(). */
   isAdmin: boolean;
@@ -1003,6 +1005,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getUserById,
     getUsersByDepartment,
     getUsersByRole,
+    refreshUsers: loadUsers,
     isAuthenticated: currentUser !== null,
     // Deliberately NOT `role === 'admin'`. Once super_admin exists that test
     // is false for the most privileged accounts in the system, which would

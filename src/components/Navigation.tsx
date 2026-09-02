@@ -7,6 +7,8 @@ import { theme, BRAND_MARK } from '../theme';
 import { roleLabel } from '../lib/roles';
 import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
+import { useMobileMenu } from '../contexts/MobileMenuContext';
+import { useTaskCounts } from '../hooks/useTaskCounts';
 
 // Icons
 const icons = {
@@ -91,6 +93,14 @@ const icons = {
       <path d="M9 21v-6h6v6" />
     </svg>
   ),
+  library: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <path d="M9 7h7" />
+      <path d="M9 11h7" />
+    </svg>
+  ),
   chevronDown: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="6 9 12 15 18 9" />
@@ -108,6 +118,8 @@ interface NavItem {
   path: string;
   label: string;
   icon: React.ReactNode;
+  /** Count shown as a pill on the icon. Omitted or zero means no pill. */
+  badge?: number;
 }
 
 interface NavGroup {
@@ -117,6 +129,40 @@ interface NavGroup {
 }
 
 type NavElement = NavItem | NavGroup;
+
+/**
+ * A titled run of rows in the mobile sheet. Mirrors the desktop grouping —
+ * the sheet used to be one flat list of up to twelve rows, so the pages a
+ * super admin opens weekly sat below the fold under the ones everyone opens
+ * daily, with nothing to say which was which.
+ */
+interface NavSection {
+  key: string;
+  label: string;
+  items: NavItem[];
+  /** Collapsible sections start closed unless the current page is inside them. */
+  collapsible?: boolean;
+}
+
+/** Where the sheet remembers whether Management was left open. */
+const MANAGEMENT_OPEN_KEY = 'didc.nav.management-open';
+
+const readManagementOpen = (): boolean | null => {
+  try {
+    const v = window.localStorage.getItem(MANAGEMENT_OPEN_KEY);
+    return v === null ? null : v === '1';
+  } catch {
+    return null;
+  }
+};
+
+const writeManagementOpen = (open: boolean) => {
+  try {
+    window.localStorage.setItem(MANAGEMENT_OPEN_KEY, open ? '1' : '0');
+  } catch {
+    // Private mode or storage disabled: the toggle still works for this visit.
+  }
+};
 
 const Navigation: React.FC = () => {
   const location = useLocation();
@@ -131,17 +177,22 @@ const Navigation: React.FC = () => {
   // One mark for both modes — it carries its own keyline. See BRAND_MARK.
   const brandLogo = BRAND_MARK;
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  // Shared with BottomNavigation's "More" tab and the quick-add button, so
+  // the flag lives in a context rather than here.
+  const { isOpen: showMobileMenu, close: closeMobileMenu, toggle: toggleMobileMenu } = useMobileMenu();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  // null means "never toggled": open if the current page is inside it.
+  const [managementOpen, setManagementOpen] = useState<boolean | null>(readManagementOpen);
   const { isMobileOrTablet } = useResponsive();
+  const { allOverdue } = useTaskCounts();
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   // Close mobile menu when route changes
   useEffect(() => {
-    setShowMobileMenu(false);
+    closeMobileMenu();
     setShowUserMenu(false);
     setOpenDropdown(null);
-  }, [location.pathname]);
+  }, [location.pathname, closeMobileMenu]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -221,7 +272,7 @@ const Navigation: React.FC = () => {
     // only from v13. These were previously offered to every signed-in user.
     if (isSuperAdmin) {
       elements.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
-      elements.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+      elements.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts, badge: allOverdue });
     }
 
     if (canEditPortal) {
@@ -231,9 +282,14 @@ const Navigation: React.FC = () => {
     // Admin group. Team stays for admins — they need the directory to assign
     // who may post to a class — but the audit log and the archive are super
     // admin only, so the group can end up holding a single entry.
+    //
+    // Task Library has had a route and an adminOnly guard since the templates
+    // feature shipped, and no menu entry anywhere: it was reachable only by
+    // typing the URL or via the Library tab inside Job Tasks.
     if (isAdmin) {
       const adminItems: NavItem[] = [
         { path: '/team', label: 'Team', icon: icons.team },
+        { path: '/task-library', label: 'Task Library', icon: icons.library },
       ];
       if (isSuperAdmin) {
         adminItems.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
@@ -245,43 +301,65 @@ const Navigation: React.FC = () => {
     return elements;
   };
 
-  // Flat list for mobile menu
-  const getFlatNavItems = (): NavItem[] => {
-    const items: NavItem[] = [
+  // Sectioned list for the mobile sheet.
+  //
+  // Same pages as the desktop bar, grouped by how often they are opened
+  // rather than by which desktop dropdown they fell into: the daily pages
+  // first, the management pages under a heading that collapses, and the
+  // portal manager on its own because it is a different product.
+  const getMobileSections = (): NavSection[] => {
+    const work: NavItem[] = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
       { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks },
     ];
+    if (isAdmin) {
+      work.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks, badge: allOverdue });
+    }
+    work.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
+    work.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
+    work.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
+
+    const sections: NavSection[] = [{ key: 'work', label: 'Work', items: work }];
 
     if (isAdmin) {
-      items.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks });
-    }
-
-    items.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
-    items.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
-    items.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
-
-    if (isSuperAdmin) {
-      items.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
-      items.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+      const management: NavItem[] = [
+        { path: '/team', label: 'Team', icon: icons.team },
+        { path: '/task-library', label: 'Task Library', icon: icons.library },
+      ];
+      if (isSuperAdmin) {
+        management.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
+        management.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts, badge: allOverdue });
+        management.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
+        management.push({ path: '/archive', label: 'Archive', icon: icons.archive });
+      }
+      sections.push({ key: 'management', label: 'Management', items: management, collapsible: true });
     }
 
     if (canEditPortal) {
-      items.push({ path: '/portal-admin', label: 'Portal', icon: icons.portal });
+      sections.push({
+        key: 'portal',
+        label: 'Parent Portal',
+        items: [{ path: '/portal-admin', label: 'Portal Manager', icon: icons.portal }],
+      });
     }
 
-    if (isAdmin) {
-      items.push({ path: '/team', label: 'Team', icon: icons.team });
-    }
-    if (isSuperAdmin) {
-      items.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
-      items.push({ path: '/archive', label: 'Archive', icon: icons.archive });
-    }
-
-    return items;
+    return sections;
   };
 
   const navElements = getNavElements();
-  const flatNavItems = getFlatNavItems();
+  const mobileSections = getMobileSections();
+
+  const isSectionOpen = (section: NavSection) => {
+    if (!section.collapsible) return true;
+    if (managementOpen !== null) return managementOpen;
+    return section.items.some(item => item.path === location.pathname);
+  };
+
+  const toggleSection = (section: NavSection) => {
+    const next = !isSectionOpen(section);
+    setManagementOpen(next);
+    writeManagementOpen(next);
+  };
 
   const toggleDropdown = (label: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -300,6 +378,23 @@ const Navigation: React.FC = () => {
     >
       <span style={styles.navIcon}>{item.icon}</span>
       {item.label}
+      {item.badge ? (
+        <span
+          role="status"
+          aria-label={`${item.badge} overdue`}
+          style={{
+            ...styles.countPill,
+            minWidth: '18px',
+            height: '18px',
+            lineHeight: '18px',
+            fontSize: '10px',
+            backgroundColor: isPathActive(item.path) ? '#FFFFFF' : theme.colors.primary,
+            color: isPathActive(item.path) ? theme.colors.primary : '#FFFFFF',
+          }}
+        >
+          {item.badge > 99 ? '99+' : item.badge}
+        </span>
+      ) : null}
     </Link>
   );
 
@@ -367,8 +462,9 @@ const Navigation: React.FC = () => {
             {/* Hamburger Menu Button */}
             <button
               style={{...styles.hamburger, color: colors.txt.primary}}
-              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              onClick={toggleMobileMenu}
               aria-label="Toggle menu"
+              aria-expanded={showMobileMenu}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {showMobileMenu ? (
@@ -413,46 +509,97 @@ const Navigation: React.FC = () => {
                 <div
                   className="modal-backdrop backdrop-blur-sm"
                   style={styles.mobileOverlay}
-                  onClick={() => setShowMobileMenu(false)}
+                  onClick={closeMobileMenu}
                 />
-                <div className="bottom-sheet-enter" style={{...styles.mobileMenu, backgroundColor: colors.bg.secondary, borderTopColor: colors.bdr.secondary}}>
+                <div
+                  className="bottom-sheet-enter"
+                  role="dialog"
+                  aria-label="Menu"
+                  style={{...styles.mobileMenu, backgroundColor: colors.bg.secondary, borderTopColor: colors.bdr.secondary}}
+                >
                   {/* Drag handle indicator */}
                   <div style={styles.dragHandle}>
                     <div style={{...styles.dragHandleBar, backgroundColor: colors.bdr.secondary}} />
                   </div>
                   <div style={styles.mobileMenuContent}>
-                    {flatNavItems.map((item, index) => (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        className="list-item-enter"
-                        style={{
-                          ...styles.mobileNavLink,
-                          color: location.pathname === item.path ? colors.txt.primary : colors.txt.secondary,
-                          ...(location.pathname === item.path ? styles.mobileNavLinkActive : {}),
-                          // Capped, not index * 0.05s. An admin sees eleven
-                          // items, so the last one used to start half a second
-                          // after the sheet opened and finish at 0.8s — and
-                          // until each item's slide-in settles it still covers
-                          // part of the row below, so an early tap opens the
-                          // wrong page. 0.18s keeps the stagger legible while
-                          // making the whole list settle in about a third of
-                          // the time.
-                          animationDelay: `${Math.min(index * 0.03, 0.18)}s`,
-                          opacity: 0,
-                        }}
-                      >
-                        <span style={styles.navIcon}>{item.icon}</span>
-                        {item.label}
-                        {location.pathname === item.path && (
-                          <span style={styles.activeIndicator}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          </span>
-                        )}
-                      </Link>
-                    ))}
+                    {mobileSections.map((section, sectionIndex) => {
+                      const open = isSectionOpen(section);
+                      const sectionBadge = section.items.reduce((n, item) => n + (item.badge || 0), 0);
+                      return (
+                        <div key={section.key} style={sectionIndex > 0 ? styles.mobileSection : undefined}>
+                          {section.collapsible ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleSection(section)}
+                              aria-expanded={open}
+                              style={{...styles.mobileSectionToggle, color: colors.txt.tertiary}}
+                            >
+                              <span style={styles.mobileSectionLabel}>{section.label}</span>
+                              {/* Collapsed sections still say when something inside needs attention. */}
+                              {!open && sectionBadge > 0 && (
+                                <span style={{...styles.countPill, backgroundColor: theme.colors.primary}}>
+                                  {sectionBadge > 99 ? '99+' : sectionBadge}
+                                </span>
+                              )}
+                              <span style={{
+                                ...styles.chevron,
+                                marginLeft: 'auto',
+                                transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                              }}>
+                                {icons.chevronDown}
+                              </span>
+                            </button>
+                          ) : (
+                            <div style={{...styles.mobileSectionHeading, color: colors.txt.tertiary}}>
+                              <span style={styles.mobileSectionLabel}>{section.label}</span>
+                            </div>
+                          )}
+                          {open && section.items.map((item, index) => (
+                            <Link
+                              key={item.path}
+                              to={item.path}
+                              className="list-item-enter"
+                              style={{
+                                ...styles.mobileNavLink,
+                                color: location.pathname === item.path ? colors.txt.primary : colors.txt.secondary,
+                                ...(location.pathname === item.path ? styles.mobileNavLinkActive : {}),
+                                // Capped, not index * 0.05s. An admin sees eleven
+                                // items, so the last one used to start half a second
+                                // after the sheet opened and finish at 0.8s — and
+                                // until each item's slide-in settles it still covers
+                                // part of the row below, so an early tap opens the
+                                // wrong page. 0.18s keeps the stagger legible while
+                                // making the whole list settle in about a third of
+                                // the time.
+                                animationDelay: `${Math.min(index * 0.03, 0.18)}s`,
+                                opacity: 0,
+                              }}
+                            >
+                              <span style={styles.navIcon}>{item.icon}</span>
+                              {item.label}
+                              {item.badge ? (
+                                <span style={{
+                                  ...styles.countPill,
+                                  marginLeft: 'auto',
+                                  // On the active (pink) row a pink pill vanishes.
+                                  backgroundColor: location.pathname === item.path ? '#FFFFFF' : theme.colors.primary,
+                                  color: location.pathname === item.path ? theme.colors.primary : '#FFFFFF',
+                                }}>
+                                  {item.badge > 99 ? '99+' : item.badge}
+                                </span>
+                              ) : null}
+                              {location.pathname === item.path && (
+                                <span style={{...styles.activeIndicator, ...(item.badge ? { marginLeft: '8px' } : {})}}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                </span>
+                              )}
+                            </Link>
+                          ))}
+                        </div>
+                      );
+                    })}
 
                     {/* Leaves the staff app entirely, so it is separated from
                         the nav items above and never shows an active state —
@@ -835,6 +982,45 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginLeft: 'auto',
     display: 'flex',
     alignItems: 'center',
+  },
+  mobileSection: {
+    marginTop: '10px',
+  },
+  mobileSectionHeading: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '6px 16px 4px',
+  },
+  mobileSectionToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    padding: '10px 16px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  mobileSectionLabel: {
+    fontFamily: theme.fonts.mono,
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  countPill: {
+    minWidth: '20px',
+    height: '20px',
+    padding: '0 6px',
+    borderRadius: '10px',
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.mono,
+    fontSize: '11px',
+    fontWeight: 700,
+    lineHeight: '20px',
+    textAlign: 'center',
+    boxSizing: 'border-box',
   },
   mobileNavLink: {
     display: 'flex',

@@ -54,6 +54,8 @@ interface WorkHoursContextType {
   loadError: string | null;
   /** False when migration v7 has not been applied; categories are unavailable. */
   hasV7Schema: boolean;
+  /** Re-read everything from the server. Pull-to-refresh on Hours Input. */
+  refresh: () => Promise<void>;
 }
 
 const WorkHoursContext = createContext<WorkHoursContextType | undefined>(undefined);
@@ -208,9 +210,9 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
   // would refetch every time that happened.
   const userId = currentUser?.id;
 
-  // Load work hours and work days
-  useEffect(() => {
-    const loadData = async () => {
+  // Load work hours and work days. A callback rather than a function local to
+  // the effect so that pull-to-refresh can run the same load on demand.
+  const loadData = useCallback(async () => {
       setLoadError(null);
 
       // Signed out? Fetch nothing.
@@ -326,14 +328,15 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
       }
       setLoading(false);
-    };
-
-    loadData();
     // currentUser?.id is a dependency because RLS scopes these tables by
     // auth.uid(): the rows a signed-out or previous user could see are not
     // the rows this user can see. Without it, switching accounts kept the
     // old user's (now unauthorised, hence empty) result set.
   }, [useSupabase, userId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Save to localStorage when using localStorage mode
   useEffect(() => {
@@ -1161,7 +1164,9 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     loading,
     loadError,
     hasV7Schema,
+    refresh: loadData,
   }), [
+    loadData,
     visibleWorkHours,
     addWorkHours,
     updateWorkHours,

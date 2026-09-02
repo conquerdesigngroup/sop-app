@@ -27,8 +27,16 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({
     const container = containerRef.current;
     if (!container) return;
 
-    // Only start pull if at top of scroll
-    if (container.scrollTop === 0) {
+    // Only start pull if at top of scroll.
+    //
+    // Both checks, not just the first. This wrapper is never the element that
+    // scrolls — the pages that use it let the document scroll and give the
+    // wrapper an auto height — so `scrollTop` here is always 0 and on its own
+    // it meant "always". Every downward drag anywhere in the list then became
+    // a pull, and touchmove's preventDefault swallowed the scroll, so a long
+    // list could not be scrolled back up by dragging inside it. The document
+    // position is the one that actually says whether we are at the top.
+    if (container.scrollTop === 0 && window.scrollY <= 0) {
       startY.current = e.touches[0].clientY;
       setIsPulling(true);
     }

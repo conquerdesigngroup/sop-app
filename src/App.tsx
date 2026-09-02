@@ -9,6 +9,8 @@ import { DashboardSettingsProvider } from './contexts/DashboardSettingsContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navigation from './components/Navigation';
 import BottomNavigation from './components/BottomNavigation';
+import QuickAddButton from './components/QuickAddButton';
+import { MobileMenuProvider } from './contexts/MobileMenuContext';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
 import { theme } from './theme';
@@ -377,6 +379,7 @@ const AppContent: React.FC = () => {
       </Suspense>
       {/* Bottom Navigation for Mobile */}
       {showStaffChrome && isMobileOrTablet && <BottomNavigation />}
+      {showStaffChrome && isMobileOrTablet && <QuickAddButton />}
       <OfflineIndicator />
       <SessionExpiryModal />
     </div>
@@ -412,9 +415,11 @@ function App() {
                       the Portal entry. Every fetch inside is behind a session,
                       so a signed-out parent pays nothing for it. */}
                   <PortalAdminProvider>
-                    <Router>
-                      <AppContent />
-                    </Router>
+                    <MobileMenuProvider>
+                      <Router>
+                        <AppContent />
+                      </Router>
+                    </MobileMenuProvider>
                   </PortalAdminProvider>
                 </DashboardSettingsProvider>
               </DataProvider>

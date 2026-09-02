@@ -19,6 +19,7 @@ import { CalendarEvent } from '../types';
 import EventDetailModal from '../components/EventDetailModal';
 import EventEditor from '../components/calendar/EventEditor';
 import GoogleConnectionBanner from '../components/calendar/GoogleConnectionBanner';
+import PullToRefresh from '../components/PullToRefresh';
 import { isManagementRole } from '../lib/roles';
 
 // View type for calendar filtering
@@ -498,6 +499,7 @@ const CalendarPage: React.FC = () => {
       </div>
 
       {/* Main Layout with Sidebar */}
+      <PullToRefresh onRefresh={refresh} disabled={!isMobileOrTablet}>
       <div style={isMobileOrTablet ? styles.mainLayoutMobile : styles.mainLayout}>
         {/* Left Sidebar - Mini Calendar & Today's Agenda */}
         {!isMobileOrTablet && (
@@ -1013,6 +1015,7 @@ const CalendarPage: React.FC = () => {
         )}
         </div>
       </div>
+      </PullToRefresh>
 
       {/* No onDelete: deleting belongs in Google, and the modal hides that
           button when the handler is absent. onEdit is offered only for the
