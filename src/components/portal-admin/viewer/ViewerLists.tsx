@@ -77,7 +77,6 @@ const ListHeader: React.FC<{
 
     <FilterChips
       label="Division"
-      multi
       options={DIVISION_OPTIONS}
       selected={filters.divisions}
       onToggle={v => setFilters({ ...filters, divisions: toggleDivision(filters.divisions, v) })}

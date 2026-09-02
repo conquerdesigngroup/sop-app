@@ -18,7 +18,7 @@ const household = (over: Partial<ViewerHousehold> = {}): ViewerHousehold => ({
   studentCount: 3,
   linkedLogins: 0,
   enrollmentCount: 4,
-  categories: ['All-Stars'],
+  categories: ['allstars'],
   lastNoteAt: null,
   ...over,
 });
@@ -107,7 +107,7 @@ describe('classMatches', () => {
     id: 'c1',
     programId: 'p1',
     name: 'All-Star Bb',
-    category: 'All-Stars',
+    category: 'allstars',
     style: null,
     level: null,
     dayOfWeek: 6,
@@ -278,5 +278,38 @@ describe('filtersAreEmpty', () => {
     expect(filtersAreEmpty(filters({ activity: 'inactive' }))).toBe(false);
     // Sunday again: 0 is a real choice, not an absent one.
     expect(filtersAreEmpty(filters({ dayOfWeek: 0 }))).toBe(false);
+  });
+});
+
+describe('searching for the words that are actually on the row', () => {
+  it('accepts the division label the chips display, not only the stored slug', () => {
+    // The bug this exists for: the chips were changed to read "All-Stars" while
+    // the search still only matched "allstars", so typing the exact text on
+    // thirty visible rows returned "No class matches that".
+    const c = klass({ category: 'allstars' });
+    expect(classMatches(c, 'All-Stars')).toBe(true);
+    expect(classMatches(c, 'all-stars')).toBe(true);
+    expect(classMatches(c, 'allstars')).toBe(true);
+  });
+
+  it('does the same on the families and dancers lists, which show the same chips', () => {
+    expect(householdMatches(household({ categories: ['allstars'] }), 'All-Stars')).toBe(true);
+    expect(studentMatches(student({ categories: ['tnt'] }), 'TNT')).toBe(true);
+  });
+
+  it('does not match a division the row is not in', () => {
+    expect(classMatches(klass({ category: 'academy' }), 'All-Stars')).toBe(false);
+    expect(householdMatches(household({ categories: ['academy'] }), 'All-Stars')).toBe(false);
+  });
+
+  it('finds a class by the day printed on it', () => {
+    expect(classMatches(klass({ dayOfWeek: 6 }), 'saturday')).toBe(true);
+    expect(classMatches(klass({ dayOfWeek: 6 }), 'monday')).toBe(false);
+  });
+
+  it('keeps an unrecognised category searchable by its own spelling', () => {
+    // A category the studio adds later has no label; falling back to the slug
+    // means the row is never unsearchable.
+    expect(classMatches(klass({ category: 'juniors' }), 'juniors')).toBe(true);
   });
 });

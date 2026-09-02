@@ -12,12 +12,19 @@ import { theme } from '../../../theme';
  * The division row holds four chips plus a label on a 320px screen, so it is
  * flex-start and it wraps.
  *
- * MULTI AND SINGLE ARE THE SAME CONTROL
+ * MULTI AND SINGLE ARE THE SAME CONTROL, AND BOTH ARE TOGGLES
  *
  * Divisions are multi-select ("show me anyone in All-Stars or TNT"); access and
- * day are single-select. Rather than two components that drift apart visually,
- * one control takes `multi` and reports the right ARIA state for each:
- * aria-pressed for a toggle, aria-checked inside a radiogroup for a choice.
+ * day allow one choice at a time. Both are announced as a plain group of
+ * toggle buttons, NOT as a radiogroup.
+ *
+ * The single-select rows look like radios and are not: a chip can be tapped
+ * again to deselect it, nothing is selected to begin with, and there is no
+ * roving tabindex or arrow-key navigation. A `radiogroup` promises all three.
+ * TabRow in this folder says the rule outright — announcing a control as
+ * something it is not "gives a screen reader a contract the page does not
+ * keep" — and SegmentedControl follows it too. aria-pressed describes what
+ * these buttons actually are.
  */
 export interface ChipOption {
   value: string;
@@ -30,8 +37,7 @@ const FilterChips: React.FC<{
   /** Selected values. For single-select this holds zero or one entry. */
   selected: string[];
   onToggle: (value: string) => void;
-  multi?: boolean;
-}> = ({ label, options, selected, onToggle, multi = false }) => (
+}> = ({ label, options, selected, onToggle }) => (
   <div style={{
     display: 'flex',
     flexWrap: 'wrap',
@@ -57,7 +63,7 @@ const FilterChips: React.FC<{
     </span>
 
     <div
-      role={multi ? 'group' : 'radiogroup'}
+      role="group"
       aria-labelledby={`filter-${label.replace(/\s+/g, '-').toLowerCase()}`}
       style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.xs }}
     >
@@ -67,9 +73,7 @@ const FilterChips: React.FC<{
           <button
             key={opt.value}
             type="button"
-            role={multi ? undefined : 'radio'}
-            aria-pressed={multi ? active : undefined}
-            aria-checked={multi ? undefined : active}
+            aria-pressed={active}
             onClick={() => onToggle(opt.value)}
             style={{
               ...theme.typography.captionSmall,

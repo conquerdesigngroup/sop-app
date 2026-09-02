@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
-import { PortalUpdate } from '../types';
+import { PortalClassCategory, PortalUpdate } from '../types';
 import { mapUpdate } from './portalMappers';
+import { CLASS_CATEGORY_LABEL, dayName } from './portal';
 
 /**
  * The read layer behind the Portal Viewer — oversight of what families
@@ -209,13 +210,30 @@ export const ageFrom = (dob: string | null, today: Date): number | null => {
  * spells surnames inconsistently (Ketenbrink / Kettenbrink), a name-only search
  * is the same trap that dropped three children from the import.
  */
+/**
+ * A row's divisions as the row DISPLAYS them.
+ *
+ * The column holds slugs; the chips render "All-Stars". Searching the slug
+ * alone meant typing the exact words printed on thirty visible rows returned
+ * "No class matches that" — the search rejecting its own labels. Both spellings
+ * are searchable now, and an unrecognised category falls back to itself so a
+ * category the studio adds later is never unsearchable.
+ *
+ * ClassesSection has done this since v25; this is the same corpus.
+ */
+const divisionText = (categories: string[]): string =>
+  categories
+    .map(c => `${c} ${CLASS_CATEGORY_LABEL[c as PortalClassCategory] ?? ''}`)
+    .join(' ');
+
 export const householdMatches = (h: ViewerHousehold, query: string): boolean => {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return (
     h.name.toLowerCase().indexOf(q) !== -1 ||
     h.email.toLowerCase().indexOf(q) !== -1 ||
-    (h.externalAccountId ?? '').toLowerCase().indexOf(q) !== -1
+    (h.externalAccountId ?? '').toLowerCase().indexOf(q) !== -1 ||
+    divisionText(h.categories).toLowerCase().indexOf(q) !== -1
   );
 };
 
@@ -226,7 +244,8 @@ export const studentMatches = (s: ViewerStudent, query: string): boolean => {
     studentFullName(s).toLowerCase().indexOf(q) !== -1 ||
     (s.displayName ?? '').toLowerCase().indexOf(q) !== -1 ||
     s.householdName.toLowerCase().indexOf(q) !== -1 ||
-    s.householdEmail.toLowerCase().indexOf(q) !== -1
+    s.householdEmail.toLowerCase().indexOf(q) !== -1 ||
+    divisionText(s.categories).toLowerCase().indexOf(q) !== -1
   );
 };
 
@@ -235,9 +254,11 @@ export const classMatches = (c: ViewerClass, query: string): boolean => {
   if (!q) return true;
   return (
     c.name.toLowerCase().indexOf(q) !== -1 ||
-    (c.category ?? '').toLowerCase().indexOf(q) !== -1 ||
+    divisionText(c.category ? [c.category] : []).toLowerCase().indexOf(q) !== -1 ||
     (c.instructorName ?? '').toLowerCase().indexOf(q) !== -1 ||
-    (c.externalClassId ?? '').toLowerCase().indexOf(q) !== -1
+    (c.externalClassId ?? '').toLowerCase().indexOf(q) !== -1 ||
+    // "saturday" is on the row too, and is how anyone would look for it.
+    (dayName(c.dayOfWeek) ?? '').toLowerCase().indexOf(q) !== -1
   );
 };
 
