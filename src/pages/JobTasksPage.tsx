@@ -13,6 +13,8 @@ import { useConfirm } from '../hooks/useConfirm';
 import TaskLibraryImport from '../components/TaskLibraryImport';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 import PullToRefresh from '../components/PullToRefresh';
+import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
+import { Modal, Button, Input } from '../components/ui';
 
 // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight. Bare
 // `new Date('YYYY-MM-DD')` parses as UTC midnight, which renders as the
@@ -43,6 +45,12 @@ const JobTasksPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'priority' | 'status' | 'name'>('date');
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [pendingOpenTaskId, setPendingOpenTaskId] = useState<string | null>(null);
+  // Bulk reassign / reschedule dialogs. `null` means neither is open.
+  const [bulkMode, setBulkMode] = useState<'reassign' | 'reschedule' | null>(null);
+  const [bulkAssignees, setBulkAssignees] = useState<string[]>([]);
+  const [bulkDate, setBulkDate] = useState<string>('');
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Was `currentUser?.role === 'admin'` — a second source of truth that a
   // widened is_admin() would not reach, so a super admin would have lost this
@@ -66,15 +74,39 @@ const JobTasksPage: React.FC = () => {
   // Handle incoming state from navigation (e.g., from Dashboard day click)
   useEffect(() => {
     if (location.state) {
-      const state = location.state as { openCreateModal?: boolean; selectedDate?: string };
+      const state = location.state as {
+        openCreateModal?: boolean;
+        selectedDate?: string;
+        /** Deep link from Alerts, the Activity Log or search: open this task's detail. */
+        openTaskId?: string;
+        /** Pre-fill the search box, e.g. with a person's name from the Alerts team tab. */
+        search?: string;
+      };
       if (state.openCreateModal) {
         setInitialScheduledDate(state.selectedDate || null);
         setShowCreateModal(true);
+      }
+      if (state.openTaskId) {
+        setPendingOpenTaskId(state.openTaskId);
+      }
+      if (state.search) {
+        setSearchQuery(state.search);
       }
       // Clear the state to prevent re-opening on refresh
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
+
+  // A deep-linked task may arrive before the task list has loaded, so the
+  // id waits here until the task exists.
+  useEffect(() => {
+    if (!pendingOpenTaskId) return;
+    const task = jobTasks.find(t => t.id === pendingOpenTaskId);
+    if (!task) return;
+    setSelectedTask(task);
+    setShowTaskDetailModal(true);
+    setPendingOpenTaskId(null);
+  }, [pendingOpenTaskId, jobTasks]);
 
   // Filter job tasks (exclude archived tasks)
   const filteredTasks = jobTasks.filter(task => {
@@ -357,6 +389,85 @@ const JobTasksPage: React.FC = () => {
     }
   };
 
+  // One task, from a swipe. Same write as the bulk path, no confirm — the
+  // swipe itself is the deliberate gesture, and My Tasks already works this way.
+  const handleQuickComplete = async (task: JobTask) => {
+    try {
+      await updateJobTask(task.id, {
+        status: 'completed',
+        completedSteps: task.steps.map(s => s.id),
+        progressPercentage: 100,
+      });
+      showToast(`"${task.title}" completed`, 'success');
+    } catch (error) {
+      console.error('Error completing task:', error);
+      showToast('Could not complete the task', 'error');
+    }
+  };
+
+  const openBulkReassign = () => {
+    // Start from whoever the first selected task already has, so "add one
+    // more person" is one tap rather than re-picking everyone.
+    const first = jobTasks.find(t => selectedTasks.has(t.id));
+    setBulkAssignees(first ? [...first.assignedTo] : []);
+    setBulkMode('reassign');
+  };
+
+  const openBulkReschedule = () => {
+    const first = jobTasks.find(t => selectedTasks.has(t.id));
+    setBulkDate(first?.scheduledDate || new Date().toISOString().split('T')[0]);
+    setBulkMode('reschedule');
+  };
+
+  // Applies one partial update to every selected task, in sequence — the
+  // same shape as handleBulkComplete, so a partial failure leaves the
+  // successful ones done and reports the rest rather than rolling back.
+  const applyBulkUpdate = async (patch: Partial<JobTask>, done: string) => {
+    const count = selectedTasks.size;
+    setBulkBusy(true);
+    try {
+      for (const taskId of Array.from(selectedTasks)) {
+        await updateJobTask(taskId, patch);
+      }
+      setSelectedTasks(new Set());
+      setBulkMode(null);
+      showToast(`${count} task(s) ${done}`, 'success');
+    } catch (error) {
+      console.error('Error updating tasks:', error);
+      showToast('Some tasks could not be updated', 'error');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkReassign = () => {
+    if (bulkAssignees.length === 0) {
+      showToast('Pick at least one person', 'error');
+      return;
+    }
+    // Unassigned tasks become pending for the new people; an in-progress or
+    // completed task keeps its status.
+    void applyBulkUpdate({ assignedTo: bulkAssignees }, 'reassigned');
+  };
+
+  const handleBulkReschedule = () => {
+    if (!bulkDate) {
+      showToast('Pick a date', 'error');
+      return;
+    }
+    // Moving an overdue task forward clears the overdue flag; the date rule
+    // in the filters recomputes it if the new date is still in the past.
+    const patch: Partial<JobTask> = { scheduledDate: bulkDate };
+    const today = new Date().toISOString().split('T')[0];
+    if (bulkDate >= today) {
+      const anyOverdue = jobTasks.some(t => selectedTasks.has(t.id) && t.status === 'overdue');
+      if (anyOverdue) patch.status = 'pending';
+    }
+    void applyBulkUpdate(patch, 'rescheduled');
+  };
+
+  const assignableUsers = users.filter(u => u.isActive !== false && u.role !== 'client');
+
   return (
     <div style={{...styles.container, ...(isMobile && styles.containerMobile)}}>
       <div style={{...styles.header, ...(isMobile && styles.headerMobile)}}>
@@ -489,6 +600,24 @@ const JobTasksPage: React.FC = () => {
                   </svg>
                   Mark Complete
                 </button>
+                <button style={styles.bulkButton} onClick={openBulkReassign}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <line x1="19" y1="8" x2="19" y2="14" />
+                    <line x1="22" y1="11" x2="16" y2="11" />
+                  </svg>
+                  Reassign
+                </button>
+                <button style={styles.bulkButton} onClick={openBulkReschedule}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  Reschedule
+                </button>
                 <button style={{...styles.bulkButton, ...styles.bulkButtonDanger}} onClick={handleBulkArchive}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="21 8 21 21 3 21 3 8" />
@@ -502,6 +631,71 @@ const JobTasksPage: React.FC = () => {
               </div>
             </div>
           )}
+
+          <Modal
+            isOpen={bulkMode === 'reassign'}
+            onClose={() => setBulkMode(null)}
+            title={`Reassign ${selectedTasks.size} task${selectedTasks.size === 1 ? '' : 's'}`}
+            size="sm"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setBulkMode(null)} disabled={bulkBusy}>Cancel</Button>
+                <Button variant="primary" onClick={handleBulkReassign} loading={bulkBusy}>Reassign</Button>
+              </>
+            }
+          >
+            <p style={{ margin: '0 0 12px', color: theme.colors.txt.secondary, fontSize: '14px' }}>
+              The selected tasks will be assigned to exactly these people.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '50dvh', overflowY: 'auto' }}>
+              {assignableUsers.map(u => {
+                const on = bulkAssignees.includes(u.id);
+                return (
+                  <label
+                    key={u.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      borderRadius: theme.borderRadius.md,
+                      backgroundColor: on ? theme.colors.bg.tertiary : 'transparent',
+                      color: theme.colors.txt.primary,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => setBulkAssignees(prev => on ? prev.filter(id => id !== u.id) : [...prev, u.id])}
+                    />
+                    <span style={{ flex: 1, minWidth: 0 }}>{u.firstName} {u.lastName}</span>
+                    <span style={{ fontSize: '12px', color: theme.colors.txt.tertiary }}>{u.department}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </Modal>
+
+          <Modal
+            isOpen={bulkMode === 'reschedule'}
+            onClose={() => setBulkMode(null)}
+            title={`Reschedule ${selectedTasks.size} task${selectedTasks.size === 1 ? '' : 's'}`}
+            size="sm"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setBulkMode(null)} disabled={bulkBusy}>Cancel</Button>
+                <Button variant="primary" onClick={handleBulkReschedule} loading={bulkBusy}>Reschedule</Button>
+              </>
+            }
+          >
+            <Input
+              type="date"
+              label="New date"
+              value={bulkDate}
+              onChange={(e) => setBulkDate(e.target.value)}
+            />
+          </Modal>
 
           {/* Filters */}
           <div style={{...styles.filtersContainer, ...(isMobile && styles.filtersContainerMobile)}}>
@@ -582,20 +776,35 @@ const JobTasksPage: React.FC = () => {
                 <p style={styles.emptySubtext}>Create your first task to get started</p>
               </div>
             ) : (
-              sortedTasks.map(task => (
-                <JobTaskCard
-                  key={task.id}
-                  task={task}
-                  users={users}
-                  isMobile={isMobile}
-                  isAdmin={isAdmin}
-                  isSelected={selectedTasks.has(task.id)}
-                  onToggleSelect={() => handleToggleSelectTask(task.id)}
-                  onArchive={() => handleArchiveTask(task.id)}
-                  onEdit={() => handleEditTask(task)}
-                  onClick={() => handleTaskClick(task)}
-                />
-              ))
+              sortedTasks.map(task => {
+                const card = (
+                  <JobTaskCard
+                    key={task.id}
+                    task={task}
+                    users={users}
+                    isMobile={isMobile}
+                    isAdmin={isAdmin}
+                    isSelected={selectedTasks.has(task.id)}
+                    onToggleSelect={() => handleToggleSelectTask(task.id)}
+                    onArchive={() => handleArchiveTask(task.id)}
+                    onEdit={() => handleEditTask(task)}
+                    onClick={() => handleTaskClick(task)}
+                  />
+                );
+                // On a phone, swipe right to complete and left to archive —
+                // the gestures My Tasks already teaches. Completed tasks
+                // only archive.
+                if (!isMobileOrTablet || !isAdmin) return card;
+                return (
+                  <SwipeableListItem
+                    key={task.id}
+                    leftAction={task.status !== 'completed' ? createSwipeAction.complete(() => handleQuickComplete(task)) : undefined}
+                    rightAction={createSwipeAction.archive(() => handleArchiveTask(task.id))}
+                  >
+                    {card}
+                  </SwipeableListItem>
+                );
+              })
             )}
           </div>
           </PullToRefresh>

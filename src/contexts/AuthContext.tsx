@@ -32,6 +32,19 @@ interface AuthContextType {
   getUsersByRole: (role: UserRole) => User[];
   /** Re-read the staff directory. Pull-to-refresh on Team. */
   refreshUsers: () => Promise<void>;
+  /**
+   * "View as": the person the UI is currently pretending to be, or null.
+   *
+   * While set, `currentUser`, `isAdmin` and `isSuperAdmin` describe THAT
+   * person, so every page renders what they would see. The session, the
+   * Supabase client and RLS are untouched — writes still happen as the real
+   * signed-in admin, which is why the banner says so. Session-only: a reload
+   * ends it.
+   */
+  viewingAs: User | null;
+  /** Start viewing as someone. Ignored unless the real user is management. */
+  viewAs: (userId: string) => void;
+  exitViewAs: () => void;
   isAuthenticated: boolean;
   /** Management or above — admin AND super_admin. Mirrors is_admin(). */
   isAdmin: boolean;
@@ -90,6 +103,7 @@ const WARNING_BEFORE_TIMEOUT = 5 * 60 * 1000; // Show warning 5 minutes before t
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [viewingAs, setViewingAs] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [sessionExpiryWarning, setSessionExpiryWarning] = useState(false);
@@ -300,6 +314,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       supabase.removeChannel(channel);
     };
   }, [useSupabase, loadUsers, currentUser?.id]);
+
+  // View as. Gated on the REAL user's role, not the effective one — otherwise
+  // an admin viewing as a team member could not have started, and a team
+  // member could never start at all, which is the point.
+  const viewAs = useCallback((userId: string) => {
+    if (!isManagementRole(currentUser?.role)) return;
+    if (userId === currentUser?.id) { setViewingAs(null); return; }
+    const target = users.find(u => u.id === userId);
+    if (target) setViewingAs(target);
+  }, [currentUser, users]);
+
+  const exitViewAs = useCallback(() => setViewingAs(null), []);
+
+  // Signing out, or the real user changing, ends it.
+  useEffect(() => {
+    if (!currentUser) setViewingAs(null);
+  }, [currentUser]);
 
   // Refresh user data when tab becomes visible (ensures data is fresh when users return)
   const handleVisibilityRefresh = useCallback(() => {
@@ -991,8 +1022,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, [currentUser, sessionExpiryWarning, resetSessionTimers, clearSessionTimers]);
 
+  // The effective user is the one being viewed as, when there is one. Only
+  // the value handed to consumers is swapped: everything above (session
+  // timers, the users subscription, login/logout) keeps using the real one.
+  const effectiveUser = viewingAs ?? currentUser;
+
   const value: AuthContextType = {
-    currentUser,
+    currentUser: effectiveUser,
     users,
     login,
     logout,
@@ -1006,12 +1042,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getUsersByDepartment,
     getUsersByRole,
     refreshUsers: loadUsers,
+    viewingAs,
+    viewAs,
+    exitViewAs,
     isAuthenticated: currentUser !== null,
     // Deliberately NOT `role === 'admin'`. Once super_admin exists that test
     // is false for the most privileged accounts in the system, which would
     // drop them into a team member's UI.
-    isAdmin: isManagementRole(currentUser?.role),
-    isSuperAdmin: isSuperAdminRole(currentUser?.role),
+    isAdmin: isManagementRole(effectiveUser?.role),
+    isSuperAdmin: isSuperAdminRole(effectiveUser?.role),
     loading,
     sessionExpiryWarning,
     extendSession,

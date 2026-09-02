@@ -10,6 +10,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Navigation from './components/Navigation';
 import BottomNavigation from './components/BottomNavigation';
 import QuickAddButton from './components/QuickAddButton';
+import ViewAsBanner from './components/ViewAsBanner';
 import { MobileMenuProvider } from './contexts/MobileMenuContext';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
@@ -185,6 +186,7 @@ const AppContent: React.FC = () => {
       }}
     >
       {showStaffChrome && <Navigation />}
+      {showStaffChrome && <ViewAsBanner />}
       <Suspense fallback={<PageLoadingFallback />}>
         <Routes>
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />

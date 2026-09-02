@@ -11,6 +11,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import { DashboardSkeleton } from '../components/Skeleton';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 import EventDetailModal from '../components/EventDetailModal';
+import AdminAttention from '../components/dashboard/AdminAttention';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 
 // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight — bare new Date()
@@ -679,6 +680,9 @@ const AdminDashboard: React.FC<{
           </>
         )}
       </div>
+
+      {/* What needs a manager today */}
+      <AdminAttention navigate={navigate} />
 
       {/* Departments - Compact pills */}
       {departmentStats.length > 0 && (

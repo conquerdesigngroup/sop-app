@@ -9,6 +9,7 @@ import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
 import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { useTaskCounts } from '../hooks/useTaskCounts';
+import GlobalSearch from './GlobalSearch';
 
 // Icons
 const icons = {
@@ -183,9 +184,30 @@ const Navigation: React.FC = () => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   // null means "never toggled": open if the current page is inside it.
   const [managementOpen, setManagementOpen] = useState<boolean | null>(readManagementOpen);
-  const { isMobileOrTablet } = useResponsive();
+  const { isMobileOrTablet, windowWidth } = useResponsive();
   const { allOverdue } = useTaskCounts();
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // ⌘K / Ctrl+K opens search from any page. Ignored while typing in a field
+  // that might legitimately want the chord.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(v => !v);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  const searchIcon = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <path d="M21 21l-4.35-4.35" />
+    </svg>
+  );
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -450,6 +472,7 @@ const Navigation: React.FC = () => {
   };
 
   return (
+    <>
     <nav style={{
       ...styles.nav,
       backgroundColor: colors.bg.secondary,
@@ -491,16 +514,26 @@ const Navigation: React.FC = () => {
               />
             </Link>
 
-            {/* User Avatar (Mobile) */}
-            <div
-              data-user-button
-              style={styles.userAvatarMobile}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowUserMenu(!showUserMenu);
-              }}
-            >
-              {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
+            <div style={styles.mobileRight}>
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Search"
+                style={{...styles.hamburger, color: colors.txt.primary}}
+              >
+                {searchIcon}
+              </button>
+              {/* User Avatar (Mobile) */}
+              <div
+                data-user-button
+                style={styles.userAvatarMobile}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowUserMenu(!showUserMenu);
+                }}
+              >
+                {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
+              </div>
             </div>
 
             {/* Mobile Menu Overlay */}
@@ -736,6 +769,19 @@ const Navigation: React.FC = () => {
 
             {/* Right side: User Section */}
             <div style={styles.userSection}>
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Search"
+                title="Search (⌘K)"
+                style={{...styles.searchButton, color: colors.txt.secondary, borderColor: colors.bdr.primary, backgroundColor: colors.bg.tertiary}}
+              >
+                {searchIcon}
+                {/* The links wrap onto a second row below ~1280; the icon alone
+                    costs nothing there, the label and shortcut only above. */}
+                {windowWidth >= 1280 && <span>Search</span>}
+                {windowWidth >= 1280 && <kbd style={{...styles.searchKbd, borderColor: colors.bdr.secondary}}>⌘K</kbd>}
+              </button>
               <div
                 data-user-button
                 style={{...styles.userButton, backgroundColor: colors.bg.tertiary, borderColor: colors.bdr.primary}}
@@ -852,6 +898,10 @@ const Navigation: React.FC = () => {
         )}
       </div>
     </nav>
+    {/* Outside the <nav>: index.css forces every `nav button` transparent,
+        which turned the highlighted result row white-on-white. */}
+    <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </>
   );
 };
 
@@ -919,6 +969,32 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '32px',
     width: 'auto',
     objectFit: 'contain',
+  },
+  mobileRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+  },
+  searchButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 10px',
+    marginRight: '10px',
+    border: '1px solid',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    fontFamily: theme.fonts.primary,
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  searchKbd: {
+    fontFamily: theme.fonts.mono,
+    fontSize: '10px',
+    padding: '1px 5px',
+    border: '1px solid',
+    borderRadius: '4px',
+    opacity: 0.8,
   },
   userAvatarMobile: {
     width: '36px',

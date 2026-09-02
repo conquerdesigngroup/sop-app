@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useResponsive } from '../hooks/useResponsive';
@@ -12,8 +13,17 @@ import { Button, Input, Modal } from '../components/ui';
 import PullToRefresh from '../components/PullToRefresh';
 
 const TeamManagementPage: React.FC = () => {
-  const { users, addUser, updateUser, deleteUser, adminResetPassword, refreshUsers, currentUser, isSuperAdmin } = useAuth();
+  const { users, addUser, updateUser, deleteUser, adminResetPassword, refreshUsers, viewAs, currentUser, isSuperAdmin } = useAuth();
   const { success, error } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // "View as": swap the whole app to what this person sees, then land on
+  // their dashboard. The banner under the header is the way back.
+  const handleViewAs = (user: User) => {
+    viewAs(user.id);
+    navigate('/dashboard');
+  };
   const { isMobile, isTablet, isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
 
@@ -25,6 +35,15 @@ const TeamManagementPage: React.FC = () => {
   const [resetBusy, setResetBusy] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Deep link from search or the activity log: land with the box filled in.
+  useEffect(() => {
+    const state = location.state as { searchTerm?: string } | null;
+    if (state?.searchTerm) {
+      setSearchTerm(state.searchTerm);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -480,6 +499,19 @@ const TeamManagementPage: React.FC = () => {
                   </div>
                 </div>
                 <div style={styles.userCardFooter}>
+                  {user.id !== currentUser?.id && user.isActive !== false && (
+                    <button
+                      onClick={() => handleViewAs(user)}
+                      style={{...styles.iconButton, ...styles.iconButtonMobile}}
+                      title={`View the app as ${user.firstName}`}
+                      aria-label={`View as ${user.firstName} ${user.lastName}`}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleOpenEditUser(user)}
                     style={{...styles.iconButton, ...styles.iconButtonMobile}}
@@ -616,6 +648,19 @@ const TeamManagementPage: React.FC = () => {
                     </td>
                     <td style={styles.td}>
                       <div style={styles.actionButtons}>
+                        {user.id !== currentUser?.id && user.isActive !== false && (
+                          <button
+                            onClick={() => handleViewAs(user)}
+                            style={styles.iconButton}
+                            title={`View the app as ${user.firstName}`}
+                            aria-label={`View as ${user.firstName} ${user.lastName}`}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           onClick={() => handleOpenEditUser(user)}
                           style={styles.iconButton}
