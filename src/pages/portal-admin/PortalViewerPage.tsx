@@ -11,7 +11,9 @@ import { ClassList, HouseholdList, StudentList } from '../../components/portal-a
 import HouseholdPanel from '../../components/portal-admin/viewer/HouseholdPanel';
 import RosterPanel from '../../components/portal-admin/viewer/RosterPanel';
 import {
+  EMPTY_FILTERS,
   ViewerClass,
+  ViewerFilters,
   ViewerHousehold,
   ViewerStudent,
   loadHouseholds,
@@ -76,12 +78,33 @@ const PortalViewerPage: React.FC = () => {
    */
   const [today] = useState(() => new Date());
 
-  // One query per list, held here so a drill-down and back does not wipe it.
+  /**
+   * One query and one filter set PER LIST, held here rather than inside the
+   * lists themselves.
+   *
+   * A detail panel replaces the list, so state living in the list is destroyed
+   * on every drill-down: narrowing 343 families to the four All-Stars ones and
+   * then losing it by opening one of them is exactly the work filtering was
+   * supposed to save.
+   *
+   * Per-list and not shared, because the three lists filter different things —
+   * a day-of-week chip means nothing on the families tab, and carrying
+   * "Not signed up" onto the class list would silently hide classes for a
+   * reason that screen cannot explain.
+   */
   const [queries, setQueries] = useState<Record<ViewKey, string>>({
     families: '', dancers: '', classes: '',
   });
   const setQuery = useCallback(
     (key: ViewKey) => (value: string) => setQueries(q => ({ ...q, [key]: value })),
+    [],
+  );
+
+  const [filters, setFilters] = useState<Record<ViewKey, ViewerFilters>>({
+    families: EMPTY_FILTERS, dancers: EMPTY_FILTERS, classes: EMPTY_FILTERS,
+  });
+  const setFilter = useCallback(
+    (key: ViewKey) => (value: ViewerFilters) => setFilters(f => ({ ...f, [key]: value })),
     [],
   );
 
@@ -225,6 +248,8 @@ const PortalViewerPage: React.FC = () => {
                 onOpen={openHousehold}
                 query={queries.families}
                 setQuery={setQuery('families')}
+                filters={filters.families}
+                setFilters={setFilter('families')}
               />
             )}
             {view === 'dancers' && (
@@ -236,6 +261,8 @@ const PortalViewerPage: React.FC = () => {
                 onOpenHousehold={openHousehold}
                 query={queries.dancers}
                 setQuery={setQuery('dancers')}
+                filters={filters.dancers}
+                setFilters={setFilter('dancers')}
               />
             )}
             {view === 'classes' && (
@@ -246,6 +273,8 @@ const PortalViewerPage: React.FC = () => {
                 onOpen={id => setParam({ class: id, household: null }, true)}
                 query={queries.classes}
                 setQuery={setQuery('classes')}
+                filters={filters.classes}
+                setFilters={setFilter('classes')}
               />
             )}
           </div>

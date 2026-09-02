@@ -1,6 +1,8 @@
 import React from 'react';
 import { theme } from '../../../theme';
 import { Badge, Card } from '../../ui';
+import { CLASS_CATEGORY_LABEL, CLASS_CATEGORY_ORDER } from '../../../lib/portal';
+import { PortalClassCategory } from '../../../types';
 
 /**
  * The parts every Viewer list shares.
@@ -106,12 +108,28 @@ export const ChipRow: React.FC<{ children: React.ReactNode }> = ({ children }) =
   </div>
 );
 
-/** Program entitlement, derived from the classes a family is actually in. */
+/**
+ * Division, derived from the classes a family is actually enrolled in — the
+ * rule the owner set, and the same one Stage 2 will scope the portal by.
+ *
+ * Labelled through CLASS_CATEGORY_LABEL rather than printed raw: the column
+ * holds slugs, so these chips said "allstars" where the rest of the app says
+ * "All-Stars". Ordered through CLASS_CATEGORY_ORDER too, because array_agg
+ * returns whatever order the planner felt like and a family's chips should not
+ * reshuffle between the list and their own page.
+ */
 export const CategoryChips: React.FC<{ categories: string[] }> = ({ categories }) => {
   if (!categories.length) return null;
+  const known = CLASS_CATEGORY_ORDER.filter(c => categories.indexOf(c) !== -1);
+  // Anything the studio adds to portal_classes.category later still shows,
+  // spelled as it is stored, rather than silently vanishing from the chips.
+  const unknown = categories.filter(c => CLASS_CATEGORY_ORDER.indexOf(c as PortalClassCategory) === -1);
   return (
     <>
-      {categories.map(c => (
+      {known.map(c => (
+        <Badge key={c} variant="info" size="sm">{CLASS_CATEGORY_LABEL[c]}</Badge>
+      ))}
+      {unknown.map(c => (
         <Badge key={c} variant="info" size="sm">{c}</Badge>
       ))}
     </>
