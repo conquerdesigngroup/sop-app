@@ -55,7 +55,6 @@ const ProgramCalendar = lazy(() => import('./pages/portal/ProgramCalendar'));
 const PortalLogin = lazy(() => import('./pages/portal/PortalLogin'));
 const PortalSignUp = lazy(() => import('./pages/portal/PortalSignUp'));
 const PortalUpdatePassword = lazy(() => import('./pages/portal/PortalUpdatePassword'));
-const PortalAccount = lazy(() => import('./pages/portal/PortalAccount'));
 const PortalProfile = lazy(() => import('./pages/portal/Profile'));
 
 // The staff side of the portal. Reachable by admins and by any employee holding
@@ -226,7 +225,11 @@ const AppContent: React.FC = () => {
                 <Route path="/portal/login" element={<PortalLogin />} />
                 <Route path="/portal/signup" element={<PortalSignUp />} />
                 <Route path="/portal/update-password" element={<PortalUpdatePassword />} />
-                <Route path="/portal/account" element={<PortalAccount />} />
+                {/* Kept as a redirect rather than deleted: a parent may have
+                    bookmarked it, and PortalAccount's content — email, password
+                    change, sign-out — now lives on the profile as the Account
+                    card. */}
+                <Route path="/portal/account" element={<Navigate to="/portal/profile" replace />} />
               </>
             )}
 
