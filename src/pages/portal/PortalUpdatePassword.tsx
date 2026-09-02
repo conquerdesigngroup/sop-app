@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { theme } from '../../theme';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import PortalLayout from '../../components/portal/PortalLayout';
-import { Button, Card, Input, Spinner } from '../../components/ui';
+import { Button, Card, PasswordInput, Spinner } from '../../components/ui';
 import { logActivity } from '../../lib/activityLog';
 import { CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
 import { portalRoutes } from '../../lib/portal';
@@ -137,17 +137,15 @@ const PortalUpdatePassword: React.FC = () => {
               }}>
                 At least {CLIENT_MIN_PASSWORD} characters.
               </p>
-              <Input
+              <PasswordInput
                 label="New password"
-                type="password"
                 autoComplete="new-password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 disabled={status === 'saving'}
               />
-              <Input
+              <PasswordInput
                 label="Confirm new password"
-                type="password"
                 autoComplete="new-password"
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}

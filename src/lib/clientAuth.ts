@@ -50,7 +50,23 @@ export const CLIENT_AUTH_ENABLED =
 /** Where a client password-reset email lands. Must be on the Supabase redirect allow-list. */
 export const PORTAL_UPDATE_PASSWORD_PATH = '/portal/update-password';
 
-export const CLIENT_MIN_PASSWORD = 10;
+/**
+ * Minimum client password length.
+ *
+ * Six, not ten. Ten was locking parents out of a portal whose whole content is
+ * their own child's class schedule and attendance — the friction was costing
+ * more sign-ups than the extra characters were buying in safety.
+ *
+ * Must stay >= Supabase's own password_min_length (currently 6) or GoTrue
+ * rejects what the form accepted, and it must match MIN_PASSWORD in
+ * supabase/functions/portal-signup — the browser check is convenience, that one
+ * is the actual gate.
+ *
+ * The compensating control for a shorter minimum is leaked-password checking
+ * (password_hibp_enabled), which rejects known-breached passwords outright and
+ * is worth far more here than two extra characters.
+ */
+export const CLIENT_MIN_PASSWORD = 6;
 
 interface RegisterInput {
   email: string;
