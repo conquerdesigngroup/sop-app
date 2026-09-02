@@ -83,13 +83,17 @@ const PortalHome: React.FC = () => {
           />
         ))}
 
-        {/* Clients manage their own login here. Staff previewing the portal
-            keep their account on the staff side, so no tile for them. */}
+        {/* One destination, not two. This tile used to point at
+            /portal/account, which held the same email, the same sign-out and a
+            password form that the profile's Account card already signposted —
+            so the portal had two doors to the same room. Both now open the
+            profile, which is where a family's dancers, schedule and attendance
+            live as well. */}
         {CLIENT_AUTH_ENABLED && isClient && (
           <NavTile
-            label="My Account"
-            description={profile?.email ?? 'Password and sign-out.'}
-            to="/portal/account"
+            label="My Profile"
+            description={profile?.email ?? 'Dancers, schedule and account.'}
+            to="/portal/profile"
           />
         )}
       </div>
