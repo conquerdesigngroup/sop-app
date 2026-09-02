@@ -236,12 +236,20 @@ const mapProgress = (row: any): ClassProgress => ({
   },
 });
 
-/** The columns portal_attendance_summary must expose. Named once. */
-const SUMMARY_COLUMNS =
-  'student_id, class_id, enrollment_id, attended, counted, percent, status, season, '
+/**
+ * The columns portal_my_enrollments exposes. Named once.
+ *
+ * NOT portal_attendance_summary. That view aggregates SESSIONS, so before the
+ * first attendance import it returns zero rows for an enrolled child — and the
+ * card then said "No classes this season", which is false. Enrollment and
+ * attendance are different facts with different lifetimes; this view carries
+ * the enrollment and LEFT JOINs the numbers.
+ */
+const ENROLLMENT_COLUMNS =
+  'student_id, class_id, enrollment_id, range, attended, counted, percent, status, season, '
   + 'enrolled_on, dropped_on, class_name, class_style, class_category, day_of_week, '
   + 'start_time, end_time, season_start, season_end, class_location, instructor_name, '
-  + 'class_level, what_to_bring';
+  + 'class_level, what_to_bring, cancelled_dates';
 
 const loadLiveView = async (
   studentId: string | null,
@@ -277,8 +285,8 @@ const loadLiveView = async (
   const target = mapped.find(s => s.id === studentId) ?? mapped[0];
 
   const { data: rows, error } = await supabase
-    .from('portal_attendance_summary')
-    .select(SUMMARY_COLUMNS)
+    .from('portal_my_enrollments')
+    .select(ENROLLMENT_COLUMNS)
     .eq('student_id', target.id)
     .eq('range', range);
 
@@ -381,8 +389,8 @@ export const loadStudentProgress = async (
   }
 
   const { data, error } = await supabase
-    .from('portal_attendance_summary')
-    .select(SUMMARY_COLUMNS)
+    .from('portal_my_enrollments')
+    .select(ENROLLMENT_COLUMNS)
     .eq('student_id', studentId)
     .eq('range', range);
 
@@ -505,29 +513,119 @@ const loadFixtureHousehold = (
   };
 };
 
+/**
+ * Claim the household carrying this login's own email.
+ *
+ * Every RLS policy in v33 pivots on portal_household_members, and until v35
+ * nothing could write a row to it — so a signed-in parent read zero students
+ * and saw "No dancers linked yet" regardless of how much correct data sat
+ * behind it. The RPC is security-definer and takes no arguments: it can only
+ * ever link the caller to the household whose primary_email matches the email
+ * on their own JWT, so a client cannot choose a family to join.
+ *
+ * Idempotent, and attempted once per page load rather than per read.
+ */
+let linkAttempt: Promise<void> | null = null;
+
+const ensureHouseholdLink = (): Promise<void> => {
+  if (linkAttempt === null) {
+    linkAttempt = supabase
+      .rpc('link_household_member')
+      .then(() => undefined)
+      // A parent whose family was never imported matches nothing. That is an
+      // honest outcome, not an error, and must not break the page.
+      .catch(() => undefined);
+  }
+  return linkAttempt as Promise<void>;
+};
+
 export const loadHouseholdSummary = async (
   src: AttendanceSource,
   settings: AttendanceSettings = DEFAULT_ATTENDANCE_SETTINGS,
 ): Promise<HouseholdSummary> => {
   if (src.source === 'fixture') return loadFixtureHousehold(src.scenario, settings);
 
-  // Live: the same shape, assembled from the view. RLS already scopes it to
-  // this household, so there is no household filter here by design (§6.3).
-  const view = await loadLiveView(null, 'all');
-  const perStudent = view.students.map(student => ({
+  await ensureHouseholdLink();
+
+  // RLS scopes every read below to this household, so there is no household
+  // filter here by design (§6.3).
+  const [studentsRes, memberRes] = await Promise.all([
+    supabase
+      .from('portal_students')
+      .select('id, household_id, external_student_id, first_name, last_name, display_name, status')
+      .eq('status', 'active')
+      .order('first_name'),
+    supabase
+      .from('portal_household_members')
+      .select('member_type, student_id')
+      .maybeSingle(),
+  ]);
+
+  if (studentsRes.error) return { ...EMPTY_HOUSEHOLD, error: GENERIC_LOAD_ERROR };
+
+  const students: Student[] = (studentsRes.data ?? []).map(mapStudent);
+  const memberType = (memberRes.data?.member_type as MemberType) ?? 'guardian';
+  if (!students.length) return { ...EMPTY_HOUSEHOLD, memberType };
+
+  // 'all' because the schedule is not a function of the range filter — a
+  // Saturday class must be addable to a calendar on a Tuesday, and "up next"
+  // must not vanish because the user is looking at "This month".
+  const { data, error } = await supabase
+    .from('portal_my_enrollments')
+    .select(ENROLLMENT_COLUMNS)
+    .eq('range', 'all');
+
+  if (error) return { ...EMPTY_HOUSEHOLD, students, memberType, error: GENERIC_LOAD_ERROR };
+
+  const rows: any[] = data ?? [];
+  const byId = new Map(students.map(s => [s.id, s]));
+  const progress: ClassProgress[] = rows.map(mapProgress);
+
+  const perStudent = students.map(student => ({
     student,
-    current: view.current.filter(p => p.enrollment.studentId === student.id),
+    current: progress.filter(p => p.enrollment.studentId === student.id
+                              && p.enrollment.status === 'active'),
   }));
 
+  // The projection needs the same shape the fixture path builds: a student, a
+  // class, an enrollment, and the sessions that are known NOT to be held. The
+  // view carries those dates as an array so this costs no extra round trip.
+  const cancelledByClass: Record<string, string[]> = {};
+  const entries = rows.flatMap((row, i) => {
+    const student = byId.get(row.student_id);
+    const p = progress[i];
+    if (!student || p.enrollment.status !== 'active') return [];
+    const dates: string[] = row.cancelled_dates ?? [];
+    cancelledByClass[p.klass.id] = dates;
+    return [{
+      student,
+      klass: p.klass,
+      enrollment: p.enrollment,
+      sessions: dates.map(d => ({
+        id: `x-${p.klass.id}-${d}`,
+        classId: p.klass.id,
+        sessionDate: d,
+        // Only the fact that it is NOT 'held' matters to blockedDates().
+        status: 'cancelled' as const,
+        source: 'manual' as const,
+        note: null,
+      })),
+    }];
+  });
+
+  // Real clock on live data. The fixture pins a date so the demo stays stable;
+  // a real family's "tonight" is tonight.
+  const now = new Date();
+
   return {
-    students: view.students,
-    memberType: view.memberType,
+    students,
+    memberType,
     perStudent,
-    upcoming: [],
-    series: [],
-    cancelledByClass: {},
-    enrolledClassIds: unique(view.current.map(p => p.klass.id)),
-    error: view.error,
+    upcoming: buildUpcoming(entries, now),
+    series: nextPerClass(entries, now),
+    cancelledByClass,
+    enrolledClassIds: unique(perStudent.flatMap(p => p.current.map(c => c.klass.id))),
+    error: null,
   };
 };
 
