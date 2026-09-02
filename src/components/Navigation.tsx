@@ -7,6 +7,9 @@ import { theme, BRAND_MARK } from '../theme';
 import { roleLabel } from '../lib/roles';
 import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
+import { useOpenTaskCount } from '../hooks/useOpenTaskCount';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { BOTTOM_NAV_PATHS } from './BottomNavigation';
 
 // Icons
 const icons = {
@@ -108,12 +111,15 @@ interface NavItem {
   path: string;
   label: string;
   icon: React.ReactNode;
+  /** A count shown beside the label. Nothing is drawn for zero. */
+  badge?: number;
 }
 
 interface NavGroup {
   label: string;
   icon: React.ReactNode;
   items: NavItem[];
+  badge?: number;
 }
 
 type NavElement = NavItem | NavGroup;
@@ -135,6 +141,14 @@ const Navigation: React.FC = () => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const { isMobileOrTablet } = useResponsive();
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const openTaskCount = useOpenTaskCount();
+  const reducedMotion = useReducedMotion();
+  // Whichever control opened the menu that is currently showing, so Escape
+  // can hand focus back to it instead of dropping it on the body.
+  const lastTriggerRef = useRef<HTMLElement | null>(null);
+  const rememberTrigger = (e: React.SyntheticEvent<HTMLElement>) => {
+    lastTriggerRef.current = e.currentTarget;
+  };
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -175,6 +189,22 @@ const Navigation: React.FC = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Escape closes whatever is open and returns focus to the control that
+  // opened it. Before this the only way to dismiss a menu was to click
+  // somewhere else, which a keyboard cannot do.
+  useEffect(() => {
+    if (!showMobileMenu && !showUserMenu && !openDropdown) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setShowMobileMenu(false);
+      setShowUserMenu(false);
+      setOpenDropdown(null);
+      lastTriggerRef.current?.focus();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showMobileMenu, showUserMenu, openDropdown]);
+
   const handleLogout = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowUserMenu(false);
@@ -186,11 +216,20 @@ const Navigation: React.FC = () => {
     return 'items' in item;
   };
 
-  const isPathActive = (path: string) => location.pathname === path;
+  // Prefix match, so a sub-page keeps its parent lit: the Portal viewer and
+  // Client Accounts live under /portal-admin and used to leave nothing in the
+  // header highlighted. The trailing slash keeps /hours from claiming
+  // /hours-input.
+  const isPathActive = (path: string) =>
+    location.pathname === path || location.pathname.startsWith(path + '/');
 
-  const isGroupActive = (group: NavGroup) => {
-    return group.items.some(item => location.pathname === item.path);
-  };
+  const isGroupActive = (group: NavGroup) => group.items.some(item => isPathActive(item.path));
+
+  // A dropdown holding one entry is a click that leads to one choice. A team
+  // member's Tasks group is only My Tasks, and a plain admin's Admin group is
+  // only Team, so both are rendered as the link itself.
+  const collapseGroup = (group: NavGroup): NavElement =>
+    group.items.length === 1 ? group.items[0] : group;
 
   // Build navigation structure with grouped items
   const getNavElements = (): NavElement[] => {
@@ -202,8 +241,9 @@ const Navigation: React.FC = () => {
     const tasksGroup: NavGroup = {
       label: 'Tasks',
       icon: icons.tasks,
+      badge: openTaskCount,
       items: [
-        { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks },
+        { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks, badge: openTaskCount },
       ],
     };
 
@@ -211,35 +251,35 @@ const Navigation: React.FC = () => {
       tasksGroup.items.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks });
     }
 
-    elements.push(tasksGroup);
+    elements.push(collapseGroup(tasksGroup));
     elements.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
     elements.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
     // Hours Input stays open to everyone — it is where you log your OWN time.
     elements.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
-
-    // Everyone else's hours, and the alert board built on them, are super admin
-    // only from v13. These were previously offered to every signed-in user.
-    if (isSuperAdmin) {
-      elements.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
-      elements.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
-    }
 
     if (canEditPortal) {
       elements.push({ path: '/portal-admin', label: 'Portal', icon: icons.portal });
     }
 
     // Admin group. Team stays for admins — they need the directory to assign
-    // who may post to a class — but the audit log and the archive are super
-    // admin only, so the group can end up holding a single entry.
+    // who may post to a class. Everything a super admin gets on top of that
+    // lives in here too: everyone else's hours and the alert board built on
+    // them (super admin only from v13; they were once offered to every
+    // signed-in user), the audit log and the archive. Top-level they made
+    // nine entries, which wrapped the header onto a second row on a 1280px
+    // laptop; in the group the row holds at that width. For a plain admin
+    // the group is a single entry and collapses to the Team link itself.
     if (isAdmin) {
       const adminItems: NavItem[] = [
         { path: '/team', label: 'Team', icon: icons.team },
       ];
       if (isSuperAdmin) {
+        adminItems.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
+        adminItems.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
         adminItems.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
         adminItems.push({ path: '/archive', label: 'Archive', icon: icons.archive });
       }
-      elements.push({ label: 'Admin', icon: icons.admin, items: adminItems });
+      elements.push(collapseGroup({ label: 'Admin', icon: icons.admin, items: adminItems }));
     }
 
     return elements;
@@ -249,7 +289,7 @@ const Navigation: React.FC = () => {
   const getFlatNavItems = (): NavItem[] => {
     const items: NavItem[] = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-      { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks },
+      { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks, badge: openTaskCount },
     ];
 
     if (isAdmin) {
@@ -281,7 +321,109 @@ const Navigation: React.FC = () => {
   };
 
   const navElements = getNavElements();
-  const flatNavItems = getFlatNavItems();
+  // The sheet offers only what the bottom bar does not. For a team member
+  // without a class that is nothing, and the hamburger is not drawn at all —
+  // it used to open a list of the same five pages already under their thumb.
+  const moreItems = getFlatNavItems().filter(item => !BOTTOM_NAV_PATHS.includes(item.path));
+  const hasMoreItems = moreItems.length > 0;
+
+  // Inverted on an active (pink) row, where a pink pill would vanish.
+  const renderBadge = (count: number | undefined, onActive: boolean) =>
+    count ? (
+      <span
+        aria-label={`${count} open`}
+        style={{
+          ...styles.countPill,
+          backgroundColor: onActive ? '#FFFFFF' : theme.colors.primary,
+          color: onActive ? theme.colors.primary : '#FFFFFF',
+        }}
+      >
+        {count > 99 ? '99+' : count}
+      </span>
+    ) : null;
+
+  // Escape returns focus here; the mobile and desktop variants render the
+  // same entries, so they are built once and only the wrapper differs.
+  const renderUserMenuItems = () => (
+    <>
+      <button
+        type="button"
+        style={{...styles.userMenuItem, color: colors.txt.secondary}}
+        onClick={() => navigate('/profile')}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+        Profile
+      </button>
+      <button
+        type="button"
+        style={{...styles.userMenuItem, color: colors.txt.secondary}}
+        onClick={() => navigate('/settings')}
+      >
+        <span style={styles.navIcon}>{React.cloneElement(icons.admin, { width: 16, height: 16 })}</span>
+        Settings
+      </button>
+      <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
+      <button
+        type="button"
+        style={{...styles.userMenuItem, color: colors.txt.secondary}}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleTheme();
+        }}
+      >
+        {isDark ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        )}
+        {isDark ? 'Light Mode' : 'Dark Mode'}
+      </button>
+      {/* Leaves the staff app entirely. This is its only home now — it used
+          to be offered in the menu sheet as well, where it sat among pages
+          it is not one of. */}
+      <button
+        type="button"
+        style={{...styles.userMenuItem, color: colors.txt.secondary}}
+        onClick={() => navigate(portalRoutes.chooser)}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+        Back to menu
+      </button>
+      <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
+      <button
+        type="button"
+        style={styles.userMenuItemLogout}
+        onClick={handleLogout}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+        Logout
+      </button>
+    </>
+  );
 
   const toggleDropdown = (label: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -292,6 +434,7 @@ const Navigation: React.FC = () => {
     <Link
       key={item.path}
       to={item.path}
+      aria-current={isPathActive(item.path) ? 'page' : undefined}
       style={{
         ...styles.navLink,
         color: isPathActive(item.path) ? colors.txt.primary : colors.txt.secondary,
@@ -300,6 +443,7 @@ const Navigation: React.FC = () => {
     >
       <span style={styles.navIcon}>{item.icon}</span>
       {item.label}
+      {renderBadge(item.badge, isPathActive(item.path))}
     </Link>
   );
 
@@ -314,7 +458,13 @@ const Navigation: React.FC = () => {
         style={styles.dropdownContainer}
       >
         <button
-          onClick={(e) => toggleDropdown(group.label, e)}
+          type="button"
+          aria-haspopup="true"
+          aria-expanded={isOpen}
+          onClick={(e) => {
+            rememberTrigger(e);
+            toggleDropdown(group.label, e);
+          }}
           style={{
             ...styles.navLink,
             ...styles.dropdownTrigger,
@@ -324,6 +474,7 @@ const Navigation: React.FC = () => {
         >
           <span style={styles.navIcon}>{group.icon}</span>
           {group.label}
+          {renderBadge(group.badge, isActive)}
           <span style={{
             ...styles.chevron,
             transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
@@ -338,6 +489,7 @@ const Navigation: React.FC = () => {
               <Link
                 key={item.path}
                 to={item.path}
+                aria-current={isPathActive(item.path) ? 'page' : undefined}
                 style={{
                   ...styles.dropdownItem,
                   color: isPathActive(item.path) ? colors.txt.primary : colors.txt.secondary,
@@ -346,6 +498,7 @@ const Navigation: React.FC = () => {
               >
                 <span style={styles.dropdownIcon}>{item.icon}</span>
                 {item.label}
+                {renderBadge(item.badge, isPathActive(item.path))}
               </Link>
             ))}
           </div>
@@ -364,11 +517,20 @@ const Navigation: React.FC = () => {
         {/* Mobile/Tablet Layout */}
         {isMobileOrTablet && (
           <>
-            {/* Hamburger Menu Button */}
+            {/* Hamburger Menu Button. Only when the sheet would hold
+                something the bottom bar does not; the spacer keeps the
+                avatar on the right when it is not drawn. */}
+            {hasMoreItems ? (
             <button
+              type="button"
               style={{...styles.hamburger, color: colors.txt.primary}}
-              onClick={() => setShowMobileMenu(!showMobileMenu)}
-              aria-label="Toggle menu"
+              onClick={(e) => {
+                rememberTrigger(e);
+                setShowMobileMenu(!showMobileMenu);
+              }}
+              aria-label={showMobileMenu ? 'Close menu' : 'More pages'}
+              aria-expanded={showMobileMenu}
+              aria-controls="staff-more-menu"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {showMobileMenu ? (
@@ -385,6 +547,9 @@ const Navigation: React.FC = () => {
                 )}
               </svg>
             </button>
+            ) : (
+              <div style={styles.hamburgerSpacer} aria-hidden="true" />
+            )}
 
             {/* Center Logo */}
             <Link to="/dashboard" style={styles.centerLogoMobile}>
@@ -396,55 +561,77 @@ const Navigation: React.FC = () => {
             </Link>
 
             {/* User Avatar (Mobile) */}
-            <div
+            <button
+              type="button"
               data-user-button
               style={styles.userAvatarMobile}
+              aria-label="Account menu"
+              aria-haspopup="true"
+              aria-expanded={showUserMenu}
+              aria-controls="staff-user-menu"
               onClick={(e) => {
                 e.stopPropagation();
+                rememberTrigger(e);
                 setShowUserMenu(!showUserMenu);
               }}
             >
               {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
-            </div>
+            </button>
 
             {/* Mobile Menu Overlay */}
-            {showMobileMenu && (
+            {showMobileMenu && hasMoreItems && (
               <>
                 <div
                   className="modal-backdrop backdrop-blur-sm"
                   style={styles.mobileOverlay}
                   onClick={() => setShowMobileMenu(false)}
                 />
-                <div className="bottom-sheet-enter" style={{...styles.mobileMenu, backgroundColor: colors.bg.secondary, borderTopColor: colors.bdr.secondary}}>
+                <div
+                  id="staff-more-menu"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="More pages"
+                  className={reducedMotion ? undefined : 'bottom-sheet-enter'}
+                  style={{...styles.mobileMenu, backgroundColor: colors.bg.secondary, borderTopColor: colors.bdr.secondary}}
+                >
                   {/* Drag handle indicator */}
                   <div style={styles.dragHandle}>
                     <div style={{...styles.dragHandleBar, backgroundColor: colors.bdr.secondary}} />
                   </div>
                   <div style={styles.mobileMenuContent}>
-                    {flatNavItems.map((item, index) => (
+                    {/* Says why Dashboard, Tasks and the rest are not in
+                        here: they are on the bar below. */}
+                    <div style={{...styles.sheetHeading, color: colors.txt.tertiary}}>More</div>
+                    {moreItems.map((item, index) => {
+                      const active = isPathActive(item.path);
+                      return (
                       <Link
                         key={item.path}
                         to={item.path}
-                        className="list-item-enter"
+                        aria-current={active ? 'page' : undefined}
+                        className={reducedMotion ? undefined : 'list-item-enter'}
                         style={{
                           ...styles.mobileNavLink,
-                          color: location.pathname === item.path ? colors.txt.primary : colors.txt.secondary,
-                          ...(location.pathname === item.path ? styles.mobileNavLinkActive : {}),
-                          // Capped, not index * 0.05s. An admin sees eleven
+                          color: active ? colors.txt.primary : colors.txt.secondary,
+                          ...(active ? styles.mobileNavLinkActive : {}),
+                          // Capped, not index * 0.05s. An admin sees several
                           // items, so the last one used to start half a second
                           // after the sheet opened and finish at 0.8s — and
                           // until each item's slide-in settles it still covers
                           // part of the row below, so an early tap opens the
                           // wrong page. 0.18s keeps the stagger legible while
                           // making the whole list settle in about a third of
-                          // the time.
-                          animationDelay: `${Math.min(index * 0.03, 0.18)}s`,
-                          opacity: 0,
+                          // the time. Skipped entirely under reduced motion,
+                          // where the rows must start visible.
+                          ...(reducedMotion
+                            ? {}
+                            : { animationDelay: `${Math.min(index * 0.03, 0.18)}s`, opacity: 0 }),
                         }}
                       >
                         <span style={styles.navIcon}>{item.icon}</span>
                         {item.label}
-                        {location.pathname === item.path && (
+                        {renderBadge(item.badge, active)}
+                        {active && (
                           <span style={styles.activeIndicator}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                               <polyline points="20 6 9 17 4 12" />
@@ -452,26 +639,8 @@ const Navigation: React.FC = () => {
                           </span>
                         )}
                       </Link>
-                    ))}
-
-                    {/* Leaves the staff app entirely, so it is separated from
-                        the nav items above and never shows an active state —
-                        the chooser is not a staff destination. */}
-                    <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary, margin: '8px 0'}} />
-                    <Link
-                      to={portalRoutes.chooser}
-                      style={{...styles.mobileNavLink, color: colors.txt.tertiary}}
-                    >
-                      <span style={styles.navIcon}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="3" width="7" height="7" rx="1" />
-                          <rect x="14" y="3" width="7" height="7" rx="1" />
-                          <rect x="3" y="14" width="7" height="7" rx="1" />
-                          <rect x="14" y="14" width="7" height="7" rx="1" />
-                        </svg>
-                      </span>
-                      Back to menu
-                    </Link>
+                      );
+                    })}
                   </div>
                 </div>
               </>
@@ -479,7 +648,7 @@ const Navigation: React.FC = () => {
 
             {/* User Menu (Mobile) */}
             {showUserMenu && (
-              <div data-user-menu className="modal-content" style={{...styles.userMenuMobile, backgroundColor: colors.bg.secondary, borderColor: colors.bdr.primary}}>
+              <div id="staff-user-menu" data-user-menu className="modal-content" style={{...styles.userMenuMobile, backgroundColor: colors.bg.secondary, borderColor: colors.bdr.primary}}>
                 <div style={{...styles.userInfoMobile, borderBottomColor: colors.bdr.primary}}>
                   <div style={{...styles.userNameMobile, color: colors.txt.primary}}>
                     {currentUser?.firstName} {currentUser?.lastName}
@@ -489,78 +658,7 @@ const Navigation: React.FC = () => {
                   </div>
                 </div>
                 <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
-                <div
-                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                  onClick={() => navigate('/profile')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  Profile
-                </div>
-                <div
-                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                  onClick={() => navigate('/settings')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
-                  Settings
-                </div>
-                <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
-                {/* Theme Toggle */}
-                <div
-                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTheme();
-                  }}
-                >
-                  {isDark ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="5" />
-                      <line x1="12" y1="1" x2="12" y2="3" />
-                      <line x1="12" y1="21" x2="12" y2="23" />
-                      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                      <line x1="1" y1="12" x2="3" y2="12" />
-                      <line x1="21" y1="12" x2="23" y2="12" />
-                      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                    </svg>
-                  )}
-                  {isDark ? 'Light Mode' : 'Dark Mode'}
-                </div>
-                                <div
-                  style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                  onClick={() => navigate(portalRoutes.chooser)}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="3" width="7" height="7" rx="1" />
-                  <rect x="3" y="14" width="7" height="7" rx="1" />
-                  <rect x="14" y="14" width="7" height="7" rx="1" />
-                  </svg>
-                  Back to menu
-                </div>
-                <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
-                <div
-                  style={styles.userMenuItemLogout}
-                  onClick={handleLogout}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                  Logout
-                </div>
+                {renderUserMenuItems()}
               </div>
             )}
           </>
@@ -589,11 +687,16 @@ const Navigation: React.FC = () => {
 
             {/* Right side: User Section */}
             <div style={styles.userSection}>
-              <div
+              <button
+                type="button"
                 data-user-button
+                aria-haspopup="true"
+                aria-expanded={showUserMenu}
+                aria-controls="staff-user-menu"
                 style={{...styles.userButton, backgroundColor: colors.bg.tertiary, borderColor: colors.bdr.primary}}
                 onClick={(e) => {
                   e.stopPropagation();
+                  rememberTrigger(e);
                   setShowUserMenu(!showUserMenu);
                 }}
               >
@@ -622,82 +725,11 @@ const Navigation: React.FC = () => {
                 >
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
-              </div>
+              </button>
 
               {showUserMenu && (
-                <div data-user-menu className="modal-content" style={{...styles.userMenu, backgroundColor: colors.bg.secondary, borderColor: colors.bdr.primary}}>
-                  <div
-                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                    onClick={() => navigate('/profile')}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                    Profile
-                  </div>
-                  <div
-                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                    onClick={() => navigate('/settings')}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                    Settings
-                  </div>
-                  <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
-                  {/* Theme Toggle */}
-                  <div
-                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleTheme();
-                    }}
-                  >
-                    {isDark ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="5" />
-                        <line x1="12" y1="1" x2="12" y2="3" />
-                        <line x1="12" y1="21" x2="12" y2="23" />
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                        <line x1="1" y1="12" x2="3" y2="12" />
-                        <line x1="21" y1="12" x2="23" y2="12" />
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                      </svg>
-                    )}
-                    {isDark ? 'Light Mode' : 'Dark Mode'}
-                  </div>
-                                    <div
-                    style={{...styles.userMenuItem, color: colors.txt.secondary}}
-                    onClick={() => navigate(portalRoutes.chooser)}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="7" height="7" rx="1" />
-                    <rect x="14" y="3" width="7" height="7" rx="1" />
-                    <rect x="3" y="14" width="7" height="7" rx="1" />
-                    <rect x="14" y="14" width="7" height="7" rx="1" />
-                  </svg>
-                    Back to menu
-                  </div>
-                  <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
-                  <div
-                    style={styles.userMenuItemLogout}
-                    onClick={handleLogout}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                      <polyline points="16 17 21 12 16 7" />
-                      <line x1="21" y1="12" x2="9" y2="12" />
-                    </svg>
-                    Logout
-                  </div>
+                <div id="staff-user-menu" data-user-menu className="modal-content" style={{...styles.userMenu, backgroundColor: colors.bg.secondary, borderColor: colors.bdr.primary}}>
+                  {renderUserMenuItems()}
                 </div>
               )}
             </div>
@@ -761,6 +793,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     transition: 'background-color 0.2s',
   },
+  // Same footprint as the hamburger: 24px icon plus 8px padding a side.
+  hamburgerSpacer: {
+    width: '40px',
+    height: '40px',
+    flexShrink: 0,
+  },
   centerLogoMobile: {
     position: 'absolute',
     left: '50%',
@@ -784,7 +822,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     fontSize: '13px',
     fontWeight: 600,
+    fontFamily: 'inherit',
     cursor: 'pointer',
+    padding: 0,
     border: `2px solid ${theme.colors.bdr.primary}`,
   },
   mobileOverlay: {
@@ -830,6 +870,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
+  },
+  sheetHeading: {
+    padding: '4px 16px 6px',
+    fontSize: '11px',
+    fontWeight: 700,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    fontFamily: theme.fonts.mono,
+  },
+  countPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '18px',
+    height: '18px',
+    padding: '0 5px',
+    marginLeft: '2px',
+    borderRadius: theme.borderRadius.full,
+    fontSize: '11px',
+    fontWeight: 700,
+    lineHeight: 1,
+    fontFamily: theme.fonts.mono,
+    boxSizing: 'border-box',
   },
   activeIndicator: {
     marginLeft: 'auto',
@@ -1002,6 +1065,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     transition: 'all 0.2s',
+    // It is a <button> now, so it is reachable by keyboard; these undo the
+    // browser's own button styling.
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    color: 'inherit',
   },
   userAvatar: {
     width: '32px',
@@ -1042,13 +1110,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     overflow: 'hidden',
     zIndex: 1100,
   },
+  // Real <button>s rather than divs, so Tab reaches them and Enter fires
+  // them. The resets below make a button look like the row it replaced.
   userMenuItem: {
     display: 'flex',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    width: '100%',
     padding: `${theme.spacing.md} ${theme.spacing.lg}`,
     color: theme.colors.txt.secondary,
     fontSize: '14px',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    background: 'none',
+    border: 'none',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
@@ -1056,9 +1131,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    width: '100%',
     padding: `${theme.spacing.md} ${theme.spacing.lg}`,
     color: theme.colors.status.error,
     fontSize: '14px',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    background: 'none',
+    border: 'none',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
