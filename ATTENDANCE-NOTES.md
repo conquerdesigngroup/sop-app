@@ -170,3 +170,28 @@ The live query path has no tests. It cannot meaningfully have any until the v33
 tables exist — mocking it today would pin the shape of a schema that is still
 waiting on the Enrolio export to be finalised. Item 3 is the test that matters,
 and it becomes writable the moment v33 lands.
+
+## Portal Viewer (v36) — what was deliberately left
+
+- **Reads are gated at `is_admin()`, not `is_super_admin()`.** The Viewer page
+  is super-admin only, but that is a route guard. v33 wrote every household
+  policy as `<own rows> OR is_admin()`, so a plain admin could already select
+  households, students, enrollments and attendance before this change and still
+  can. Nothing new was opened; nothing was narrowed either. If the owner wants
+  the tables themselves restricted, it is one `is_admin()` → `is_super_admin()`
+  per policy in v33 — but check the import pipeline first, which will run as an
+  admin.
+- **Writes ARE enforced.** `portal_updates_insert/update/delete` require
+  `is_super_admin()` for any row carrying a `household_id`. Verified against
+  production with a real insert under both roles.
+- **A note is one-way.** No reply, no thread, no read receipt. If the studio
+  wants a conversation, that is a different table and a different screen; the
+  compose form says so in words so nobody is misled into treating it as a
+  message.
+- **Nothing is emailed or pushed.** A parent sees a note the next time they open
+  the portal. The install-telemetry migration (v32) that would tell us how many
+  families have the PWA installed is still written-but-unapplied, and that
+  number is the thing worth knowing before building notifications.
+- **The Enrolio import is still the source of truth.** The Viewer cannot edit an
+  enrollment, a roster or a child's details, and should not learn to: two places
+  to change the same fact is how the Kettenbrink/Ketenbrink split survived.

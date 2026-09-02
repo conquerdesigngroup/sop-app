@@ -261,7 +261,13 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         .from('portal_updates')
         .select('*')
         .eq('program_id', programId)
-        .eq('is_published', true);
+        .eq('is_published', true)
+        // Broadcasts only. A note addressed to one household (v36) is already
+        // unreadable by anon and by other families, but its own family WOULD
+        // see it here — appearing on the program feed among notices sent to
+        // ninety people, with nothing to say it was written to them. It belongs
+        // in their profile's Updates card, which labels it.
+        .is('household_id', null);
 
       // undefined = everything for the program; null = program-wide only;
       // a string = that class only.

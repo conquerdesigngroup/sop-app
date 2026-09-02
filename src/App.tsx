@@ -61,6 +61,7 @@ const PortalProfile = lazy(() => import('./pages/portal/Profile'));
 // a class, which is why its route is a plain ProtectedRoute — see the page.
 const PortalManagerPage = lazy(() => import('./pages/portal-admin/PortalManagerPage'));
 const ClientAccountsPage = lazy(() => import('./pages/portal-admin/ClientAccountsPage'));
+const PortalViewerPage = lazy(() => import('./pages/portal-admin/PortalViewerPage'));
 
 // Page loading fallback - simple centered spinner.
 // theme.colors resolve to CSS variables, so this is theme-aware automatically.
@@ -368,6 +369,19 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <PortalManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* Oversight of what families actually have — accounts, dancers,
+              rosters — and the one place a note can be sent to a single
+              household. Super admin only by instruction. The gate here is the
+              UI's; the note itself is refused by portal_updates_insert (v36)
+              for anyone below super admin, so a typed URL buys nothing. */}
+          <Route
+            path="/portal-admin/viewer"
+            element={
+              <ProtectedRoute superAdminOnly>
+                <PortalViewerPage />
               </ProtectedRoute>
             }
           />

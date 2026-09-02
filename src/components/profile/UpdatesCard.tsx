@@ -21,6 +21,11 @@ import { useHousehold } from './useHousehold';
  * reaches only the enrolled. That is the entire change, and it needs no schema
  * work at all — only knowing which classes the household is in.
  *
+ * Since v36 there is a third case that needs no filtering here at all: a note
+ * with household_id set is addressed to ONE family, and RLS decides whether the
+ * row is returned. It arrives with class_id null so the filter below passes it
+ * through, and it is marked FOR YOUR FAMILY when rendered.
+ *
  * READ STATE IS LOCAL AND DELIBERATELY FORGIVING
  *
  * "New" is computed against a last-seen timestamp in localStorage rather than a
@@ -174,6 +179,19 @@ const UpdatesCard: React.FC<ProfileCardProps> = ({ ctx }) => {
                     }}>
                       {update.title}
                     </span>
+                    {/* A note the studio sent to this family alone. Marked,
+                        because "the costume fitting is Saturday" reads very
+                        differently once you know it was written to you and not
+                        posted to ninety people. */}
+                    {update.householdId !== null && (
+                      <span style={{
+                        ...theme.typography.captionSmall,
+                        fontFamily: theme.fonts.mono,
+                        color: theme.colors.primary,
+                      }}>
+                        {'  '}FOR YOUR FAMILY
+                      </span>
+                    )}
                     {update.isPinned && (
                       <span style={{
                         ...theme.typography.captionSmall,

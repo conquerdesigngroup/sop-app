@@ -418,6 +418,8 @@ const update = (
   id,
   programId,
   classId,
+  // The fixture has no households; a personal note is only ever real data.
+  householdId: null,
   title,
   body,
   isPinned,
