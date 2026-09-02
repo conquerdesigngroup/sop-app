@@ -119,6 +119,29 @@ in place first, so the two implementations are known to agree.
 
 ---
 
+## Parent matching needs a fuzzy FALLBACK, not just exact
+
+The v33 seed matched students to households on exact parent name plus the
+contact's "All Students" list. That left 8 unresolved — and an adversarial audit
+found the exclusion was wrong for three of them.
+
+`Ketenbrink` (students export) vs `Kettenbrink` (contact record). One letter.
+Three children in one family, all on real class rosters, all invisible.
+
+The rule that works, and is safe (verified: zero disagreements against the 383
+already-resolved students):
+
+1. Exact parent name -> contact, and contact's "All Students" -> student.
+   Accept when they agree on ONE household.
+2. FALLBACK ONLY if that yields nothing: difflib near-match at cutoff 0.85 on
+   BOTH the parent name AND the child name. Require both to land on the same
+   household — two independent signals agreeing.
+3. Never auto-accept a surname-only match. Two unrelated families share a
+   surname constantly; that is what the child-name corroboration is for.
+
+Whatever the importer ends up being, it needs step 2. Exact matching silently
+drops real families and the counts still reconcile, so nothing looks wrong.
+
 ## If the studio's timezone ever gets stored
 
 Calendar exports use floating local time (`DTSTART:20260901T163000`, no `Z`),
