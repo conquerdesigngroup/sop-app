@@ -1,22 +1,36 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
+import { useOpenTaskCount } from '../hooks/useOpenTaskCount';
 
 interface NavItem {
   path: string;
   label: string;
   icon: React.ReactNode;
-  adminOnly?: boolean;
+  /** A count to hang off the icon. Nothing is drawn for zero. */
+  badge?: number;
 }
+
+/**
+ * The destinations the bar already covers. The header's menu sheet reads
+ * this so it can offer only what is NOT down here — for most staff that is
+ * nothing at all, and the sheet stays closed. Keep in step with navItems.
+ */
+export const BOTTOM_NAV_PATHS: readonly string[] = [
+  '/dashboard',
+  '/my-tasks',
+  '/calendar',
+  '/hours-input',
+  '/sop',
+];
 
 const BottomNavigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
   const { isDark } = useTheme();
   const colors = useThemeColors();
+  const openTaskCount = useOpenTaskCount();
 
   // Navigation items - max 5 for bottom nav
   const navItems: NavItem[] = [
@@ -33,6 +47,7 @@ const BottomNavigation: React.FC = () => {
     {
       path: '/my-tasks',
       label: 'Tasks',
+      badge: openTaskCount,
       icon: (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 11l3 3L22 4" />
@@ -125,7 +140,7 @@ const BottomNavigation: React.FC = () => {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              aria-label={item.label}
+              aria-label={item.badge ? `${item.label}, ${item.badge} open` : item.label}
               aria-current={active ? 'page' : undefined}
               style={{
                 display: 'flex',
@@ -164,11 +179,20 @@ const BottomNavigation: React.FC = () => {
               <span
                 style={{
                   display: 'flex',
+                  position: 'relative',
                   transform: active ? 'scale(1.1)' : 'scale(1)',
                   transition: 'transform 0.2s ease',
                 }}
               >
                 {item.icon}
+                {/* Open-task count. Sits on the icon's top-right corner so
+                    the label underneath keeps its width — the label must
+                    never be what widens the column. */}
+                {item.badge ? (
+                  <span aria-hidden="true" style={styles.badge}>
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                ) : null}
               </span>
               <span
                 style={{
@@ -190,6 +214,28 @@ const BottomNavigation: React.FC = () => {
       </div>
     </nav>
   );
+};
+
+const styles: { [key: string]: React.CSSProperties } = {
+  badge: {
+    position: 'absolute',
+    top: '-6px',
+    left: '14px',
+    minWidth: '16px',
+    height: '16px',
+    padding: '0 4px',
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.primary,
+    // Brand pink is identical in both modes, so white is always readable.
+    color: '#FFFFFF',
+    fontSize: '10px',
+    fontWeight: 700,
+    lineHeight: '16px',
+    textAlign: 'center',
+    fontFamily: theme.fonts.mono,
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+  },
 };
 
 export default BottomNavigation;

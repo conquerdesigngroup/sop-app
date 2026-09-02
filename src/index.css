@@ -614,3 +614,23 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
     scrollbar-color: var(--c-bdr-secondary, #36363D) transparent;
   }
 }
+
+/* ============================================
+   Reduced Motion
+   ============================================
+   Honour the OS-level "reduce motion" setting. Every animation and
+   transition in the app is decorative — sheets sliding up, rows fading in,
+   hover colours easing — so none of it needs to survive. Durations are made
+   near-zero rather than set to `none` so that anything relying on an
+   animation's end state (an entrance that fades from opacity 0, say) still
+   lands there instead of staying invisible. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
