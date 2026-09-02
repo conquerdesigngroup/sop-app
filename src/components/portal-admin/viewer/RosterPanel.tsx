@@ -9,7 +9,7 @@ import {
   ageFrom,
   loadClassRoster,
 } from '../../../lib/portalViewer';
-import { ChipRow, ResultCount, RowSub, RowTitle, ViewerRow } from './ViewerShared';
+import { CategoryChips, ChipRow, ResultCount, RowSub, RowTitle, ViewerRow } from './ViewerShared';
 
 /**
  * Who is actually in one class.
@@ -87,7 +87,7 @@ const RosterPanel: React.FC<{
           <Badge variant="primary" size="sm">
             {active === 1 ? '1 enrolled' : `${active} enrolled`}
           </Badge>
-          {klass.category && <Badge variant="info" size="sm">{klass.category}</Badge>}
+          <CategoryChips categories={klass.category ? [klass.category] : []} />
           {klass.level && <Badge variant="default" size="sm">{klass.level}</Badge>}
           {klass.instructorName && <Badge variant="default" size="sm">{klass.instructorName}</Badge>}
         </ChipRow>

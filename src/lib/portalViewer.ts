@@ -62,6 +62,8 @@ export interface ViewerStudent {
   householdName: string;
   householdEmail: string;
   enrollmentCount: number;
+  /** Divisions this dancer is currently enrolled in. Empty = not enrolled. */
+  categories: string[];
 }
 
 export interface ViewerClass {
@@ -151,6 +153,7 @@ const mapStudent = (r: any): ViewerStudent => ({
   householdName: r.household_name || r.primary_email,
   householdEmail: r.primary_email,
   enrollmentCount: r.enrollment_count ?? 0,
+  categories: r.categories ?? [],
 });
 
 const mapClass = (r: any): ViewerClass => ({
@@ -457,4 +460,104 @@ export const sendHouseholdNote = async (input: {
 export const deleteHouseholdNote = async (id: string): Promise<ViewerError> => {
   const { error } = await supabase.from('portal_updates').delete().eq('id', id);
   return error ? 'The note could not be deleted.' : null;
+};
+
+// ------------------------------------------------------------------ filters
+
+/**
+ * The cuts the front desk actually asks for.
+ *
+ * DIVISION IS "ANY OF", NOT "IS"
+ *
+ * 93 of the 343 households have children in more than one division and 11 are
+ * in all three, so a family is not *a* division — it overlaps a set of them.
+ * Selecting All-Stars and TNT therefore means "show me anyone touching either",
+ * which is the question ("who do I need to tell about the Saturday change?"),
+ * not "show me families enrolled in exactly those two".
+ *
+ * NOT-ENROLLED IS A DIVISION IN THE PICKER
+ *
+ * 72 households and 70 dancers have no active enrollment at all. Without a chip
+ * for them they are invisible to every division filter and reachable only by
+ * clearing all of them — and they are a group worth finding on purpose, because
+ * a family paying nothing is either finished or a mistake.
+ *
+ * NOTHING SELECTED MEANS EVERYTHING
+ *
+ * An empty set is not an impossible filter. A picker that returns zero rows
+ * until you choose something reads as broken, and the first thing anyone does
+ * with a filter row is clear it.
+ */
+
+/** The pseudo-division for "no active enrollment". Never a real category. */
+export const NO_DIVISION = 'none';
+
+export type AccessFilter = 'any' | 'signed-up' | 'not-signed-up';
+export type ActivityFilter = 'any' | 'active' | 'inactive';
+
+export interface ViewerFilters {
+  /** Category slugs, plus possibly NO_DIVISION. Empty = no division filter. */
+  divisions: string[];
+  access: AccessFilter;
+  activity: ActivityFilter;
+  /** 0–6, or null for any day. */
+  dayOfWeek: number | null;
+}
+
+export const EMPTY_FILTERS: ViewerFilters = {
+  divisions: [],
+  access: 'any',
+  activity: 'any',
+  dayOfWeek: null,
+};
+
+/** True when no filter is narrowing anything — used to offer a "clear" button. */
+export const filtersAreEmpty = (f: ViewerFilters): boolean =>
+  f.divisions.length === 0 && f.access === 'any' && f.activity === 'any' && f.dayOfWeek === null;
+
+/** Add or remove one chip, since these rows are multi-select. */
+export const toggleDivision = (divisions: string[], value: string): string[] =>
+  divisions.indexOf(value) === -1
+    ? divisions.concat([value])
+    : divisions.filter(d => d !== value);
+
+/**
+ * Does a row carrying `categories` pass the division chips?
+ *
+ * Shared by families and dancers because the rule is identical, and having two
+ * copies is how they end up disagreeing about what "Academy" means.
+ */
+export const matchesDivisions = (categories: string[], divisions: string[]): boolean => {
+  if (divisions.length === 0) return true;
+  if (divisions.indexOf(NO_DIVISION) !== -1 && categories.length === 0) return true;
+  return categories.some(c => divisions.indexOf(c) !== -1);
+};
+
+export const householdPasses = (h: ViewerHousehold, query: string, f: ViewerFilters): boolean => {
+  if (!householdMatches(h, query)) return false;
+  if (!matchesDivisions(h.categories, f.divisions)) return false;
+  if (f.access === 'signed-up' && h.linkedLogins === 0) return false;
+  if (f.access === 'not-signed-up' && h.linkedLogins > 0) return false;
+  if (f.activity === 'active' && h.status !== 'active') return false;
+  if (f.activity === 'inactive' && h.status === 'active') return false;
+  return true;
+};
+
+export const studentPasses = (s: ViewerStudent, query: string, f: ViewerFilters): boolean => {
+  if (!studentMatches(s, query)) return false;
+  if (!matchesDivisions(s.categories, f.divisions)) return false;
+  if (f.activity === 'active' && s.status !== 'active') return false;
+  if (f.activity === 'inactive' && s.status === 'active') return false;
+  return true;
+};
+
+export const classPasses = (c: ViewerClass, query: string, f: ViewerFilters): boolean => {
+  if (!classMatches(c, query)) return false;
+  // A class has ONE category, so it is wrapped rather than special-cased —
+  // and a class with none behaves like a row with no division, same as above.
+  if (!matchesDivisions(c.category ? [c.category] : [], f.divisions)) return false;
+  if (f.dayOfWeek !== null && c.dayOfWeek !== f.dayOfWeek) return false;
+  if (f.activity === 'active' && !c.isActive) return false;
+  if (f.activity === 'inactive' && c.isActive) return false;
+  return true;
 };
