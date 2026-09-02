@@ -22,23 +22,37 @@ import { ProfileContext, UNLOCKABLES_ENABLED, orderedCards } from '../../lib/pro
  *
  * THE DEMO SWITCHER
  *
- * The v32 attendance tables do not exist yet, so the cards read the in-repo
- * seed fixture. While that is true the page offers a scenario picker, because
- * the states that actually matter here — no children linked, no classes, a
- * class that has not met — are the ones a real account cannot easily be put
- * into, and a state nobody can look at is a state nobody designs. It disappears
- * the moment REACT_APP_ATTENDANCE_LIVE is set, and it is never registered in a
- * production build without a session (see the redirect below).
+ * In a development build the cards read the in-repo seed fixture and the page
+ * offers a scenario picker, because the states that actually matter here — no
+ * children linked, no classes, a class that has not met — are the ones a real
+ * account cannot easily be put into, and a state nobody can look at is a state
+ * nobody designs.
+ *
+ * The v33 tables now exist, so a production build always reads them. See
+ * USE_FIXTURE below for why that is a build-time fact rather than an env var.
  */
 
 const DEMO_ALLOWED = !ATTENDANCE_LIVE && process.env.NODE_ENV !== 'production';
+
+/**
+ * The fixture is a DEVELOPMENT artefact and may never reach a real family.
+ *
+ * This used to key off REACT_APP_ATTENDANCE_LIVE alone, which made a missing or
+ * misspelled Vercel variable enough to serve invented children — names, classes
+ * and attendance percentages — to a parent who trusted them. An env var is not
+ * a safety mechanism; a production build is.
+ *
+ * So production always reads the real tables. With no data yet a family sees
+ * the calm empty states, which is true, instead of somebody else's fiction.
+ */
+const USE_FIXTURE = DEMO_ALLOWED;
 
 const Profile: React.FC = () => {
   const { loading, hasSession, isStaff, profile } = usePortalAuth();
   const [scenario, setScenario] = useState<FixtureScenario>('guardian');
 
   const source: AttendanceSource = useMemo(
-    () => (ATTENDANCE_LIVE ? { source: 'live' } : { source: 'fixture', scenario }),
+    () => (USE_FIXTURE ? { source: 'fixture', scenario } : { source: 'live' }),
     [scenario],
   );
 
@@ -72,7 +86,7 @@ const Profile: React.FC = () => {
         gap: theme.spacing.md,
         maxWidth: '560px',
       }}>
-        {!ATTENDANCE_LIVE && (
+        {USE_FIXTURE && (
           <div style={{
             border: `1px dashed ${theme.colors.bdr.secondary}`,
             borderRadius: theme.borderRadius.lg,

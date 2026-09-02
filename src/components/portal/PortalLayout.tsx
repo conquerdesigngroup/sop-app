@@ -189,8 +189,14 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
 
             {showAccount && (
               <Link
-                to="/portal/account"
-                aria-label="My account"
+                // Points at the profile, not /portal/account. The profile is
+                // now the signed-in home — identity, what's on next, attendance,
+                // updates, files — and it carries an Account card that links on
+                // to /portal/account for the password change and sign-out.
+                // Without this the whole profile was reachable only by typing
+                // the URL, which is the same as not having shipped it.
+                to="/portal/profile"
+                aria-label="My profile"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
