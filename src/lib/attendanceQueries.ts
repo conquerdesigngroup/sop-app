@@ -662,6 +662,9 @@ export const loadMyUpdates = async (
     id: row.id,
     programId: row.program_id,
     classId: row.class_id,
+    // RLS decides whether this row is even returned; the field is carried so
+    // the card can mark a note as addressed to this family alone.
+    householdId: row.household_id ?? null,
     title: row.title,
     body: row.body,
     isPinned: row.is_pinned,

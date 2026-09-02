@@ -482,6 +482,12 @@ export interface PortalUpdate {
   programId: string;
   /** Null means program-wide rather than tied to one class. */
   classId: string | null;
+  /**
+   * Set = a note to ONE family; only that household can read it (v36 RLS).
+   * Mutually exclusive with classId — a note is addressed to a class or to a
+   * family, never both.
+   */
+  householdId: string | null;
   title: string;
   body: string;
   isPinned: boolean;

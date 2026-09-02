@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePortalAdmin } from '../../contexts/PortalAdminContext';
 import { useAdminList } from '../../components/portal-admin/useAdminList';
 import { TabRow } from '../../components/portal-admin/shared';
+import PortalAdminTabs from '../../components/portal-admin/PortalAdminTabs';
 import UpdatesSection from '../../components/portal-admin/UpdatesSection';
 import EventsSection from '../../components/portal-admin/EventsSection';
 import ClassesSection from '../../components/portal-admin/ClassesSection';
@@ -72,7 +73,7 @@ const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
 
 const PortalManagerPage: React.FC = () => {
   const { canEdit, checking, programs, programsLoading, fetchClasses } = usePortalAdmin();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin } = useAuth();
   const { isMobileOrTablet } = useResponsive();
   const [params, setParams] = useSearchParams();
 
@@ -137,7 +138,7 @@ const PortalManagerPage: React.FC = () => {
       margin: '0 auto',
     }}>
       <PageHeader
-        title="Portal"
+        title="Portal editor"
         subtitle="What families see when they open the parent portal"
         actions={
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -159,6 +160,8 @@ const PortalManagerPage: React.FC = () => {
           </div>
         }
       />
+
+      <PortalAdminTabs active="editor" canViewEveryone={isSuperAdmin} />
 
       {programsLoading && !program && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>

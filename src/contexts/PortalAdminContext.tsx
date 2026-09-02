@@ -352,6 +352,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     const { data, error } = await supabase
       .from('portal_updates')
       .select('*')
+      // Notes addressed to a single family (v36) are not this list's business:
+      // they are written and read in the Portal Viewer, one household at a
+      // time, and mixing them in here would turn "Info" into a mailbox.
+      .is('household_id', null)
       .eq('program_id', programId)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });

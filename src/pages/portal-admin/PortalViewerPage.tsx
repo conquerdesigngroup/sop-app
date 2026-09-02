@@ -1,0 +1,212 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { theme } from '../../theme';
+import { Button, PageHeader } from '../../components/ui';
+import { useResponsive } from '../../hooks/useResponsive';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePortalAdmin } from '../../contexts/PortalAdminContext';
+import { TabRow } from '../../components/portal-admin/shared';
+import PortalAdminTabs from '../../components/portal-admin/PortalAdminTabs';
+import { ClassList, HouseholdList, StudentList } from '../../components/portal-admin/viewer/ViewerLists';
+import HouseholdPanel from '../../components/portal-admin/viewer/HouseholdPanel';
+import RosterPanel from '../../components/portal-admin/viewer/RosterPanel';
+import {
+  ViewerClass,
+  ViewerHousehold,
+  ViewerStudent,
+  loadHouseholds,
+  loadStudents,
+  loadViewerClasses,
+} from '../../lib/portalViewer';
+
+/**
+ * Oversight: everything the account holders have, from the studio's side.
+ *
+ * WHY THIS IS NOT PART OF THE EDITOR
+ *
+ * The editor answers "what should families see?". This answers "what do they
+ * actually have?" — which family owns which login, which child is in which
+ * class, and whether anyone has signed up at all. They are different questions
+ * with different shapes, and the editor is already three tabs deep.
+ *
+ * SUPER ADMIN ONLY, AND WHERE THAT IS ENFORCED
+ *
+ * The route is superAdminOnly, which is a UI gate. The DATABASE is more
+ * permissive on reads: v33 wrote every household policy as `OR is_admin()`, so
+ * any admin could already select these tables — this page opens no new read
+ * access, it only makes existing access legible.
+ *
+ * WRITES are different and are genuinely enforced: portal_updates_insert
+ * requires is_super_admin() for any row carrying a household_id (v36). An admin
+ * who reached this page by typing the URL still could not send anybody a note.
+ *
+ * THREE LISTS, ONE ANSWER
+ *
+ * Families, dancers and classes are three doors into the same place. Whichever
+ * the front desk searches, they land on the family — because every question
+ * that starts "a parent called about…" ends there.
+ */
+
+type ViewKey = 'families' | 'dancers' | 'classes';
+
+const VIEWS: { key: ViewKey; label: string }[] = [
+  { key: 'families', label: 'Families' },
+  { key: 'dancers', label: 'Dancers' },
+  { key: 'classes', label: 'Classes & rosters' },
+];
+
+const PortalViewerPage: React.FC = () => {
+  const { isMobileOrTablet } = useResponsive();
+  const { isSuperAdmin } = useAuth();
+  const { programs } = usePortalAdmin();
+  const [params, setParams] = useSearchParams();
+
+  const [households, setHouseholds] = useState<ViewerHousehold[]>([]);
+  const [students, setStudents] = useState<ViewerStudent[]>([]);
+  const [classes, setClasses] = useState<ViewerClass[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * One clock for the whole screen.
+   *
+   * Ages are computed against it in three different components; letting each
+   * call new Date() means a render that straddles midnight can show the same
+   * child as 8 in the list and 9 in the detail.
+   */
+  const [today] = useState(() => new Date());
+
+  const requestedView = params.get('view') as ViewKey | null;
+  const view: ViewKey = VIEWS.some(v => v.key === requestedView)
+    ? (requestedView as ViewKey)
+    : 'families';
+
+  const openHouseholdId = params.get('household');
+  const openClassId = params.get('class');
+  const openClass = openClassId ? classes.find(c => c.id === openClassId) ?? null : null;
+
+  const setParam = useCallback((next: Record<string, string | null>) => {
+    const merged = new URLSearchParams(params);
+    Object.keys(next).forEach(k => {
+      const value = next[k];
+      if (value === null) merged.delete(k);
+      else merged.set(k, value);
+    });
+    setParams(merged, { replace: true });
+  }, [params, setParams]);
+
+  // All three lists load together and are then searched locally. Three
+  // requests once beats one request per keystroke, and the payload is small
+  // enough that splitting them per tab would only add a spinner on every
+  // switch.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [h, s, c] = await Promise.all([loadHouseholds(), loadStudents(), loadViewerClasses()]);
+      if (cancelled) return;
+      setHouseholds(h.rows);
+      setStudents(s.rows);
+      setClasses(c.rows);
+      setError(h.error ?? s.error ?? c.error);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const openHousehold = useCallback((id: string) => {
+    setParam({ household: id, class: null });
+  }, [setParam]);
+
+  const subtitle = useMemo(() => {
+    if (loading || error) return 'Every account, dancer and roster in the portal';
+    return `${households.length} families · ${students.length} dancers · ${classes.length} classes`;
+  }, [loading, error, households.length, students.length, classes.length]);
+
+  return (
+    <div style={{
+      padding: isMobileOrTablet ? '16px' : '40px',
+      maxWidth: '1400px',
+      margin: '0 auto',
+    }}>
+      <PageHeader
+        title="Portal viewer"
+        subtitle={subtitle}
+        actions={
+          <Link to="/portal-admin/clients" style={{ textDecoration: 'none' }}>
+            <Button variant="outline">Client accounts</Button>
+          </Link>
+        }
+      />
+
+      <PortalAdminTabs active="viewer" canViewEveryone={isSuperAdmin} />
+
+      {/* A detail panel replaces the list rather than sitting under it: on a
+          phone a list of 343 above a detail is a scroll nobody finishes. */}
+      {openHouseholdId ? (
+        <HouseholdPanel
+          householdId={openHouseholdId}
+          programs={programs}
+          canSendNotes={isSuperAdmin}
+          today={today}
+          onBack={() => setParam({ household: null })}
+        />
+      ) : openClass ? (
+        <RosterPanel
+          klass={openClass}
+          today={today}
+          onBack={() => setParam({ class: null })}
+          onOpenHousehold={openHousehold}
+        />
+      ) : (
+        <>
+          <TabRow
+            panelId="portal-viewer-panel"
+            options={VIEWS.map(v => ({ key: v.key, label: v.label }))}
+            active={view}
+            onSelect={key => setParam({ view: key, household: null, class: null })}
+          />
+
+          <div id="portal-viewer-panel" role="tabpanel">
+            {view === 'families' && (
+              <HouseholdList
+                households={households}
+                loading={loading}
+                error={error}
+                onOpen={openHousehold}
+              />
+            )}
+            {view === 'dancers' && (
+              <StudentList
+                students={students}
+                loading={loading}
+                error={error}
+                today={today}
+                onOpenHousehold={openHousehold}
+              />
+            )}
+            {view === 'classes' && (
+              <ClassList
+                classes={classes}
+                loading={loading}
+                error={error}
+                onOpen={id => setParam({ class: id, household: null })}
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      <p style={{
+        ...theme.typography.captionSmall,
+        fontFamily: theme.fonts.primary,
+        color: theme.colors.txt.tertiary,
+        marginTop: theme.spacing.xl,
+      }}>
+        Read-only, apart from notes. Enrollments and rosters come from the
+        Enrolio import — correct them there, not here.
+      </p>
+    </div>
+  );
+};
+
+export default PortalViewerPage;

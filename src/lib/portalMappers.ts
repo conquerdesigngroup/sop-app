@@ -79,6 +79,7 @@ export const mapUpdate = (r: any): PortalUpdate => ({
   id: r.id,
   programId: r.program_id,
   classId: r.class_id,
+  householdId: r.household_id ?? null,
   title: r.title,
   body: r.body ?? '',
   isPinned: r.is_pinned,

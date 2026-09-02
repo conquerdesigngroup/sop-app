@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useToast } from '../../contexts/ToastContext';
@@ -161,7 +161,10 @@ const ClientAccountsPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  // Seeded from ?q= so "Login & roster" in the Portal Viewer opens on the one
+  // family being looked at rather than on all 388 roster rows.
+  const [urlParams] = useSearchParams();
+  const [search, setSearch] = useState(() => urlParams.get('q') ?? '');
   const [busyRow, setBusyRow] = useState<string | null>(null);
 
   const [showImport, setShowImport] = useState(false);

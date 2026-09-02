@@ -149,6 +149,10 @@ const AUTH_ROUTES = [
   // which the audit's staff session cannot reach (staff get redirected), so
   // it has no row here — check it by hand on a phone with a client login.
   '/portal-admin/clients',
+  // Super-admin only. A session below that rank is redirected to /dashboard and
+  // the row passes having measured the wrong page, so this line is only
+  // meaningful when AUDIT_EMAIL names a super admin.
+  '/portal-admin/viewer',
 ];
 
 // ---------------------------------------------------------------- static scan
