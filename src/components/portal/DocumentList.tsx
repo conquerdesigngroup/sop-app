@@ -6,7 +6,7 @@ import { formatFileSize } from '../../lib/portal';
 import { mediaKindOf, withDownload, MediaKind } from '../../lib/portalMedia';
 import {
   streamIframeUrl, streamDownloadHref, streamDownloadFilename, formatDuration,
-  videoSaveSupport, describeFetchProgress, SHARE_MAX_BYTES,
+  saveToPhotosSupport, describeFetchProgress, SHARE_MAX_BYTES,
 } from '../../lib/portalStream';
 import { fetchVideoFile, isAbort, VideoTooLarge, FetchProgress } from '../../lib/videoFetch';
 import { resolveStreamDownload } from '../../lib/portalStreamDownload';
@@ -206,27 +206,48 @@ const MediaCaption: React.FC<{
 type SaveStage = 'idle' | 'fetching' | 'ready' | 'sharing' | 'shared' | 'handedOff' | 'failed';
 
 /**
- * Download → Save to Photos, for a class video on Stream.
+ * A photo that arrives within this long of the tap is shared straight away,
+ * inside the tap's own activation, so it is ONE tap: Save → the sheet. Past
+ * it, Safari would refuse the sheet as unprompted, so the flow falls back to
+ * the second tap. Videos never try this: they take long enough that the
+ * second tap is a clearer moment, and the tests pin the two-tap shape.
+ */
+const IMMEDIATE_SHARE_MS = 1500;
+
+/**
+ * Save (a photo) or Download (a class video) → Save to Photos.
  *
- * A plain download link lands the MP4 in Files, and Files → share → Save
- * Video is where parents got lost. With the share API the phone can be
- * handed the file itself, and the iOS sheet then offers "Save Video" on the
- * first screen. The file has to be in memory first, so the flow is two taps:
- * Download fetches it (with the bar and the words below, because twenty
- * silent seconds is exactly how people end up tapping five times), then
- * Save to Photos opens the sheet inside the tap Safari insists on.
+ * A plain download link lands the file in Files, and Files → share → Save
+ * Image is where parents got lost. With the share API the phone can be
+ * handed the file itself, and the iOS sheet then offers "Save Image" or
+ * "Save Video" on the first screen. The file has to be in memory first, so:
+ * the first tap fetches it (with the bar and the words below, because twenty
+ * silent seconds is exactly how people end up tapping five times), then Save
+ * to Photos opens the sheet inside the tap Safari insists on. A photo that
+ * arrives fast enough skips the second tap.
  *
- * Every other case — no share API, a video over SHARE_MAX_BYTES, a share
+ * Every other case — no share API, a file over SHARE_MAX_BYTES, a share
  * sheet that will not open — falls back to the ordinary download and says so.
  * Nothing here ever goes quiet: the status line under the caption always
  * says what is happening and what to do next. See CLAUDE.md, "Slow taps".
  */
-const StreamSave: React.FC<{
+const SaveToPhotos: React.FC<{
   doc: PortalDocument;
+  kind: 'photo' | 'video';
+  /** The plain download, for every fallback. */
   href: string;
+  /** Where to fetch the bytes from; may differ from href (see Stream). */
+  getUrl: () => Promise<string>;
+  /** The name the saved file gets. */
+  filename: string;
+  /** What to probe the share sheet with — a file of this type. */
+  mime: string;
+  /** "Save" for a photo we hold; "Download" for the MP4 Cloudflare built. */
+  idleLabel: string;
   onDownload?: (doc: PortalDocument) => void;
-}> = ({ doc, href, onDownload }) => {
-  const [support] = useState(() => videoSaveSupport(typeof navigator === 'undefined' ? undefined : navigator));
+}> = ({ doc, kind, href, getUrl, filename, mime, idleLabel, onDownload }) => {
+  const [support] = useState(() =>
+    saveToPhotosSupport(typeof navigator === 'undefined' ? undefined : navigator, mime));
   const [stage, setStage] = useState<SaveStage>('idle');
   const [progress, setProgress] = useState<FetchProgress>({ received: 0, total: null });
   const [file, setFile] = useState<File | null>(null);
@@ -244,20 +265,28 @@ const StreamSave: React.FC<{
     setStage('handedOff');
   }, [href]);
 
+  const openSheet = async (got: File): Promise<'shared' | 'dismissed' | 'refused'> => {
+    try {
+      await navigator.share({ files: [got], title: doc.title });
+      return 'shared';
+    } catch (e) {
+      return isAbort(e) ? 'dismissed' : 'refused';
+    }
+  };
+
   const startFetch = async () => {
     if (busyRef.current) return;
     busyRef.current = true;
+    const tappedAt = Date.now();
     onDownload?.(doc);
     const controller = new AbortController();
     abortRef.current = controller;
     setProgress({ received: 0, total: null });
     setStage('fetching');
     try {
-      // The recorded URL redirects, and the redirect blocks a browser fetch;
-      // the function follows it for us. See portalStreamDownload.ts.
-      const url = await resolveStreamDownload(doc.streamUid ?? '', doc.title);
+      const url = await getUrl();
       if (controller.signal.aborted) { setStage('idle'); return; }
-      const got = await fetchVideoFile(url, streamDownloadFilename(doc.title), {
+      const got = await fetchVideoFile(url, filename, {
         maxBytes: SHARE_MAX_BYTES,
         signal: controller.signal,
         onProgress: setProgress,
@@ -266,6 +295,15 @@ const StreamSave: React.FC<{
       // mind", not "ready" — and the fetch does not always reject for it.
       if (controller.signal.aborted) { setStage('idle'); return; }
       setFile(got);
+
+      if (kind === 'photo' && Date.now() - tappedAt < IMMEDIATE_SHARE_MS) {
+        setStage('sharing');
+        const outcome = await openSheet(got);
+        // A refusal here is Safari saying the tap has expired, not that the
+        // phone will not take the file: offer the second tap.
+        setStage(outcome === 'shared' ? 'shared' : 'ready');
+        return;
+      }
       setStage('ready');
     } catch (e) {
       if (isAbort(e)) setStage('idle');
@@ -281,60 +319,57 @@ const StreamSave: React.FC<{
     if (busyRef.current || !file) return;
     busyRef.current = true;
     setStage('sharing');
-    try {
-      await navigator.share({ files: [file], title: doc.title });
-      setStage('shared');
-    } catch (e) {
-      // Dismissing the sheet is not a failure; anything else means this
-      // phone will not take the file, so give it the download instead.
-      if (isAbort(e)) setStage('ready');
-      else handOff();
-    } finally {
-      busyRef.current = false;
-    }
+    const outcome = await openSheet(file);
+    // Dismissing the sheet is not a failure; anything else means this phone
+    // will not take the file, so give it the download instead.
+    if (outcome === 'shared') setStage('shared');
+    else if (outcome === 'dismissed') setStage('ready');
+    else handOff();
+    busyRef.current = false;
   };
 
   if (support === 'link') {
-    return <MediaCaption doc={doc} downloadUrl={href} label="Download" onDownload={onDownload} />;
+    return <MediaCaption doc={doc} downloadUrl={href} label={idleLabel} onDownload={onDownload} />;
   }
 
+  const noun = kind === 'photo' ? 'photo' : 'video';
+  const sheetItem = kind === 'photo' ? 'Save Image' : 'Save Video';
   const fetching = stage === 'fetching';
   const pct = progress.total ? Math.min(100, Math.floor((progress.received / progress.total) * 100)) : null;
 
   const message: string | null =
     stage === 'fetching'
       ? (progress.received === 0 && progress.total === null
-          ? 'Getting the video ready — connecting. Keep this page open.'
-          : `Getting the video ready — ${describeFetchProgress(progress.received, progress.total)}. Keep this page open.`)
-    : stage === 'ready' ? 'Ready. Tap Save to Photos, then choose Save Video.'
-    : stage === 'sharing' ? 'Opening your phone\u2019s share sheet…'
+          ? `Getting the ${noun} ready — connecting. Keep this page open.`
+          : `Getting the ${noun} ready — ${describeFetchProgress(progress.received, progress.total)}. Keep this page open.`)
+    : stage === 'ready' ? `Ready. Tap Save to Photos, then choose ${sheetItem}.`
+    : stage === 'sharing' ? 'Opening your phone’s share sheet…'
     : stage === 'shared' ? 'Done. Tap Save to Photos again to send it somewhere else.'
-    : stage === 'handedOff' ? 'This one is too big to save straight to Photos, so your phone is downloading it as a file instead.'
-    : stage === 'failed' ? 'Couldn\u2019t get the video. Check your connection and tap Download again.'
+    : stage === 'handedOff' ? `This one is too big to save straight to Photos, so your phone is downloading it as a file instead.`
+    : stage === 'failed' ? `Couldn’t get the ${noun}. Check your connection and tap ${idleLabel} again.`
     : null;
 
   const canSave = (stage === 'ready' || stage === 'shared') && file !== null;
+  const busy = fetching || stage === 'sharing';
   const button = stage === 'handedOff' ? (
-    <a href={href} style={SAVE_CONTROL}><DownloadGlyph />Download</a>
+    <a href={href} style={SAVE_CONTROL}><DownloadGlyph />{idleLabel}</a>
   ) : (
     <button
       type="button"
       onClick={canSave ? share : startFetch}
-      disabled={fetching || stage === 'sharing'}
-      aria-busy={fetching || stage === 'sharing' ? true : undefined}
+      disabled={busy}
+      aria-busy={busy ? true : undefined}
       style={{
         ...SAVE_CONTROL,
         ...(canSave ? { backgroundColor: theme.colors.primary, color: '#FFFFFF' } : {}),
-        ...(fetching || stage === 'sharing' ? { cursor: 'progress', opacity: 0.85 } : {}),
+        ...(busy ? { cursor: 'progress', opacity: 0.85 } : {}),
       }}
     >
-      {fetching || stage === 'sharing'
-        ? <Spinner size={16} color="currentColor" />
-        : <DownloadGlyph />}
-      {fetching ? (pct === null ? 'Getting video…' : `${pct}%`)
+      {busy ? <Spinner size={16} color="currentColor" /> : <DownloadGlyph />}
+      {fetching ? (pct === null ? `Getting ${noun}…` : `${pct}%`)
         : stage === 'sharing' ? 'Opening…'
         : canSave ? 'Save to Photos'
-        : 'Download'}
+        : idleLabel}
     </button>
   );
 
@@ -346,7 +381,7 @@ const StreamSave: React.FC<{
           {fetching && (
             <div
               role="progressbar"
-              aria-label="Getting the video"
+              aria-label={`Getting the ${noun}`}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={pct ?? undefined}
@@ -443,7 +478,19 @@ const ImageBlock: React.FC<{
           style={{ display: 'block', width: '100%', height: 'auto' }}
         />
       </a>
-      <MediaCaption doc={doc} downloadUrl={withDownload(url, doc.fileName)} onDownload={onDownload} />
+      {/* The signed URL itself, not the &download= form: the bytes come
+          into memory and go to the share sheet, so nothing should ask the
+          browser to save a file. The fallbacks still use the download form. */}
+      <SaveToPhotos
+        doc={doc}
+        kind="photo"
+        href={withDownload(url, doc.fileName)}
+        getUrl={async () => url}
+        filename={doc.fileName || 'photo.jpg'}
+        mime={doc.mimeType || 'image/jpeg'}
+        idleLabel="Save"
+        onDownload={onDownload}
+      />
     </div>
   );
 };
@@ -536,7 +583,7 @@ const AudioBlock: React.FC<{
  *
  * Nothing is signed: the iframe streams whichever quality the parent's
  * connection can carry, which is the entire reason the video is there rather
- * than in the bucket. The Download control (StreamSave) hands out the MP4
+ * than in the bucket. The Download control (SaveToPhotos) hands out the MP4
  * Cloudflare builds from the encode (v41), not the multi-gigabyte original —
  * and only once the row says that file exists, because Cloudflare builds it
  * after the video is already playable and a link that 404s meanwhile would
@@ -603,7 +650,18 @@ const StreamBlock: React.FC<{
         />
       </div>
       {doc.streamDownloadUrl ? (
-        <StreamSave doc={doc} href={streamDownloadHref(doc.streamDownloadUrl, doc.title)} onDownload={onDownload} />
+        <SaveToPhotos
+          doc={doc}
+          kind="video"
+          href={streamDownloadHref(doc.streamDownloadUrl, doc.title)}
+          // The recorded URL redirects, and the redirect blocks a browser
+          // fetch; the function follows it for us. See portalStreamDownload.ts.
+          getUrl={() => resolveStreamDownload(doc.streamUid ?? '', doc.title)}
+          filename={streamDownloadFilename(doc.title)}
+          mime="video/mp4"
+          idleLabel="Download"
+          onDownload={onDownload}
+        />
       ) : (
         <MediaCaption doc={doc} downloadUrl={null} />
       )}
