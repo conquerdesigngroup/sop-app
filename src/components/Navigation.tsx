@@ -792,7 +792,6 @@ const Navigation: React.FC = () => {
                     >
                       <span style={styles.navIcon}>{icons.search}</span>
                       Search
-                      <kbd style={{...styles.searchKbd, marginLeft: 'auto', borderColor: colors.bdr.secondary}}>⌘K</kbd>
                     </button>
 
                     {mobileSections.map((section, sectionIndex) => {

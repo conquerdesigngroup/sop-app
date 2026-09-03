@@ -144,9 +144,8 @@ describe('mobile menu sheet', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
     const sheet = screen.getByRole('dialog', { name: 'More pages' });
-    // Management starts open because nothing remembers it closed and the
-    // current page is not inside it either — it is only the once-toggled
-    // state that persists.
+    // Management starts closed on a page outside it (nothing has been
+    // remembered yet), so it is opened here to read its rows.
     fireEvent.click(within(sheet).getByRole('button', { name: /management/i }));
     const labels = within(sheet).getAllByRole('link').map(a => a.textContent);
     expect(labels).toEqual(['SOPs', 'Hours Input', 'Team', 'Task Library', 'Portal Manager']);
