@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { useConfirm } from '../hooks/useConfirm';
@@ -186,7 +186,41 @@ const loadSavedViews = (): SavedView[] => {
 
 const EXPORT_CAP = 10000;
 
+/**
+ * Where a row's entity lives in the app, if it lives anywhere.
+ *
+ * The union in ActivityLogContext lists nine entity types; the call sites
+ * actually write eleven (work_hours, event, update and program are logged
+ * straight through lib/activityLog). Matched on the string, not the union,
+ * so a row is never left without its link because of a type nobody updated.
+ */
+const entityDestination = (log: ActivityLog): { path: string; state?: Record<string, string>; label: string } | null => {
+  const id = log.entity_id;
+  switch (log.entity_type) {
+    case 'task':
+      return id ? { path: '/job-tasks', state: { openTaskId: id }, label: 'Open task' } : { path: '/job-tasks', label: 'Job Tasks' };
+    case 'template':
+      return { path: '/task-library', label: 'Task Library' };
+    case 'sop':
+      return id ? { path: '/sop', state: { openSopId: id }, label: 'Open SOP' } : { path: '/sop', label: 'SOPs' };
+    case 'user':
+      return { path: '/team', state: log.entity_title ? { searchTerm: log.entity_title } : undefined, label: 'Open in Team' };
+    case 'work_hours':
+      return { path: '/hours-input', label: 'Hours Input' };
+    case 'event':
+      return { path: '/calendar', label: 'Calendar' };
+    case 'class':
+    case 'document':
+    case 'update':
+    case 'program':
+      return { path: '/portal-admin', label: 'Portal Manager' };
+    default:
+      return null;
+  }
+};
+
 const ActivityLogPage: React.FC = () => {
+  const navigate = useNavigate();
   const { isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
   const { success, error: toastError } = useToast();
@@ -611,6 +645,23 @@ const ActivityLogPage: React.FC = () => {
                             {' · '}
                           </>
                         )}
+                        {(() => {
+                          // The row says what happened; this takes you to the
+                          // thing it happened to, so you can act on it.
+                          const target = entityDestination(log);
+                          return target ? (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigate(target.path, { state: target.state }); }}
+                                title={target.label}
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: theme.colors.primary, font: 'inherit', fontWeight: 700 }}
+                              >
+                                {target.label} ↗
+                              </button>
+                              {' · '}
+                            </>
+                          ) : null;
+                        })()}
                         {log.request_id && `request ${log.request_id} · `}
                         {log.ip_address && `ip ${log.ip_address} · `}
                         {log.user_agent ?? ''}

@@ -1,7 +1,8 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Navigation from './Navigation';
-import { BOTTOM_NAV_PATHS } from './BottomNavigation';
+import { bottomNavPathsFor } from './BottomNavigation';
+import { MobileMenuProvider } from '../contexts/MobileMenuContext';
 
 // react-router-dom 7 ships an `exports` map that this jest cannot resolve
 // (see PortalAdminTabs.test for the same workaround). The header only needs
@@ -29,7 +30,8 @@ const mockAuth = {
 };
 let mockCanEditPortal = false;
 let mockMobile = false;
-let mockOpenCount = 0;
+let mockMyOverdue = 0;
+let mockAllOverdue = 0;
 
 jest.mock('../contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
 jest.mock('../contexts/PortalAdminContext', () => ({
@@ -38,7 +40,12 @@ jest.mock('../contexts/PortalAdminContext', () => ({
 jest.mock('../hooks/useResponsive', () => ({
   useResponsive: () => ({ isMobileOrTablet: mockMobile }),
 }));
-jest.mock('../hooks/useOpenTaskCount', () => ({ useOpenTaskCount: () => mockOpenCount }));
+jest.mock('../hooks/useTaskCounts', () => ({
+  useTaskCounts: () => ({ myOverdue: mockMyOverdue, allOverdue: mockAllOverdue }),
+}));
+// The search palette reads the task and portal contexts; the header only
+// needs to know it is there.
+jest.mock('./GlobalSearch', () => () => null);
 // The refresh button in both header layouts. Stubbed at the context so the
 // test can see what a tap asks for without the registry behind it.
 const mockRefresh = jest.fn();
@@ -77,13 +84,20 @@ const asSuperAdmin = () => {
 
 const renderAt = (path = '/dashboard') => {
   mockPath = path;
-  return render(<Navigation />);
+  // The sheet's open flag is shared with the bottom bar, so it lives in a
+  // real (tiny) context rather than a stub.
+  return render(
+    <MobileMenuProvider>
+      <Navigation />
+    </MobileMenuProvider>
+  );
 };
 
 beforeEach(() => {
   asTeam();
   mockMobile = false;
-  mockOpenCount = 0;
+  mockMyOverdue = 0;
+  mockAllOverdue = 0;
   // CRA's jest runs with resetMocks, so the resolved value is re-armed here.
   mockRefresh.mockReset().mockResolvedValue({ ok: true, failed: 0, total: 1 });
 });
@@ -107,11 +121,21 @@ describe('mobile menu sheet', () => {
   it('draws no hamburger for a team member: everything they can reach is on the bottom bar', () => {
     renderAt();
     expect(screen.queryByRole('button', { name: /more pages/i })).not.toBeInTheDocument();
-    // The account menu is still there — the bar does not cover it.
+    // Search takes the hamburger's slot, and the account menu is still
+    // there — the bar does not cover either.
+    expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /account menu/i })).toBeInTheDocument();
   });
 
-  it('offers an admin only what the bottom bar does not', () => {
+  it('gives a teacher with a class a sheet holding only the portal', () => {
+    mockCanEditPortal = true;
+    renderAt();
+    fireEvent.click(screen.getByRole('button', { name: /more pages/i }));
+    const sheet = screen.getByRole('dialog', { name: 'More pages' });
+    expect(within(sheet).getAllByRole('link').map(a => a.textContent)).toEqual(['Portal Manager']);
+  });
+
+  it('offers an admin only what the bottom bar does not, in sections', () => {
     asAdmin();
     renderAt();
     const trigger = screen.getByRole('button', { name: /more pages/i });
@@ -120,15 +144,30 @@ describe('mobile menu sheet', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
     const sheet = screen.getByRole('dialog', { name: 'More pages' });
+    // Management starts closed on a page outside it (nothing has been
+    // remembered yet), so it is opened here to read its rows.
+    fireEvent.click(within(sheet).getByRole('button', { name: /management/i }));
     const labels = within(sheet).getAllByRole('link').map(a => a.textContent);
-    expect(labels).toEqual(['Job Tasks', 'Portal', 'Team']);
+    expect(labels).toEqual(['SOPs', 'Hours Input', 'Team', 'Task Library', 'Portal Manager']);
 
-    // Nothing in the sheet duplicates the bar.
+    // Nothing in the sheet duplicates the admin bar, which carries Job Tasks.
     within(sheet).getAllByRole('link').forEach(a => {
-      expect(BOTTOM_NAV_PATHS).not.toContain(a.getAttribute('href'));
+      expect(bottomNavPathsFor(true)).not.toContain(a.getAttribute('href'));
     });
-    // "Back to menu" lives in the account menu only now.
+    // Search is the first row; "Back to menu" lives in the account menu only now.
+    expect(within(sheet).getByRole('button', { name: /search/i })).toBeInTheDocument();
     expect(within(sheet).queryByText('Back to menu')).not.toBeInTheDocument();
+  });
+
+  it('remembers Management being closed', () => {
+    asAdmin();
+    window.localStorage.setItem('didc.nav.management-open', '0');
+    renderAt();
+    fireEvent.click(screen.getByRole('button', { name: /more pages/i }));
+    const sheet = screen.getByRole('dialog', { name: 'More pages' });
+    expect(within(sheet).getByRole('button', { name: /management/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(sheet).queryByRole('link', { name: 'Team' })).not.toBeInTheDocument();
+    window.localStorage.removeItem('didc.nav.management-open');
   });
 
   it('closes on Escape and hands focus back to the hamburger', () => {
@@ -194,13 +233,21 @@ describe('desktop header', () => {
     inAdmin.forEach(label => expect(screen.getByRole('link', { name: label })).toBeInTheDocument());
   });
 
-  it('shows how many tasks are waiting, and nothing when none are', () => {
+  it('shows how many tasks are overdue, and nothing when none are', () => {
     renderAt();
-    expect(screen.queryByLabelText(/open$/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/overdue$/)).not.toBeInTheDocument();
 
-    mockOpenCount = 3;
+    mockMyOverdue = 3;
     renderAt();
-    expect(screen.getByLabelText('3 open')).toBeInTheDocument();
+    expect(screen.getByLabelText('3 overdue')).toBeInTheDocument();
+  });
+
+  it('puts Task Library in the Admin group, so a plain admin gets the dropdown', () => {
+    asAdmin();
+    renderAt();
+    const admin = screen.getByRole('button', { name: /admin/i });
+    fireEvent.click(admin);
+    expect(screen.getByRole('link', { name: 'Task Library' })).toHaveAttribute('href', '/task-library');
   });
 
   it('puts Profile, Settings and Logout on real buttons that Escape can leave', () => {

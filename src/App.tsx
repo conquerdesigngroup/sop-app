@@ -9,6 +9,9 @@ import { DashboardSettingsProvider } from './contexts/DashboardSettingsContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navigation from './components/Navigation';
 import BottomNavigation from './components/BottomNavigation';
+import QuickAddButton from './components/QuickAddButton';
+import ViewAsBanner from './components/ViewAsBanner';
+import { MobileMenuProvider } from './contexts/MobileMenuContext';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
 import PullToRefreshLayer from './components/PullToRefreshLayer';
@@ -186,6 +189,7 @@ const AppContent: React.FC = () => {
       }}
     >
       {showStaffChrome && <Navigation />}
+      {showStaffChrome && <ViewAsBanner />}
       <Suspense fallback={<PageLoadingFallback />}>
         <Routes>
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
@@ -407,6 +411,7 @@ const AppContent: React.FC = () => {
       </Suspense>
       {/* Bottom Navigation for Mobile */}
       {showStaffChrome && isMobileOrTablet && <BottomNavigation />}
+      {showStaffChrome && isMobileOrTablet && <QuickAddButton />}
       <OfflineIndicator />
       {/* Pull down from the top of any page to refresh it. Once, here, for
           staff and parents alike — it listens on the document. */}
@@ -448,9 +453,11 @@ function App() {
                         the Portal entry. Every fetch inside is behind a session,
                         so a signed-out parent pays nothing for it. */}
                     <PortalAdminProvider>
-                      <Router>
-                        <AppContent />
-                      </Router>
+                      <MobileMenuProvider>
+                        <Router>
+                          <AppContent />
+                        </Router>
+                      </MobileMenuProvider>
                     </PortalAdminProvider>
                   </DashboardSettingsProvider>
                 </DataProvider>

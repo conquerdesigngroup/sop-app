@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useTask } from '../contexts/TaskContext';
@@ -12,6 +12,7 @@ import DataIntegrityPanel from '../components/DataIntegrityPanel';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
+import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription } from '../lib/push';
 
 interface ToggleSwitchProps {
   checked: boolean;
@@ -333,6 +334,68 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  // Push is a real subscription now, not just a preference. Turning it on
+  // asks the browser and registers this device; turning it off forgets this
+  // device. The preference is saved alongside so the sender honours it.
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushOnThisDevice, setPushOnThisDevice] = useState<boolean | null>(null);
+  const support = pushSupport();
+
+  useEffect(() => {
+    let cancelled = false;
+    hasPushSubscription().then(v => { if (!cancelled) setPushOnThisDevice(v); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const savePrefs = async (next: { pushEnabled?: boolean }) => {
+    if (!currentUser) return;
+    await updateUser(currentUser.id, {
+      notificationPreferences: {
+        pushEnabled: next.pushEnabled ?? pushEnabled,
+        emailEnabled,
+        taskReminders,
+        overdueAlerts,
+        calendarSyncEnabled: calendarSync,
+      },
+    });
+  };
+
+  const handlePushToggle = async (checked: boolean) => {
+    if (!currentUser) return;
+    setPushBusy(true);
+    try {
+      if (checked) {
+        await enablePush(currentUser.id);
+        setPushEnabled(true);
+        setPushOnThisDevice(true);
+        await savePrefs({ pushEnabled: true });
+        showToast('Notifications are on for this device', 'success');
+      } else {
+        await disablePush();
+        setPushEnabled(false);
+        setPushOnThisDevice(false);
+        await savePrefs({ pushEnabled: false });
+        showToast('Notifications are off', 'success');
+      }
+    } catch (e) {
+      showToast((e as Error).message || 'Could not change notifications', 'error');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleTestPush = async () => {
+    setPushBusy(true);
+    try {
+      const result = await sendTestPush();
+      showToast(result.sent > 0 ? 'Test sent — check your notifications' : (result.note || 'Nothing to send to'), result.sent > 0 ? 'success' : 'error');
+    } catch (e) {
+      showToast((e as Error).message || 'Could not send a test', 'error');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
   const handleSaveNotifications = async () => {
     if (!currentUser) return;
 
@@ -389,11 +452,33 @@ const SettingsPage: React.FC = () => {
               <div style={styles.settingInfo}>
                 <span style={styles.settingLabel}>Push Notifications</span>
                 <span style={styles.settingDescription}>
-                  Receive notifications in your browser
+                  {support === 'needs-install'
+                    ? 'On iPhone, add the app to your Home Screen first — Safari cannot receive these on its own.'
+                    : support === 'unsupported'
+                      ? 'This browser cannot receive push notifications.'
+                      : support === 'blocked'
+                        ? 'Blocked in your browser settings for this site.'
+                        : isAdmin
+                          ? 'A morning digest of overdue and unassigned tasks, sent to this device.'
+                          : 'Receive notifications on this device.'}
+                  {support === 'ok' && pushOnThisDevice === false && pushEnabled && (
+                    <> This device is not subscribed yet — turn the switch off and on to add it.</>
+                  )}
                 </span>
               </div>
-              <ToggleSwitch checked={pushEnabled} onChange={setPushEnabled} />
+              <ToggleSwitch
+                checked={pushEnabled && pushOnThisDevice !== false}
+                onChange={handlePushToggle}
+                disabled={pushBusy || support !== 'ok'}
+              />
             </div>
+            {isAdmin && support === 'ok' && pushOnThisDevice && (
+              <div style={{ padding: '0 0 8px' }}>
+                <FormButton variant="secondary" size="sm" onClick={handleTestPush} loading={pushBusy}>
+                  Send a test notification
+                </FormButton>
+              </div>
+            )}
 
             <div style={styles.divider} />
 

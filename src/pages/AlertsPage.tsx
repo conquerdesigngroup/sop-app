@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
@@ -48,6 +49,7 @@ const AlertsPage: React.FC = () => {
   const { jobTasks, archiveJobTask } = useTask();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
+  const navigate = useNavigate();
   const [activeAdminTab, setActiveAdminTab] = useState<'team' | 'tasks' | 'completed'>('tasks');
 
   // Calculate team member progress for admin view
@@ -490,10 +492,19 @@ const AlertsPage: React.FC = () => {
   const renderAdminAlertCard = (alert: TaskAlert, showArchiveButton: boolean = false) => (
     <div
       key={alert.id}
+      role="link"
+      tabIndex={0}
+      title="Open this task"
+      // Every row opens the task it is about. Reading that a task is nine
+      // days overdue and then having to find it on Job Tasks by name was
+      // the whole gap.
+      onClick={() => navigate('/job-tasks', { state: { openTaskId: alert.taskId } })}
+      onKeyDown={(e) => { if (e.key === 'Enter') navigate('/job-tasks', { state: { openTaskId: alert.taskId } }); }}
       style={{
         ...styles.alertCard,
         backgroundColor: getAlertBgColor(alert.type),
         borderLeftColor: getAlertColor(alert.type),
+        cursor: 'pointer',
       }}
     >
       <div style={styles.alertHeader}>
@@ -535,7 +546,7 @@ const AlertsPage: React.FC = () => {
         </div>
         {showArchiveButton && (
           <button
-            onClick={() => handleArchiveTask(alert.taskId, alert.taskTitle)}
+            onClick={(e) => { e.stopPropagation(); handleArchiveTask(alert.taskId, alert.taskTitle); }}
             style={styles.archiveButton}
             title="Archive this task"
           >
@@ -855,7 +866,15 @@ const AlertsPage: React.FC = () => {
           ) : (
             <div style={styles.teamGrid}>
               {teamMemberProgress.map(member => (
-                <div key={member.userId} style={styles.memberCard}>
+                <div
+                  key={member.userId}
+                  style={{ ...styles.memberCard, cursor: 'pointer' }}
+                  role="link"
+                  tabIndex={0}
+                  title={`Open ${member.userName}'s tasks`}
+                  onClick={() => navigate('/job-tasks', { state: { search: member.userName } })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate('/job-tasks', { state: { search: member.userName } }); }}
+                >
                   {/* Member Header */}
                   <div style={styles.memberHeader}>
                     <div style={styles.memberAvatar}>

@@ -25,6 +25,7 @@ const SOPPage: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingSOP, setEditingSOP] = useState<SOP | null>(null);
   const [viewingSOP, setViewingSOP] = useState<SOP | null>(null);
+  const [pendingSopId, setPendingSopId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -50,10 +51,24 @@ const SOPPage: React.FC = () => {
       if (state.expandCategory) {
         setExpandedCategories(new Set([state.expandCategory]));
       }
+      // Deep link (search, activity log): open one SOP straight into the viewer.
+      if (state.openSopId) {
+        setPendingSopId(state.openSopId);
+      }
       // Clear the state so it doesn't reapply on refresh
       window.history.replaceState({}, document.title);
     }
   }, [location]);
+
+  // The SOP list may still be loading when the deep link lands, so the id
+  // waits until the SOP is actually here.
+  useEffect(() => {
+    if (!pendingSopId) return;
+    const sop = sops.find(s => s.id === pendingSopId);
+    if (!sop) return;
+    setViewingSOP(sop);
+    setPendingSopId(null);
+  }, [pendingSopId, sops]);
 
   // Memoized callbacks - must be defined before any early returns to follow hooks rules
   const handleEdit = useCallback((sop: SOP) => {

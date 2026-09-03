@@ -3,15 +3,17 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
+import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { theme, BRAND_MARK } from '../theme';
 import RefreshButton from './RefreshButton';
+import GlobalSearch from './GlobalSearch';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { roleLabel } from '../lib/roles';
 import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
-import { useOpenTaskCount } from '../hooks/useOpenTaskCount';
+import { useTaskCounts } from '../hooks/useTaskCounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { BOTTOM_NAV_PATHS } from './BottomNavigation';
+import { bottomNavPathsFor } from './BottomNavigation';
 
 // Icons
 const icons = {
@@ -96,6 +98,20 @@ const icons = {
       <path d="M9 21v-6h6v6" />
     </svg>
   ),
+  library: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <path d="M9 7h7" />
+      <path d="M9 11h7" />
+    </svg>
+  ),
+  search: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <path d="M21 21l-4.35-4.35" />
+    </svg>
+  ),
   chevronDown: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="6 9 12 15 18 9" />
@@ -126,6 +142,40 @@ interface NavGroup {
 
 type NavElement = NavItem | NavGroup;
 
+/**
+ * A titled run of rows in the mobile sheet. Mirrors the desktop grouping —
+ * the sheet used to be one flat list of up to twelve rows, so the pages a
+ * super admin opens weekly sat below the fold under the ones everyone opens
+ * daily, with nothing to say which was which.
+ */
+interface NavSection {
+  key: string;
+  label: string;
+  items: NavItem[];
+  /** Collapsible sections start closed unless the current page is inside them. */
+  collapsible?: boolean;
+}
+
+/** Where the sheet remembers whether Management was left open. */
+const MANAGEMENT_OPEN_KEY = 'didc.nav.management-open';
+
+const readManagementOpen = (): boolean | null => {
+  try {
+    const v = window.localStorage.getItem(MANAGEMENT_OPEN_KEY);
+    return v === null ? null : v === '1';
+  } catch {
+    return null;
+  }
+};
+
+const writeManagementOpen = (open: boolean) => {
+  try {
+    window.localStorage.setItem(MANAGEMENT_OPEN_KEY, open ? '1' : '0');
+  } catch {
+    // Private mode or storage disabled: the toggle still works for this visit.
+  }
+};
+
 const Navigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -147,11 +197,16 @@ const Navigation: React.FC = () => {
   // squashed logo.
   const roomForRefresh = useMediaQuery('(min-width: 360px)', true);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  // Shared with BottomNavigation's "More" tab and the quick-add button, so
+  // the flag lives in a context rather than here.
+  const { isOpen: showMobileMenu, close: closeMobileMenu, toggle: toggleMobileMenu } = useMobileMenu();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const { isMobileOrTablet } = useResponsive();
+  // null means "never toggled": open if the current page is inside it.
+  const [managementOpen, setManagementOpen] = useState<boolean | null>(readManagementOpen);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { isMobileOrTablet, windowWidth } = useResponsive();
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
-  const openTaskCount = useOpenTaskCount();
+  const { myOverdue, allOverdue } = useTaskCounts();
   const reducedMotion = useReducedMotion();
   // Whichever control opened the menu that is currently showing, so Escape
   // can hand focus back to it instead of dropping it on the body.
@@ -160,12 +215,24 @@ const Navigation: React.FC = () => {
     lastTriggerRef.current = e.currentTarget;
   };
 
+  // ⌘K / Ctrl+K opens search from any page.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(v => !v);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   // Close mobile menu when route changes
   useEffect(() => {
-    setShowMobileMenu(false);
+    closeMobileMenu();
     setShowUserMenu(false);
     setOpenDropdown(null);
-  }, [location.pathname]);
+  }, [location.pathname, closeMobileMenu]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -206,14 +273,14 @@ const Navigation: React.FC = () => {
     if (!showMobileMenu && !showUserMenu && !openDropdown) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setShowMobileMenu(false);
+      closeMobileMenu();
       setShowUserMenu(false);
       setOpenDropdown(null);
       lastTriggerRef.current?.focus();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showMobileMenu, showUserMenu, openDropdown]);
+  }, [showMobileMenu, showUserMenu, openDropdown, closeMobileMenu]);
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -236,8 +303,8 @@ const Navigation: React.FC = () => {
   const isGroupActive = (group: NavGroup) => group.items.some(item => isPathActive(item.path));
 
   // A dropdown holding one entry is a click that leads to one choice. A team
-  // member's Tasks group is only My Tasks, and a plain admin's Admin group is
-  // only Team, so both are rendered as the link itself.
+  // member's Tasks group is only My Tasks, so it is rendered as the link
+  // itself.
   const collapseGroup = (group: NavGroup): NavElement =>
     group.items.length === 1 ? group.items[0] : group;
 
@@ -247,18 +314,19 @@ const Navigation: React.FC = () => {
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
     ];
 
-    // Tasks group
+    // Tasks group. For management the group's own pill is everyone's overdue
+    // count, which already includes their own.
     const tasksGroup: NavGroup = {
       label: 'Tasks',
       icon: icons.tasks,
-      badge: openTaskCount,
+      badge: isAdmin ? allOverdue : myOverdue,
       items: [
-        { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks, badge: openTaskCount },
+        { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks, badge: myOverdue },
       ],
     };
 
     if (isAdmin) {
-      tasksGroup.items.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks });
+      tasksGroup.items.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks, badge: allOverdue });
     }
 
     elements.push(collapseGroup(tasksGroup));
@@ -277,71 +345,108 @@ const Navigation: React.FC = () => {
     // them (super admin only from v13; they were once offered to every
     // signed-in user), the audit log and the archive. Top-level they made
     // nine entries, which wrapped the header onto a second row on a 1280px
-    // laptop; in the group the row holds at that width. For a plain admin
-    // the group is a single entry and collapses to the Team link itself.
+    // laptop; in the group the row holds at that width.
+    //
+    // Task Library has had a route and an adminOnly guard since the templates
+    // feature shipped, and no menu entry anywhere: it was reachable only by
+    // typing the URL or via the Library tab inside Job Tasks.
     if (isAdmin) {
       const adminItems: NavItem[] = [
         { path: '/team', label: 'Team', icon: icons.team },
+        { path: '/task-library', label: 'Task Library', icon: icons.library },
       ];
       if (isSuperAdmin) {
         adminItems.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
-        adminItems.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+        adminItems.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts, badge: allOverdue });
         adminItems.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
         adminItems.push({ path: '/archive', label: 'Archive', icon: icons.archive });
       }
-      elements.push(collapseGroup({ label: 'Admin', icon: icons.admin, items: adminItems }));
+      elements.push(collapseGroup({
+        label: 'Admin',
+        icon: icons.admin,
+        items: adminItems,
+        // Alerts is the only thing in here with a count; the closed group
+        // still says when it needs a look.
+        badge: isSuperAdmin ? allOverdue : undefined,
+      }));
     }
 
     return elements;
   };
 
-  // Flat list for mobile menu
-  const getFlatNavItems = (): NavItem[] => {
-    const items: NavItem[] = [
+  // Sectioned list for the mobile sheet.
+  //
+  // Same pages as the desktop bar, grouped by how often they are opened
+  // rather than by which desktop dropdown they fell into: the daily pages
+  // first, the management pages under a heading that collapses, and the
+  // portal manager on its own because it is a different product.
+  const getMobileSections = (): NavSection[] => {
+    const work: NavItem[] = [
       { path: '/dashboard', label: 'Dashboard', icon: icons.dashboard },
-      { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks, badge: openTaskCount },
+      { path: '/my-tasks', label: 'My Tasks', icon: icons.tasks, badge: myOverdue },
     ];
+    if (isAdmin) {
+      work.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks, badge: allOverdue });
+    }
+    work.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
+    work.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
+    work.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
+
+    const sections: NavSection[] = [{ key: 'work', label: 'Work', items: work }];
 
     if (isAdmin) {
-      items.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks });
-    }
-
-    items.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
-    items.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
-    items.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
-
-    if (isSuperAdmin) {
-      items.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
-      items.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts });
+      const management: NavItem[] = [
+        { path: '/team', label: 'Team', icon: icons.team },
+        { path: '/task-library', label: 'Task Library', icon: icons.library },
+      ];
+      if (isSuperAdmin) {
+        management.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
+        management.push({ path: '/alerts', label: 'Alerts', icon: icons.alerts, badge: allOverdue });
+        management.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
+        management.push({ path: '/archive', label: 'Archive', icon: icons.archive });
+      }
+      sections.push({ key: 'management', label: 'Management', items: management, collapsible: true });
     }
 
     if (canEditPortal) {
-      items.push({ path: '/portal-admin', label: 'Portal', icon: icons.portal });
+      sections.push({
+        key: 'portal',
+        label: 'Parent Portal',
+        items: [{ path: '/portal-admin', label: 'Portal Manager', icon: icons.portal }],
+      });
     }
 
-    if (isAdmin) {
-      items.push({ path: '/team', label: 'Team', icon: icons.team });
-    }
-    if (isSuperAdmin) {
-      items.push({ path: '/activity-log', label: 'Activity Log', icon: icons.activity });
-      items.push({ path: '/archive', label: 'Archive', icon: icons.archive });
-    }
-
-    return items;
+    return sections;
   };
 
   const navElements = getNavElements();
-  // The sheet offers only what the bottom bar does not. For a team member
-  // without a class that is nothing, and the hamburger is not drawn at all —
-  // it used to open a list of the same five pages already under their thumb.
-  const moreItems = getFlatNavItems().filter(item => !BOTTOM_NAV_PATHS.includes(item.path));
-  const hasMoreItems = moreItems.length > 0;
+  // The sheet offers only what the bottom bar does not — the bar is chosen
+  // by role, so what is left over is too. For a team member without a class
+  // that is nothing, and the hamburger is not drawn at all: it used to open
+  // a list of the same five pages already under their thumb.
+  const barPaths = bottomNavPathsFor(isAdmin);
+  const mobileSections = getMobileSections()
+    .map(section => ({ ...section, items: section.items.filter(item => !barPaths.includes(item.path)) }))
+    .filter(section => section.items.length > 0);
+  const hasMoreItems = mobileSections.length > 0;
+
+  const isSectionOpen = (section: NavSection) => {
+    if (!section.collapsible) return true;
+    if (managementOpen !== null) return managementOpen;
+    return section.items.some(item => isPathActive(item.path));
+  };
+
+  const toggleSection = (section: NavSection) => {
+    const next = !isSectionOpen(section);
+    setManagementOpen(next);
+    writeManagementOpen(next);
+  };
 
   // Inverted on an active (pink) row, where a pink pill would vanish.
   const renderBadge = (count: number | undefined, onActive: boolean) =>
     count ? (
       <span
-        aria-label={`${count} open`}
+        aria-label={`${count} overdue`}
         style={{
           ...styles.countPill,
           backgroundColor: onActive ? '#FFFFFF' : theme.colors.primary,
@@ -517,7 +622,67 @@ const Navigation: React.FC = () => {
     );
   };
 
+  // One row of the mobile sheet.
+  const renderSheetLink = (item: NavItem, index: number) => {
+    const active = isPathActive(item.path);
+    return (
+      <Link
+        key={item.path}
+        to={item.path}
+        aria-current={active ? 'page' : undefined}
+        className={reducedMotion ? undefined : 'list-item-enter'}
+        style={{
+          ...styles.mobileNavLink,
+          color: active ? colors.txt.primary : colors.txt.secondary,
+          ...(active ? styles.mobileNavLinkActive : {}),
+          // Capped, not index * 0.05s. An admin sees several
+          // items, so the last one used to start half a second
+          // after the sheet opened and finish at 0.8s — and
+          // until each item's slide-in settles it still covers
+          // part of the row below, so an early tap opens the
+          // wrong page. 0.18s keeps the stagger legible while
+          // making the whole list settle in about a third of
+          // the time. Skipped entirely under reduced motion,
+          // where the rows must start visible.
+          ...(reducedMotion
+            ? {}
+            : { animationDelay: `${Math.min(index * 0.03, 0.18)}s`, opacity: 0 }),
+        }}
+      >
+        <span style={styles.navIcon}>{item.icon}</span>
+        {item.label}
+        {item.badge ? (
+          <span style={{ marginLeft: 'auto', display: 'flex' }}>{renderBadge(item.badge, active)}</span>
+        ) : null}
+        {active && (
+          <span style={{...styles.activeIndicator, ...(item.badge ? { marginLeft: '8px' } : {})}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+        )}
+      </Link>
+    );
+  };
+
+  // The phone header has room for one control on the left. When there is a
+  // sheet, that is the hamburger and Search is the sheet's first row; when
+  // there is not, Search takes the hamburger's place. Either way the right
+  // cluster stays refresh + avatar, which is all the 147px mark leaves room
+  // for on a 375px phone.
+  const mobileSearchButton = (
+    <button
+      type="button"
+      style={{...styles.hamburger, color: colors.txt.primary}}
+      onClick={() => setSearchOpen(true)}
+      aria-label="Search"
+    >
+      {icons.search}
+    </button>
+  );
+
   return (
+    <>
     <nav style={{
       ...styles.nav,
       backgroundColor: colors.bg.secondary,
@@ -528,15 +693,15 @@ const Navigation: React.FC = () => {
         {isMobileOrTablet && (
           <>
             {/* Hamburger Menu Button. Only when the sheet would hold
-                something the bottom bar does not; the spacer keeps the
-                avatar on the right when it is not drawn. */}
+                something the bottom bar does not; otherwise the slot goes
+                to Search so the avatar stays on the right. */}
             {hasMoreItems ? (
             <button
               type="button"
               style={{...styles.hamburger, color: colors.txt.primary}}
               onClick={(e) => {
                 rememberTrigger(e);
-                setShowMobileMenu(!showMobileMenu);
+                toggleMobileMenu();
               }}
               aria-label={showMobileMenu ? 'Close menu' : 'More pages'}
               aria-expanded={showMobileMenu}
@@ -558,7 +723,7 @@ const Navigation: React.FC = () => {
               </svg>
             </button>
             ) : (
-              <div style={styles.hamburgerSpacer} aria-hidden="true" />
+              mobileSearchButton
             )}
 
             {/* Center Logo */}
@@ -600,7 +765,7 @@ const Navigation: React.FC = () => {
                 <div
                   className="modal-backdrop backdrop-blur-sm"
                   style={styles.mobileOverlay}
-                  onClick={() => setShowMobileMenu(false)}
+                  onClick={closeMobileMenu}
                 />
                 <div
                   id="staff-more-menu"
@@ -615,46 +780,50 @@ const Navigation: React.FC = () => {
                     <div style={{...styles.dragHandleBar, backgroundColor: colors.bdr.secondary}} />
                   </div>
                   <div style={styles.mobileMenuContent}>
-                    {/* Says why Dashboard, Tasks and the rest are not in
-                        here: they are on the bar below. */}
-                    <div style={{...styles.sheetHeading, color: colors.txt.tertiary}}>More</div>
-                    {moreItems.map((item, index) => {
-                      const active = isPathActive(item.path);
+                    {/* Search first: the header slot it would have taken is
+                        the hamburger's whenever this sheet exists. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeMobileMenu();
+                        setSearchOpen(true);
+                      }}
+                      style={{...styles.mobileNavLink, ...styles.mobileSheetButton, color: colors.txt.secondary}}
+                    >
+                      <span style={styles.navIcon}>{icons.search}</span>
+                      Search
+                    </button>
+
+                    {mobileSections.map((section, sectionIndex) => {
+                      const open = isSectionOpen(section);
+                      const sectionBadge = section.items.reduce((n, item) => n + (item.badge || 0), 0);
                       return (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        aria-current={active ? 'page' : undefined}
-                        className={reducedMotion ? undefined : 'list-item-enter'}
-                        style={{
-                          ...styles.mobileNavLink,
-                          color: active ? colors.txt.primary : colors.txt.secondary,
-                          ...(active ? styles.mobileNavLinkActive : {}),
-                          // Capped, not index * 0.05s. An admin sees several
-                          // items, so the last one used to start half a second
-                          // after the sheet opened and finish at 0.8s — and
-                          // until each item's slide-in settles it still covers
-                          // part of the row below, so an early tap opens the
-                          // wrong page. 0.18s keeps the stagger legible while
-                          // making the whole list settle in about a third of
-                          // the time. Skipped entirely under reduced motion,
-                          // where the rows must start visible.
-                          ...(reducedMotion
-                            ? {}
-                            : { animationDelay: `${Math.min(index * 0.03, 0.18)}s`, opacity: 0 }),
-                        }}
-                      >
-                        <span style={styles.navIcon}>{item.icon}</span>
-                        {item.label}
-                        {renderBadge(item.badge, active)}
-                        {active && (
-                          <span style={styles.activeIndicator}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          </span>
-                        )}
-                      </Link>
+                        <div key={section.key} style={sectionIndex > 0 ? styles.mobileSection : undefined}>
+                          {section.collapsible ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleSection(section)}
+                              aria-expanded={open}
+                              style={{...styles.mobileSectionToggle, color: colors.txt.tertiary}}
+                            >
+                              <span style={styles.mobileSectionLabel}>{section.label}</span>
+                              {/* Collapsed sections still say when something inside needs attention. */}
+                              {!open && sectionBadge > 0 && renderBadge(sectionBadge, false)}
+                              <span style={{
+                                ...styles.chevron,
+                                marginLeft: 'auto',
+                                transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                              }}>
+                                {icons.chevronDown}
+                              </span>
+                            </button>
+                          ) : (
+                            <div style={{...styles.mobileSectionHeading, color: colors.txt.tertiary}}>
+                              <span style={styles.mobileSectionLabel}>{section.label}</span>
+                            </div>
+                          )}
+                          {open && section.items.map((item, index) => renderSheetLink(item, index))}
+                        </div>
                       );
                     })}
                   </div>
@@ -703,6 +872,19 @@ const Navigation: React.FC = () => {
 
             {/* Right side: User Section */}
             <div style={styles.userSection}>
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Search"
+                title="Search (⌘K)"
+                style={{...styles.searchButton, color: colors.txt.secondary, borderColor: colors.bdr.primary, backgroundColor: colors.bg.tertiary}}
+              >
+                {icons.search}
+                {/* The links wrap onto a second row below ~1280; the icon alone
+                    costs nothing there, the label and shortcut only above. */}
+                {windowWidth >= 1280 && <span>Search</span>}
+                {windowWidth >= 1280 && <kbd style={{...styles.searchKbd, borderColor: colors.bdr.secondary}}>⌘K</kbd>}
+              </button>
               <RefreshButton size={40} style={{ marginRight: theme.spacing.sm }} />
               <button
                 type="button"
@@ -754,6 +936,10 @@ const Navigation: React.FC = () => {
         )}
       </div>
     </nav>
+    {/* Outside the <nav>: index.css forces every `nav button` transparent,
+        which turned the highlighted result row white-on-white. */}
+    <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </>
   );
 };
 
@@ -809,11 +995,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     borderRadius: theme.borderRadius.md,
     transition: 'background-color 0.2s',
-  },
-  // Same footprint as the hamburger: 24px icon plus 8px padding a side.
-  hamburgerSpacer: {
-    width: '40px',
-    height: '40px',
     flexShrink: 0,
   },
   centerLogoMobile: {
@@ -833,6 +1014,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '4px',
     flexShrink: 0,
+  },
+  searchButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 10px',
+    marginRight: '10px',
+    border: '1px solid',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    fontFamily: theme.fonts.primary,
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  searchKbd: {
+    fontFamily: theme.fonts.mono,
+    fontSize: '10px',
+    padding: '1px 5px',
+    border: '1px solid',
+    borderRadius: '4px',
+    opacity: 0.8,
   },
   userAvatarMobile: {
     width: '36px',
@@ -894,13 +1096,32 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '6px',
   },
-  sheetHeading: {
-    padding: '4px 16px 6px',
+  mobileSection: {
+    marginTop: '10px',
+  },
+  mobileSectionHeading: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '6px 16px 4px',
+  },
+  mobileSectionToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    padding: '10px 16px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+  },
+  mobileSectionLabel: {
+    fontFamily: theme.fonts.mono,
     fontSize: '11px',
-    fontWeight: 700,
+    fontWeight: 600,
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
-    fontFamily: theme.fonts.mono,
   },
   countPill: {
     display: 'inline-flex',
@@ -934,6 +1155,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: theme.borderRadius.md,
     transition: 'all 0.2s',
     border: `2px solid transparent`,
+  },
+  // A row of the sheet that is a <button> rather than a <Link>: the resets
+  // make it look like its neighbours.
+  mobileSheetButton: {
+    width: '100%',
+    background: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
   },
   mobileNavLinkActive: {
     backgroundColor: theme.colors.primary,
