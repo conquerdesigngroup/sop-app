@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useToast } from '../../contexts/ToastContext';
+import { useRefreshable } from '../../contexts/RefreshContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { supabase } from '../../lib/supabase';
 import { CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
@@ -195,8 +196,10 @@ const ClientAccountsPage: React.FC = () => {
     return data;
   }, []);
 
-  const fetchRows = useCallback(async (offset = 0, append = false) => {
-    setLoading(true);
+  // `silent` is the app-wide refresh: same first page, but the list stays on
+  // screen while it loads instead of dropping to a spinner.
+  const fetchRows = useCallback(async (offset = 0, append = false, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await callPortalAdmin({
         action: 'client_list',
@@ -219,6 +222,9 @@ const ClientAccountsPage: React.FC = () => {
     const t = setTimeout(() => { fetchRows(0, false); }, search ? 300 : 0);
     return () => clearTimeout(t);
   }, [fetchRows, search]);
+
+  const refetch = useCallback(() => fetchRows(0, false, true), [fetchRows]);
+  useRefreshable(refetch);
 
   // ------------------------------------------------------------- actions
 

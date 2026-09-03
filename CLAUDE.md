@@ -260,6 +260,36 @@ permission does not take effect until it restarts.
 
 ---
 
+## 🔄 DATA REFRESH (register every fetch)
+
+There is one refresh for the whole app — `src/contexts/RefreshContext.tsx`.
+The header button (staff nav and portal shell), pull-to-refresh on a phone
+(`PullToRefreshLayer`), and coming back to the foreground all call the same
+`refresh()`, which runs every loader registered with `useRefreshable`.
+
+**If you add a fetch — in a context, a page, or a hook — register it:**
+
+```tsx
+import { useRefreshable } from '../contexts/RefreshContext';
+
+const reload = useCallback(() => load(true /* silent */), [load]);
+useRefreshable(reload, isAuthenticated);   // second arg: only while this is true
+```
+
+Rules:
+1. **Silent.** A registered loader replaces its data when the fetch resolves
+   and never flips a `loading` flag on the way — the person is looking at the
+   page they asked to refresh, and a spinner replacing it reads as broken. Give
+   the load a `silent` parameter if it has a loading flag (see EventContext).
+2. **Throw on failure** rather than swallowing it, so the button can say so.
+3. **Guard stale responses** with a request counter or current-id ref when the
+   fetch is keyed on route state (see `useProgramQuery`, `ClassDetail`).
+4. Do not add per-context `visibilitychange` handlers; the provider does it.
+
+A source that is not registered is a source the refresh button lies about.
+
+---
+
 ## 🚫 DO NOT
 
 1. **DO NOT** create inline styles for buttons, cards, inputs - use the UI components

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { CalendarEvent, CalendarSource } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useRefreshable } from './RefreshContext';
 import { useAuth } from './AuthContext';
 import { buildEventPayload } from '../lib/googleEventMap';
 
@@ -192,14 +193,19 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  /**
+   * `silent` is for the app-wide refresh: replace the rows when they arrive
+   * and leave `loading` alone, so the calendar someone is looking at is not
+   * swapped for a spinner while it checks for changes.
+   */
+  const load = useCallback(async (silent = false) => {
     if (!isSupabaseConfigured() || !supabase) {
       setLoading(false);
       setError('The calendar needs a database connection.');
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       // Both in flight together: neither is large and the page cannot draw an
       // event without knowing which calendar's colour it takes.
@@ -256,6 +262,13 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     load();
   }, [load, authLoading, isAuthenticated]);
+
+  // Header button, pull-to-refresh, back-to-foreground. The calendar had a
+  // realtime channel but no refetch on resume, and a channel that was asleep
+  // with the phone does not replay what it missed — so an event edited while
+  // the app was backgrounded stayed stale until a cold start.
+  const reload = useCallback(() => load(true), [load]);
+  useRefreshable(reload, isAuthenticated && !authLoading);
 
   const syncNow = useCallback(async (): Promise<SyncRunResult[]> => {
     if (!isSupabaseConfigured() || !supabase) return [];

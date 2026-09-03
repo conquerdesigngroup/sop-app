@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Navigation from './Navigation';
 import { BOTTOM_NAV_PATHS } from './BottomNavigation';
 
@@ -39,6 +39,15 @@ jest.mock('../hooks/useResponsive', () => ({
   useResponsive: () => ({ isMobileOrTablet: mockMobile }),
 }));
 jest.mock('../hooks/useOpenTaskCount', () => ({ useOpenTaskCount: () => mockOpenCount }));
+// The refresh button in both header layouts. Stubbed at the context so the
+// test can see what a tap asks for without the registry behind it.
+const mockRefresh = jest.fn();
+jest.mock('../contexts/RefreshContext', () => ({
+  useRefresh: () => ({ refreshing: false, reason: null, lastRefreshedAt: null, count: 1, refresh: mockRefresh }),
+}));
+jest.mock('../contexts/ToastContext', () => ({
+  useToast: () => ({ success: jest.fn(), error: jest.fn(), warning: jest.fn(), info: jest.fn(), showToast: jest.fn() }),
+}));
 jest.mock('../contexts/ThemeContext', () => {
   const colors = {
     bg: { primary: '#000', secondary: '#111', tertiary: '#222' },
@@ -75,6 +84,21 @@ beforeEach(() => {
   asTeam();
   mockMobile = false;
   mockOpenCount = 0;
+  // CRA's jest runs with resetMocks, so the resolved value is re-armed here.
+  mockRefresh.mockReset().mockResolvedValue({ ok: true, failed: 0, total: 1 });
+});
+
+describe('refresh button', () => {
+  it.each([
+    ['phone', true],
+    ['laptop', false],
+  ])('is in the header on a %s and asks for a manual refresh', async (_label, mobile) => {
+    mockMobile = mobile;
+    renderAt('/dashboard');
+    const button = screen.getByRole('button', { name: 'Refresh' });
+    fireEvent.click(button);
+    await waitFor(() => expect(mockRefresh).toHaveBeenCalledWith('manual'));
+  });
 });
 
 describe('mobile menu sheet', () => {

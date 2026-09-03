@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRefreshable } from '../../contexts/RefreshContext';
 
 /**
  * One-shot fetch with an explicit reload, for each manager section.
@@ -7,6 +8,9 @@ import { useCallback, useEffect, useState } from 'react';
  * time and read by parents on a pull-to-refresh; holding a socket open per
  * section would cost more than it tells anyone. Every mutation calls reload(),
  * so the list a staff member is looking at is the list they just changed.
+ *
+ * It does take part in the app-wide refresh (RefreshContext) — silently, so a
+ * colleague's change arrives under the list without the list going away first.
  */
 export function useAdminList<T>(
   programId: string | undefined,
@@ -49,6 +53,22 @@ export function useAdminList<T>(
     // `run` comes from PortalAdminContext and is useCallback-stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programId, nonce]);
+
+  const runRef = useRef(run);
+  runRef.current = run;
+  const currentId = useRef(programId);
+  currentId.current = programId;
+
+  const refetch = useCallback(async () => {
+    const id = currentId.current;
+    if (!id) return;
+    const result = await runRef.current(id);
+    // The tab changed while this was in flight; the new tab's own load wins.
+    if (currentId.current !== id) return;
+    setData(result);
+    setError(null);
+  }, []);
+  useRefreshable(refetch, !!programId);
 
   return { data, loading, error, reload };
 }

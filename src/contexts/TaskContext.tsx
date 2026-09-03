@@ -3,7 +3,7 @@ import { TaskTemplate, JobTask, TaskTemplateStep, TaskStep, TaskStatus, TaskPrio
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logActivity } from '../utils/activityLogger';
-import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
+import { useRefreshable } from './RefreshContext';
 
 interface TaskContextType {
   // Task Templates (Library)
@@ -435,16 +435,10 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     }
   }, [jobTasks, useSupabase]);
 
-  // Refresh data when tab becomes visible (ensures data is fresh when users return)
-  const handleVisibilityRefresh = useCallback(() => {
-    if (useSupabase && isAuthenticated && !authLoading) {
-      console.log('[TaskContext] Tab visible - refreshing data...');
-      loadTaskTemplates();
-      loadJobTasks();
-    }
-  }, [useSupabase, isAuthenticated, authLoading, loadTaskTemplates, loadJobTasks]);
-
-  useVisibilityRefresh(handleVisibilityRefresh, 3000); // 3 second minimum between refreshes
+  // Part of every app-wide refresh: the header button, pull-to-refresh, and
+  // coming back to the foreground. RefreshContext owns the visibility
+  // handling that used to sit here.
+  useRefreshable(refreshTasks, !!useSupabase && isAuthenticated && !authLoading);
 
   // Task Template Methods
   const addTaskTemplate = async (templateData: Omit<TaskTemplate, 'id' | 'createdAt'>) => {

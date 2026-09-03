@@ -11,6 +11,8 @@ import Navigation from './components/Navigation';
 import BottomNavigation from './components/BottomNavigation';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
+import PullToRefreshLayer from './components/PullToRefreshLayer';
+import { RefreshProvider } from './contexts/RefreshContext';
 import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
@@ -406,6 +408,9 @@ const AppContent: React.FC = () => {
       {/* Bottom Navigation for Mobile */}
       {showStaffChrome && isMobileOrTablet && <BottomNavigation />}
       <OfflineIndicator />
+      {/* Pull down from the top of any page to refresh it. Once, here, for
+          staff and parents alike — it listens on the document. */}
+      <PullToRefreshLayer />
       <SessionExpiryModal />
     </div>
   );
@@ -432,22 +437,26 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
-          <AuthProvider>
-            <ActivityLogProvider>
-              <DataProvider>
-                <DashboardSettingsProvider>
-                  {/* Above the Router because the nav asks it whether to show
-                      the Portal entry. Every fetch inside is behind a session,
-                      so a signed-out parent pays nothing for it. */}
-                  <PortalAdminProvider>
-                    <Router>
-                      <AppContent />
-                    </Router>
-                  </PortalAdminProvider>
-                </DashboardSettingsProvider>
-              </DataProvider>
-            </ActivityLogProvider>
-          </AuthProvider>
+          {/* Above every data context, because every data context registers
+              its loader with it. See RefreshContext for what that buys. */}
+          <RefreshProvider>
+            <AuthProvider>
+              <ActivityLogProvider>
+                <DataProvider>
+                  <DashboardSettingsProvider>
+                    {/* Above the Router because the nav asks it whether to show
+                        the Portal entry. Every fetch inside is behind a session,
+                        so a signed-out parent pays nothing for it. */}
+                    <PortalAdminProvider>
+                      <Router>
+                        <AppContent />
+                      </Router>
+                    </PortalAdminProvider>
+                  </DashboardSettingsProvider>
+                </DataProvider>
+              </ActivityLogProvider>
+            </AuthProvider>
+          </RefreshProvider>
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>
