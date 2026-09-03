@@ -80,6 +80,44 @@ export const streamDownloadFilename = (title: string): string => {
 export const streamDownloadHref = (downloadUrl: string, title: string): string =>
   `${downloadUrl}?filename=${streamDownloadFilename(title)}`;
 
+/**
+ * Save to Photos works by fetching the whole MP4 into memory and handing it
+ * to the phone's share sheet. 300 MB is comfortably inside what an older
+ * iPhone's Safari will hold; a full class can be several times that and goes
+ * the plain-download way instead.
+ */
+export const SHARE_MAX_BYTES = 300 * 1024 * 1024;
+
+export type VideoSaveSupport = 'share' | 'link';
+
+/**
+ * 'share' when this browser can hand a video file to the share sheet (iOS
+ * 15+, Android Chrome, installed PWAs included); 'link' everywhere else,
+ * where Download stays a plain anchor.
+ */
+export const videoSaveSupport = (
+  nav: Partial<Pick<Navigator, 'share' | 'canShare'>> | undefined,
+): VideoSaveSupport => {
+  if (!nav || typeof nav.share !== 'function' || typeof nav.canShare !== 'function') return 'link';
+  if (typeof File === 'undefined') return 'link';
+  try {
+    return nav.canShare({ files: [new File([''], 'probe.mp4', { type: 'video/mp4' })] }) ? 'share' : 'link';
+  } catch {
+    return 'link';
+  }
+};
+
+const mb = (bytes: number): string => {
+  const n = bytes / (1024 * 1024);
+  return `${n < 10 ? n.toFixed(1) : Math.round(n)} MB`;
+};
+
+/** "43% of 21 MB", or "12 MB so far" when the total is unknown. */
+export const describeFetchProgress = (received: number, total: number | null): string =>
+  total && total > 0
+    ? `${Math.min(100, Math.floor((received / total) * 100))}% of ${mb(total)}`
+    : `${mb(received)} so far`;
+
 /** 754 → "12:34", 3723 → "1:02:03". Null for anything that is not a duration. */
 export const formatDuration = (seconds: number | null | undefined): string | null => {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) return null;

@@ -75,8 +75,11 @@ const streamDoc = (over: Partial<PortalDocument>): PortalDocument => doc({
 const renderList = async (documents: PortalDocument[]) => {
   render(<DocumentList documents={documents} />);
   await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalled());
-  // Let the resolved promise's setState flush.
-  await act(async () => { await Promise.resolve(); });
+  // Let the resolved promise's setState flush. A whole macrotask, not one
+  // microtask: the mock's promise chain is more than one tick deep, and a
+  // single Promise.resolve() left the img unrendered about one run in ten —
+  // the "flaky photo test" PR #65 wrote off.
+  await act(async () => { await new Promise(r => setTimeout(r, 0)); });
 };
 
 /** Every path in this file signs successfully unless a test says otherwise. */
@@ -356,7 +359,7 @@ describe('a class video on Cloudflare Stream', () => {
     expect(document.querySelector('video')).toBeNull();
   });
 
-  it('offers Cloudflare\'s MP4 as a Download, named after the title', async () => {
+  it('offers Cloudflare\'s MP4 as a plain Download link where the browser cannot share a file', async () => {
     const onDownload = jest.fn();
     render(<DocumentList documents={[streamDoc({})]} onDownload={onDownload} />);
     await screen.findByTitle('Tuesday class recording');
@@ -366,6 +369,146 @@ describe('a class video on Cloudflare Stream', () => {
     expect(link).not.toHaveAttribute('target');
     fireEvent.click(link);
     expect(onDownload).toHaveBeenCalledWith(expect.objectContaining({ id: 'doc-stream' }));
+  });
+
+  describe('Save to Photos, on a phone that can share a file', () => {
+    const shareSpy = jest.fn();
+    const fetchSpy = jest.fn();
+    /** A fake MP4 body: two chunks, the first held back until `release` runs. */
+    let release: () => void = () => {};
+    const fakeResponse = (total: number | null, signal?: AbortSignal) => {
+      const first = new Promise<void>(res => { release = res; });
+      const abort = () => { const e = new Error('aborted'); e.name = 'AbortError'; return e; };
+      const chunks = [new Uint8Array(4).fill(1), new Uint8Array(6).fill(2)];
+      let i = 0;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (h: string) => (h === 'content-length' ? (total === null ? null : String(total)) : h === 'content-type' ? 'video/mp4' : null) },
+        body: {
+          getReader: () => ({
+            read: async () => {
+              if (i === 0) await first;
+              // Like the real reader: a read after abort rejects.
+              if (signal?.aborted) throw abort();
+              return i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined };
+            },
+            cancel: jest.fn().mockResolvedValue(undefined),
+          }),
+          cancel: jest.fn().mockResolvedValue(undefined),
+        },
+      };
+    };
+
+    beforeEach(() => {
+      Object.defineProperty(navigator, 'share', { value: shareSpy, configurable: true, writable: true });
+      Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true, writable: true });
+      (global as any).fetch = fetchSpy;
+      shareSpy.mockReset().mockResolvedValue(undefined);
+      fetchSpy.mockReset().mockImplementation(async (_url: string, init?: RequestInit) => fakeResponse(10, init?.signal ?? undefined));
+    });
+    afterEach(() => {
+      delete (navigator as any).share;
+      delete (navigator as any).canShare;
+      delete (global as any).fetch;
+    });
+
+    it('is a Download button, not a link, and one tap fetches the MP4 with a progress line', async () => {
+      const onDownload = jest.fn();
+      render(<DocumentList documents={[streamDoc({})]} onDownload={onDownload} />);
+      await screen.findByTitle('Tuesday class recording');
+      expect(screen.queryByRole('link', { name: /download/i })).toBeNull();
+
+      const button = screen.getByRole('button', { name: /download/i });
+      await act(async () => { fireEvent.click(button); });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${STREAM_BASE}/downloads/default.mp4?filename=Tuesday-class-recording.mp4`,
+        expect.objectContaining({ credentials: 'omit' }),
+      );
+      // The audit sees the download the moment it starts.
+      expect(onDownload).toHaveBeenCalledWith(expect.objectContaining({ id: 'doc-stream' }));
+      // While it is coming: the control is disabled, and the words say so.
+      expect(button).toBeDisabled();
+      expect(screen.getByRole('progressbar', { name: /getting the video/i })).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent(/Getting the video ready — 0% of 0.0 MB. Keep this page open./);
+
+      // A second, third, fourth tap starts nothing.
+      fireEvent.click(button); fireEvent.click(button); fireEvent.click(button);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      await act(async () => { release(); });
+      const save = await screen.findByRole('button', { name: /save to photos/i });
+      expect(save).toBeEnabled();
+      expect(screen.getByRole('status')).toHaveTextContent(/Ready. Tap Save to Photos, then choose Save Video./);
+      expect(screen.queryByRole('progressbar')).toBeNull();
+
+      await act(async () => { fireEvent.click(save); });
+      expect(shareSpy).toHaveBeenCalledTimes(1);
+      const shared = shareSpy.mock.calls[0][0];
+      expect(shared.title).toBe('Tuesday class recording');
+      expect(shared.files).toHaveLength(1);
+      expect(shared.files[0]).toBeInstanceOf(File);
+      expect(shared.files[0].name).toBe('Tuesday-class-recording.mp4');
+      expect(shared.files[0].type).toBe('video/mp4');
+      expect(shared.files[0].size).toBe(10);
+      expect(screen.getByRole('status')).toHaveTextContent(/Done\./);
+      // Still there for a second send; the file is kept, not re-fetched.
+      expect(screen.getByRole('button', { name: /save to photos/i })).toBeEnabled();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('goes back to Download when the fetch is cancelled', async () => {
+      render(<DocumentList documents={[streamDoc({})]} />);
+      await screen.findByTitle('Tuesday class recording');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /download/i })); });
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /cancel/i })); });
+      // The held-back read resolves after the abort; the component must
+      // not treat that as success.
+      await act(async () => { release(); });
+      expect(await screen.findByRole('button', { name: /^download$/i })).toBeEnabled();
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('hands a video over the size cap to the browser download instead, and says so', async () => {
+      fetchSpy.mockImplementation(async (_url: string, init?: RequestInit) => fakeResponse(400 * 1024 * 1024, init?.signal ?? undefined));
+      render(<DocumentList documents={[streamDoc({})]} />);
+      await screen.findByTitle('Tuesday class recording');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /download/i })); });
+      await waitFor(() => expect(assignSpy).toHaveBeenCalledWith(
+        `${STREAM_BASE}/downloads/default.mp4?filename=Tuesday-class-recording.mp4`,
+      ));
+      expect(screen.getByRole('status')).toHaveTextContent(/too big to save straight to Photos/);
+      expect(screen.getByRole('link', { name: /download/i })).toBeInTheDocument();
+      expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it('says what to do when the fetch fails, and lets them try again', async () => {
+      fetchSpy.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      render(<DocumentList documents={[streamDoc({})]} />);
+      await screen.findByTitle('Tuesday class recording');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /download/i })); });
+      expect(screen.getByRole('status')).toHaveTextContent(/Check your connection and tap Download again/);
+      expect(screen.getByRole('button', { name: /download/i })).toBeEnabled();
+    });
+
+    it('stays ready when the share sheet is dismissed, and falls back when it will not open', async () => {
+      const dismissed = new Error('cancelled'); dismissed.name = 'AbortError';
+      shareSpy.mockRejectedValueOnce(dismissed).mockRejectedValueOnce(new Error('NotAllowedError'));
+      render(<DocumentList documents={[streamDoc({})]} />);
+      await screen.findByTitle('Tuesday class recording');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /download/i })); });
+      await act(async () => { release(); });
+      const save = await screen.findByRole('button', { name: /save to photos/i });
+
+      await act(async () => { fireEvent.click(save); });
+      expect(screen.getByRole('button', { name: /save to photos/i })).toBeEnabled();
+      expect(assignSpy).not.toHaveBeenCalled();
+
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /save to photos/i })); });
+      expect(assignSpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('status')).toHaveTextContent(/downloading it as a file instead/);
+    });
   });
 
   it('offers no Download until Cloudflare has built the MP4', async () => {

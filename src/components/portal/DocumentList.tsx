@@ -1,10 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
 import { Spinner } from '../ui';
 import { usePortal } from '../../contexts/PortalContext';
 import { formatFileSize } from '../../lib/portal';
 import { mediaKindOf, withDownload, MediaKind } from '../../lib/portalMedia';
-import { streamIframeUrl, streamDownloadHref, formatDuration } from '../../lib/portalStream';
+import {
+  streamIframeUrl, streamDownloadHref, streamDownloadFilename, formatDuration,
+  videoSaveSupport, describeFetchProgress, SHARE_MAX_BYTES,
+} from '../../lib/portalStream';
+import { fetchVideoFile, isAbort, VideoTooLarge, FetchProgress } from '../../lib/videoFetch';
 import { PortalDocument } from '../../types';
 
 /**
@@ -126,6 +130,28 @@ const Meta: React.FC<{ doc: PortalDocument; failed?: boolean }> = ({ doc, failed
   );
 };
 
+/** The save control's look, shared by the anchor and the Save-to-Photos button. */
+const SAVE_CONTROL: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  flexShrink: 0,
+  padding: '6px 10px',
+  borderRadius: theme.borderRadius.md,
+  backgroundColor: theme.colors.bg.tertiary,
+  color: theme.colors.txt.secondary,
+  textDecoration: 'none',
+  ...theme.typography.captionSmall,
+  fontFamily: theme.fonts.primary,
+  fontWeight: 600,
+  // 32px of padding plus the glyph is under the 44px touch target on
+  // its own; the row it sits in is taller than that, and the label
+  // makes the hit area wide enough to be hit.
+  minHeight: '32px',
+  border: 'none',
+  cursor: 'pointer',
+};
+
 /**
  * The strip under a photo or a video: what it is on the left, save on the right.
  *
@@ -138,9 +164,11 @@ const MediaCaption: React.FC<{
   downloadUrl: string | null;
   /** "Save" for a file we hold; "Download" for the MP4 Cloudflare built. */
   label?: string;
+  /** Replaces the anchor entirely — the Stream card's stateful control. */
+  action?: React.ReactNode;
   onDownload?: (doc: PortalDocument) => void;
 }> = ({
-  doc, downloadUrl, label = 'Save', onDownload,
+  doc, downloadUrl, label = 'Save', action, onDownload,
 }) => (
   <div style={{
     display: 'flex',
@@ -154,7 +182,7 @@ const MediaCaption: React.FC<{
       <Meta doc={doc} />
     </span>
 
-    {downloadUrl && (
+    {action ?? (downloadUrl && (
       <a
         href={downloadUrl}
         // Fires alongside the download, never instead of it — onClick on an
@@ -163,31 +191,214 @@ const MediaCaption: React.FC<{
         // No target: the URL carries Content-Disposition: attachment, so the
         // browser downloads it and stays put. _blank would open a tab that
         // immediately closes itself.
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          flexShrink: 0,
-          padding: '6px 10px',
-          borderRadius: theme.borderRadius.md,
-          backgroundColor: theme.colors.bg.tertiary,
-          color: theme.colors.txt.secondary,
-          textDecoration: 'none',
-          ...theme.typography.captionSmall,
-          fontFamily: theme.fonts.primary,
-          fontWeight: 600,
-          // 32px of padding plus the glyph is under the 44px touch target on
-          // its own; the row it sits in is taller than that, and the label
-          // makes the hit area wide enough to be hit.
-          minHeight: '32px',
-        }}
+        style={SAVE_CONTROL}
       >
         <DownloadGlyph />
         {label}
       </a>
-    )}
+    ))}
   </div>
 );
+
+// ------------------------------------------------------------ save to photos
+
+type SaveStage = 'idle' | 'fetching' | 'ready' | 'sharing' | 'shared' | 'handedOff' | 'failed';
+
+/**
+ * Download → Save to Photos, for a class video on Stream.
+ *
+ * A plain download link lands the MP4 in Files, and Files → share → Save
+ * Video is where parents got lost. With the share API the phone can be
+ * handed the file itself, and the iOS sheet then offers "Save Video" on the
+ * first screen. The file has to be in memory first, so the flow is two taps:
+ * Download fetches it (with the bar and the words below, because twenty
+ * silent seconds is exactly how people end up tapping five times), then
+ * Save to Photos opens the sheet inside the tap Safari insists on.
+ *
+ * Every other case — no share API, a video over SHARE_MAX_BYTES, a share
+ * sheet that will not open — falls back to the ordinary download and says so.
+ * Nothing here ever goes quiet: the status line under the caption always
+ * says what is happening and what to do next. See CLAUDE.md, "Slow taps".
+ */
+const StreamSave: React.FC<{
+  doc: PortalDocument;
+  href: string;
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({ doc, href, onDownload }) => {
+  const [support] = useState(() => videoSaveSupport(typeof navigator === 'undefined' ? undefined : navigator));
+  const [stage, setStage] = useState<SaveStage>('idle');
+  const [progress, setProgress] = useState<FetchProgress>({ received: 0, total: null });
+  const [file, setFile] = useState<File | null>(null);
+  // The tap can land between a render and the state update it caused, so
+  // the guard against a second fetch is a ref, not `stage`.
+  const busyRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const handOff = useCallback(() => {
+    // The browser's own download: the URL carries Content-Disposition, so
+    // the page stays put. assign(), not open() — see the file header.
+    window.location.assign(href);
+    setStage('handedOff');
+  }, [href]);
+
+  const startFetch = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    onDownload?.(doc);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setProgress({ received: 0, total: null });
+    setStage('fetching');
+    try {
+      const got = await fetchVideoFile(href, streamDownloadFilename(doc.title), {
+        maxBytes: SHARE_MAX_BYTES,
+        signal: controller.signal,
+        onProgress: setProgress,
+      });
+      // A Cancel that landed after the last byte still means "I changed my
+      // mind", not "ready" — and the fetch does not always reject for it.
+      if (controller.signal.aborted) { setStage('idle'); return; }
+      setFile(got);
+      setStage('ready');
+    } catch (e) {
+      if (isAbort(e)) setStage('idle');
+      else if (e instanceof VideoTooLarge) handOff();
+      else setStage('failed');
+    } finally {
+      busyRef.current = false;
+      abortRef.current = null;
+    }
+  };
+
+  const share = async () => {
+    if (busyRef.current || !file) return;
+    busyRef.current = true;
+    setStage('sharing');
+    try {
+      await navigator.share({ files: [file], title: doc.title });
+      setStage('shared');
+    } catch (e) {
+      // Dismissing the sheet is not a failure; anything else means this
+      // phone will not take the file, so give it the download instead.
+      if (isAbort(e)) setStage('ready');
+      else handOff();
+    } finally {
+      busyRef.current = false;
+    }
+  };
+
+  if (support === 'link') {
+    return <MediaCaption doc={doc} downloadUrl={href} label="Download" onDownload={onDownload} />;
+  }
+
+  const fetching = stage === 'fetching';
+  const pct = progress.total ? Math.min(100, Math.floor((progress.received / progress.total) * 100)) : null;
+
+  const message: string | null =
+    stage === 'fetching' ? `Getting the video ready — ${describeFetchProgress(progress.received, progress.total)}. Keep this page open.`
+    : stage === 'ready' ? 'Ready. Tap Save to Photos, then choose Save Video.'
+    : stage === 'sharing' ? 'Opening your phone\u2019s share sheet…'
+    : stage === 'shared' ? 'Done. Tap Save to Photos again to send it somewhere else.'
+    : stage === 'handedOff' ? 'This one is too big to save straight to Photos, so your phone is downloading it as a file instead.'
+    : stage === 'failed' ? 'Couldn\u2019t get the video. Check your connection and tap Download again.'
+    : null;
+
+  const canSave = (stage === 'ready' || stage === 'shared') && file !== null;
+  const button = stage === 'handedOff' ? (
+    <a href={href} style={SAVE_CONTROL}><DownloadGlyph />Download</a>
+  ) : (
+    <button
+      type="button"
+      onClick={canSave ? share : startFetch}
+      disabled={fetching || stage === 'sharing'}
+      aria-busy={fetching || stage === 'sharing' ? true : undefined}
+      style={{
+        ...SAVE_CONTROL,
+        ...(canSave ? { backgroundColor: theme.colors.primary, color: '#FFFFFF' } : {}),
+        ...(fetching || stage === 'sharing' ? { cursor: 'progress', opacity: 0.85 } : {}),
+      }}
+    >
+      {fetching || stage === 'sharing'
+        ? <Spinner size={16} color="currentColor" />
+        : <DownloadGlyph />}
+      {fetching ? (pct === null ? 'Getting video…' : `${pct}%`)
+        : stage === 'sharing' ? 'Opening…'
+        : canSave ? 'Save to Photos'
+        : 'Download'}
+    </button>
+  );
+
+  return (
+    <>
+      <MediaCaption doc={doc} downloadUrl={null} action={button} />
+      {message && (
+        <div role="status" aria-live="polite" style={{ padding: '0 14px 12px' }}>
+          {fetching && (
+            <div
+              role="progressbar"
+              aria-label="Getting the video"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pct ?? undefined}
+              style={{
+                height: '6px',
+                borderRadius: '3px',
+                backgroundColor: theme.colors.bg.tertiary,
+                overflow: 'hidden',
+                marginBottom: '8px',
+              }}
+            >
+              {/* Striped and moving so it reads as "working" even while the
+                  number is not changing; index.css freezes the stripes under
+                  prefers-reduced-motion and the words above still say it. */}
+              <div
+                className="progress-striped"
+                style={{
+                  height: '100%',
+                  width: pct === null ? '100%' : `${Math.max(pct, 3)}%`,
+                  backgroundColor: theme.colors.primary,
+                  backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.28) 0 6px, transparent 6px 12px)',
+                  backgroundSize: '1rem 1rem',
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+          )}
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            ...theme.typography.captionSmall,
+            fontFamily: theme.fonts.primary,
+            color: stage === 'failed' ? theme.colors.status.error : theme.colors.txt.tertiary,
+          }}>
+            <span style={{ flex: 1, minWidth: 0 }}>{message}</span>
+            {fetching && (
+              <button
+                type="button"
+                onClick={() => abortRef.current?.abort()}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '4px 0',
+                  color: theme.colors.txt.secondary,
+                  font: 'inherit',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+    </>
+  );
+};
 
 // ------------------------------------------------------------------- blocks
 
@@ -317,10 +528,11 @@ const AudioBlock: React.FC<{
  *
  * Nothing is signed: the iframe streams whichever quality the parent's
  * connection can carry, which is the entire reason the video is there rather
- * than in the bucket. The Download button hands out the MP4 Cloudflare builds
- * from the encode (v41), not the multi-gigabyte original — and only once the
- * row says that file exists, because Cloudflare builds it after the video is
- * already playable and a link that 404s meanwhile would look broken.
+ * than in the bucket. The Download control (StreamSave) hands out the MP4
+ * Cloudflare builds from the encode (v41), not the multi-gigabyte original —
+ * and only once the row says that file exists, because Cloudflare builds it
+ * after the video is already playable and a link that 404s meanwhile would
+ * look broken.
  *
  * Before Cloudflare has finished encoding, the row says so instead of showing
  * a player that would sit on a spinner. The staff screen keeps that state
@@ -382,12 +594,11 @@ const StreamBlock: React.FC<{
           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
         />
       </div>
-      <MediaCaption
-        doc={doc}
-        downloadUrl={doc.streamDownloadUrl ? streamDownloadHref(doc.streamDownloadUrl, doc.title) : null}
-        label="Download"
-        onDownload={onDownload}
-      />
+      {doc.streamDownloadUrl ? (
+        <StreamSave doc={doc} href={streamDownloadHref(doc.streamDownloadUrl, doc.title)} onDownload={onDownload} />
+      ) : (
+        <MediaCaption doc={doc} downloadUrl={null} />
+      )}
     </div>
   );
 };
