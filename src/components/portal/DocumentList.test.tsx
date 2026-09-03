@@ -467,6 +467,40 @@ describe('a class video on Cloudflare Stream', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('saves a PHOTO in one tap: fetches the signed URL and opens the sheet straight away', async () => {
+      await renderList([doc({ title: 'Competition costume', fileName: 'costume.jpg' })]);
+      // A share-capable phone gets a button, not the &download= link.
+      expect(screen.queryByRole('link', { name: /save/i })).toBeNull();
+      const save = screen.getByRole('button', { name: /^save$/i });
+
+      await act(async () => { fireEvent.click(save); });
+      // The bare signed URL — the bytes go to the sheet, never to Files.
+      expect(fetchSpy).toHaveBeenCalledWith(SIGNED, expect.objectContaining({ credentials: 'omit' }));
+      await act(async () => { release(); });
+
+      await waitFor(() => expect(shareSpy).toHaveBeenCalledTimes(1));
+      const shared = shareSpy.mock.calls[0][0];
+      expect(shared.files[0].name).toBe('costume.jpg');
+      expect(shared.files[0]).toBeInstanceOf(File);
+      expect(screen.getByRole('status')).toHaveTextContent(/Done\./);
+      // The second tap is still there for sending it elsewhere.
+      expect(screen.getByRole('button', { name: /save to photos/i })).toBeEnabled();
+    });
+
+    it('offers the second tap when Safari says the photo arrived too late to share unprompted', async () => {
+      const refused = new Error('NotAllowedError'); refused.name = 'NotAllowedError';
+      shareSpy.mockRejectedValueOnce(refused);
+      await renderList([doc({ title: 'Competition costume' })]);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^save$/i })); });
+      await act(async () => { release(); });
+      const again = await screen.findByRole('button', { name: /save to photos/i });
+      expect(again).toBeEnabled();
+      expect(screen.getByRole('status')).toHaveTextContent(/Ready. Tap Save to Photos, then choose Save Image./);
+      // Not handed off to the browser download: that is for a sheet that
+      // refuses on the explicit tap, not for an expired activation.
+      expect(assignSpy).not.toHaveBeenCalled();
+    });
+
     it('goes back to Download when the fetch is cancelled', async () => {
       render(<DocumentList documents={[streamDoc({})]} />);
       await screen.findByTitle('Tuesday class recording');

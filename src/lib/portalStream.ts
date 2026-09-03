@@ -88,20 +88,22 @@ export const streamDownloadHref = (downloadUrl: string, title: string): string =
  */
 export const SHARE_MAX_BYTES = 300 * 1024 * 1024;
 
-export type VideoSaveSupport = 'share' | 'link';
+export type SaveToPhotosSupport = 'share' | 'link';
 
 /**
- * 'share' when this browser can hand a video file to the share sheet (iOS
- * 15+, Android Chrome, installed PWAs included); 'link' everywhere else,
- * where Download stays a plain anchor.
+ * 'share' when this browser can hand a file of this type to the share sheet
+ * (iOS 15+, Android Chrome, installed PWAs included); 'link' everywhere
+ * else, where Save / Download stays a plain anchor.
  */
-export const videoSaveSupport = (
+export const saveToPhotosSupport = (
   nav: Partial<Pick<Navigator, 'share' | 'canShare'>> | undefined,
-): VideoSaveSupport => {
+  mime: string = 'video/mp4',
+): SaveToPhotosSupport => {
   if (!nav || typeof nav.share !== 'function' || typeof nav.canShare !== 'function') return 'link';
   if (typeof File === 'undefined') return 'link';
   try {
-    return nav.canShare({ files: [new File([''], 'probe.mp4', { type: 'video/mp4' })] }) ? 'share' : 'link';
+    const ext = mime.startsWith('image/') ? 'jpg' : 'mp4';
+    return nav.canShare({ files: [new File([''], `probe.${ext}`, { type: mime })] }) ? 'share' : 'link';
   } catch {
     return 'link';
   }

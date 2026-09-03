@@ -9,7 +9,7 @@ import {
   formatDuration,
   streamStatusLabel,
   streamDownloadFilename, streamDownloadHref,
-  videoSaveSupport, describeFetchProgress, SHARE_MAX_BYTES,
+  saveToPhotosSupport, describeFetchProgress, SHARE_MAX_BYTES,
 } from './portalStream';
 
 /**
@@ -102,17 +102,24 @@ describe('streamDownloadFilename', () => {
   });
 });
 
-describe('videoSaveSupport', () => {
+describe('saveToPhotosSupport', () => {
   const probeOk = { share: async () => undefined, canShare: () => true };
   it('is share only when the browser can share a video file', () => {
-    expect(videoSaveSupport(probeOk)).toBe('share');
-    expect(videoSaveSupport({ ...probeOk, canShare: () => false })).toBe('link');
-    expect(videoSaveSupport({ share: async () => undefined })).toBe('link');
-    expect(videoSaveSupport({})).toBe('link');
-    expect(videoSaveSupport(undefined)).toBe('link');
+    expect(saveToPhotosSupport(probeOk)).toBe('share');
+    expect(saveToPhotosSupport({ ...probeOk, canShare: () => false })).toBe('link');
+    expect(saveToPhotosSupport({ share: async () => undefined })).toBe('link');
+    expect(saveToPhotosSupport({})).toBe('link');
+    expect(saveToPhotosSupport(undefined)).toBe('link');
+  });
+  it('probes with the type it will actually share', () => {
+    const seen: string[] = [];
+    const nav = { share: async () => undefined, canShare: (d: { files?: File[] }) => { seen.push(d.files?.[0]?.type ?? ''); return true; } };
+    saveToPhotosSupport(nav, 'image/jpeg');
+    saveToPhotosSupport(nav);
+    expect(seen).toEqual(['image/jpeg', 'video/mp4']);
   });
   it('treats a throwing canShare as no support', () => {
-    expect(videoSaveSupport({ ...probeOk, canShare: () => { throw new Error('x'); } })).toBe('link');
+    expect(saveToPhotosSupport({ ...probeOk, canShare: () => { throw new Error('x'); } })).toBe('link');
   });
 });
 

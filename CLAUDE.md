@@ -319,8 +319,8 @@ a moment must, from the first tap:
    `prefers-reduced-motion`, so the words and the bar's width must carry the
    meaning on their own.
 
-Reference implementations: the Download → Save to Photos flow on a class video
-(`StreamSave` in `src/components/portal/DocumentList.tsx`) and the Stream
+Reference implementations: the Save / Download → Save to Photos flow on a
+class photo or video (`SaveToPhotos` in `src/components/portal/DocumentList.tsx`) and the Stream
 upload progress with Cancel in `src/components/portal-admin/DocumentsSection.tsx`.
 `DocumentList.test.tsx` shows how to pin the "second tap starts nothing" rule.
 
