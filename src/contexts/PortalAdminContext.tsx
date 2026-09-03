@@ -11,7 +11,7 @@ import {
 import {
   mapProgram, mapClass, mapUpdate, mapEvent, mapDocument, mapCalendarSource,
 } from '../lib/portalMappers';
-import { buildStoragePath } from '../lib/portalAdmin';
+import { buildStoragePath, MAX_DOCUMENT_MB } from '../lib/portalAdmin';
 import { signDocumentUrls, removeStorageObject } from '../lib/portalStorage';
 import { logActivity } from '../lib/activityLog';
 
@@ -229,6 +229,12 @@ export const describeWriteError = (e: any): string => {
     return 'You can only publish to your own classes. Ask an admin if this should be studio-wide.';
   }
   if (code === '23505') return 'That already exists.';
+  // Storage, not PostgREST: the project or bucket size cap said no. The app
+  // checks MAX_DOCUMENT_BYTES before uploading, so this only fires when the
+  // two have drifted apart — say which side, so the fix is obvious.
+  if (e?.statusCode === '413' || e?.statusCode === 413 || /exceeded the maximum allowed size/i.test(msg)) {
+    return `Supabase refused that file as too large. The app allows ${MAX_DOCUMENT_MB} MB; the storage limit on the Supabase side is lower and needs raising to match.`;
+  }
   if (/violates check constraint/i.test(msg)) return 'Something in that form is out of range — check the dates and times.';
   return msg || 'That did not save. Please try again.';
 };
