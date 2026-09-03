@@ -61,6 +61,25 @@ export const streamWatchUrl = (playbackUrl: string): string => `${playbackUrl}/w
 export const streamThumbnailUrl = (playbackUrl: string): string =>
   `${playbackUrl}/thumbnails/thumbnail.jpg`;
 
+/**
+ * The name the saved file gets. Cloudflare's `?filename=` takes at most 120
+ * characters of letters, digits, hyphens and underscores plus one extension,
+ * so the title is reduced to that: "Tuesday class recording" → Tuesday-class-recording.mp4.
+ * A title with nothing usable in it becomes video.mp4.
+ */
+export const streamDownloadFilename = (title: string): string => {
+  const slug = title
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    .replace(/-+$/g, '');
+  return `${slug || 'video'}.mp4`;
+};
+
+/** The Download button's href: the recorded MP4 URL, named after the title. */
+export const streamDownloadHref = (downloadUrl: string, title: string): string =>
+  `${downloadUrl}?filename=${streamDownloadFilename(title)}`;
+
 /** 754 → "12:34", 3723 → "1:02:03". Null for anything that is not a duration. */
 export const formatDuration = (seconds: number | null | undefined): string | null => {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) return null;

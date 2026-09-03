@@ -4,7 +4,7 @@ import { Spinner } from '../ui';
 import { usePortal } from '../../contexts/PortalContext';
 import { formatFileSize } from '../../lib/portal';
 import { mediaKindOf, withDownload, MediaKind } from '../../lib/portalMedia';
-import { streamIframeUrl, formatDuration } from '../../lib/portalStream';
+import { streamIframeUrl, streamDownloadHref, formatDuration } from '../../lib/portalStream';
 import { PortalDocument } from '../../types';
 
 /**
@@ -136,9 +136,11 @@ const Meta: React.FC<{ doc: PortalDocument; failed?: boolean }> = ({ doc, failed
 const MediaCaption: React.FC<{
   doc: PortalDocument;
   downloadUrl: string | null;
+  /** "Save" for a file we hold; "Download" for the MP4 Cloudflare built. */
+  label?: string;
   onDownload?: (doc: PortalDocument) => void;
 }> = ({
-  doc, downloadUrl, onDownload,
+  doc, downloadUrl, label = 'Save', onDownload,
 }) => (
   <div style={{
     display: 'flex',
@@ -181,7 +183,7 @@ const MediaCaption: React.FC<{
         }}
       >
         <DownloadGlyph />
-        Save
+        {label}
       </a>
     )}
   </div>
@@ -313,19 +315,24 @@ const AudioBlock: React.FC<{
 /**
  * A class video on Cloudflare Stream, in Cloudflare's own player.
  *
- * Nothing is signed and nothing is downloaded: the iframe streams whichever
- * quality the parent's connection can carry, which is the entire reason the
- * video is there rather than in the bucket. There is no Save button either —
- * the only file to hand out would be the multi-gigabyte original.
+ * Nothing is signed: the iframe streams whichever quality the parent's
+ * connection can carry, which is the entire reason the video is there rather
+ * than in the bucket. The Download button hands out the MP4 Cloudflare builds
+ * from the encode (v41), not the multi-gigabyte original — and only once the
+ * row says that file exists, because Cloudflare builds it after the video is
+ * already playable and a link that 404s meanwhile would look broken.
  *
  * Before Cloudflare has finished encoding, the row says so instead of showing
  * a player that would sit on a spinner. The staff screen keeps that state
  * fresh; a parent's page shows whatever the row said when it loaded.
  *
  * Plays are not reported to onDownload: the player lives on another origin
- * and this component cannot see a tap inside it.
+ * and this component cannot see a tap inside it. Downloads are.
  */
-const StreamBlock: React.FC<{ doc: PortalDocument }> = ({ doc }) => {
+const StreamBlock: React.FC<{
+  doc: PortalDocument;
+  onDownload?: (doc: PortalDocument) => void;
+}> = ({ doc, onDownload }) => {
   if (doc.streamStatus !== 'ready' || !doc.streamPlaybackUrl) {
     const failed = doc.streamStatus === 'error';
     return (
@@ -375,7 +382,12 @@ const StreamBlock: React.FC<{ doc: PortalDocument }> = ({ doc }) => {
           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
         />
       </div>
-      <MediaCaption doc={doc} downloadUrl={null} />
+      <MediaCaption
+        doc={doc}
+        downloadUrl={doc.streamDownloadUrl ? streamDownloadHref(doc.streamDownloadUrl, doc.title) : null}
+        label="Download"
+        onDownload={onDownload}
+      />
     </div>
   );
 };
@@ -492,7 +504,7 @@ const DocumentItem: React.FC<{
 
   // Stream videos have no signed URL and no fallback row: Cloudflare's
   // player is the only thing that can play them.
-  if (doc.streamUid) return <StreamBlock doc={doc} />;
+  if (doc.streamUid) return <StreamBlock doc={doc} onDownload={onDownload} />;
 
   if (url && !undisplayable) {
     if (kind === 'image') return <ImageBlock doc={doc} url={url} onUndisplayable={degrade} onDownload={onDownload} />;

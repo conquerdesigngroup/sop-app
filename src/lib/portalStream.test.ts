@@ -8,6 +8,7 @@ import {
   streamThumbnailUrl,
   formatDuration,
   streamStatusLabel,
+  streamDownloadFilename, streamDownloadHref,
 } from './portalStream';
 
 /**
@@ -78,6 +79,25 @@ describe('formatDuration', () => {
     expect(formatDuration(undefined)).toBeNull();
     expect(formatDuration(-1)).toBeNull();
     expect(formatDuration(NaN)).toBeNull();
+  });
+});
+
+describe('streamDownloadFilename', () => {
+  it('turns a title into something Cloudflare accepts, with the extension', () => {
+    expect(streamDownloadFilename('Tuesday class recording')).toBe('Tuesday-class-recording.mp4');
+    expect(streamDownloadFilename('  Jazz 2 — week 3 (Ms. B)  ')).toBe('Jazz-2-week-3-Ms-B.mp4');
+  });
+  it('falls back when nothing in the title is usable', () => {
+    expect(streamDownloadFilename('🎉🎉')).toBe('video.mp4');
+    expect(streamDownloadFilename('')).toBe('video.mp4');
+  });
+  it('keeps under Cloudflare\'s 120-character cap', () => {
+    const long = 'a'.repeat(200);
+    expect(streamDownloadFilename(long).length).toBeLessThanOrEqual(120);
+  });
+  it('builds the href from the recorded URL', () => {
+    expect(streamDownloadHref('https://x/downloads/default.mp4', 'Recital'))
+      .toBe('https://x/downloads/default.mp4?filename=Recital.mp4');
   });
 });
 

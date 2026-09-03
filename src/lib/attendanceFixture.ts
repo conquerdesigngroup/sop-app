@@ -493,6 +493,7 @@ const doc = (
   streamPlaybackUrl: null,
   streamStatus: null,
   durationSeconds: null,
+  streamDownloadUrl: null,
   fileName,
   mimeType,
   sizeBytes,
