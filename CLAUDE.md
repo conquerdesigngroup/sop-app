@@ -290,6 +290,42 @@ A source that is not registered is a source the refresh button lies about.
 
 ---
 
+## ⏳ SLOW TAPS (anything a tap starts that can take more than a second)
+
+A parent taps Download on a class video and nothing visible happens for
+twenty seconds while the MP4 comes down. They tap again. And again. That is
+not impatience, it is the only sensible response to a button that gives no
+sign it heard you. Every control that starts work which can take longer than
+a moment must, from the first tap:
+
+1. **Disable itself and ignore repeated taps.** `disabled` on the control AND
+   a busy ref in the handler — a second tap can land between the first tap
+   and the re-render that disables the button.
+2. **Show live progress.** A determinate bar (`role="progressbar"` with
+   `aria-valuenow`) when the total is known, a full-width striped one when it
+   is not (`className="progress-striped"` — the stripes move, so it reads as
+   working even while the number sits still).
+3. **Say it in words, and say what to do.** A `role="status"`
+   `aria-live="polite"` line under the control: *"Getting the video ready —
+   43% of 21 MB. Keep this page open."* Not a spinner on its own; a spinner
+   with no words is exactly what people tap through.
+4. **Offer Cancel** wherever the work can be abandoned.
+5. **End in a state that says what happens next.** *"Ready. Tap Save to
+   Photos, then choose Save Video."* — or a plain error with the next step:
+   *"Couldn't get the video. Check your connection and tap Download again."*
+   A control must never go quiet, and must never silently go back to how it
+   looked before the tap.
+6. **Honour reduced motion.** `index.css` already freezes CSS animations under
+   `prefers-reduced-motion`, so the words and the bar's width must carry the
+   meaning on their own.
+
+Reference implementations: the Download → Save to Photos flow on a class video
+(`StreamSave` in `src/components/portal/DocumentList.tsx`) and the Stream
+upload progress with Cancel in `src/components/portal-admin/DocumentsSection.tsx`.
+`DocumentList.test.tsx` shows how to pin the "second tap starts nothing" rule.
+
+---
+
 ## 🚫 DO NOT
 
 1. **DO NOT** create inline styles for buttons, cards, inputs - use the UI components

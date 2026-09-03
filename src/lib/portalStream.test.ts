@@ -9,6 +9,7 @@ import {
   formatDuration,
   streamStatusLabel,
   streamDownloadFilename, streamDownloadHref,
+  videoSaveSupport, describeFetchProgress, SHARE_MAX_BYTES,
 } from './portalStream';
 
 /**
@@ -98,6 +99,36 @@ describe('streamDownloadFilename', () => {
   it('builds the href from the recorded URL', () => {
     expect(streamDownloadHref('https://x/downloads/default.mp4', 'Recital'))
       .toBe('https://x/downloads/default.mp4?filename=Recital.mp4');
+  });
+});
+
+describe('videoSaveSupport', () => {
+  const probeOk = { share: async () => undefined, canShare: () => true };
+  it('is share only when the browser can share a video file', () => {
+    expect(videoSaveSupport(probeOk)).toBe('share');
+    expect(videoSaveSupport({ ...probeOk, canShare: () => false })).toBe('link');
+    expect(videoSaveSupport({ share: async () => undefined })).toBe('link');
+    expect(videoSaveSupport({})).toBe('link');
+    expect(videoSaveSupport(undefined)).toBe('link');
+  });
+  it('treats a throwing canShare as no support', () => {
+    expect(videoSaveSupport({ ...probeOk, canShare: () => { throw new Error('x'); } })).toBe('link');
+  });
+});
+
+describe('describeFetchProgress', () => {
+  it('shows a percentage against a known total', () => {
+    expect(describeFetchProgress(9 * 1024 * 1024, 21 * 1024 * 1024)).toBe('42% of 21 MB');
+    expect(describeFetchProgress(0, 2.5 * 1024 * 1024)).toBe('0% of 2.5 MB');
+  });
+  it('never claims more than 100%', () => {
+    expect(describeFetchProgress(30, 10)).toBe('100% of 0.0 MB');
+  });
+  it('shows bytes so far without a total', () => {
+    expect(describeFetchProgress(12 * 1024 * 1024, null)).toBe('12 MB so far');
+  });
+  it('caps the in-memory path at 300 MB', () => {
+    expect(SHARE_MAX_BYTES).toBe(300 * 1024 * 1024);
   });
 });
 
