@@ -3,7 +3,7 @@ import { SOP, SOPStatus } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logActivity } from '../utils/activityLogger';
-import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
+import { useRefreshable } from './RefreshContext';
 
 interface SOPContextType {
   sops: SOP[];
@@ -772,15 +772,10 @@ export const SOPProvider: React.FC<SOPProviderProps> = ({ children }) => {
     }
   }, [sops, useSupabase]);
 
-  // Refresh data when tab becomes visible (ensures data is fresh when users return)
-  const handleVisibilityRefresh = useCallback(() => {
-    if (useSupabase && isAuthenticated && !authLoading) {
-      console.log('[SOPContext] Tab visible - refreshing data...');
-      loadSOPs();
-    }
-  }, [useSupabase, isAuthenticated, authLoading, loadSOPs]);
-
-  useVisibilityRefresh(handleVisibilityRefresh, 3000);
+  // Part of every app-wide refresh: the header button, pull-to-refresh, and
+  // coming back to the foreground. RefreshContext owns the visibility
+  // handling that used to sit here.
+  useRefreshable(loadSOPs, !!useSupabase && isAuthenticated && !authLoading);
 
   const addSOP = async (sopData: Omit<SOP, 'id' | 'createdAt'>) => {
     if (!useSupabase) {

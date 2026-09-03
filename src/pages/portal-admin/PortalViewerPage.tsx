@@ -4,6 +4,7 @@ import { theme } from '../../theme';
 import { Button, PageHeader } from '../../components/ui';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRefreshable } from '../../contexts/RefreshContext';
 import { usePortalAdmin } from '../../contexts/PortalAdminContext';
 import { TabRow } from '../../components/portal-admin/shared';
 import PortalAdminTabs from '../../components/portal-admin/PortalAdminTabs';
@@ -145,19 +146,27 @@ const PortalViewerPage: React.FC = () => {
   // requests once beats one request per keystroke, and the payload is small
   // enough that splitting them per tab would only add a spinner on every
   // switch.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const [h, s, c] = await Promise.all([loadHouseholds(), loadStudents(), loadViewerClasses()]);
-      if (cancelled) return;
-      setHouseholds(h.rows);
-      setStudents(s.rows);
-      setClasses(c.rows);
-      setError(h.error ?? s.error ?? c.error);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
+  //
+  // Also what the app-wide refresh re-runs (RefreshContext): the same three
+  // reads, swapped in under the page rather than behind a spinner. The request
+  // counter drops a response that lands after a newer load has started.
+  const requestRef = useRef(0);
+  const loadAll = useCallback(async () => {
+    const requestId = ++requestRef.current;
+    const [h, s, c] = await Promise.all([loadHouseholds(), loadStudents(), loadViewerClasses()]);
+    if (requestId !== requestRef.current) return;
+    setHouseholds(h.rows);
+    setStudents(s.rows);
+    setClasses(c.rows);
+    setError(h.error ?? s.error ?? c.error);
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void loadAll();
+    return () => { requestRef.current++; };
+  }, [loadAll]);
+  useRefreshable(loadAll);
 
   /**
    * Opening a family does NOT clear `class`.

@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme, BRAND_MARK } from '../theme';
+import RefreshButton from './RefreshButton';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { roleLabel } from '../lib/roles';
 import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
@@ -136,6 +138,14 @@ const Navigation: React.FC = () => {
   const colors = useThemeColors();
   // One mark for both modes — it carries its own keyline. See BRAND_MARK.
   const brandLogo = BRAND_MARK;
+
+  // The phone header is hamburger | centred mark | right cluster, and the mark
+  // is 147px wide at 32px tall. With the refresh button beside the avatar
+  // (both 44px touch targets) the cluster reaches the mark at 320px — a
+  // first-generation SE, or an iPad Slide Over pane. There the button steps
+  // aside; pull-to-refresh still works, and the page is not worth a
+  // squashed logo.
+  const roomForRefresh = useMediaQuery('(min-width: 360px)', true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -560,23 +570,29 @@ const Navigation: React.FC = () => {
               />
             </Link>
 
-            {/* User Avatar (Mobile) */}
-            <button
-              type="button"
-              data-user-button
-              style={styles.userAvatarMobile}
-              aria-label="Account menu"
-              aria-haspopup="true"
-              aria-expanded={showUserMenu}
-              aria-controls="staff-user-menu"
-              onClick={(e) => {
-                e.stopPropagation();
-                rememberTrigger(e);
-                setShowUserMenu(!showUserMenu);
-              }}
-            >
-              {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
-            </button>
+            {/* Right cluster: refresh, then the avatar. The logo is absolutely
+                centred, so this cluster's width does not push it about. */}
+            <div style={styles.rightClusterMobile}>
+              {roomForRefresh && <RefreshButton size={36} />}
+
+              {/* User Avatar (Mobile) */}
+              <button
+                type="button"
+                data-user-button
+                style={styles.userAvatarMobile}
+                aria-label="Account menu"
+                aria-haspopup="true"
+                aria-expanded={showUserMenu}
+                aria-controls="staff-user-menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  rememberTrigger(e);
+                  setShowUserMenu(!showUserMenu);
+                }}
+              >
+                {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
+              </button>
+            </div>
 
             {/* Mobile Menu Overlay */}
             {showMobileMenu && hasMoreItems && (
@@ -687,6 +703,7 @@ const Navigation: React.FC = () => {
 
             {/* Right side: User Section */}
             <div style={styles.userSection}>
+              <RefreshButton size={40} style={{ marginRight: theme.spacing.sm }} />
               <button
                 type="button"
                 data-user-button
@@ -810,6 +827,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '32px',
     width: 'auto',
     objectFit: 'contain',
+  },
+  rightClusterMobile: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    flexShrink: 0,
   },
   userAvatarMobile: {
     width: '36px',

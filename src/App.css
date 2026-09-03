@@ -35,18 +35,10 @@
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
-/* Pull to Refresh Spinner */
-@keyframes pull-refresh-spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.pull-refresh-spinner {
-  animation: pull-refresh-spin 0.8s linear infinite;
+/* The header refresh button's check mark, when a refresh finishes. */
+@keyframes refresh-done-pop {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 /* Spin animation for general use */

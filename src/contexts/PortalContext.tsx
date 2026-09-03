@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { signDocumentUrls } from '../lib/portalStorage';
+import { useRefreshable } from './RefreshContext';
 import {
   PortalProgram,
   PortalClass,
@@ -165,6 +166,12 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     loadPrograms();
   }, [loadPrograms]);
+
+  // The portal has no realtime channel, on purpose (see useProgramQuery). The
+  // header button, pull-to-refresh and returning to the foreground are how a
+  // parent gets a post made after they opened the app — this is the programs
+  // half; each page registers its own feed.
+  useRefreshable(loadPrograms);
 
   const getProgramBySlug = useCallback(
     (slug: string) => programs.find(p => p.slug === slug),

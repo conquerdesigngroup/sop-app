@@ -6,7 +6,7 @@ import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { logActivity } from '../utils/activityLogger';
 import { logActivity as logViaRpc } from '../lib/activityLog';
 import { reportSignInFailure, reportResetRequested } from '../lib/clientAuth';
-import { useVisibilityRefresh } from '../hooks/useVisibilityRefresh';
+import { useRefreshable } from './RefreshContext';
 
 interface AddUserResult {
   success: boolean;
@@ -299,15 +299,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, [useSupabase, loadUsers, currentUser?.id]);
 
-  // Refresh user data when tab becomes visible (ensures data is fresh when users return)
-  const handleVisibilityRefresh = useCallback(() => {
-    if (useSupabase && currentUser !== null) {
-      console.log('[AuthContext] Tab visible - refreshing users...');
-      loadUsers();
-    }
-  }, [useSupabase, currentUser, loadUsers]);
-
-  useVisibilityRefresh(handleVisibilityRefresh, 3000);
+  // Part of every app-wide refresh: the header button, pull-to-refresh, and
+  // coming back to the foreground. RefreshContext owns the visibility
+  // handling that used to sit here.
+  useRefreshable(loadUsers, !!useSupabase && currentUser !== null);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     if (!useSupabase) {

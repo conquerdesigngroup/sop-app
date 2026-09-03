@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { WorkHoursEntry, WorkHoursSummary, WorkDay, WorkCategory, EmployeePayRate, WorkHoursPay } from '../types';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useRefreshable } from './RefreshContext';
 import { queueWorkHoursOffline, getQueuedWorkHours } from '../lib/indexedDB';
 import { isNetworkFailure } from '../lib/networkErrors';
 import { logActivity } from '../lib/activityLog';
@@ -208,132 +209,141 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
   // would refetch every time that happened.
   const userId = currentUser?.id;
 
-  // Load work hours and work days
-  useEffect(() => {
-    const loadData = async () => {
-      setLoadError(null);
+  // Load work hours and work days.
+  //
+  // A useCallback rather than an effect-local function so the app-wide
+  // refresh (RefreshContext) can run the very same load again. It does not
+  // touch `loading` on the way in — only on the way out — so a refresh
+  // replaces the rows under the page instead of blanking it first.
+  const loadWorkData = useCallback(async () => {
+    setLoadError(null);
 
-      // Signed out? Fetch nothing.
-      //
-      // Every table this context reads is staff-only, and RLS returns zero
-      // rows to `anon` anyway — but the requests still go out. PortalContext
-      // documents the cost: a parent loading /portal/:program triggers the
-      // staff contexts too, and work_hours / work_days / work_categories are
-      // three of the wasted round trips on their phone. This adds two more
-      // (employee_pay_rates, work_hours_pay), so guard the whole load rather
-      // than make a parent's cold start worse.
-      //
-      // currentUser?.id is already a dependency, so signing in re-runs this
-      // and the staff side loads exactly as before.
-      if (!userId) {
-        setWorkHours([]);
-        setWorkDays([]);
-        setWorkCategories([]);
-        setEmployeePayRates([]);
-        setWorkHoursPay([]);
-        setLoading(false);
-        return;
-      }
+    // Signed out? Fetch nothing.
+    //
+    // Every table this context reads is staff-only, and RLS returns zero
+    // rows to `anon` anyway — but the requests still go out. PortalContext
+    // documents the cost: a parent loading /portal/:program triggers the
+    // staff contexts too, and work_hours / work_days / work_categories are
+    // three of the wasted round trips on their phone. This adds two more
+    // (employee_pay_rates, work_hours_pay), so guard the whole load rather
+    // than make a parent's cold start worse.
+    //
+    // currentUser?.id is already a dependency, so signing in re-runs this
+    // and the staff side loads exactly as before.
+    if (!userId) {
+      setWorkHours([]);
+      setWorkDays([]);
+      setWorkCategories([]);
+      setEmployeePayRates([]);
+      setWorkHoursPay([]);
+      setLoading(false);
+      return;
+    }
 
-      if (useSupabase) {
-        try {
-          // Load work hours
-          const { data: hoursData, error: hoursError } = await supabase
-            .from('work_hours')
-            .select('*')
-            .order('work_date', { ascending: false });
+    if (useSupabase) {
+      try {
+        // Load work hours
+        const { data: hoursData, error: hoursError } = await supabase
+          .from('work_hours')
+          .select('*')
+          .order('work_date', { ascending: false });
 
-          if (hoursData && !hoursError) {
-            setWorkHours(hoursData.map(mapSupabaseWorkHours));
-          } else if (hoursError) {
-            // supabase-js returns query errors in the result rather than
-            // throwing, so the surrounding try/catch never sees this. Left
-            // unreported it looks identical to "you have logged no hours".
-            console.error('Failed to load work hours:', hoursError.message);
-            setLoadError('Could not load your hours. Check your connection and refresh.');
-          }
-
-          // Load work days
-          const { data: daysData, error: daysError } = await supabase
-            .from('work_days')
-            .select('*')
-            .order('work_date', { ascending: false });
-
-          if (daysData && !daysError) {
-            setWorkDays(daysData.map(mapSupabaseWorkDay));
-          } else if (daysError) {
-            console.error('Failed to load work days:', daysError.message);
-          }
-
-          // Load work categories. Tolerated as optional: on a database
-          // where migration v7 has not been applied yet the table does
-          // not exist, and the rest of the page must still work.
-          const { data: catData, error: catError } = await supabase
-            .from('work_categories')
-            .select('*')
-            .order('sort_order', { ascending: true });
-
-          if (catData && !catError) {
-            setWorkCategories(catData.map(mapSupabaseWorkCategory));
-            setHasV7Schema(true);
-            // Pay tables. A team member gets an empty result from RLS rather
-            // than an error, so nothing here needs to branch on role.
-            const [{ data: rateData }, { data: payData }] = await Promise.all([
-              supabase.from('employee_pay_rates').select('*'),
-              supabase.from('work_hours_pay').select('*'),
-            ]);
-            if (rateData) setEmployeePayRates(rateData.map(mapSupabasePayRate));
-            if (payData) setWorkHoursPay(payData.map(mapSupabaseWorkHoursPay));
-          } else if (catError) {
-            // Doubles as the v7 probe: if work_categories is missing then
-            // category_id and rejection_reason are missing too, and we must
-            // stop sending them or every write fails.
-            console.warn(
-              'Migration v7 does not appear to be applied — work categories are disabled. ' +
-              'Run supabase-migration-v7-hours-input.sql. Details:',
-              catError.message
-            );
-            setWorkCategories([]);
-            setEmployeePayRates([]);
-            setWorkHoursPay([]);
-            setHasV7Schema(false);
-          }
-        } catch (error: any) {
-          console.error('Error loading work data:', error);
+        if (hoursData && !hoursError) {
+          setWorkHours(hoursData.map(mapSupabaseWorkHours));
+        } else if (hoursError) {
+          // supabase-js returns query errors in the result rather than
+          // throwing, so the surrounding try/catch never sees this. Left
+          // unreported it looks identical to "you have logged no hours".
+          console.error('Failed to load work hours:', hoursError.message);
           setLoadError('Could not load your hours. Check your connection and refresh.');
         }
-      } else {
-        // localStorage fallback
-        try {
-          const storedHours = localStorage.getItem(STORAGE_KEY);
-          if (storedHours) {
-            setWorkHours(JSON.parse(storedHours));
-          }
-          const storedDays = localStorage.getItem(WORK_DAYS_STORAGE_KEY);
-          if (storedDays) {
-            setWorkDays(JSON.parse(storedDays));
-          }
-          const storedCats = localStorage.getItem(WORK_CATEGORIES_STORAGE_KEY);
-          if (storedCats) {
-            setWorkCategories(JSON.parse(storedCats));
-          }
-          const storedRates = localStorage.getItem(PAY_RATES_STORAGE_KEY);
-          if (storedRates) {
-            setEmployeePayRates(JSON.parse(storedRates));
-          }
-        } catch (error) {
-          console.error('Error loading work data from localStorage:', error);
-        }
-      }
-      setLoading(false);
-    };
 
-    loadData();
+        // Load work days
+        const { data: daysData, error: daysError } = await supabase
+          .from('work_days')
+          .select('*')
+          .order('work_date', { ascending: false });
+
+        if (daysData && !daysError) {
+          setWorkDays(daysData.map(mapSupabaseWorkDay));
+        } else if (daysError) {
+          console.error('Failed to load work days:', daysError.message);
+        }
+
+        // Load work categories. Tolerated as optional: on a database
+        // where migration v7 has not been applied yet the table does
+        // not exist, and the rest of the page must still work.
+        const { data: catData, error: catError } = await supabase
+          .from('work_categories')
+          .select('*')
+          .order('sort_order', { ascending: true });
+
+        if (catData && !catError) {
+          setWorkCategories(catData.map(mapSupabaseWorkCategory));
+          setHasV7Schema(true);
+          // Pay tables. A team member gets an empty result from RLS rather
+          // than an error, so nothing here needs to branch on role.
+          const [{ data: rateData }, { data: payData }] = await Promise.all([
+            supabase.from('employee_pay_rates').select('*'),
+            supabase.from('work_hours_pay').select('*'),
+          ]);
+          if (rateData) setEmployeePayRates(rateData.map(mapSupabasePayRate));
+          if (payData) setWorkHoursPay(payData.map(mapSupabaseWorkHoursPay));
+        } else if (catError) {
+          // Doubles as the v7 probe: if work_categories is missing then
+          // category_id and rejection_reason are missing too, and we must
+          // stop sending them or every write fails.
+          console.warn(
+            'Migration v7 does not appear to be applied — work categories are disabled. ' +
+            'Run supabase-migration-v7-hours-input.sql. Details:',
+            catError.message
+          );
+          setWorkCategories([]);
+          setEmployeePayRates([]);
+          setWorkHoursPay([]);
+          setHasV7Schema(false);
+        }
+      } catch (error: any) {
+        console.error('Error loading work data:', error);
+        setLoadError('Could not load your hours. Check your connection and refresh.');
+      }
+    } else {
+      // localStorage fallback
+      try {
+        const storedHours = localStorage.getItem(STORAGE_KEY);
+        if (storedHours) {
+          setWorkHours(JSON.parse(storedHours));
+        }
+        const storedDays = localStorage.getItem(WORK_DAYS_STORAGE_KEY);
+        if (storedDays) {
+          setWorkDays(JSON.parse(storedDays));
+        }
+        const storedCats = localStorage.getItem(WORK_CATEGORIES_STORAGE_KEY);
+        if (storedCats) {
+          setWorkCategories(JSON.parse(storedCats));
+        }
+        const storedRates = localStorage.getItem(PAY_RATES_STORAGE_KEY);
+        if (storedRates) {
+          setEmployeePayRates(JSON.parse(storedRates));
+        }
+      } catch (error) {
+        console.error('Error loading work data from localStorage:', error);
+      }
+    }
+    setLoading(false);
     // currentUser?.id is a dependency because RLS scopes these tables by
     // auth.uid(): the rows a signed-out or previous user could see are not
     // the rows this user can see. Without it, switching accounts kept the
     // old user's (now unauthorised, hence empty) result set.
   }, [useSupabase, userId]);
+
+  useEffect(() => {
+    loadWorkData();
+  }, [loadWorkData]);
+
+  // Header button, pull-to-refresh, back-to-foreground. Signed out there is
+  // nothing to fetch, and the load above already returns early for that.
+  useRefreshable(loadWorkData, !!useSupabase && !!userId);
 
   // Save to localStorage when using localStorage mode
   useEffect(() => {

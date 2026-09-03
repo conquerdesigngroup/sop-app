@@ -108,8 +108,10 @@ in place first, so the two implementations are known to agree.
 
 - **`CardSkeleton`** (`src/components/Skeleton.tsx`) instead of the spinners.
   Cards resolve independently, so the page currently assembles raggedly.
-- **`PullToRefresh`** (`src/components/PullToRefresh.tsx`, already wired in
-  `MyTasksPage`). This is the page people will pull on.
+- ~~**`PullToRefresh`**~~ Done, app-wide: pull-to-refresh is `PullToRefreshLayer`
+  (mounted once in App.tsx) and every portal query registers with
+  `RefreshContext`, so this page refreshes on pull, on the header button, and
+  on coming back to the app. A new fetch here only needs `useRefreshable`.
 - **Per-update read marking.** `UpdatesCard` uses one global localStorage
   watermark, so opening the profile marks every update seen — including ones
   never expanded. It is deliberately not a server-side read receipt; per-update

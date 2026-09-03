@@ -54,6 +54,10 @@ body {
   color: var(--c-txt-primary);
   /* Prevent horizontal scroll */
   overflow-x: hidden;
+  /* The app has its own pull-to-refresh (PullToRefreshLayer). Without this,
+     Chrome on Android runs its native one at the same time and a pull reloads
+     the whole page instead of refreshing the data in place. */
+  overscroll-behavior-y: none;
 }
 
 /* Brand display face: Kanit ExtraBold Italic, uppercase, for all headlines */
@@ -544,17 +548,6 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
 
 .progress-striped {
   animation: progress-stripes 1s linear infinite;
-}
-
-/* ============================================
-   Pull to Refresh Indicator
-   ============================================ */
-@keyframes pull-spin {
-  to { transform: rotate(360deg); }
-}
-
-.pull-refresh-spinner {
-  animation: pull-spin 0.8s linear infinite;
 }
 
 /* ============================================

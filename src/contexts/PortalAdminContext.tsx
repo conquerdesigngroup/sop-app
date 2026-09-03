@@ -2,6 +2,7 @@ import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode,
 } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useRefreshable } from './RefreshContext';
 import { useAuth } from './AuthContext';
 import {
   PortalProgram, PortalClass, PortalClassCategory, PortalUpdate, PortalEvent, PortalDocument,
@@ -256,7 +257,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
    * in portal_class_instructors. Deriving this from `isAdmin` would hide the
    * area from exactly the people it was built for.
    */
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!isAuthenticated || !isSupabaseConfigured() || !supabase) {
       setCanEdit(false);
       setEditableClassIds([]);
@@ -265,7 +266,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       return;
     }
 
-    setChecking(true);
+    // `checking` unmounts the whole manager page for a spinner, which is
+    // right on first entry and wrong for a re-check behind a page someone is
+    // editing. Silent re-checks (reload, the app-wide refresh) skip it.
+    if (!silent) setChecking(true);
     try {
       const [{ data: allowed, error: allowedErr }, { data: grants, error: grantsErr }] =
         await Promise.all([
@@ -316,7 +320,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
   }, [canEdit]);
 
   const reload = useCallback(async () => {
-    await load();
+    await load(true);
     if (!supabase) return;
     const { data } = await supabase
       .from('portal_programs')
@@ -324,6 +328,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       .order('sort_order', { ascending: true });
     setPrograms((data ?? []).map(mapProgram));
   }, [load]);
+
+  // Only once the area is reachable: for everyone else there is nothing here
+  // to refresh, and the programs list is not even loaded.
+  useRefreshable(reload, isAuthenticated && canEdit);
 
   /** Mirrors can_edit_portal_class(): NULL is admins-only, by design. */
   const canEditClass = useCallback(
