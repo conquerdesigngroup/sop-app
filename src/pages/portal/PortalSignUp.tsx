@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import PortalLayout from '../../components/portal/PortalLayout';
-import { Button, Card, Input } from '../../components/ui';
+import { Button, Card, Input, PasswordInput } from '../../components/ui';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { portalCheckEmail, CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
 import { portalRoutes } from '../../lib/portal';
@@ -208,18 +208,16 @@ const PortalSignUp: React.FC = () => {
                 Choose a password for <strong>{email.trim().toLowerCase()}</strong>.
                 At least {CLIENT_MIN_PASSWORD} characters.
               </p>
-              <Input
+              <PasswordInput
                 label="Password"
-                type="password"
                 autoComplete="new-password"
                 value={password}
                 onChange={e => { setPassword(e.target.value); setError(''); }}
                 disabled={busy}
                 style={inputFontFix}
               />
-              <Input
+              <PasswordInput
                 label="Confirm password"
-                type="password"
                 autoComplete="new-password"
                 value={confirm}
                 onChange={e => { setConfirm(e.target.value); setError(''); }}

@@ -46,8 +46,12 @@ create policy "portal_documents_read" on public.portal_documents
   for select to authenticated using (is_published);
 
 drop policy "portal_updates_read" on public.portal_updates;
+-- `household_id is null` is not optional and not a tidy-up. v36 added notes
+-- addressed to ONE family and relies on this policy excluding them; recreating
+-- it as a bare `is_published` — as this file did before v36 existed — hands
+-- every private note to every signed-in parent the moment this migration runs.
 create policy "portal_updates_read" on public.portal_updates
-  for select to authenticated using (is_published);
+  for select to authenticated using (is_published and household_id is null);
 
 drop policy "portal_events_read" on public.portal_events;
 create policy "portal_events_read" on public.portal_events

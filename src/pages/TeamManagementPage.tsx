@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useResponsive } from '../hooks/useResponsive';
@@ -8,12 +9,20 @@ import { DEFAULT_DEPARTMENTS, SUCCESS_MESSAGES, ERROR_MESSAGES } from '../consta
 import { isManagementRole, isSuperAdminRole, roleLabel } from '../lib/roles';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { useConfirm } from '../hooks/useConfirm';
-import { Button, Input, Modal } from '../components/ui';
-import PullToRefresh from '../components/PullToRefresh';
+import { Button, Modal, PasswordInput } from '../components/ui';
 
 const TeamManagementPage: React.FC = () => {
-  const { users, addUser, updateUser, deleteUser, adminResetPassword, refreshUsers, currentUser, isSuperAdmin } = useAuth();
+  const { users, addUser, updateUser, deleteUser, adminResetPassword, viewAs, currentUser, isSuperAdmin } = useAuth();
   const { success, error } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // "View as": swap the whole app to what this person sees, then land on
+  // their dashboard. The banner under the header is the way back.
+  const handleViewAs = (user: User) => {
+    viewAs(user.id);
+    navigate('/dashboard');
+  };
   const { isMobile, isTablet, isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
 
@@ -25,6 +34,15 @@ const TeamManagementPage: React.FC = () => {
   const [resetBusy, setResetBusy] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Deep link from search or the activity log: land with the box filled in.
+  useEffect(() => {
+    const state = location.state as { searchTerm?: string } | null;
+    if (state?.searchTerm) {
+      setSearchTerm(state.searchTerm);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -34,6 +52,7 @@ const TeamManagementPage: React.FC = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     firstName: '',
     lastName: '',
     role: 'team' as UserRole,
@@ -64,6 +83,7 @@ const TeamManagementPage: React.FC = () => {
     setFormData({
       email: '',
       password: '',
+      confirmPassword: '',
       firstName: '',
       lastName: '',
       role: 'team',
@@ -83,6 +103,7 @@ const TeamManagementPage: React.FC = () => {
     setFormData({
       email: user.email,
       password: '', // Don't show existing password
+      confirmPassword: '',
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role,
@@ -108,8 +129,18 @@ const TeamManagementPage: React.FC = () => {
       return false;
     }
 
+    // Length is the only rule. Any character is allowed — letters, digits,
+    // spaces, punctuation, symbols — and nothing between here and Supabase
+    // strips or rejects any of them. What DID go wrong was invisible: an
+    // account was created with a password nobody could sign in with, and the
+    // admin had to reset it. The confirm field and the show/hide toggle exist
+    // so the person typing can see exactly what will be stored.
     if (!editingUser && formData.password.length < 8) {
       error(ERROR_MESSAGES.INVALID_PASSWORD);
+      return false;
+    }
+    if (!editingUser && formData.password !== formData.confirmPassword) {
+      error('The two passwords do not match');
       return false;
     }
 
@@ -422,7 +453,6 @@ const TeamManagementPage: React.FC = () => {
       {/* Users Table/Cards */}
       {isMobileOrTablet ? (
         // Mobile Card View
-        <PullToRefresh onRefresh={refreshUsers}>
         <div>
           {filteredUsers.length === 0 ? (
             <div style={styles.emptyState}>
@@ -480,6 +510,19 @@ const TeamManagementPage: React.FC = () => {
                   </div>
                 </div>
                 <div style={styles.userCardFooter}>
+                  {user.id !== currentUser?.id && user.isActive !== false && (
+                    <button
+                      onClick={() => handleViewAs(user)}
+                      style={{...styles.iconButton, ...styles.iconButtonMobile}}
+                      title={`View the app as ${user.firstName}`}
+                      aria-label={`View as ${user.firstName} ${user.lastName}`}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleOpenEditUser(user)}
                     style={{...styles.iconButton, ...styles.iconButtonMobile}}
@@ -544,7 +587,6 @@ const TeamManagementPage: React.FC = () => {
             ))
           )}
         </div>
-        </PullToRefresh>
       ) : (
         // Desktop Table View
         <div style={styles.tableCard}>
@@ -616,6 +658,19 @@ const TeamManagementPage: React.FC = () => {
                     </td>
                     <td style={styles.td}>
                       <div style={styles.actionButtons}>
+                        {user.id !== currentUser?.id && user.isActive !== false && (
+                          <button
+                            onClick={() => handleViewAs(user)}
+                            style={styles.iconButton}
+                            title={`View the app as ${user.firstName}`}
+                            aria-label={`View as ${user.firstName} ${user.lastName}`}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           onClick={() => handleOpenEditUser(user)}
                           style={styles.iconButton}
@@ -772,24 +827,50 @@ const TeamManagementPage: React.FC = () => {
                 />
               </div>
 
-              {/* Password field: Only show for new users */}
+              {/* Password fields: only for new users.
+                  autoComplete="new-password" matters more than it looks. This
+                  form is email + password, which is exactly the shape a
+                  browser's password manager fills in — and on a phone it can
+                  drop the ADMIN's own saved password into this field, under
+                  the dots, after they have typed the new one. The toggle on
+                  PasswordInput and the confirm field are the other half of the
+                  same fix: what is about to be stored can be seen and has to
+                  be typed twice. autoCapitalize/autoCorrect off so that when
+                  the field is revealed iOS does not "fix" the text. */}
               {!editingUser && (
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>
-                    Password <span style={styles.required}>*</span>
-                  </label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    style={{
-                      ...styles.input,
-                      ...(isMobile && styles.inputMobile),
-                    }}
-                    required
-                    placeholder="Minimum 8 characters"
-                  />
-                </div>
+                <>
+                  <div style={styles.formGroup}>
+                    <PasswordInput
+                      label="Password *"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      required
+                      placeholder="At least 8 characters"
+                      helperText="Letters, numbers, spaces and symbols are all allowed."
+                    />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <PasswordInput
+                      label="Confirm password *"
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      required
+                      error={
+                        formData.confirmPassword && formData.confirmPassword !== formData.password
+                          ? 'Does not match'
+                          : undefined
+                      }
+                    />
+                  </div>
+                </>
               )}
 
               <div style={{
@@ -908,18 +989,23 @@ const TeamManagementPage: React.FC = () => {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <Input
+          <PasswordInput
             label="New password"
-            type="password"
             autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={resetPassword}
             onChange={e => setResetPassword(e.target.value)}
             disabled={resetBusy}
+            helperText="At least 8 characters. Letters, numbers, spaces and symbols are all allowed."
           />
-          <Input
+          <PasswordInput
             label="Confirm new password"
-            type="password"
             autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={resetConfirm}
             onChange={e => setResetConfirm(e.target.value)}
             error={resetError || undefined}

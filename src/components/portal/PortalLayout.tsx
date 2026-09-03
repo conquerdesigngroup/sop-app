@@ -2,10 +2,13 @@ import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { theme, BRAND_MARK } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { ProgramSlug, portalRoutes } from '../../lib/portal';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { CLIENT_AUTH_ENABLED } from '../../lib/clientAuth';
+import { recordInstallPing } from '../../lib/displayMode';
 import PortalBottomNav from './PortalBottomNav';
+import RefreshButton from '../RefreshButton';
 
 /**
  * Shell for every parent-portal page.
@@ -56,12 +59,34 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
   // Any portal session gets a persistent way out. Gated on the flag so the
   // access-code-only portal (no sessions) shows nothing. hasSession is true for
   // a client and for staff previewing — both need to be able to sign out, and
-  // /portal/account handles which is which.
+  // The profile handles which is which: a client gets the full set of cards, a
+  // staff member previewing the portal gets identity and the way out.
   const { hasSession } = usePortalAuth();
   const showAccount = CLIENT_AUTH_ENABLED && hasSession;
 
+  // The right cluster can hold three things — the "Parent Portal" label
+  // (106px), the refresh button and the account button — and the mark is
+  // 101px wide at this height while index.css pads every button and link out
+  // to a 44px touch target on a phone. Measured on a sub-page with a signed-in
+  // parent: 363px of content, so a 390px phone fits it with 3px to spare and a
+  // 375 does not. Below 390 the label goes; it is orientation, and the two
+  // buttons are actions.
+  const roomForLabel = useMediaQuery('(min-width: 390px)', true);
+
   const headerRef = useRef<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Anonymous, once per browser per day: is this a Home Screen app or a tab?
+  //
+  // It lives here rather than in index.tsx because the number that matters is
+  // the PARENT install rate, and this shell wraps every parent-facing page and
+  // nothing else. Counting staff sessions would dilute the very figure the
+  // measurement exists to produce. See lib/displayMode.ts for why we need it —
+  // iOS web push reaches installed apps only — and the v32 migration for how
+  // little is stored.
+  useEffect(() => {
+    void recordInstallPing();
+  }, []);
 
   useEffect(() => {
     const header = headerRef.current;
@@ -155,12 +180,12 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
           {/* Right cluster: the section label and the account button. The
               cluster owns the marginLeft:auto so both sit at the right edge
               whether one or both are present. */}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             {/* Orientation for sub-pages, where the h1 is a program name and
                 nothing else says which half of the app you are in. Suppressed on
                 the portal home, whose own h1 already reads "Parent Portal" —
                 printing it twice just eats vertical space on a phone. */}
-            {backTo && (
+            {backTo && roomForLabel && (
               <span
                 style={{
                   ...theme.typography.captionSmall,
@@ -174,10 +199,20 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
               </span>
             )}
 
+            {/* Portal reads are one-shot — no realtime socket for a parent's
+                phone to hold open — so this, the pull gesture, and reopening
+                the app are how new posts arrive. See RefreshContext. */}
+            <RefreshButton size={32} />
+
             {showAccount && (
               <Link
-                to="/portal/account"
-                aria-label="My account"
+                // The profile is the signed-in home — identity, what's on next,
+                // attendance, updates, files, and the Account card carrying the
+                // email, password change and sign-out. /portal/account redirects
+                // here, so this icon and the home tile lead to one place rather
+                // than two doors onto the same room.
+                to="/portal/profile"
+                aria-label="My profile"
                 style={{
                   display: 'flex',
                   alignItems: 'center',

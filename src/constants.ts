@@ -121,7 +121,7 @@ export const ERROR_MESSAGES = {
   DESCRIPTION_TOO_LONG: `Description must be less than ${VALIDATION.DESCRIPTION_MAX_LENGTH} characters`,
   MIN_STEPS_REQUIRED: `At least ${VALIDATION.MIN_STEPS} step is required`,
   INVALID_EMAIL: 'Please enter a valid email address',
-  INVALID_PASSWORD: 'Password must be at least 8 characters',
+  INVALID_PASSWORD: 'Password must be at least 8 characters. Letters, numbers, spaces and symbols are all allowed.',
   STORAGE_FULL: 'Storage is full. Please delete some items.',
   STORAGE_ERROR: 'Failed to save data. Please try again.',
 } as const;

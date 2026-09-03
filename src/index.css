@@ -54,6 +54,10 @@ body {
   color: var(--c-txt-primary);
   /* Prevent horizontal scroll */
   overflow-x: hidden;
+  /* The app has its own pull-to-refresh (PullToRefreshLayer). Without this,
+     Chrome on Android runs its native one at the same time and a pull reloads
+     the whole page instead of refreshing the data in place. */
+  overscroll-behavior-y: none;
 }
 
 /* Brand display face: Kanit ExtraBold Italic, uppercase, for all headlines */
@@ -547,17 +551,6 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
 }
 
 /* ============================================
-   Pull to Refresh Indicator
-   ============================================ */
-@keyframes pull-spin {
-  to { transform: rotate(360deg); }
-}
-
-.pull-refresh-spinner {
-  animation: pull-spin 0.8s linear infinite;
-}
-
-/* ============================================
    Stat Number Count Animation
    ============================================ */
 @keyframes count-up {
@@ -612,5 +605,25 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
   .scroll-visible {
     scrollbar-width: thin;
     scrollbar-color: var(--c-bdr-secondary, #36363D) transparent;
+  }
+}
+
+/* ============================================
+   Reduced Motion
+   ============================================
+   Honour the OS-level "reduce motion" setting. Every animation and
+   transition in the app is decorative — sheets sliding up, rows fading in,
+   hover colours easing — so none of it needs to survive. Durations are made
+   near-zero rather than set to `none` so that anything relying on an
+   animation's end state (an entrance that fades from opacity 0, say) still
+   lands there instead of staying invisible. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

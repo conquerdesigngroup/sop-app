@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { WorkHoursEntry } from '../types';
 import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,7 +11,6 @@ import { PageHeader, Card, Modal, Spinner } from '../components/ui';
 import HoursEntryForm, { HoursFormValues } from '../components/hours/HoursEntryForm';
 import HoursHistoryList from '../components/hours/HoursHistoryList';
 import TeamHoursPanel from '../components/hours/TeamHoursPanel';
-import PullToRefresh from '../components/PullToRefresh';
 import {
   PeriodPreset,
   PERIOD_LABELS,
@@ -53,13 +53,23 @@ const HoursInputPage: React.FC = () => {
     loading,
     loadError,
     hasV7Schema,
-    refresh,
   } = useWorkHours();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirm();
   const { isMobileOrTablet } = useResponsive();
 
   const [tab, setTab] = useState<Tab>('mine');
+  const location = useLocation();
+
+  // Deep link from the dashboard's "hours awaiting review": land on the
+  // team tab. Only honoured for a super admin, who is the only one it exists for.
+  useEffect(() => {
+    const state = location.state as { tab?: Tab } | null;
+    if (state?.tab === 'team' && isSuperAdmin) {
+      setTab('team');
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, isSuperAdmin]);
   // All time by default. Hours are reviewed far more often than they are
   // logged, and a week-shaped default hid every older entry behind a chip
   // nobody thought to press.
@@ -268,7 +278,6 @@ const HoursInputPage: React.FC = () => {
         </div>
       )}
 
-      <PullToRefresh onRefresh={refresh} disabled={!isMobileOrTablet}>
       {tab === 'team' && isSuperAdmin ? (
         <TeamHoursPanel />
       ) : (
@@ -397,7 +406,6 @@ const HoursInputPage: React.FC = () => {
           />
         </>
       )}
-      </PullToRefresh>
 
       {/* ---- Edit ---- */}
       <Modal

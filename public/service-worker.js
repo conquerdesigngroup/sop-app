@@ -153,24 +153,51 @@ async function syncOfflineChanges() {
   });
 }
 
-// Push notification handler (for future use)
+// Push notification handler. Payloads come from the alert-push Edge Function
+// as JSON { title, body, url, tag }. Guarded: a push with a non-JSON body
+// (a test from a browser devtools panel, say) must still show something
+// rather than throw inside the handler and show nothing.
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || 'SOP App Notification';
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = { body: event.data.text() };
+    }
+  }
+  const title = data.title || 'DIDC';
   const options = {
     body: data.body || 'You have a new notification',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    data: data,
+    // One tag per kind of alert, so a second digest replaces the first
+    // instead of stacking up unread in the tray.
+    tag: data.tag || 'didc-alert',
+    renotify: true,
+    data: { url: data.url || '/' },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Notification click handler
+// Notification click: focus an open tab if there is one and send it to the
+// alert's page, otherwise open a new one there.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil(
-    clients.openWindow(event.notification.data.url || '/')
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if ('focus' in client) {
+          client.focus();
+          if ('navigate' in client) {
+            return client.navigate(url);
+          }
+          return client;
+        }
+      }
+      return self.clients.openWindow(url);
+    })
   );
 });

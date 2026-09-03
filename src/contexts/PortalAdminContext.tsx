@@ -2,6 +2,7 @@ import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode,
 } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useRefreshable } from './RefreshContext';
 import { useAuth } from './AuthContext';
 import {
   PortalProgram, PortalClass, PortalClassCategory, PortalUpdate, PortalEvent, PortalDocument,
@@ -10,7 +11,11 @@ import {
 import {
   mapProgram, mapClass, mapUpdate, mapEvent, mapDocument, mapCalendarSource,
 } from '../lib/portalMappers';
-import { buildStoragePath } from '../lib/portalAdmin';
+import { buildStoragePath, MAX_DOCUMENT_MB } from '../lib/portalAdmin';
+import {
+  createStreamUpload, uploadToStream, deleteStreamVideo, fetchStreamStatus, StreamUploadAborted,
+} from '../lib/portalStreamUpload';
+import type { StreamStatus } from '../lib/portalStream';
 import { signDocumentUrls, removeStorageObject } from '../lib/portalStorage';
 import { logActivity } from '../lib/activityLog';
 
@@ -86,6 +91,13 @@ export interface DocumentInput {
   category: string | null;
   sortOrder: number;
   isPublished: boolean;
+}
+
+/** What the upload form shows while a video is on its way to Cloudflare. */
+export interface StreamUploadProgress {
+  stage: 'preparing' | 'uploading' | 'saving';
+  /** 0–1. Only meaningful while uploading. */
+  fraction: number;
 }
 
 export interface ClassInput {
@@ -170,6 +182,21 @@ interface PortalAdminContextValue {
     meta: DocumentInput,
     onProgress?: (stage: 'uploading' | 'saving') => void,
   ) => Promise<void>;
+  /**
+   * A video, to Cloudflare Stream. Resolves with the new row's id once the row
+   * exists; Cloudflare keeps processing after that and the row says 'pending'
+   * until refreshStreamStatus reports otherwise. Abort the signal to cancel —
+   * the promise then rejects with StreamUploadAborted and nothing is left
+   * behind on either side.
+   */
+  uploadStreamVideo: (
+    file: File,
+    meta: DocumentInput,
+    onProgress: (p: StreamUploadProgress) => void,
+    signal?: AbortSignal,
+  ) => Promise<string>;
+  /** Ask Cloudflare where a video is. The function writes the answer onto the row. */
+  refreshStreamStatus: (uid: string) => Promise<StreamStatus>;
   saveDocumentMeta: (input: DocumentInput & { id: string }) => Promise<void>;
   /**
    * Removes the stored file first, then the row. Throws if the file cannot be
@@ -228,6 +255,12 @@ export const describeWriteError = (e: any): string => {
     return 'You can only publish to your own classes. Ask an admin if this should be studio-wide.';
   }
   if (code === '23505') return 'That already exists.';
+  // Storage, not PostgREST: the project or bucket size cap said no. The app
+  // checks MAX_DOCUMENT_BYTES before uploading, so this only fires when the
+  // two have drifted apart — say which side, so the fix is obvious.
+  if (e?.statusCode === '413' || e?.statusCode === 413 || /exceeded the maximum allowed size/i.test(msg)) {
+    return `Supabase refused that file as too large. The app allows ${MAX_DOCUMENT_MB} MB; the storage limit on the Supabase side is lower and needs raising to match.`;
+  }
   if (/violates check constraint/i.test(msg)) return 'Something in that form is out of range — check the dates and times.';
   return msg || 'That did not save. Please try again.';
 };
@@ -256,7 +289,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
    * in portal_class_instructors. Deriving this from `isAdmin` would hide the
    * area from exactly the people it was built for.
    */
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!isAuthenticated || !isSupabaseConfigured() || !supabase) {
       setCanEdit(false);
       setEditableClassIds([]);
@@ -265,7 +298,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       return;
     }
 
-    setChecking(true);
+    // `checking` unmounts the whole manager page for a spinner, which is
+    // right on first entry and wrong for a re-check behind a page someone is
+    // editing. Silent re-checks (reload, the app-wide refresh) skip it.
+    if (!silent) setChecking(true);
     try {
       const [{ data: allowed, error: allowedErr }, { data: grants, error: grantsErr }] =
         await Promise.all([
@@ -316,7 +352,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
   }, [canEdit]);
 
   const reload = useCallback(async () => {
-    await load();
+    await load(true);
     if (!supabase) return;
     const { data } = await supabase
       .from('portal_programs')
@@ -324,6 +360,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       .order('sort_order', { ascending: true });
     setPrograms((data ?? []).map(mapProgram));
   }, [load]);
+
+  // Only once the area is reachable: for everyone else there is nothing here
+  // to refresh, and the programs list is not even loaded.
+  useRefreshable(reload, isAuthenticated && canEdit);
 
   /** Mirrors can_edit_portal_class(): NULL is admins-only, by design. */
   const canEditClass = useCallback(
@@ -352,6 +392,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     const { data, error } = await supabase
       .from('portal_updates')
       .select('*')
+      // Notes addressed to a single family (v36) are not this list's business:
+      // they are written and read in the Portal Viewer, one household at a
+      // time, and mixing them in here would turn "Info" into a mailbox.
+      .is('household_id', null)
       .eq('program_id', programId)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
@@ -564,6 +608,106 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     });
   }, [authorId]);
 
+  /**
+   * VIDEO GOES TO CLOUDFLARE STREAM, NOT THE BUCKET.
+   *
+   * Ticket, then bytes, then row — the row last for the same reason
+   * uploadDocument writes the object first: nothing should ever be visible to
+   * a parent that has no video behind it. The bytes go phone → Cloudflare
+   * directly; nothing large passes through Supabase.
+   *
+   * If the row is refused (an instructor uploading to someone else's class —
+   * the function checks first, so this is belt and braces) or the person
+   * cancels, the video is deleted again so it does not sit in Stream costing
+   * minutes with nothing pointing at it.
+   */
+  const uploadStreamVideo = useCallback(async (
+    file: File,
+    meta: DocumentInput,
+    onProgress: (p: StreamUploadProgress) => void,
+    signal?: AbortSignal,
+  ) => {
+    const title = meta.title.trim();
+
+    onProgress({ stage: 'preparing', fraction: 0 });
+    const ticket = await createStreamUpload({
+      classId: meta.classId, title, fileName: file.name, sizeBytes: file.size,
+    });
+
+    // Best effort: a video that could not be cleaned up is visible in the
+    // Cloudflare dashboard, which is the recoverable direction.
+    const discard = () => deleteStreamVideo(ticket.uid).catch(() => undefined);
+
+    try {
+      onProgress({ stage: 'uploading', fraction: 0 });
+      await uploadToStream(
+        file, ticket.uploadUrl,
+        fraction => onProgress({ stage: 'uploading', fraction }),
+        signal,
+      );
+    } catch (e) {
+      await discard();
+      if (!(e instanceof StreamUploadAborted)) {
+        void logActivity({
+          action: 'document_uploaded', entityType: 'document', entityTitle: title,
+          result: 'failure',
+          details: { fileName: file.name, via: 'stream', reason: 'upload_failed', message: (e as Error)?.message },
+        });
+      }
+      throw e;
+    }
+
+    onProgress({ stage: 'saving', fraction: 1 });
+    const { data, error: rowErr } = await supabase.from('portal_documents').insert({
+      program_id: meta.programId,
+      class_id: meta.classId,
+      title,
+      description: meta.description,
+      category: meta.category,
+      storage_path: null,
+      stream_uid: ticket.uid,
+      stream_playback_url: ticket.playbackUrl,
+      stream_status: 'pending',
+      file_name: file.name,
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      sort_order: meta.sortOrder,
+      is_published: meta.isPublished,
+      uploaded_by: authorId,
+    }).select('id').single();
+
+    if (rowErr) {
+      await discard();
+      void logActivity({
+        action: 'document_uploaded', entityType: 'document', entityTitle: title,
+        result: 'failure',
+        details: { fileName: file.name, via: 'stream', reason: failureReason(rowErr) },
+      });
+      throw rowErr;
+    }
+
+    void logActivity({
+      action: 'document_uploaded', entityType: 'document', entityId: data.id as string,
+      entityTitle: title,
+      details: {
+        programId: meta.programId,
+        classId: meta.classId,
+        fileName: file.name,
+        sizeBytes: file.size,
+        category: meta.category,
+        isPublished: meta.isPublished,
+        via: 'stream',
+        streamUid: ticket.uid,
+      },
+    });
+    return data.id as string;
+  }, [authorId]);
+
+  const refreshStreamStatus = useCallback(
+    async (uid: string) => (await fetchStreamStatus(uid)).status,
+    [],
+  );
+
   /** Title, class, category and visibility. The file itself is immutable. */
   const saveDocumentMeta = useCallback(async (input: DocumentInput & { id: string }) => {
     const { error } = await supabase
@@ -612,14 +756,24 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
    * "Already gone" is not a failure — see removeStorageObject.
    */
   const deleteDocument = useCallback(async (doc: PortalDocument) => {
-    await removeStorageObject('portal-documents', doc.storagePath);
+    if (doc.streamUid) {
+      // Same order, same reason, on Cloudflare's side: the function removes
+      // the video and only then the row, and refuses the row if the video
+      // would not go.
+      await deleteStreamVideo(doc.streamUid);
+    } else {
+      await removeStorageObject('portal-documents', doc.storagePath ?? '');
 
-    const { error } = await supabase.from('portal_documents').delete().eq('id', doc.id);
-    if (error) throw error;
+      const { error } = await supabase.from('portal_documents').delete().eq('id', doc.id);
+      if (error) throw error;
+    }
     void logActivity({
       action: 'document_deleted', entityType: 'document', entityId: doc.id,
       entityTitle: doc.title,
-      details: { fileName: doc.fileName, storagePath: doc.storagePath, sizeBytes: doc.sizeBytes },
+      details: {
+        fileName: doc.fileName, storagePath: doc.storagePath, streamUid: doc.streamUid,
+        sizeBytes: doc.sizeBytes,
+      },
     });
   }, []);
 
@@ -891,7 +1045,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchClasses, fetchUpdates, fetchEvents, fetchDocuments,
     saveUpdate, deleteUpdate,
     saveEvent, deleteEvent,
-    uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
+    uploadDocument, uploadStreamVideo, refreshStreamStatus, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
@@ -900,7 +1054,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     programs, programsLoading, reload,
     fetchClasses, fetchUpdates, fetchEvents, fetchDocuments,
     saveUpdate, deleteUpdate, saveEvent, deleteEvent,
-    uploadDocument, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
+    uploadDocument, uploadStreamVideo, refreshStreamStatus, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,

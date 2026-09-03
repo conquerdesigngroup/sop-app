@@ -33,7 +33,8 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
+      // Trim the address only. A password is sent exactly as typed.
+      const success = await login(email.trim(), password);
       if (success) {
         // Handle remember me
         if (rememberMe) {
@@ -141,6 +142,10 @@ const Login: React.FC = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               placeholder="you@example.com"
               required
               style={responsiveStyles.input}
@@ -155,6 +160,14 @@ const Login: React.FC = () => {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                // Off, all three, because the toggle above turns this into a
+                // text field, and a text field on iOS gets its first letter
+                // capitalised and its quotes made "smart" — which is a
+                // different password from the one that was set.
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="••••••••"
                 required
                 style={{ ...responsiveStyles.input, ...styles.passwordInput }}

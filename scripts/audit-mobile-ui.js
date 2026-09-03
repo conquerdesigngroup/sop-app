@@ -149,6 +149,17 @@ const AUTH_ROUTES = [
   // which the audit's staff session cannot reach (staff get redirected), so
   // it has no row here — check it by hand on a phone with a client login.
   '/portal-admin/clients',
+  // Super-admin only. A session below that rank is redirected to /dashboard and
+  // the row passes having measured the wrong page, so these lines are only
+  // meaningful when AUDIT_EMAIL names a super admin.
+  //
+  // All three tabs, because they are three different layouts behind one path:
+  // Classes carries the widest filter row in the app (four division chips plus
+  // seven days), and auditing only the default tab would measure the narrowest
+  // of the three and report the route CLEAN.
+  '/portal-admin/viewer',
+  '/portal-admin/viewer?view=dancers',
+  '/portal-admin/viewer?view=classes',
 ];
 
 // ---------------------------------------------------------------- static scan
