@@ -45,6 +45,27 @@ const doc = (over: Partial<PortalDocument>): PortalDocument => ({
   sortOrder: 0,
   isPublished: true,
   createdAt: '2026-08-01T00:00:00Z',
+  streamUid: null,
+  streamPlaybackUrl: null,
+  streamStatus: null,
+  durationSeconds: null,
+  ...over,
+});
+
+const STREAM_BASE = 'https://customer-abc123.cloudflarestream.com/0123456789abcdef0123456789abcdef';
+
+/** A class video that lives on Cloudflare Stream rather than in the bucket. */
+const streamDoc = (over: Partial<PortalDocument>): PortalDocument => doc({
+  id: 'doc-stream',
+  title: 'Tuesday class recording',
+  storagePath: null,
+  fileName: 'IMG_2231.MOV',
+  mimeType: 'video/quicktime',
+  sizeBytes: 2400000000,
+  streamUid: '0123456789abcdef0123456789abcdef',
+  streamPlaybackUrl: STREAM_BASE,
+  streamStatus: 'ready',
+  durationSeconds: 1834,
   ...over,
 });
 
@@ -321,5 +342,53 @@ describe('across the whole list', () => {
     const text = document.body.textContent ?? '';
     expect(text.indexOf('First')).toBeLessThan(text.indexOf('Second'));
     expect(text.indexOf('Second')).toBeLessThan(text.indexOf('Third'));
+  });
+});
+
+describe('a class video on Cloudflare Stream', () => {
+  it('plays in Cloudflare\'s player, not a <video> tag', async () => {
+    render(<DocumentList documents={[streamDoc({})]} />);
+    const frame = await screen.findByTitle('Tuesday class recording');
+    expect(frame.tagName).toBe('IFRAME');
+    expect(frame).toHaveAttribute('src', `${STREAM_BASE}/iframe`);
+    expect(document.querySelector('video')).toBeNull();
+  });
+
+  it('offers no Save link — the only file would be the multi-gigabyte original', async () => {
+    render(<DocumentList documents={[streamDoc({})]} />);
+    await screen.findByTitle('Tuesday class recording');
+    expect(screen.queryByText('Save')).toBeNull();
+  });
+
+  it('shows the duration where a bucket file shows its size', async () => {
+    render(<DocumentList documents={[streamDoc({})]} />);
+    await screen.findByTitle('Tuesday class recording');
+    expect(screen.getByText('30:34')).toBeInTheDocument();
+    expect(screen.queryByText(/GB/)).toBeNull();
+  });
+
+  it('does not ask storage to sign anything for it', async () => {
+    render(<DocumentList documents={[streamDoc({})]} />);
+    await screen.findByTitle('Tuesday class recording');
+    expect(mockGetDocumentUrls).not.toHaveBeenCalled();
+  });
+
+  it('says it is still processing rather than showing an empty player', async () => {
+    render(<DocumentList documents={[streamDoc({ streamStatus: 'pending', durationSeconds: null })]} />);
+    expect(await screen.findByText(/still processing/i)).toBeInTheDocument();
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('says so when Cloudflare could not process it', async () => {
+    render(<DocumentList documents={[streamDoc({ streamStatus: 'error', durationSeconds: null })]} />);
+    expect(await screen.findByText(/could not be processed/i)).toBeInTheDocument();
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('sits in the list beside bucket files, which are still signed', async () => {
+    await renderList([doc({}), streamDoc({})]);
+    expect(mockGetDocumentUrls).toHaveBeenCalledWith(['allstars/abc-costume.jpg']);
+    expect(await screen.findByTitle('Tuesday class recording')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Costume photo' })).toBeInTheDocument();
   });
 });
