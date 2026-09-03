@@ -568,6 +568,11 @@ export interface PortalDocument {
   streamStatus: PortalStreamStatus | null;
   /** Reported by Cloudflare once the video is processed. */
   durationSeconds: number | null;
+  /**
+   * `<playback>/downloads/default.mp4` once Cloudflare has built the MP4 (v41),
+   * null until then. The parent-facing Download button exists iff this does.
+   */
+  streamDownloadUrl: string | null;
   fileName: string;
   mimeType: string | null;
   sizeBytes: number | null;

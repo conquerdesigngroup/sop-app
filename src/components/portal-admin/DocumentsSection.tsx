@@ -15,7 +15,7 @@ import { DOCUMENT_ACCEPT, DOCUMENT_HINT, validateDocumentFile } from '../../lib/
 import { compatibilityWarning, mediaKindOf } from '../../lib/portalMedia';
 import {
   goesToStream, validateStreamFile, STREAM_HINT,
-  streamThumbnailUrl, streamWatchUrl, streamStatusLabel, formatDuration,
+  streamThumbnailUrl, streamWatchUrl, streamDownloadHref, streamStatusLabel, formatDuration,
 } from '../../lib/portalStream';
 import { useAdminList } from './useAdminList';
 import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audienceLabel, useAutoFocus } from './shared';
@@ -172,36 +172,51 @@ const DocumentsSection: React.FC<{
   }, [pathKey, getDocumentUrls]);
 
   /**
-   * Videos still encoding on Cloudflare. While any row says 'pending', ask
-   * every ten seconds and refetch the list the moment one moves — that is
-   * what turns "Processing" into a thumbnail without anyone reloading. The
-   * function writes the answer onto the row, so a parent's page picks it up
-   * on its next load too.
+   * Videos Cloudflare is still working on. Two kinds: rows that say 'pending'
+   * (still encoding) and rows that are ready but have no MP4 yet (Cloudflare
+   * builds the download after the encode, and only when asked — the status
+   * call is what asks). While there is any such row, ask every ten seconds
+   * and refetch the list the moment one moves — that is what turns
+   * "Processing" into a thumbnail, and then into a Download link, without
+   * anyone reloading. The function writes the answer onto the row, so a
+   * parent's page picks it up on its next load too.
+   *
+   * Capped at ten minutes per mount so a download Cloudflare never finishes
+   * does not keep a forgotten tab asking forever.
    *
    * reload comes through a ref: its identity is the list hook's business and
    * this effect must not restart the timer every render.
    */
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
-  const pendingKey = rows
-    .filter(d => d.streamStatus === 'pending' && d.streamUid)
-    .map(d => d.streamUid)
+  const watchKey = rows
+    .filter(d => d.streamUid && (
+      d.streamStatus === 'pending' || (d.streamStatus === 'ready' && !d.streamDownloadUrl)
+    ))
+    .map(d => `${d.streamUid}:${d.streamStatus}`)
     .join(' ');
 
   useEffect(() => {
-    if (!pendingKey) return;
+    if (!watchKey) return;
     let cancelled = false;
-    const uids = pendingKey.split(' ');
+    let checks = 0;
+    const watched = watchKey.split(' ').map(entry => {
+      const [uid, status] = entry.split(':');
+      return { uid, status };
+    });
     const check = async () => {
+      if (++checks > 60) { window.clearInterval(timer); return; }
       const results = await Promise.all(
-        uids.map(uid => refreshStreamStatus(uid).catch(() => 'pending' as const)),
+        watched.map(w => refreshStreamStatus(w.uid).catch(() => null)),
       );
-      if (!cancelled && results.some(s => s !== 'pending')) reloadRef.current();
+      const moved = results.some((r, i) =>
+        r !== null && (r.status !== watched[i].status || r.downloadUrl !== null));
+      if (!cancelled && moved) reloadRef.current();
     };
-    void check();
     const timer = window.setInterval(check, 10000);
+    void check();
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [pendingKey, refreshStreamStatus]);
+  }, [watchKey, refreshStreamStatus]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -425,17 +440,29 @@ const DocumentsSection: React.FC<{
                 </RowMeta>
 
                 {doc.streamPlaybackUrl ? (
-                  /* Cloudflare's own watch page. Nothing to sign, and it
-                     shows "processing" itself until the video is ready. */
-                  <a
-                    href={streamWatchUrl(doc.streamPlaybackUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => logDownload(doc)}
-                    style={OPEN_LINK}
-                  >
-                    {doc.streamStatus === 'ready' ? 'Watch' : 'Open on Cloudflare'}
-                  </a>
+                  <>
+                    {/* Cloudflare's own watch page. Nothing to sign, and it
+                        shows "processing" itself until the video is ready. */}
+                    <a
+                      href={streamWatchUrl(doc.streamPlaybackUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => logDownload(doc)}
+                      style={OPEN_LINK}
+                    >
+                      {doc.streamStatus === 'ready' ? 'Watch' : 'Open on Cloudflare'}
+                    </a>
+                    {/* The same MP4 parents get, once Cloudflare has built it. */}
+                    {doc.streamDownloadUrl && (
+                      <a
+                        href={streamDownloadHref(doc.streamDownloadUrl, doc.title)}
+                        onClick={() => logDownload(doc)}
+                        style={{ ...OPEN_LINK, marginLeft: '14px' }}
+                      >
+                        Download
+                      </a>
+                    )}
+                  </>
                 ) : previews[doc.storagePath ?? ''] ? (
                   /* A plain anchor, because it can be: the URL is already
                      signed. Nothing to await means nothing for a phone to

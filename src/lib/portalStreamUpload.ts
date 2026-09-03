@@ -29,6 +29,8 @@ export interface StreamStatusReport {
   durationSeconds: number | null;
   errorText: string | null;
   playbackUrl: string | null;
+  /** The MP4 for the Download button, once Cloudflare has built it. */
+  downloadUrl: string | null;
 }
 
 /**

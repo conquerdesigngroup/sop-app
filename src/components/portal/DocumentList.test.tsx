@@ -49,6 +49,7 @@ const doc = (over: Partial<PortalDocument>): PortalDocument => ({
   streamPlaybackUrl: null,
   streamStatus: null,
   durationSeconds: null,
+  streamDownloadUrl: null,
   ...over,
 });
 
@@ -66,6 +67,7 @@ const streamDoc = (over: Partial<PortalDocument>): PortalDocument => doc({
   streamPlaybackUrl: STREAM_BASE,
   streamStatus: 'ready',
   durationSeconds: 1834,
+  streamDownloadUrl: `${STREAM_BASE}/downloads/default.mp4`,
   ...over,
 });
 
@@ -354,9 +356,22 @@ describe('a class video on Cloudflare Stream', () => {
     expect(document.querySelector('video')).toBeNull();
   });
 
-  it('offers no Save link — the only file would be the multi-gigabyte original', async () => {
-    render(<DocumentList documents={[streamDoc({})]} />);
+  it('offers Cloudflare\'s MP4 as a Download, named after the title', async () => {
+    const onDownload = jest.fn();
+    render(<DocumentList documents={[streamDoc({})]} onDownload={onDownload} />);
     await screen.findByTitle('Tuesday class recording');
+    const link = screen.getByRole('link', { name: /download/i });
+    expect(link).toHaveAttribute('href', `${STREAM_BASE}/downloads/default.mp4?filename=Tuesday-class-recording.mp4`);
+    // No target: Cloudflare sends the file as an attachment, so the page stays.
+    expect(link).not.toHaveAttribute('target');
+    fireEvent.click(link);
+    expect(onDownload).toHaveBeenCalledWith(expect.objectContaining({ id: 'doc-stream' }));
+  });
+
+  it('offers no Download until Cloudflare has built the MP4', async () => {
+    render(<DocumentList documents={[streamDoc({ streamDownloadUrl: null })]} />);
+    await screen.findByTitle('Tuesday class recording');
+    expect(screen.queryByRole('link', { name: /download/i })).toBeNull();
     expect(screen.queryByText('Save')).toBeNull();
   });
 

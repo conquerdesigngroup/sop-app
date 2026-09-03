@@ -22,6 +22,9 @@
 //   status   Ask Cloudflare where a video is and write the answer onto its
 //            portal_documents row (stream_status, duration_seconds). Any
 //            portal author may ask; the answer is a fact, not a permission.
+//            Once the video is ready it also asks Cloudflare for the MP4
+//            download and, when that exists, records stream_download_url
+//            (v41) — the parent-facing Download button appears from that.
 //
 //   delete   Remove the video from Cloudflare, then its row. Video first for
 //            the same reason the bucket path deletes the object first: a row
@@ -95,10 +98,15 @@ interface CfVideo {
   creator?: string | null;
 }
 
-interface CfReply {
+/** GET/POST /stream/<uid>/downloads: the MP4 Cloudflare builds on request. */
+interface CfDownloads {
+  default?: { status?: string; url?: string; percentComplete?: number };
+}
+
+interface CfReply<T = CfVideo> {
   ok: boolean;
   status: number;
-  result?: CfVideo;
+  result?: T;
   errors?: { code?: number; message?: string }[];
 }
 
@@ -175,9 +183,9 @@ Deno.serve(async (req: Request) => {
       headers: { Authorization: `Bearer ${cfToken}`, ...(init.headers ?? {}) },
     });
 
-  const cfJson = async (path: string, init: RequestInit = {}): Promise<CfReply> => {
+  const cfJson = async <T = CfVideo>(path: string, init: RequestInit = {}): Promise<CfReply<T>> => {
     const r = await cf(path, init);
-    let parsed: { success?: boolean; result?: CfVideo; errors?: CfReply['errors'] } | null = null;
+    let parsed: { success?: boolean; result?: T; errors?: CfReply['errors'] } | null = null;
     try { parsed = await r.json(); } catch { /* non-JSON body: treated as no detail */ }
     return {
       ok: r.ok && parsed?.success !== false,
@@ -187,7 +195,7 @@ Deno.serve(async (req: Request) => {
     };
   };
 
-  const cfError = (what: string, r: CfReply) =>
+  const cfError = (what: string, r: CfReply<unknown>) =>
     `Cloudflare Stream ${what} failed (${r.status}): ${
       r.errors?.map((e) => e.message).filter(Boolean).join('; ') || 'no detail'
     }`;
@@ -314,9 +322,26 @@ Deno.serve(async (req: Request) => {
       const durationSeconds = v.duration && v.duration > 0 ? Math.round(v.duration) : null;
       const playbackUrl = playbackBase(v.preview);
 
+      // The MP4 behind the Download button. Cloudflare builds it once per
+      // video, on request, and only from a finished encode: so it is asked
+      // for on every check that finds the video ready, until Cloudflare says
+      // the file exists. GET reads an existing job; POST starts one. Neither
+      // is fatal — a video with no download still plays.
+      let downloadUrl: string | null = null;
+      if (status === 'ready') {
+        let dl = await cfJson<CfDownloads>(`/${uid}/downloads`);
+        if (!dl.ok || !dl.result?.default) {
+          dl = await cfJson<CfDownloads>(`/${uid}/downloads`, { method: 'POST' });
+          if (!dl.ok) console.error(cfError('download request', dl));
+        }
+        const def = dl.result?.default;
+        if (def?.status === 'ready' && def.url) downloadUrl = def.url;
+      }
+
       const patch: Record<string, unknown> = { stream_status: status };
       if (durationSeconds !== null) patch.duration_seconds = durationSeconds;
       if (playbackUrl) patch.stream_playback_url = playbackUrl;
+      if (downloadUrl) patch.stream_download_url = downloadUrl;
       const { error: rowErr } = await admin
         .from('portal_documents')
         .update(patch)
@@ -336,6 +361,7 @@ Deno.serve(async (req: Request) => {
         durationSeconds,
         errorText: v.status?.errorReasonText || null,
         playbackUrl,
+        downloadUrl,
       });
     }
 

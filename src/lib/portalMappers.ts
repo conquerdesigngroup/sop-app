@@ -118,6 +118,7 @@ export const mapDocument = (r: any): PortalDocument => ({
   streamPlaybackUrl: r.stream_playback_url ?? null,
   streamStatus: r.stream_status ?? null,
   durationSeconds: r.duration_seconds ?? null,
+  streamDownloadUrl: r.stream_download_url ?? null,
   fileName: r.file_name,
   mimeType: r.mime_type,
   sizeBytes: r.size_bytes,

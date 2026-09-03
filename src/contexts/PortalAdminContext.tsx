@@ -195,8 +195,11 @@ interface PortalAdminContextValue {
     onProgress: (p: StreamUploadProgress) => void,
     signal?: AbortSignal,
   ) => Promise<string>;
-  /** Ask Cloudflare where a video is. The function writes the answer onto the row. */
-  refreshStreamStatus: (uid: string) => Promise<StreamStatus>;
+  /**
+   * Ask Cloudflare where a video is. The function writes the answer onto the
+   * row, including the MP4 download URL once that file exists.
+   */
+  refreshStreamStatus: (uid: string) => Promise<{ status: StreamStatus; downloadUrl: string | null }>;
   saveDocumentMeta: (input: DocumentInput & { id: string }) => Promise<void>;
   /**
    * Removes the stored file first, then the row. Throws if the file cannot be
@@ -703,10 +706,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     return data.id as string;
   }, [authorId]);
 
-  const refreshStreamStatus = useCallback(
-    async (uid: string) => (await fetchStreamStatus(uid)).status,
-    [],
-  );
+  const refreshStreamStatus = useCallback(async (uid: string) => {
+    const report = await fetchStreamStatus(uid);
+    return { status: report.status, downloadUrl: report.downloadUrl };
+  }, []);
 
   /** Title, class, category and visibility. The file itself is immutable. */
   const saveDocumentMeta = useCallback(async (input: DocumentInput & { id: string }) => {
