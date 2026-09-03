@@ -31,6 +31,14 @@
 //            that outlives its video is visible and retryable, a video that
 //            outlives its row is billed and unreachable.
 //
+//   download-url   The one action a PARENT's phone calls, so it needs no
+//            person behind it — the anon key alone passes verify_jwt. The MP4
+//            URL a row records answers with a 302 to a signed copy, and that
+//            302 carries no CORS header, so a browser fetch from didc.app dies
+//            on the redirect. This follows the hop server-side and returns
+//            the target, which does allow our origin. Nothing secret moves:
+//            the recorded URL is public, and only a published row's resolves.
+//
 // SECRETS (set on this function, never in the repo)
 //
 //   CF_ACCOUNT_ID    the Cloudflare account, from the dashboard URL
@@ -75,6 +83,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'localhost:3000',
 ];
 const UID_RE = /^[a-f0-9]{32}$/;
+// Cloudflare's rule for ?filename=: letters, digits, - and _, one extension.
+const FILENAME_RE = /^[A-Za-z0-9_-]{1,100}(\.[A-Za-z0-9_-]{1,10})?$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_TITLE = 200;
 
@@ -111,12 +121,14 @@ interface CfReply<T = CfVideo> {
 }
 
 interface Body {
-  action?: 'create' | 'status' | 'delete';
+  action?: 'create' | 'status' | 'delete' | 'download-url';
   classId?: string | null;
   title?: string;
   fileName?: string;
   sizeBytes?: number;
   uid?: string;
+  /** download-url: the name the saved file should get. */
+  filename?: string;
 }
 
 const toStatus = (v: CfVideo): StreamStatus => {
@@ -164,16 +176,45 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   });
 
-  const { data: userData, error: userErr } = await caller.auth.getUser();
-  if (userErr || !userData?.user) return json(401, { error: 'Invalid or expired session' });
-  const callerId = userData.user.id;
-
   let body: Body;
   try {
     body = await req.json();
   } catch {
     return json(400, { error: 'Body must be JSON' });
   }
+
+  // ------------------------------------------------- public: download-url
+  // Before the session check on purpose — see the header. Anyone who can
+  // load the class page can already reach the recorded URL; this only saves
+  // their browser from a redirect it is not allowed to follow.
+  if (body.action === 'download-url') {
+    const uid = body.uid ?? '';
+    if (!UID_RE.test(uid)) return json(400, { error: 'uid is required' });
+    const { data: row } = await admin
+      .from('portal_documents')
+      .select('stream_download_url, is_published')
+      .eq('stream_uid', uid)
+      .maybeSingle();
+    if (!row?.stream_download_url || !row.is_published) {
+      return json(404, { error: 'No download for that video yet.' });
+    }
+    const filename = typeof body.filename === 'string' && FILENAME_RE.test(body.filename) ? body.filename : null;
+    const start = filename ? `${row.stream_download_url}?filename=${filename}` : row.stream_download_url;
+    let target: string | null = null;
+    try {
+      // Deno hands back the 3xx itself under redirect: 'manual', Location and all.
+      const hop = await fetch(start, { method: 'HEAD', redirect: 'manual' });
+      if (hop.status >= 300 && hop.status < 400) target = hop.headers.get('location');
+      else if (!hop.ok) return json(502, { error: `Cloudflare would not serve the download (${hop.status}).` });
+    } catch (e) {
+      return json(502, { error: `Could not reach Cloudflare for the download: ${(e as Error).message}` });
+    }
+    return json(200, { url: target ?? start });
+  }
+
+  const { data: userData, error: userErr } = await caller.auth.getUser();
+  if (userErr || !userData?.user) return json(401, { error: 'Invalid or expired session' });
+  const callerId = userData.user.id;
 
   // ------------------------------------------------------------- helpers
 

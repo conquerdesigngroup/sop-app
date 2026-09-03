@@ -23,6 +23,12 @@ const SIGNED = 'https://x.supabase.co/storage/v1/object/sign/portal-documents/p/
 
 const mockGetDocumentUrls = jest.fn();
 const mockGetDocumentUrl = jest.fn();
+const mockResolveDownload = jest.fn();
+
+// The function that follows Cloudflare's CORS-less redirect for the phone.
+jest.mock('../../lib/portalStreamDownload', () => ({
+  resolveStreamDownload: (...args: unknown[]) => mockResolveDownload(...args),
+}));
 
 jest.mock('../../contexts/PortalContext', () => ({
   usePortal: () => ({
@@ -400,7 +406,10 @@ describe('a class video on Cloudflare Stream', () => {
       };
     };
 
+    const RESOLVED = `${STREAM_BASE}/dl/default.mp4?p=signed&s=sig`;
+
     beforeEach(() => {
+      mockResolveDownload.mockReset().mockResolvedValue(RESOLVED);
       Object.defineProperty(navigator, 'share', { value: shareSpy, configurable: true, writable: true });
       Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true, writable: true });
       (global as any).fetch = fetchSpy;
@@ -422,10 +431,10 @@ describe('a class video on Cloudflare Stream', () => {
       const button = screen.getByRole('button', { name: /download/i });
       await act(async () => { fireEvent.click(button); });
 
-      expect(fetchSpy).toHaveBeenCalledWith(
-        `${STREAM_BASE}/downloads/default.mp4?filename=Tuesday-class-recording.mp4`,
-        expect.objectContaining({ credentials: 'omit' }),
-      );
+      // The recorded URL redirects without CORS headers, so the fetch goes
+      // to the target the function resolved, not to the recorded URL.
+      expect(mockResolveDownload).toHaveBeenCalledWith('0123456789abcdef0123456789abcdef', 'Tuesday class recording');
+      expect(fetchSpy).toHaveBeenCalledWith(RESOLVED, expect.objectContaining({ credentials: 'omit' }));
       // The audit sees the download the moment it starts.
       expect(onDownload).toHaveBeenCalledWith(expect.objectContaining({ id: 'doc-stream' }));
       // While it is coming: the control is disabled, and the words say so.
@@ -481,6 +490,16 @@ describe('a class video on Cloudflare Stream', () => {
       expect(screen.getByRole('status')).toHaveTextContent(/too big to save straight to Photos/);
       expect(screen.getByRole('link', { name: /download/i })).toBeInTheDocument();
       expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it('says what to do when the redirect cannot be resolved, and lets them try again', async () => {
+      mockResolveDownload.mockRejectedValueOnce(new Error('No download for that video yet.'));
+      render(<DocumentList documents={[streamDoc({})]} />);
+      await screen.findByTitle('Tuesday class recording');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /download/i })); });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent(/Check your connection and tap Download again/);
+      expect(screen.getByRole('button', { name: /download/i })).toBeEnabled();
     });
 
     it('says what to do when the fetch fails, and lets them try again', async () => {

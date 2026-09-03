@@ -9,6 +9,7 @@ import {
   videoSaveSupport, describeFetchProgress, SHARE_MAX_BYTES,
 } from '../../lib/portalStream';
 import { fetchVideoFile, isAbort, VideoTooLarge, FetchProgress } from '../../lib/videoFetch';
+import { resolveStreamDownload } from '../../lib/portalStreamDownload';
 import { PortalDocument } from '../../types';
 
 /**
@@ -252,7 +253,11 @@ const StreamSave: React.FC<{
     setProgress({ received: 0, total: null });
     setStage('fetching');
     try {
-      const got = await fetchVideoFile(href, streamDownloadFilename(doc.title), {
+      // The recorded URL redirects, and the redirect blocks a browser fetch;
+      // the function follows it for us. See portalStreamDownload.ts.
+      const url = await resolveStreamDownload(doc.streamUid ?? '', doc.title);
+      if (controller.signal.aborted) { setStage('idle'); return; }
+      const got = await fetchVideoFile(url, streamDownloadFilename(doc.title), {
         maxBytes: SHARE_MAX_BYTES,
         signal: controller.signal,
         onProgress: setProgress,
@@ -297,7 +302,10 @@ const StreamSave: React.FC<{
   const pct = progress.total ? Math.min(100, Math.floor((progress.received / progress.total) * 100)) : null;
 
   const message: string | null =
-    stage === 'fetching' ? `Getting the video ready — ${describeFetchProgress(progress.received, progress.total)}. Keep this page open.`
+    stage === 'fetching'
+      ? (progress.received === 0 && progress.total === null
+          ? 'Getting the video ready — connecting. Keep this page open.'
+          : `Getting the video ready — ${describeFetchProgress(progress.received, progress.total)}. Keep this page open.`)
     : stage === 'ready' ? 'Ready. Tap Save to Photos, then choose Save Video.'
     : stage === 'sharing' ? 'Opening your phone\u2019s share sheet…'
     : stage === 'shared' ? 'Done. Tap Save to Photos again to send it somewhere else.'
