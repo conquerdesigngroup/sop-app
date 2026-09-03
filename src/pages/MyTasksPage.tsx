@@ -8,10 +8,9 @@ import { JobTask, TaskStep } from '../types';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
-import PullToRefresh from '../components/PullToRefresh';
 
 const MyTasksPage: React.FC = () => {
-  const { jobTasks, updateJobTask, refreshTasks } = useTask();
+  const { jobTasks, updateJobTask } = useTask();
   const { currentUser } = useAuth();
   const { sops } = useSOPs();
   const { success: showSuccess, error: showError } = useToast();
@@ -20,18 +19,6 @@ const MyTasksPage: React.FC = () => {
   const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Pull to refresh handler - refetches tasks from the server
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      await refreshTasks();
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [refreshTasks]);
-
   // Quick complete task (mark all steps as done)
   const handleQuickComplete = useCallback(async (task: JobTask) => {
     try {
@@ -292,55 +279,54 @@ const MyTasksPage: React.FC = () => {
         </select>
       </div>
 
-      {/* Tasks List with Pull to Refresh */}
-      <PullToRefresh onRefresh={handleRefresh} disabled={!isMobileOrTablet}>
-        <div style={styles.tasksList}>
-          {isMobileOrTablet && (
-            <p style={styles.swipeHint}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14M12 5l7 7-7 7"/>
-              </svg>
-              Swipe right to complete
-            </p>
-          )}
-          {sortedTasks.length === 0 ? (
-            <div style={styles.emptyState}>
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
-                <path d="M9 11l3 3L22 4" />
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-              </svg>
-              <p style={styles.emptyText}>No tasks found</p>
-              <p style={styles.emptySubtext}>You're all set!</p>
-            </div>
-          ) : (
-            sortedTasks.map(task => (
-              isMobileOrTablet && task.status !== 'completed' ? (
-                <SwipeableListItem
-                  key={task.id}
-                  leftAction={createSwipeAction.complete(() => handleQuickComplete(task))}
-                >
-                  <MyTaskCard
-                    task={task}
-                    onClick={() => handleTaskClick(task)}
-                    onStepToggle={(stepId) => handleStepToggle(task, stepId)}
-                    onNoStepsToggle={() => handleNoStepsToggle(task)}
-                    isMobileOrTablet={isMobileOrTablet}
-                  />
-                </SwipeableListItem>
-              ) : (
+      {/* Tasks list. Pull-to-refresh used to be wrapped around this one list
+          and nowhere else; it is now app-wide (PullToRefreshLayer). */}
+      <div style={styles.tasksList}>
+        {isMobileOrTablet && (
+          <p style={styles.swipeHint}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+            Swipe right to complete
+          </p>
+        )}
+        {sortedTasks.length === 0 ? (
+          <div style={styles.emptyState}>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            <p style={styles.emptyText}>No tasks found</p>
+            <p style={styles.emptySubtext}>You're all set!</p>
+          </div>
+        ) : (
+          sortedTasks.map(task => (
+            isMobileOrTablet && task.status !== 'completed' ? (
+              <SwipeableListItem
+                key={task.id}
+                leftAction={createSwipeAction.complete(() => handleQuickComplete(task))}
+              >
                 <MyTaskCard
-                  key={task.id}
                   task={task}
                   onClick={() => handleTaskClick(task)}
                   onStepToggle={(stepId) => handleStepToggle(task, stepId)}
                   onNoStepsToggle={() => handleNoStepsToggle(task)}
                   isMobileOrTablet={isMobileOrTablet}
                 />
-              )
-            ))
-          )}
-        </div>
-      </PullToRefresh>
+              </SwipeableListItem>
+            ) : (
+              <MyTaskCard
+                key={task.id}
+                task={task}
+                onClick={() => handleTaskClick(task)}
+                onStepToggle={(stepId) => handleStepToggle(task, stepId)}
+                onNoStepsToggle={() => handleNoStepsToggle(task)}
+                isMobileOrTablet={isMobileOrTablet}
+              />
+            )
+          ))
+        )}
+      </div>
 
       {/* Task Detail Modal */}
       {selectedTask && (

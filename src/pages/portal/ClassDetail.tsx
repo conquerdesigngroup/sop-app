@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Badge, Card, EmptyState, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import { usePortal } from '../../contexts/PortalContext';
+import { useRefreshable } from '../../contexts/RefreshContext';
 import { portalRoutes, formatClassSchedule, CLASS_CATEGORY_LABEL } from '../../lib/portal';
 import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
 import { useProgramPage } from './useProgramPage';
@@ -53,55 +54,71 @@ const ClassDetail: React.FC = () => {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Every load bumps this; a response whose number is no longer current is
+  // for a class the parent has already navigated away from and is dropped.
+  const requestRef = useRef(0);
+
+  /**
+   * `silent` is the app-wide refresh: same fetches, but the page stays put
+   * while they run, and a failure is thrown to the refresh rather than
+   * replacing a class the parent can see with an error they cannot act on.
+   */
+  const load = useCallback(async (silent: boolean) => {
     if (!program?.id || !classId) return;
 
-    let cancelled = false;
-    setLoading(true);
+    const requestId = ++requestRef.current;
+    const stale = () => requestId !== requestRef.current;
+    if (!silent) setLoading(true);
 
-    (async () => {
-      try {
-        // Two steps rather than one Promise.all: the second pair of fetches is
-        // scoped by the class's own program, which is not known until the
-        // first has resolved. The list is one indexed query and already in
-        // cache from the schedule page in the common case.
-        const classes = await fetchClasses(slug);
-        if (cancelled) return;
+    try {
+      // Two steps rather than one Promise.all: the second pair of fetches is
+      // scoped by the class's own program, which is not known until the
+      // first has resolved. The list is one indexed query and already in
+      // cache from the schedule page in the common case.
+      const classes = await fetchClasses(slug);
+      if (stale()) return;
 
-        const found = classes.find(c => c.id === classId) ?? null;
-        setKlass(found);
-        setNotFound(!found);
+      const found = classes.find(c => c.id === classId) ?? null;
+      setKlass(found);
+      setNotFound(!found);
 
-        if (!found) {
-          setUpdates([]);
-          setDocuments([]);
-          setError(null);
-          return;
-        }
-
-        const [classUpdates, classDocs] = await Promise.all([
-          fetchUpdates(found.programId, classId),
-          fetchDocuments(found.programId, classId),
-        ]);
-        if (cancelled) return;
-
-        setUpdates(classUpdates);
-        setDocuments(classDocs);
+      if (!found) {
+        setUpdates([]);
+        setDocuments([]);
         setError(null);
-      } catch (e) {
-        if (cancelled) return;
-        console.error('Failed to load class:', e);
-        setError('Could not load this class.');
-      } finally {
-        if (!cancelled) setLoading(false);
+        return;
       }
-    })();
 
-    return () => { cancelled = true; };
+      const [classUpdates, classDocs] = await Promise.all([
+        fetchUpdates(found.programId, classId),
+        fetchDocuments(found.programId, classId),
+      ]);
+      if (stale()) return;
+
+      setUpdates(classUpdates);
+      setDocuments(classDocs);
+      setError(null);
+    } catch (e) {
+      if (stale()) return;
+      console.error('Failed to load class:', e);
+      if (silent) throw e;
+      setError('Could not load this class.');
+    } finally {
+      if (!stale() && !silent) setLoading(false);
+    }
     // fetchClasses/fetchUpdates/fetchDocuments are useCallback-stable, and slug
     // moves with program?.id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program?.id, classId]);
+
+  useEffect(() => {
+    void load(false);
+    // Leaving the page invalidates anything still in flight.
+    return () => { requestRef.current++; };
+  }, [load]);
+
+  const reload = useCallback(() => load(true), [load]);
+  useRefreshable(reload, !!program?.id && !!classId);
 
   // An id that is not in this program — a stale link, or a class that has been
   // deactivated since it was shared.

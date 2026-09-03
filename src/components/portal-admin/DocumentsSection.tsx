@@ -5,12 +5,18 @@ import { CustomCheckbox } from '../CustomCheckbox';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePortalAdmin, describeWriteError, DocumentInput } from '../../contexts/PortalAdminContext';
+import {
+  usePortalAdmin, describeWriteError, DocumentInput, StreamUploadProgress,
+} from '../../contexts/PortalAdminContext';
 import { PortalClass, PortalDocument, PortalProgram } from '../../types';
 import { formatFileSize } from '../../lib/portal';
 import { logActivity } from '../../lib/activityLog';
 import { DOCUMENT_ACCEPT, DOCUMENT_HINT, validateDocumentFile } from '../../lib/portalAdmin';
 import { compatibilityWarning, mediaKindOf } from '../../lib/portalMedia';
+import {
+  goesToStream, validateStreamFile, STREAM_HINT,
+  streamThumbnailUrl, streamWatchUrl, streamStatusLabel, formatDuration,
+} from '../../lib/portalStream';
 import { useAdminList } from './useAdminList';
 import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audienceLabel, useAutoFocus } from './shared';
 
@@ -59,11 +65,17 @@ const Thumb: React.FC<{ doc: PortalDocument; url?: string }> = ({ doc, url }) =>
     color: theme.colors.txt.tertiary,
   };
 
-  if (kind === 'image' && url && !broken) {
+  // A Stream video has a thumbnail once Cloudflare has processed it; before
+  // that, and for every other kind, the glyph.
+  const thumb = doc.streamPlaybackUrl && doc.streamStatus === 'ready'
+    ? streamThumbnailUrl(doc.streamPlaybackUrl)
+    : (kind === 'image' ? url : undefined);
+
+  if (thumb && !broken) {
     return (
       <span style={box}>
         <img
-          src={url}
+          src={thumb}
           alt=""
           onError={() => setBroken(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -89,6 +101,16 @@ const Thumb: React.FC<{ doc: PortalDocument; url?: string }> = ({ doc, url }) =>
   );
 };
 
+const OPEN_LINK: React.CSSProperties = {
+  display: 'inline-block',
+  marginTop: '8px',
+  ...theme.typography.bodySmall,
+  fontFamily: theme.fonts.primary,
+  fontWeight: 600,
+  color: theme.colors.primary,
+  textDecoration: 'none',
+};
+
 const emptyMeta = (programId: string, classId: string | null): DocumentInput => ({
   programId,
   classId,
@@ -110,7 +132,8 @@ const DocumentsSection: React.FC<{
   scope?: { classId: string | null };
 }> = ({ program, classes, scope }) => {
   const {
-    fetchDocuments, uploadDocument, saveDocumentMeta, deleteDocument,
+    fetchDocuments, uploadDocument, uploadStreamVideo, refreshStreamStatus,
+    saveDocumentMeta, deleteDocument,
     getDocumentUrl, getDocumentUrls,
     canEditClass, editableClassIds,
   } = usePortalAdmin();
@@ -132,10 +155,10 @@ const DocumentsSection: React.FC<{
    * that signs first — see the note on openDocument below.
    */
   const [previews, setPreviews] = useState<Record<string, string>>({});
-  const pathKey = rows.map(d => d.storagePath).join(' ');
+  const pathKey = rows.map(d => d.storagePath ?? '').join(' ');
 
   useEffect(() => {
-    const paths = rows.map(d => d.storagePath).filter(Boolean);
+    const paths = rows.map(d => d.storagePath).filter((p): p is string => Boolean(p));
     if (paths.length === 0) {
       setPreviews({});
       return;
@@ -148,11 +171,46 @@ const DocumentsSection: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathKey, getDocumentUrls]);
 
+  /**
+   * Videos still encoding on Cloudflare. While any row says 'pending', ask
+   * every ten seconds and refetch the list the moment one moves — that is
+   * what turns "Processing" into a thumbnail without anyone reloading. The
+   * function writes the answer onto the row, so a parent's page picks it up
+   * on its next load too.
+   *
+   * reload comes through a ref: its identity is the list hook's business and
+   * this effect must not restart the timer every render.
+   */
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+  const pendingKey = rows
+    .filter(d => d.streamStatus === 'pending' && d.streamUid)
+    .map(d => d.streamUid)
+    .join(' ');
+
+  useEffect(() => {
+    if (!pendingKey) return;
+    let cancelled = false;
+    const uids = pendingKey.split(' ');
+    const check = async () => {
+      const results = await Promise.all(
+        uids.map(uid => refreshStreamStatus(uid).catch(() => 'pending' as const)),
+      );
+      if (!cancelled && results.some(s => s !== 'pending')) reloadRef.current();
+    };
+    void check();
+    const timer = window.setInterval(check, 10000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [pendingKey, refreshStreamStatus]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [meta, setMeta] = useState<DocumentInput | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [stage, setStage] = useState<'idle' | 'uploading' | 'saving'>('idle');
+  // The Stream path reports finer progress than the bucket path's two stages.
+  const [progress, setProgress] = useState<StreamUploadProgress | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [formError, setFormError] = useState('');
   const [opening, setOpening] = useState<string | null>(null);
   const focusRef = useAutoFocus(meta !== null);
@@ -161,7 +219,7 @@ const DocumentsSection: React.FC<{
   const defaultClassId = scope
     ? scope.classId
     : (isAdmin ? null : (editableClassIds[0] ?? null));
-  const busy = stage !== 'idle';
+  const busy = stage !== 'idle' || progress !== null;
 
   const startUpload = () => {
     setFormError('');
@@ -196,7 +254,7 @@ const DocumentsSection: React.FC<{
     const picked = e.target.files?.[0] ?? null;
     if (!picked) return;
 
-    const problem = validateDocumentFile(picked);
+    const problem = goesToStream(picked) ? validateStreamFile(picked) : validateDocumentFile(picked);
     if (problem) {
       setFormError(problem);
       setFile(null);
@@ -234,6 +292,16 @@ const DocumentsSection: React.FC<{
         setStage('saving');
         await saveDocumentMeta({ ...meta, id: editingId });
         success('File details updated.');
+      } else if (goesToStream(file!)) {
+        const controller = new AbortController();
+        abortRef.current = controller;
+        try {
+          await uploadStreamVideo(file!, meta, setProgress, controller.signal);
+        } finally {
+          abortRef.current = null;
+          setProgress(null);
+        }
+        success('Video uploaded. Parents will see it once Cloudflare finishes processing — usually a few minutes.');
       } else {
         await uploadDocument(file!, program.slug, meta, setStage);
         success('File uploaded.');
@@ -245,6 +313,8 @@ const DocumentsSection: React.FC<{
       reload();
     } catch (e) {
       setStage('idle');
+      // A cancelled upload is not an error; the form just stays open.
+      if ((e as Error)?.name === 'StreamUploadAborted') return;
       setFormError(describeWriteError(e));
     }
   };
@@ -252,7 +322,7 @@ const DocumentsSection: React.FC<{
   const handleDelete = async (doc: PortalDocument) => {
     const ok = await confirm({
       title: 'Delete this file?',
-      message: `"${doc.title}" will be removed from the portal and the file itself deleted. This cannot be undone.`,
+      message: `"${doc.title}" will be removed from the portal and the ${doc.streamUid ? 'video deleted from Cloudflare Stream' : 'file itself deleted'}. This cannot be undone.`,
       confirmLabel: 'Delete',
       variant: 'danger',
     });
@@ -290,6 +360,7 @@ const DocumentsSection: React.FC<{
    * nothing at all. Navigating instead is never blocked.
    */
   const openDocument = async (doc: PortalDocument) => {
+    if (!doc.storagePath) return;
     setOpening(doc.id);
     const url = await getDocumentUrl(doc.storagePath);
     setOpening(null);
@@ -321,7 +392,7 @@ const DocumentsSection: React.FC<{
         {rows.map(doc => (
           <Card key={doc.id}>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <Thumb doc={doc} url={previews[doc.storagePath]} />
+              <Thumb doc={doc} url={previews[doc.storagePath ?? '']} />
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ marginBottom: '6px' }}>
@@ -340,31 +411,43 @@ const DocumentsSection: React.FC<{
                 <RowMeta>
                   <span>{doc.fileName}</span>
                   {formatFileSize(doc.sizeBytes) && <span>· {formatFileSize(doc.sizeBytes)}</span>}
+                  {formatDuration(doc.durationSeconds) && <span>· {formatDuration(doc.durationSeconds)}</span>}
+                  {streamStatusLabel(doc.streamStatus) && (
+                    <span style={{
+                      color: doc.streamStatus === 'error' ? theme.colors.status.error : theme.colors.status.warning,
+                    }}>
+                      · {streamStatusLabel(doc.streamStatus)}
+                    </span>
+                  )}
                   {doc.category && <span>· {doc.category}</span>}
                   {/* Redundant inside a scope — see UpdatesSection. */}
                   {!scope && <span>· {audienceLabel(doc.classId, classes)}</span>}
                 </RowMeta>
 
-                {previews[doc.storagePath] ? (
+                {doc.streamPlaybackUrl ? (
+                  /* Cloudflare's own watch page. Nothing to sign, and it
+                     shows "processing" itself until the video is ready. */
+                  <a
+                    href={streamWatchUrl(doc.streamPlaybackUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => logDownload(doc)}
+                    style={OPEN_LINK}
+                  >
+                    {doc.streamStatus === 'ready' ? 'Watch' : 'Open on Cloudflare'}
+                  </a>
+                ) : previews[doc.storagePath ?? ''] ? (
                   /* A plain anchor, because it can be: the URL is already
                      signed. Nothing to await means nothing for a phone to
                      treat as an unsolicited popup. */
                   <a
-                    href={previews[doc.storagePath]}
+                    href={previews[doc.storagePath ?? '']}
                     target="_blank"
                     rel="noopener noreferrer"
                     // Fires alongside the navigation, never instead of it —
                     // onClick on an <a href> does not swallow the tap.
                     onClick={() => logDownload(doc)}
-                    style={{
-                      display: 'inline-block',
-                      marginTop: '8px',
-                      ...theme.typography.bodySmall,
-                      fontFamily: theme.fonts.primary,
-                      fontWeight: 600,
-                      color: theme.colors.primary,
-                      textDecoration: 'none',
-                    }}
+                    style={OPEN_LINK}
                   >
                     Open
                   </a>
@@ -403,9 +486,19 @@ const DocumentsSection: React.FC<{
         size="lg"
         footer={
           <>
-            <Button variant="secondary" onClick={closeModal} disabled={busy}>Cancel</Button>
+            {progress?.stage === 'uploading' ? (
+              /* The one moment Cancel has to work while busy: it stops the
+                 tus upload and the video is deleted again on Cloudflare. */
+              <Button variant="secondary" onClick={() => abortRef.current?.abort()}>Cancel upload</Button>
+            ) : (
+              <Button variant="secondary" onClick={closeModal} disabled={busy}>Cancel</Button>
+            )}
             <Button variant="primary" onClick={handleSave} loading={busy}>
-              {stage === 'uploading' ? 'Uploading…' : editingId ? 'Save' : 'Upload'}
+              {progress
+                ? progress.stage === 'uploading'
+                  ? `Uploading ${Math.round(progress.fraction * 100)}%`
+                  : progress.stage === 'saving' ? 'Saving…' : 'Preparing…'
+                : stage === 'uploading' ? 'Uploading…' : editingId ? 'Save' : 'Upload'}
             </Button>
           </>
         }
@@ -442,14 +535,41 @@ const DocumentsSection: React.FC<{
                   color: theme.colors.txt.tertiary,
                   margin: '8px 0 0',
                 }}>
-                  {file ? `${file.name} · ${formatFileSize(file.size)}` : DOCUMENT_HINT}
+                  {file
+                    ? `${file.name} · ${formatFileSize(file.size)}${goesToStream(file) ? ' · video — goes to Cloudflare Stream' : ''}`
+                    : `${DOCUMENT_HINT} ${STREAM_HINT}`}
                 </p>
+
+                {progress?.stage === 'uploading' && (
+                  <div
+                    role="progressbar"
+                    aria-label="Upload progress"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(progress.fraction * 100)}
+                    style={{
+                      marginTop: '10px',
+                      height: '6px',
+                      borderRadius: theme.borderRadius.full,
+                      backgroundColor: theme.colors.bg.tertiary,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div style={{
+                      width: `${Math.round(progress.fraction * 100)}%`,
+                      height: '100%',
+                      backgroundColor: theme.colors.primary,
+                      transition: 'width 300ms ease',
+                    }} />
+                  </div>
+                )}
 
                 {/* Said here rather than refused: the bucket takes both, and a
                     teacher on an iPhone should not be blocked from posting the
                     photo they have. It only warns about what a parent on the
-                    other platform would get. */}
-                {file && compatibilityWarning(file.type, file.name) && (
+                    other platform would get. A video is exempt: Stream
+                    re-encodes a .mov into something every phone plays. */}
+                {file && !goesToStream(file) && compatibilityWarning(file.type, file.name) && (
                   <p style={{
                     ...theme.typography.captionSmall,
                     fontFamily: theme.fonts.primary,

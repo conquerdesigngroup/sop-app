@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { signDocumentUrls } from '../lib/portalStorage';
+import { useRefreshable } from './RefreshContext';
 import {
   PortalProgram,
   PortalClass,
@@ -166,6 +167,12 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     loadPrograms();
   }, [loadPrograms]);
 
+  // The portal has no realtime channel, on purpose (see useProgramQuery). The
+  // header button, pull-to-refresh and returning to the foreground are how a
+  // parent gets a post made after they opened the app — this is the programs
+  // half; each page registers its own feed.
+  useRefreshable(loadPrograms);
+
   const getProgramBySlug = useCallback(
     (slug: string) => programs.find(p => p.slug === slug),
     [programs]
@@ -261,7 +268,13 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         .from('portal_updates')
         .select('*')
         .eq('program_id', programId)
-        .eq('is_published', true);
+        .eq('is_published', true)
+        // Broadcasts only. A note addressed to one household (v36) is already
+        // unreadable by anon and by other families, but its own family WOULD
+        // see it here — appearing on the program feed among notices sent to
+        // ninety people, with nothing to say it was written to them. It belongs
+        // in their profile's Updates card, which labels it.
+        .is('household_id', null);
 
       // undefined = everything for the program; null = program-wide only;
       // a string = that class only.

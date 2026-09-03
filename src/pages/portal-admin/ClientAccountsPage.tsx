@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useToast } from '../../contexts/ToastContext';
+import { useRefreshable } from '../../contexts/RefreshContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { supabase } from '../../lib/supabase';
 import { CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
@@ -161,7 +162,10 @@ const ClientAccountsPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  // Seeded from ?q= so "Login & roster" in the Portal Viewer opens on the one
+  // family being looked at rather than on all 388 roster rows.
+  const [urlParams] = useSearchParams();
+  const [search, setSearch] = useState(() => urlParams.get('q') ?? '');
   const [busyRow, setBusyRow] = useState<string | null>(null);
 
   const [showImport, setShowImport] = useState(false);
@@ -192,8 +196,10 @@ const ClientAccountsPage: React.FC = () => {
     return data;
   }, []);
 
-  const fetchRows = useCallback(async (offset = 0, append = false) => {
-    setLoading(true);
+  // `silent` is the app-wide refresh: same first page, but the list stays on
+  // screen while it loads instead of dropping to a spinner.
+  const fetchRows = useCallback(async (offset = 0, append = false, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await callPortalAdmin({
         action: 'client_list',
@@ -216,6 +222,9 @@ const ClientAccountsPage: React.FC = () => {
     const t = setTimeout(() => { fetchRows(0, false); }, search ? 300 : 0);
     return () => clearTimeout(t);
   }, [fetchRows, search]);
+
+  const refetch = useCallback(() => fetchRows(0, false, true), [fetchRows]);
+  useRefreshable(refetch);
 
   // ------------------------------------------------------------- actions
 

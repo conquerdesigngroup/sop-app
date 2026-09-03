@@ -71,7 +71,9 @@ const json = (status: number, body: unknown) =>
 // One body for every outcome. Declared once so a future edit cannot fork it.
 const OK_BODY = { ok: true };
 
-const MIN_PASSWORD = 10;
+// Six, matching CLIENT_MIN_PASSWORD in src/lib/clientAuth.ts. The browser
+// check is convenience; this is the gate a crafted request has to pass.
+const MIN_PASSWORD = 6;
 const FLOOR_MS = 250;
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;

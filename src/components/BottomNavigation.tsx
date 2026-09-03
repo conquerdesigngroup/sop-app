@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
-import { useTaskCounts } from '../hooks/useTaskCounts';
+import { useTaskCounts, TaskCounts } from '../hooks/useTaskCounts';
 import { theme } from '../theme';
 
 /**
@@ -83,6 +83,46 @@ const icons = {
 };
 
 /**
+ * Five slots, chosen by role.
+ *
+ * A team member's day on a phone is: what am I doing, when, log my hours,
+ * look something up. Management's day is that plus everyone else's tasks —
+ * and Job Tasks used to be two taps away behind the hamburger while SOPs,
+ * which an admin opens far less often, had a permanent tab. The admin bar
+ * trades Hours and SOPs for Job Tasks and More; both remain one tap away
+ * in the sheet, and the quick-add button logs hours from anywhere.
+ */
+const tabsFor = (isAdmin: boolean, counts: TaskCounts, onMore: () => void): NavTab[] => [
+  { key: 'home', path: '/dashboard', label: 'Home', icon: icons.home },
+  { key: 'my-tasks', path: '/my-tasks', label: 'Tasks', icon: icons.tasks, badge: counts.myOverdue },
+  ...(isAdmin
+    ? [
+        { key: 'job-tasks', path: '/job-tasks', label: 'Job Tasks', icon: icons.jobTasks, badge: counts.allOverdue },
+        { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
+        { key: 'more', label: 'More', icon: icons.more, onPress: onMore },
+      ]
+    : [
+        { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
+        // Hours Input, not the /hours schedule: logging time is the thing an
+        // employee does on a phone.
+        { key: 'hours', path: '/hours-input', label: 'Hours', icon: icons.hours },
+        { key: 'sop', path: '/sop', label: 'SOPs', icon: icons.sop },
+      ]),
+];
+
+const NO_COUNTS: TaskCounts = { myOverdue: 0, allOverdue: 0 };
+const noop = () => {};
+
+/**
+ * The destinations the bar already covers for this role. The header's menu
+ * sheet reads this so it can offer only what is NOT down here — for a team
+ * member without a class that is nothing, and the sheet is never drawn.
+ * Derived from the same list the bar renders, so the two cannot drift.
+ */
+export const bottomNavPathsFor = (isAdmin: boolean): readonly string[] =>
+  tabsFor(isAdmin, NO_COUNTS, noop).flatMap(tab => (tab.path ? [tab.path] : []));
+
+/**
  * The count pill on a tab icon. Electric pink is the one accent the brand
  * allows, and an overdue count is exactly the kind of thing it is for.
  * Caps at 99+ so the pill never widens past the icon.
@@ -103,6 +143,7 @@ export const CountBadge: React.FC<{ count: number; label: string }> = ({ count, 
         padding: '0 4px',
         borderRadius: '8px',
         backgroundColor: theme.colors.primary,
+        // Brand pink is identical in both modes, so white is always readable.
         color: '#FFFFFF',
         fontSize: '10px',
         fontWeight: 700,
@@ -110,6 +151,7 @@ export const CountBadge: React.FC<{ count: number; label: string }> = ({ count, 
         textAlign: 'center',
         fontFamily: theme.fonts.mono,
         boxSizing: 'border-box',
+        pointerEvents: 'none',
       }}
     >
       {count > 99 ? '99+' : count}
@@ -124,33 +166,9 @@ const BottomNavigation: React.FC = () => {
   const { isDark } = useTheme();
   const colors = useThemeColors();
   const menu = useMobileMenu();
-  const { myOverdue, allOverdue } = useTaskCounts();
+  const counts = useTaskCounts();
 
-  // Five slots, chosen by role.
-  //
-  // A team member's day on a phone is: what am I doing, when, log my hours,
-  // look something up. Management's day is that plus everyone else's tasks —
-  // and Job Tasks used to be two taps away behind the hamburger while SOPs,
-  // which an admin opens far less often, had a permanent tab. The admin bar
-  // trades Hours and SOPs for Job Tasks and More; both remain one tap away
-  // in the sheet, and the quick-add button logs hours from anywhere.
-  const tabs: NavTab[] = [
-    { key: 'home', path: '/dashboard', label: 'Home', icon: icons.home },
-    { key: 'my-tasks', path: '/my-tasks', label: 'Tasks', icon: icons.tasks, badge: myOverdue },
-    ...(isAdmin
-      ? [
-          { key: 'job-tasks', path: '/job-tasks', label: 'Job Tasks', icon: icons.jobTasks, badge: allOverdue },
-          { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
-          { key: 'more', label: 'More', icon: icons.more, onPress: menu.toggle },
-        ]
-      : [
-          { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
-          // Hours Input, not the /hours schedule: logging time is the thing an
-          // employee does on a phone.
-          { key: 'hours', path: '/hours-input', label: 'Hours', icon: icons.hours },
-          { key: 'sop', path: '/sop', label: 'SOPs', icon: icons.sop },
-        ]),
-  ];
+  const tabs = tabsFor(isAdmin, counts, menu.toggle);
 
   const isActive = (tab: NavTab) => {
     if (!tab.path) return menu.isOpen;
@@ -243,6 +261,9 @@ const BottomNavigation: React.FC = () => {
                 }}
               >
                 {tab.icon}
+                {/* Sits on the icon's top-right corner so the label underneath
+                    keeps its width — the label must never be what widens the
+                    column. */}
                 {tab.badge !== undefined && <CountBadge count={tab.badge} label="overdue" />}
               </span>
               <span
@@ -250,7 +271,6 @@ const BottomNavigation: React.FC = () => {
                   fontSize: '11px',
                   fontWeight: active ? 700 : 500,
                   letterSpacing: '0.3px',
-                  // The label must never be what widens the column.
                   maxWidth: '100%',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

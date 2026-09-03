@@ -12,7 +12,6 @@ import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
 import TaskLibraryImport from '../components/TaskLibraryImport';
 import CalendarTaskModal from '../components/CalendarTaskModal';
-import PullToRefresh from '../components/PullToRefresh';
 import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
 import { Modal, Button, Input } from '../components/ui';
 
@@ -23,7 +22,7 @@ const parseLocalDate = (dateString: string) =>
   new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
 
 const JobTasksPage: React.FC = () => {
-  const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask, addTaskTemplate, refreshTasks } = useTask();
+  const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask, addTaskTemplate } = useTask();
   const { currentUser, users } = useAuth();
   const { sops } = useSOPs();
   const { isMobile, isMobileOrTablet } = useResponsive();
@@ -764,7 +763,6 @@ const JobTasksPage: React.FC = () => {
           )}
 
           {/* Job Tasks List */}
-          <PullToRefresh onRefresh={refreshTasks} disabled={!isMobileOrTablet}>
           <div style={styles.tasksList}>
             {sortedTasks.length === 0 ? (
               <div style={styles.emptyState}>
@@ -807,7 +805,6 @@ const JobTasksPage: React.FC = () => {
               })
             )}
           </div>
-          </PullToRefresh>
         </>
       ) : (
         <TaskLibraryTab

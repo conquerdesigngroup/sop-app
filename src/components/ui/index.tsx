@@ -384,6 +384,77 @@ interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEleme
   size?: 'sm' | 'md';
 }
 
+/**
+ * A password field with a reveal toggle.
+ *
+ * WHY REVEALING MATTERS MORE THAN LENGTH
+ *
+ * A parent typing a password blind on a phone keyboard mistypes it, gets a
+ * mismatch error they cannot see the cause of, and gives up — which is a bigger
+ * barrier to signing up than any character minimum. Letting them look at what
+ * they typed removes the whole failure mode, and it is what current NIST
+ * guidance recommends over forcing complexity.
+ *
+ * The toggle is a real button, not a decorative icon: it is reachable by
+ * keyboard, it is labelled for screen readers, and its label states what will
+ * happen rather than what is showing. tabIndex -1 keeps it out of the tab order
+ * between the fields, so a keyboard user still moves field-to-field naturally
+ * and reaches the toggle deliberately.
+ *
+ * type="button" is load-bearing — a bare <button> inside a <form> defaults to
+ * submit, so revealing the password would submit the form.
+ */
+export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputProps, 'type' | 'rightIcon'>>(
+  (props, ref) => {
+    const [shown, setShown] = useState(false);
+
+    return (
+      <Input
+        {...props}
+        ref={ref}
+        type={shown ? 'text' : 'password'}
+        rightIcon={
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setShown(v => !v)}
+            aria-label={shown ? 'Hide password' : 'Show password'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              margin: '-6px',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: theme.borderRadius.full,
+              color: theme.colors.txt.tertiary,
+              cursor: 'pointer',
+            }}
+          >
+            {shown ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 15a3 3 0 100-6 3 3 0 000 6z"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </button>
+        }
+      />
+    );
+  },
+);
+
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(({
   value,
   onClear,
@@ -1115,6 +1186,14 @@ export const TrashIcon: React.FC<IconProps> = ({ size = 18, color = 'currentColo
 export const FilterIcon: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2">
     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
+export const RefreshIcon: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10" />
+    <polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
   </svg>
 );
 

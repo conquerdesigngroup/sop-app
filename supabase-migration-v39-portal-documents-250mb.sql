@@ -1,0 +1,52 @@
+-- =============================================================================
+-- Migration v39 — portal-documents accepts files up to 250 MB
+-- =============================================================================
+--
+-- WHY THIS EXISTS
+--
+-- Teachers post class videos, and 50 MB is under a minute of phone footage.
+-- 50 was not a choice: it was the per-file ceiling of the Supabase Free plan
+-- (see v27). The organisation moved to Pro on 2026-09-03, which lifts that
+-- ceiling, so the bucket goes to 250 MB.
+--
+-- TWO LIMITS, NOT ONE
+--
+-- Supabase checks an upload against the PROJECT's global file size limit
+-- first, then the bucket's. The global limit lives outside the database, in
+-- Storage settings (Management API: PATCH /v1/projects/{ref}/config/storage,
+-- {"fileSizeLimit": 262144000}), and it was set to 250 MB the same day this
+-- ran. A bucket value above the global one is silently ignored — the upload
+-- is refused at the global number with "exceeded the maximum allowed size" —
+-- so raise the global limit before the bucket if this number ever moves.
+--
+-- KEEP IN STEP WITH src/lib/portalAdmin.ts
+--
+-- MAX_DOCUMENT_MB there mirrors this value so an oversized file is refused in
+-- the browser with a sentence, before the upload, instead of by the API after
+-- it. Change one and the other drifts.
+--
+-- WHAT DOES NOT CHANGE
+--
+-- allowed_mime_types (v27), every policy, and calendar-attachments, which stays
+-- at 25 MB — that bucket holds handouts pinned to calendar events, not video.
+--
+-- Applied via the Supabase MCP as v39_portal_documents_250mb.
+-- =============================================================================
+
+UPDATE storage.buckets
+   SET file_size_limit = 250 * 1024 * 1024
+ WHERE id = 'portal-documents';
+
+-- =============================================================================
+-- VERIFY
+--
+--   SELECT id, file_size_limit FROM storage.buckets WHERE id = 'portal-documents';
+--   -- file_size_limit  262144000
+--
+-- ROLLBACK
+--
+--   UPDATE storage.buckets SET file_size_limit = 50 * 1024 * 1024
+--    WHERE id = 'portal-documents';
+--   -- Files already stored above 50 MB stay readable; the limit is checked
+--   -- on the way in only. Set MAX_DOCUMENT_MB back to 50 at the same time.
+-- =============================================================================

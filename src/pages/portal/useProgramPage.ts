@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { usePortal } from '../../contexts/PortalContext';
+import { useRefreshable } from '../../contexts/RefreshContext';
 import { PortalProgram } from '../../types';
 import { ProgramSlug } from '../../lib/portal';
 
@@ -21,8 +22,15 @@ export const useProgramPage = (): { slug: ProgramSlug; program: PortalProgram | 
  *
  * Portal reads are one-shot rather than subscribed: this content changes when a
  * teacher posts, not continuously, and a parent on a phone should not hold a
- * realtime socket open for it. Pull-to-refresh and reopening the app are the
- * refresh mechanism.
+ * realtime socket open for it. The refresh button, pull-to-refresh and coming
+ * back to the app are the refresh mechanism — and for a long time that
+ * sentence was aspirational: nothing in the portal implemented any of them, so
+ * a post made after the parent opened the app stayed invisible until iOS
+ * happened to evict the page. Every query here now registers with
+ * RefreshContext, which is what makes all three of those actually re-run it.
+ *
+ * The refresh path is silent: it swaps the data in when it arrives and never
+ * touches `loading`, so the page stays put instead of flashing a skeleton.
  */
 export function useProgramQuery<T>(
   programId: string | undefined,
@@ -62,6 +70,25 @@ export function useProgramQuery<T>(
     // `run` comes from PortalContext and is useCallback-stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programId]);
+
+  // The same query again, for the app-wide refresh. Read through refs so the
+  // registration is stable, and checked against the CURRENT program id after
+  // the await so a slow response for a section the parent has left cannot
+  // land on the one they are now looking at.
+  const runRef = useRef(run);
+  runRef.current = run;
+  const currentId = useRef(programId);
+  currentId.current = programId;
+
+  const refetch = useCallback(async () => {
+    const id = currentId.current;
+    if (!id) return;
+    const result = await runRef.current(id);
+    if (currentId.current !== id) return;
+    setData(result);
+    setError(null);
+  }, []);
+  useRefreshable(refetch, !!programId);
 
   return { data, loading, error };
 }

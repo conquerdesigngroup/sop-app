@@ -11,7 +11,6 @@ import { PageHeader, Card, Modal, Spinner } from '../components/ui';
 import HoursEntryForm, { HoursFormValues } from '../components/hours/HoursEntryForm';
 import HoursHistoryList from '../components/hours/HoursHistoryList';
 import TeamHoursPanel from '../components/hours/TeamHoursPanel';
-import PullToRefresh from '../components/PullToRefresh';
 import {
   PeriodPreset,
   PERIOD_LABELS,
@@ -54,7 +53,6 @@ const HoursInputPage: React.FC = () => {
     loading,
     loadError,
     hasV7Schema,
-    refresh,
   } = useWorkHours();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirm();
@@ -280,7 +278,6 @@ const HoursInputPage: React.FC = () => {
         </div>
       )}
 
-      <PullToRefresh onRefresh={refresh} disabled={!isMobileOrTablet}>
       {tab === 'team' && isSuperAdmin ? (
         <TeamHoursPanel />
       ) : (
@@ -409,7 +406,6 @@ const HoursInputPage: React.FC = () => {
           />
         </>
       )}
-      </PullToRefresh>
 
       {/* ---- Edit ---- */}
       <Modal

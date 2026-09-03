@@ -14,6 +14,8 @@ import ViewAsBanner from './components/ViewAsBanner';
 import { MobileMenuProvider } from './contexts/MobileMenuContext';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
+import PullToRefreshLayer from './components/PullToRefreshLayer';
+import { RefreshProvider } from './contexts/RefreshContext';
 import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
@@ -58,12 +60,13 @@ const ProgramCalendar = lazy(() => import('./pages/portal/ProgramCalendar'));
 const PortalLogin = lazy(() => import('./pages/portal/PortalLogin'));
 const PortalSignUp = lazy(() => import('./pages/portal/PortalSignUp'));
 const PortalUpdatePassword = lazy(() => import('./pages/portal/PortalUpdatePassword'));
-const PortalAccount = lazy(() => import('./pages/portal/PortalAccount'));
+const PortalProfile = lazy(() => import('./pages/portal/Profile'));
 
 // The staff side of the portal. Reachable by admins and by any employee holding
 // a class, which is why its route is a plain ProtectedRoute — see the page.
 const PortalManagerPage = lazy(() => import('./pages/portal-admin/PortalManagerPage'));
 const ClientAccountsPage = lazy(() => import('./pages/portal-admin/ClientAccountsPage'));
+const PortalViewerPage = lazy(() => import('./pages/portal-admin/PortalViewerPage'));
 
 // Page loading fallback - simple centered spinner.
 // theme.colors resolve to CSS variables, so this is theme-aware automatically.
@@ -211,6 +214,16 @@ const AppContent: React.FC = () => {
           <Route element={<PortalProvider><PortalAuthProvider><Outlet /></PortalAuthProvider></PortalProvider>}>
             <Route path="/portal" element={<PortalHome />} />
 
+            {/* The profile is registered outside the CLIENT_AUTH block on
+                purpose: it is the one portal page that has something to show
+                before client logins are switched on, because its attendance
+                cards read the in-repo seed fixture. The page itself sends a
+                signed-out visitor to the login in a production build — see
+                DEMO_ALLOWED there — so this route is not a way around the
+                gate, only a way to review the cards before there is anything
+                real behind them. */}
+            <Route path="/portal/profile" element={<PortalProfile />} />
+
             {/* The client login build. Static segments, so they win over the
                 /portal/:program matcher regardless of order — but they are
                 only registered at all when the flag is on. */}
@@ -219,7 +232,11 @@ const AppContent: React.FC = () => {
                 <Route path="/portal/login" element={<PortalLogin />} />
                 <Route path="/portal/signup" element={<PortalSignUp />} />
                 <Route path="/portal/update-password" element={<PortalUpdatePassword />} />
-                <Route path="/portal/account" element={<PortalAccount />} />
+                {/* Kept as a redirect rather than deleted: a parent may have
+                    bookmarked it, and PortalAccount's content — email, password
+                    change, sign-out — now lives on the profile as the Account
+                    card. */}
+                <Route path="/portal/account" element={<Navigate to="/portal/profile" replace />} />
               </>
             )}
 
@@ -361,6 +378,19 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          {/* Oversight of what families actually have — accounts, dancers,
+              rosters — and the one place a note can be sent to a single
+              household. Super admin only by instruction. The gate here is the
+              UI's; the note itself is refused by portal_updates_insert (v36)
+              for anyone below super admin, so a typed URL buys nothing. */}
+          <Route
+            path="/portal-admin/viewer"
+            element={
+              <ProtectedRoute superAdminOnly>
+                <PortalViewerPage />
+              </ProtectedRoute>
+            }
+          />
           {/* Family logins and the enrollment roster. Unlike the manager above
               this IS adminOnly: per-class instructors have no business in
               other families' account details. */}
@@ -383,6 +413,9 @@ const AppContent: React.FC = () => {
       {showStaffChrome && isMobileOrTablet && <BottomNavigation />}
       {showStaffChrome && isMobileOrTablet && <QuickAddButton />}
       <OfflineIndicator />
+      {/* Pull down from the top of any page to refresh it. Once, here, for
+          staff and parents alike — it listens on the document. */}
+      <PullToRefreshLayer />
       <SessionExpiryModal />
     </div>
   );
@@ -409,24 +442,28 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <ToastProvider>
-          <AuthProvider>
-            <ActivityLogProvider>
-              <DataProvider>
-                <DashboardSettingsProvider>
-                  {/* Above the Router because the nav asks it whether to show
-                      the Portal entry. Every fetch inside is behind a session,
-                      so a signed-out parent pays nothing for it. */}
-                  <PortalAdminProvider>
-                    <MobileMenuProvider>
-                      <Router>
-                        <AppContent />
-                      </Router>
-                    </MobileMenuProvider>
-                  </PortalAdminProvider>
-                </DashboardSettingsProvider>
-              </DataProvider>
-            </ActivityLogProvider>
-          </AuthProvider>
+          {/* Above every data context, because every data context registers
+              its loader with it. See RefreshContext for what that buys. */}
+          <RefreshProvider>
+            <AuthProvider>
+              <ActivityLogProvider>
+                <DataProvider>
+                  <DashboardSettingsProvider>
+                    {/* Above the Router because the nav asks it whether to show
+                        the Portal entry. Every fetch inside is behind a session,
+                        so a signed-out parent pays nothing for it. */}
+                    <PortalAdminProvider>
+                      <MobileMenuProvider>
+                        <Router>
+                          <AppContent />
+                        </Router>
+                      </MobileMenuProvider>
+                    </PortalAdminProvider>
+                  </DashboardSettingsProvider>
+                </DataProvider>
+              </ActivityLogProvider>
+            </AuthProvider>
+          </RefreshProvider>
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>

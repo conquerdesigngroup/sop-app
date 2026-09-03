@@ -18,17 +18,24 @@ export const PORTAL_ADMIN_PATH = '/portal-admin';
 // ------------------------------------------------------------------ documents
 
 /**
- * 50 MB — the bucket's own file_size_limit, checked here for a real message.
+ * 250 MB — the bucket's own file_size_limit, checked here for a real message.
  *
- * Raised from 25 MB with v27, when video became something a teacher can post.
- * 25 MB is about twenty seconds of phone video, which is not a routine.
+ * 25 MB (v9) was handouts. 50 MB (v27) was the Supabase Free plan's per-file
+ * ceiling, reached the day video became something a teacher can post. 250 MB
+ * (v39, 2026-09-03) came with the move to Pro: the project's *global* storage
+ * limit was raised to 250 MB in the same change, and the bucket cannot exceed
+ * that global value, so raising this again means raising both, in that order.
  *
- * 50 is not a taste decision: it is the per-file ceiling on the Supabase free
- * plan, so it cannot go higher without changing the plan. Worth knowing that
- * the same plan caps TOTAL storage at 1 GB — twenty full-size videos fills it,
- * and nothing in the app warns anyone when it does.
+ * 250 MB is roughly four minutes of 1080p/30 iPhone video, or ninety seconds
+ * of 4K. A whole class is still too big; the fix for that is compression or a
+ * video service, not a bigger number here.
+ *
+ * Every message that quotes the limit derives from MAX_DOCUMENT_MB so the
+ * number cannot go stale in one place and not another — which is exactly what
+ * happened between v27 and v39, when the hint said 50 and the refusal said 25.
  */
-export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
+export const MAX_DOCUMENT_MB = 250;
+export const MAX_DOCUMENT_BYTES = MAX_DOCUMENT_MB * 1024 * 1024;
 
 /**
  * Mirrors allowed_mime_types on the `portal-documents` bucket (v9 s.12, v27).
@@ -62,12 +69,12 @@ export const ALLOWED_DOCUMENT_MIME: readonly string[] = [
 
 /** For the file picker's `accept` and for the hint under it. */
 export const DOCUMENT_ACCEPT = ALLOWED_DOCUMENT_MIME.join(',');
-export const DOCUMENT_HINT = 'Photo, video, MP3, PDF, Word or text. 50 MB max.';
+export const DOCUMENT_HINT = `Photo, video, MP3, PDF, Word or text. ${MAX_DOCUMENT_MB} MB max.`;
 
 /** Null when the file is fine, otherwise the reason to show. */
 export const validateDocumentFile = (file: File): string | null => {
   if (file.size > MAX_DOCUMENT_BYTES) {
-    return `That file is ${(file.size / (1024 * 1024)).toFixed(1)} MB. The limit is 25 MB.`;
+    return `That file is ${(file.size / (1024 * 1024)).toFixed(1)} MB. The limit is ${MAX_DOCUMENT_MB} MB.`;
   }
   // Some browsers report an empty type for less common extensions; the bucket
   // makes the final call, so only a positively wrong type is rejected here.
