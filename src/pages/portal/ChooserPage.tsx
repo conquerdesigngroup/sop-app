@@ -7,7 +7,7 @@ import { portalRoutes } from '../../lib/portal';
 import { CLIENT_AUTH_ENABLED } from '../../lib/clientAuth';
 import InstallAppGuide from '../../components/InstallAppGuide';
 import ThemeToggle from '../../components/ThemeToggle';
-import HalftoneField from '../../components/HalftoneField';
+import RefractedGlassField from '../../components/RefractedGlassField';
 
 /**
  * The front door.
@@ -85,8 +85,8 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false }) =
       onBlur={() => setActive(false)}
       style={{
         // Card's visual contract, with one deliberate departure: the panel is
-        // translucent and blurs what is behind it, so the halftone field passes
-        // under the tiles instead of stopping dead at their edges. At 0.78 over
+        // translucent and blurs what is behind it, so the field passes under
+        // the tiles instead of stopping dead at their edges. At 0.78 over
         // the void the text contrast is unchanged; the blur is over two small
         // boxes, not the page, so it costs almost nothing.
         backgroundColor: translucentPanel(mode, 0.78),
@@ -198,7 +198,7 @@ const ChooserPage: React.FC = () => {
         gap: isMobileOrTablet ? '32px' : '48px',
       }}
     >
-      <HalftoneField />
+      <RefractedGlassField />
 
       {/* Logo and toggle are one group with their own tighter gap, rather than
           two children of the page. As siblings they would each take the page's
