@@ -1,0 +1,91 @@
+import {
+  STREAM_CHUNK_BYTES,
+  MAX_STREAM_BYTES,
+  goesToStream,
+  validateStreamFile,
+  streamIframeUrl,
+  streamWatchUrl,
+  streamThumbnailUrl,
+  formatDuration,
+  streamStatusLabel,
+} from './portalStream';
+
+/**
+ * The rules Cloudflare enforces on the other end, pinned here so a "tidy"
+ * edit to a constant fails a test instead of failing every upload at 5 MB in.
+ */
+describe('the tus chunk size', () => {
+  it('is a multiple of 256 KiB, as Cloudflare requires', () => {
+    expect(STREAM_CHUNK_BYTES % (256 * 1024)).toBe(0);
+  });
+  it('is inside the 5 MiB – 200 MiB window', () => {
+    expect(STREAM_CHUNK_BYTES).toBeGreaterThanOrEqual(5 * 1024 * 1024);
+    expect(STREAM_CHUNK_BYTES).toBeLessThanOrEqual(200 * 1024 * 1024);
+  });
+});
+
+describe('routing a picked file', () => {
+  it('sends an MP4 to Stream', () => {
+    expect(goesToStream({ type: 'video/mp4', name: 'class.mp4' })).toBe(true);
+  });
+  it('sends an iPhone .mov with no MIME type to Stream — Safari often sends none', () => {
+    expect(goesToStream({ type: '', name: 'IMG_2231.MOV' })).toBe(true);
+  });
+  it('keeps photos, PDFs and music in the bucket', () => {
+    expect(goesToStream({ type: 'image/jpeg', name: 'costume.jpg' })).toBe(false);
+    expect(goesToStream({ type: 'application/pdf', name: 'slip.pdf' })).toBe(false);
+    expect(goesToStream({ type: 'audio/mpeg', name: 'routine.mp3' })).toBe(false);
+  });
+  it('believes a real non-video MIME over a video extension', () => {
+    expect(goesToStream({ type: 'application/pdf', name: 'weird.mp4' })).toBe(false);
+  });
+});
+
+describe('validating a video', () => {
+  it('accepts a multi-gigabyte class recording', () => {
+    expect(validateStreamFile({ size: 3 * 1024 * 1024 * 1024 })).toBeNull();
+  });
+  it('refuses an empty file', () => {
+    expect(validateStreamFile({ size: 0 })).toMatch(/empty/);
+  });
+  it('refuses anything over the ceiling, and says the number', () => {
+    expect(validateStreamFile({ size: MAX_STREAM_BYTES + 1 })).toMatch(/20 GB/);
+  });
+});
+
+describe('URLs derived from the stored playback base', () => {
+  const base = 'https://customer-abc123.cloudflarestream.com/0123456789abcdef0123456789abcdef';
+  it('player, watch page and thumbnail all hang off the same base', () => {
+    expect(streamIframeUrl(base)).toBe(`${base}/iframe`);
+    expect(streamWatchUrl(base)).toBe(`${base}/watch`);
+    expect(streamThumbnailUrl(base)).toBe(`${base}/thumbnails/thumbnail.jpg`);
+  });
+});
+
+describe('formatDuration', () => {
+  it('shows minutes:seconds under an hour', () => {
+    expect(formatDuration(754)).toBe('12:34');
+    expect(formatDuration(5)).toBe('0:05');
+  });
+  it('shows hours:minutes:seconds with zero-padded minutes past an hour', () => {
+    expect(formatDuration(3723)).toBe('1:02:03');
+  });
+  it('rounds Cloudflare\'s fractional seconds', () => {
+    expect(formatDuration(59.6)).toBe('1:00');
+  });
+  it('is null for nothing, a negative, or NaN', () => {
+    expect(formatDuration(null)).toBeNull();
+    expect(formatDuration(undefined)).toBeNull();
+    expect(formatDuration(-1)).toBeNull();
+    expect(formatDuration(NaN)).toBeNull();
+  });
+});
+
+describe('streamStatusLabel', () => {
+  it('names the two states a teacher has to know about, and nothing for ready', () => {
+    expect(streamStatusLabel('pending')).toBe('Processing');
+    expect(streamStatusLabel('error')).toBe('Video failed');
+    expect(streamStatusLabel('ready')).toBeNull();
+    expect(streamStatusLabel(null)).toBeNull();
+  });
+});

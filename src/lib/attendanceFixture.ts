@@ -489,6 +489,10 @@ const doc = (
   // Demo rows point at nothing. The card renders them without a working link
   // and says so, rather than offering a download that 404s.
   storagePath: '',
+  streamUid: null,
+  streamPlaybackUrl: null,
+  streamStatus: null,
+  durationSeconds: null,
   fileName,
   mimeType,
   sizeBytes,

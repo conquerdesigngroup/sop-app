@@ -545,6 +545,9 @@ export interface PortalCalendarSource {
   lastRemoved: number | null;
 }
 
+/** Where Cloudflare is with a video. Only 'ready' has a player behind it. */
+export type PortalStreamStatus = 'pending' | 'ready' | 'error';
+
 export interface PortalDocument {
   id: string;
   programId: string;
@@ -552,8 +555,19 @@ export interface PortalDocument {
   title: string;
   description: string;
   category: string | null;
-  /** Object key in the private `portal-documents` bucket; read via signed URL. */
-  storagePath: string;
+  /**
+   * Object key in the private `portal-documents` bucket; read via signed URL.
+   * Null when the file is a video living in Cloudflare Stream instead (v40):
+   * exactly one of storagePath / streamUid is set.
+   */
+  storagePath: string | null;
+  /** Cloudflare Stream video id. Null for anything in the bucket. */
+  streamUid: string | null;
+  /** `https://customer-<code>.cloudflarestream.com/<uid>`; add /iframe, /watch or /thumbnails/thumbnail.jpg. */
+  streamPlaybackUrl: string | null;
+  streamStatus: PortalStreamStatus | null;
+  /** Reported by Cloudflare once the video is processed. */
+  durationSeconds: number | null;
   fileName: string;
   mimeType: string | null;
   sizeBytes: number | null;

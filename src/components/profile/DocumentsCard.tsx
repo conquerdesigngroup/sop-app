@@ -62,7 +62,10 @@ const DocumentsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
       // sign and nothing to offer — the rows render without a link and say so.
       if (result.error || isDemo || result.rows.length === 0) return;
 
-      const signed = await signDocumentUrls(result.rows.map(d => d.storagePath));
+      // Stream videos (v40) have no storage path and nothing to sign here.
+      const signed = await signDocumentUrls(
+        result.rows.map(d => d.storagePath).filter((p): p is string => Boolean(p)),
+      );
       if (!cancelled) setUrls(signed);
     });
 
@@ -127,7 +130,7 @@ const DocumentsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
         </p>
       ) : (
         docs.map((docRow, index) => {
-          const signed = urls[docRow.storagePath];
+          const signed = docRow.storagePath ? urls[docRow.storagePath] : undefined;
           const meta = [
             docRow.category,
             formatFileSize(docRow.sizeBytes),

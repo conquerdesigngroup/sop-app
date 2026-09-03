@@ -4,6 +4,7 @@ import { Spinner } from '../ui';
 import { usePortal } from '../../contexts/PortalContext';
 import { formatFileSize } from '../../lib/portal';
 import { mediaKindOf, withDownload, MediaKind } from '../../lib/portalMedia';
+import { streamIframeUrl, formatDuration } from '../../lib/portalStream';
 import { PortalDocument } from '../../types';
 
 /**
@@ -104,7 +105,12 @@ const Title: React.FC<{ doc: PortalDocument }> = ({ doc }) => (
 );
 
 const Meta: React.FC<{ doc: PortalDocument; failed?: boolean }> = ({ doc, failed }) => {
-  const text = [doc.category, formatFileSize(doc.sizeBytes)].filter(Boolean).join(' · ');
+  // A Stream video's size is the original upload, which nobody receives;
+  // its duration is what a parent wants to know.
+  const text = [
+    doc.category,
+    doc.streamUid ? formatDuration(doc.durationSeconds) : formatFileSize(doc.sizeBytes),
+  ].filter(Boolean).join(' · ');
   if (!text && !failed) return null;
 
   return (
@@ -305,6 +311,76 @@ const AudioBlock: React.FC<{
 };
 
 /**
+ * A class video on Cloudflare Stream, in Cloudflare's own player.
+ *
+ * Nothing is signed and nothing is downloaded: the iframe streams whichever
+ * quality the parent's connection can carry, which is the entire reason the
+ * video is there rather than in the bucket. There is no Save button either —
+ * the only file to hand out would be the multi-gigabyte original.
+ *
+ * Before Cloudflare has finished encoding, the row says so instead of showing
+ * a player that would sit on a spinner. The staff screen keeps that state
+ * fresh; a parent's page shows whatever the row said when it loaded.
+ *
+ * Plays are not reported to onDownload: the player lives on another origin
+ * and this component cannot see a tap inside it.
+ */
+const StreamBlock: React.FC<{ doc: PortalDocument }> = ({ doc }) => {
+  if (doc.streamStatus !== 'ready' || !doc.streamPlaybackUrl) {
+    const failed = doc.streamStatus === 'error';
+    return (
+      <div style={{ ...CARD, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <span style={{
+          width: '40px',
+          height: '40px',
+          flexShrink: 0,
+          borderRadius: theme.borderRadius.md,
+          backgroundColor: theme.colors.bg.tertiary,
+          color: theme.colors.txt.secondary,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <FileIcon kind="video" />
+        </span>
+        <span style={{ flex: 1, minWidth: 0, display: 'block' }}>
+          <Title doc={doc} />
+          <span style={{
+            ...theme.typography.captionSmall,
+            fontFamily: theme.fonts.mono,
+            color: failed ? theme.colors.status.error : theme.colors.txt.tertiary,
+            display: 'block',
+            marginTop: '4px',
+          }}>
+            {failed
+              ? 'This video could not be processed. Ask the studio to post it again.'
+              : 'Still processing — check back in a few minutes.'}
+          </span>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={CARD}>
+      {/* A 16:9 box held open with padding, so the page does not jump when
+          the player loads and older iOS without aspect-ratio still gets a
+          frame. Literal black for the letterbox, as in VideoBlock. */}
+      <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', backgroundColor: '#000000' }}>
+        <iframe
+          src={streamIframeUrl(doc.streamPlaybackUrl)}
+          title={doc.title}
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+        />
+      </div>
+      <MediaCaption doc={doc} downloadUrl={null} />
+    </div>
+  );
+};
+
+/**
  * Everything else: one row, the whole of it a download link.
  *
  * Falls back to signing on tap when the batch did not cover this file — a
@@ -367,6 +443,7 @@ const FileRow: React.FC<{
   }
 
   const openLate = async () => {
+    if (!doc.storagePath) return;
     setBusy(true);
     setFailed(false);
     const signed = await getDocumentUrl(doc.storagePath);
@@ -413,6 +490,10 @@ const DocumentItem: React.FC<{
   const kind = mediaKindOf(doc.mimeType, doc.fileName);
   const degrade = () => setUndisplayable(true);
 
+  // Stream videos have no signed URL and no fallback row: Cloudflare's
+  // player is the only thing that can play them.
+  if (doc.streamUid) return <StreamBlock doc={doc} />;
+
   if (url && !undisplayable) {
     if (kind === 'image') return <ImageBlock doc={doc} url={url} onUndisplayable={degrade} onDownload={onDownload} />;
     if (kind === 'video') return <VideoBlock doc={doc} url={url} onUndisplayable={degrade} onDownload={onDownload} />;
@@ -443,7 +524,7 @@ export const DocumentList: React.FC<{
   const [urls, setUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const paths = documents.map(d => d.storagePath).filter(Boolean);
+    const paths = documents.map(d => d.storagePath).filter((p): p is string => Boolean(p));
     if (paths.length === 0) {
       setUrls({});
       return;
@@ -462,7 +543,12 @@ export const DocumentList: React.FC<{
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {documents.map(doc => (
-        <DocumentItem key={doc.id} doc={doc} url={urls[doc.storagePath] ?? null} onDownload={onDownload} />
+        <DocumentItem
+          key={doc.id}
+          doc={doc}
+          url={doc.storagePath ? (urls[doc.storagePath] ?? null) : null}
+          onDownload={onDownload}
+        />
       ))}
     </div>
   );
