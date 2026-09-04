@@ -599,7 +599,8 @@ const createField = (env: FieldEnv): Field => {
         ctx.stroke();
       }
     }
-  };};
+  };
+};
 
 /**
  * How fast the glass moves, as a multiple of the rate the field was authored at.
@@ -608,8 +609,17 @@ const createField = (env: FieldEnv): Field => {
  * deliberately incommensurate periods in WAVE keep their ratios and the field
  * still never visibly repeats. It also keeps STILL_AT naming the same composed
  * frame, which editing the periods would not.
+ *
+ * What this rate actually buys, so the next person does not have to re-derive
+ * it: the authored periods are 23 / 17.5 / 31s, which land at 7.2 / 5.5 / 9.7s
+ * on screen, and the phase speeds go from 12-16 px/s to 38-51 px/s — a seam
+ * crosses a phone in about nine seconds rather than half a minute.
+ *
+ * That is near the fast edge of ambient and is a deliberate choice, not a
+ * default. Much past this the field stops reading as glass being looked
+ * through and starts reading as something scrolling behind the tiles.
  */
-const SPEED = 2.4;
+const SPEED = 3.2;
 
 /** The frame drawn when motion is off. The field was composed against this
  *  value, so it is a deliberately chosen picture rather than t = 0. */
