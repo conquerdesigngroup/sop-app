@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { isManagementRole } from '../lib/roles';
+import { studioToday, shiftIsoDays, daysBetweenIso } from '../lib/studioDate';
 import { JobTask } from '../types';
 
 // Types for alerts
@@ -161,9 +162,7 @@ const AlertsPage: React.FC = () => {
   } => {
     if (!isAdmin) return { completed: [], inProgress: [], overdue: [], pending: [] };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = studioToday();
 
     const completed: TaskAlert[] = [];
     const inProgress: TaskAlert[] = [];
@@ -182,8 +181,6 @@ const AlertsPage: React.FC = () => {
       .filter(task => task.status !== 'archived' && task.status !== 'draft')
       .forEach(task => {
         const dueDate = task.scheduledDate;
-        const dueDateObj = new Date(dueDate);
-        dueDateObj.setHours(0, 0, 0, 0);
         const isOverdue = dueDate < todayStr && task.status !== 'completed';
 
         const alertBase = {
@@ -202,13 +199,13 @@ const AlertsPage: React.FC = () => {
           completed.push({ ...alertBase, type: 'completed' });
         } else if (task.status === 'in-progress') {
           if (isOverdue) {
-            const daysOverdue = Math.floor((today.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+            const daysOverdue = daysBetweenIso(dueDate, todayStr);
             overdue.push({ ...alertBase, type: 'overdue', daysOverdue: daysOverdue > 0 ? daysOverdue : 1 });
           } else {
             inProgress.push({ ...alertBase, type: 'in_progress' });
           }
         } else if (task.status === 'overdue' || isOverdue) {
-          const daysOverdue = Math.floor((today.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+          const daysOverdue = daysBetweenIso(dueDate, todayStr);
           overdue.push({ ...alertBase, type: 'overdue', daysOverdue: daysOverdue > 0 ? daysOverdue : 1 });
         } else if (task.status === 'pending') {
           pending.push({ ...alertBase, type: 'pending' });
@@ -228,13 +225,8 @@ const AlertsPage: React.FC = () => {
   const upcomingDeadlines = useMemo(() => {
     if (!isAdmin) return [];
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
-
-    const sevenDaysFromNow = new Date(today);
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    const sevenDaysStr = sevenDaysFromNow.toISOString().split('T')[0];
+    const todayStr = studioToday();
+    const sevenDaysStr = shiftIsoDays(todayStr, 7);
 
     // Get user names for display
     const getUserNames = (userIds: string[]) => {
@@ -275,13 +267,8 @@ const AlertsPage: React.FC = () => {
   const taskAlerts = useMemo((): TaskAlert[] => {
     if (!currentUser) return [];
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
-
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const todayStr = studioToday();
+    const tomorrowStr = shiftIsoDays(todayStr, 1);
 
     const alerts: TaskAlert[] = [];
 
@@ -295,12 +282,10 @@ const AlertsPage: React.FC = () => {
 
     myTasks.forEach(task => {
       const dueDate = task.scheduledDate;
-      const dueDateObj = new Date(dueDate);
-      dueDateObj.setHours(0, 0, 0, 0);
 
       if (dueDate < todayStr || task.status === 'overdue') {
         // Overdue
-        const daysOverdue = Math.floor((today.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+        const daysOverdue = daysBetweenIso(dueDate, todayStr);
         alerts.push({
           id: `alert_${task.id}_overdue`,
           taskId: task.id,
@@ -745,13 +730,9 @@ const AlertsPage: React.FC = () => {
               </h3>
               <div style={styles.upcomingTimeline}>
                 {upcomingDeadlines.map((task, index) => {
-                  const dueDate = new Date(task.scheduledDate);
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  const todayStr = today.toISOString().split('T')[0];
-                  const tomorrow = new Date(today);
-                  tomorrow.setDate(tomorrow.getDate() + 1);
-                  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+                  const dueDate = new Date(`${task.scheduledDate}T00:00:00`);
+                  const todayStr = studioToday();
+                  const tomorrowStr = shiftIsoDays(todayStr, 1);
 
                   let dayLabel = dueDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                   let labelColor = theme.colors.txt.secondary;

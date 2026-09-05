@@ -6,6 +6,7 @@ import { isManagementRole, roleLabel } from '../lib/roles';
 import { useResponsive } from '../hooks/useResponsive';
 import TemplateSelector from './TemplateSelector';
 import { CustomCheckbox } from './CustomCheckbox';
+import { studioToday } from '../lib/studioDate';
 
 interface ChecklistItem {
   id: string;
@@ -173,10 +174,12 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     }
   }, [editingTask, initialTemplateId, taskTemplates]);
 
-  // Set default date to today or use initialScheduledDate
+  // Set default date to today at the studio, or use initialScheduledDate.
+  // This becomes a scheduledDate, which every overdue rule reads in the
+  // studio's timezone — see src/lib/studioDate.ts.
   useEffect(() => {
     if (!editingTask) {
-      const defaultDate = initialScheduledDate || new Date().toISOString().split('T')[0];
+      const defaultDate = initialScheduledDate || studioToday();
       setScheduledDate(defaultDate);
     }
   }, [editingTask, initialScheduledDate]);

@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { JobTask, TaskStep } from '../types';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
+import { studioToday, shiftIsoDays } from '../lib/studioDate';
 import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
 
 const MyTasksPage: React.FC = () => {
@@ -80,8 +81,8 @@ const MyTasksPage: React.FC = () => {
 
   // A task is overdue if its date has passed and it isn't completed —
   // computed here so the filter works even before the server-side sweep runs
+  const today = studioToday();
   const isTaskOverdue = (task: JobTask) => {
-    const today = new Date().toISOString().split('T')[0];
     return task.scheduledDate < today && task.status !== 'completed';
   };
 
@@ -94,13 +95,10 @@ const MyTasksPage: React.FC = () => {
         : task.status === filterStatus);
 
     if (filterDate === 'today') {
-      const today = new Date().toISOString().split('T')[0];
       return matchesStatus && task.scheduledDate === today;
     } else if (filterDate === 'upcoming') {
-      const today = new Date().toISOString().split('T')[0];
       return matchesStatus && task.scheduledDate > today;
     } else if (filterDate === 'past') {
-      const today = new Date().toISOString().split('T')[0];
       return matchesStatus && task.scheduledDate < today;
     }
 
@@ -221,10 +219,9 @@ const MyTasksPage: React.FC = () => {
   };
 
   // Get today's tasks count
-  const todayTasksCount = myTasks.filter(task => {
-    const today = new Date().toISOString().split('T')[0];
-    return task.scheduledDate === today && task.status !== 'completed';
-  }).length;
+  const todayTasksCount = myTasks.filter(
+    task => task.scheduledDate === today && task.status !== 'completed'
+  ).length;
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
@@ -375,18 +372,11 @@ const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle, on
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    } else {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
+    const todayStr = studioToday();
+    if (dateString === todayStr) return 'Today';
+    if (dateString === shiftIsoDays(todayStr, 1)) return 'Tomorrow';
+    return new Date(`${dateString}T00:00:00`)
+      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   return (
@@ -577,7 +567,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
     : (totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0);
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = new Date(`${dateString}T00:00:00`);
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 

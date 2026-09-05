@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { isManagementRole } from '../lib/roles';
+import { studioToday, daysBetweenIso } from '../lib/studioDate';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { JobTask, TaskTemplate } from '../types';
 import { theme } from '../theme';
@@ -108,6 +109,7 @@ const JobTasksPage: React.FC = () => {
   }, [pendingOpenTaskId, jobTasks]);
 
   // Filter job tasks (exclude archived tasks)
+  const today = studioToday();
   const filteredTasks = jobTasks.filter(task => {
     // Exclude archived tasks from the main list
     if (task.status === 'archived') return false;
@@ -127,8 +129,7 @@ const JobTasksPage: React.FC = () => {
                          assignedUserNames.includes(searchLower);
     // Overdue is computed client-side (date passed + not completed) so the
     // stat card and filter agree, even before the background sweep updates status
-    const isOverdue = task.scheduledDate < new Date().toISOString().split('T')[0] &&
-                      task.status !== 'completed';
+    const isOverdue = task.scheduledDate < today && task.status !== 'completed';
     const matchesStatus =
       filterStatus === 'all' ||
       (filterStatus === 'overdue'
@@ -162,24 +163,19 @@ const JobTasksPage: React.FC = () => {
   // Calculate task stats
   const taskStats = useMemo(() => {
     const nonArchivedTasks = jobTasks.filter(t => t.status !== 'archived');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = studioToday();
 
     return {
       total: nonArchivedTasks.length,
       pending: nonArchivedTasks.filter(t => t.status === 'pending').length,
       inProgress: nonArchivedTasks.filter(t => t.status === 'in-progress').length,
       completed: nonArchivedTasks.filter(t => t.status === 'completed').length,
-      overdue: nonArchivedTasks.filter(t => {
-        const taskDate = parseLocalDate(t.scheduledDate);
-        taskDate.setHours(0, 0, 0, 0);
-        return taskDate < today && t.status !== 'completed';
-      }).length,
-      dueToday: nonArchivedTasks.filter(t => {
-        const taskDate = parseLocalDate(t.scheduledDate);
-        taskDate.setHours(0, 0, 0, 0);
-        return taskDate.getTime() === today.getTime() && t.status !== 'completed';
-      }).length,
+      overdue: nonArchivedTasks.filter(
+        t => t.scheduledDate < today && t.status !== 'completed'
+      ).length,
+      dueToday: nonArchivedTasks.filter(
+        t => t.scheduledDate === today && t.status !== 'completed'
+      ).length,
     };
   }, [jobTasks]);
 
@@ -414,7 +410,7 @@ const JobTasksPage: React.FC = () => {
 
   const openBulkReschedule = () => {
     const first = jobTasks.find(t => selectedTasks.has(t.id));
-    setBulkDate(first?.scheduledDate || new Date().toISOString().split('T')[0]);
+    setBulkDate(first?.scheduledDate || studioToday());
     setBulkMode('reschedule');
   };
 
@@ -457,8 +453,7 @@ const JobTasksPage: React.FC = () => {
     // Moving an overdue task forward clears the overdue flag; the date rule
     // in the filters recomputes it if the new date is still in the past.
     const patch: Partial<JobTask> = { scheduledDate: bulkDate };
-    const today = new Date().toISOString().split('T')[0];
-    if (bulkDate >= today) {
+    if (bulkDate >= studioToday()) {
       const anyOverdue = jobTasks.some(t => selectedTasks.has(t.id) && t.status === 'overdue');
       if (anyOverdue) patch.status = 'pending';
     }
@@ -898,11 +893,7 @@ const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, i
   // Calculate due date warning
   const getDueDateWarning = () => {
     if (task.status === 'completed') return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const taskDate = parseLocalDate(task.scheduledDate);
-    taskDate.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((taskDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = daysBetweenIso(studioToday(), task.scheduledDate);
 
     if (diffDays < 0) return { text: 'OVERDUE', color: theme.colors.status.error, urgent: true };
     if (diffDays === 0) return { text: 'DUE TODAY', color: theme.colors.status.warning, urgent: true };
@@ -1233,10 +1224,10 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
     });
   };
 
-  // Set default date to today
+  // Set default date to today at the studio — this becomes a scheduledDate,
+  // and the viewer's own date could already be behind it.
   React.useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    setScheduledDate(today);
+    setScheduledDate(studioToday());
   }, []);
 
   return (
