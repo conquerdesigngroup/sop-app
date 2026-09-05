@@ -1046,6 +1046,82 @@ export const Divider: React.FC<DividerProps> = ({ margin = 'md', style }) => {
 };
 
 // ============================================
+// TOGGLE
+// ============================================
+interface ToggleProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  /** Required unless `labelledBy` names a visible label. */
+  label?: string;
+  /** id of the visible label element, when the row already has one. */
+  labelledBy?: string;
+  /** id of the element describing what this switch does. */
+  describedBy?: string;
+}
+
+/**
+ * An on/off switch.
+ *
+ * role="switch" + aria-checked, because a bare <button> whose only state is a
+ * moved dot tells a screen reader nothing: it announces "button" and the
+ * person has no way to know whether the thing is on. Either `label` or
+ * `labelledBy` must be given for the same reason — the knob has no text.
+ *
+ * The transition is inline, which looks like it would defeat the
+ * reduced-motion rule in index.css. It does not: that block sets
+ * transition-duration with !important, and a stylesheet !important beats an
+ * inline style.
+ */
+export const Toggle: React.FC<ToggleProps> = ({
+  checked,
+  onChange,
+  disabled,
+  label,
+  labelledBy,
+  describedBy,
+}) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    aria-label={labelledBy ? undefined : label}
+    aria-labelledby={labelledBy}
+    aria-describedby={describedBy}
+    disabled={disabled}
+    onClick={() => !disabled && onChange(!checked)}
+    style={{
+      width: '52px',
+      height: '28px',
+      borderRadius: '14px',
+      border: 'none',
+      position: 'relative',
+      flexShrink: 0,
+      padding: 0,
+      backgroundColor: checked ? theme.colors.primary : theme.colors.bg.tertiary,
+      opacity: disabled ? 0.5 : 1,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      transition: 'background-color 0.2s ease',
+    }}
+  >
+    <span
+      style={{
+        position: 'absolute',
+        top: '50%',
+        marginTop: '-11px',
+        left: checked ? '27px' : '3px',
+        width: '22px',
+        height: '22px',
+        borderRadius: '11px',
+        backgroundColor: '#FFFFFF',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+        transition: 'left 0.2s ease',
+      }}
+    />
+  </button>
+);
+
+// ============================================
 // EMPTY STATE
 // ============================================
 interface EmptyStateProps {
