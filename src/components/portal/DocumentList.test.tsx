@@ -48,12 +48,33 @@ const doc = (over: Partial<PortalDocument>): PortalDocument => ({
   ...over,
 });
 
-/** Renders and waits out the signing round-trip the list fires on mount. */
+/**
+ * Renders and waits until the signing round-trip has LANDED — not merely until
+ * it was requested.
+ *
+ * That difference is what made this file flaky. `waitFor` runs with React's act
+ * environment switched off, so the setState that fires when signing resolves is
+ * queued on React's own scheduler rather than on the act queue — and `act` only
+ * flushes the act queue. The old helper awaited a single microtask and caught
+ * the re-render roughly two runs in three. Nor is a bigger flush the answer:
+ * every fixed number of microtask or macrotask turns has some promise shape it
+ * misses. Only a retrying wait is sound.
+ *
+ * A file with a URL renders as media or an <a>; one without renders as a
+ * <button>. So the update has been applied once the buttons on the page have
+ * settled to exactly the files the signing call declined to sign.
+ */
 const renderList = async (documents: PortalDocument[]) => {
-  render(<DocumentList documents={documents} />);
+  const view = render(<DocumentList documents={documents} />);
   await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalled());
-  // Let the resolved promise's setState flush.
-  await act(async () => { await Promise.resolve(); });
+
+  // The map the component itself was handed, so the count below is derived
+  // from what this test actually stubbed rather than restated by hand.
+  const signed: Record<string, string> = await mockGetDocumentUrls.mock.results[0].value;
+  const unsigned = documents.filter(d => !signed[d.storagePath]).length;
+  await waitFor(() => expect(screen.queryAllByRole('button')).toHaveLength(unsigned));
+
+  return view;
 };
 
 /** Every path in this file signs successfully unless a test says otherwise. */
@@ -132,9 +153,7 @@ describe('a video', () => {
     doc({ title: 'Routine run-through', mimeType: 'video/mp4', fileName: 'routine.mp4', ...over });
 
   it('plays in the page rather than downloading', async () => {
-    const { container } = render(<DocumentList documents={[video()]} />);
-    await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalled());
-    await act(async () => { await Promise.resolve(); });
+    const { container } = await renderList([video()]);
 
     const el = container.querySelector('video') as HTMLVideoElement;
     expect(el).toBeInTheDocument();
@@ -149,19 +168,15 @@ describe('a video', () => {
 
   it('is recognised from the file name when the MIME type is useless', async () => {
     // Some pickers send octet-stream for an ordinary .mov.
-    const { container } = render(<DocumentList documents={[
+    const { container } = await renderList([
       video({ mimeType: 'application/octet-stream', fileName: 'jazz.mov' }),
-    ]} />);
-    await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalled());
-    await act(async () => { await Promise.resolve(); });
+    ]);
 
     expect(container.querySelector('video')).toBeInTheDocument();
   });
 
   it('falls back to a download row when the codec is not supported', async () => {
-    const { container } = render(<DocumentList documents={[video()]} />);
-    await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalled());
-    await act(async () => { await Promise.resolve(); });
+    const { container } = await renderList([video()]);
 
     fireEvent.error(container.querySelector('video')!);
 
@@ -172,11 +187,9 @@ describe('a video', () => {
 
 describe('music', () => {
   it('gets a player', async () => {
-    const { container } = render(<DocumentList documents={[
+    const { container } = await renderList([
       doc({ title: 'Competition mix', mimeType: 'audio/mpeg', fileName: 'mix.mp3' }),
-    ]} />);
-    await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalled());
-    await act(async () => { await Promise.resolve(); });
+    ]);
 
     const el = container.querySelector('audio') as HTMLAudioElement;
     expect(el).toBeInTheDocument();
@@ -193,7 +206,7 @@ describe('everything else', () => {
   });
 
   it('stays a download row', async () => {
-    const { container } = await renderList([pdf]).then(() => ({ container: document.body }));
+    const { container } = await renderList([pdf]);
 
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('video')).toBeNull();
@@ -211,11 +224,9 @@ describe('everything else', () => {
 
   it('is not a name the extension table can override', async () => {
     // Named like a video, served as a PDF. The server's type wins.
-    const { container } = render(<DocumentList documents={[
+    const { container } = await renderList([
       doc({ mimeType: 'application/pdf', fileName: 'routine.mp4' }),
-    ]} />);
-    await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalled());
-    await act(async () => { await Promise.resolve(); });
+    ]);
 
     expect(container.querySelector('video')).toBeNull();
   });
@@ -234,9 +245,8 @@ describe('signing', () => {
   });
 
   it('does not re-sign when the parent re-renders with an equal list', async () => {
-    const documents = [doc({})];
-    const { rerender } = render(<DocumentList documents={documents} />);
-    await waitFor(() => expect(mockGetDocumentUrls).toHaveBeenCalledTimes(1));
+    const { rerender } = await renderList([doc({})]);
+    expect(mockGetDocumentUrls).toHaveBeenCalledTimes(1);
 
     // A new array with the same contents — what a parent component produces on
     // every render. Depending on the array itself would loop forever.
@@ -281,7 +291,9 @@ describe('the file that could not be signed up front', () => {
     });
 
     expect(mockGetDocumentUrl).toHaveBeenCalledWith(unsigned.storagePath);
-    expect(assignSpy).toHaveBeenCalledWith(`${SIGNED}&download=late.pdf`);
+    // The handler signs before it navigates, so the assign lands behind an
+    // await — waited for, not assumed, for the reason in renderList.
+    await waitFor(() => expect(assignSpy).toHaveBeenCalledWith(`${SIGNED}&download=late.pdf`));
     expect(openSpy).not.toHaveBeenCalled();
   });
 
@@ -293,7 +305,7 @@ describe('the file that could not be signed up front', () => {
       fireEvent.click(screen.getByRole('button', { name: /Late handout/ }));
     });
 
-    expect(screen.getByText(/Could not open/)).toBeInTheDocument();
+    expect(await screen.findByText(/Could not open/)).toBeInTheDocument();
     expect(assignSpy).not.toHaveBeenCalled();
   });
 });
