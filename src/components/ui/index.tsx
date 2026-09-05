@@ -1282,6 +1282,29 @@ export const CalendarIcon: React.FC<IconProps> = ({ size = 18, color = 'currentC
   </svg>
 );
 
+/**
+ * A calendar with a plus — "put this in my calendar", as opposed to
+ * CalendarIcon's "look at a calendar".
+ *
+ * The two must not be interchangeable: the plain calendar is what opens the
+ * schedule and the month sheet, and a button that only means "add" needs to
+ * look different from one that means "browse" even at 16px.
+ */
+export const CalendarPlusIcon: React.FC<IconProps> = ({ size = 18, color = 'currentColor' }) => (
+  <svg
+    width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+  >
+    {/* Short of the right edge, leaving room for the plus to sit clear of it. */}
+    <path d="M19 12V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="19" y2="10" />
+    <line x1="18" y1="15" x2="18" y2="21" />
+    <line x1="15" y1="18" x2="21" y2="18" />
+  </svg>
+);
+
 // ============================================
 // SHARED STYLES
 // ============================================
