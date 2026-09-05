@@ -10,7 +10,7 @@ import {
   outlookSubscribeUrl,
   webcalUrl,
 } from '../../lib/portalFeed';
-import { openCalendarUrl } from '../../lib/portalIcs';
+import { openCalendarUrl } from '../../lib/calendarTarget';
 import { copyCalendarLink } from '../../utils/calendarExport';
 
 /**

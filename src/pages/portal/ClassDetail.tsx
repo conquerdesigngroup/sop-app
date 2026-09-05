@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Badge, Card, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Button, CalendarPlusIcon, Card, EmptyState, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import { usePortal } from '../../contexts/PortalContext';
 import { useRefreshable } from '../../contexts/RefreshContext';
+import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes, formatClassSchedule, CLASS_CATEGORY_LABEL } from '../../lib/portal';
 import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
+import { canAddClassToCalendar, classTarget } from '../../lib/classCalendar';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
@@ -41,6 +44,7 @@ const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const { slug, program } = useProgramPage();
   const { fetchClasses, fetchUpdates, fetchDocuments } = usePortal();
+  const { isMobileOrTablet } = useResponsive();
   // Every open is logged, by anybody. This used to be gated on isClient, which
   // meant it logged NOTHING AT ALL: client logins are still switched off, so
   // isClient was false for every real visitor, and the audit log held zero
@@ -55,6 +59,14 @@ const ClassDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Whether the add-to-calendar sheet is up.
+   *
+   * A boolean rather than the class itself: there is only one class on this
+   * page, and holding a copy of it would be a second thing to keep in step
+   * with the refresh.
+   */
+  const [adding, setAdding] = useState(false);
 
   // Every load bumps this; a response whose number is no longer current is
   // for a class the parent has already navigated away from and is dropped.
@@ -267,6 +279,26 @@ const ClassDetail: React.FC = () => {
                     ))}
                   </dl>
                 )}
+
+                {/* The page's one action, at the end of the facts rather than
+                    beside the title: a parent decides they want this class in
+                    their calendar AFTER reading when and where it is, not
+                    before. Hidden when the class has no day, no start time or
+                    a season that has already finished — see
+                    canAddClassToCalendar. Full width on a phone, where it is
+                    the thumb's target and there is nothing to sit beside. */}
+                {canAddClassToCalendar(klass, new Date()) && (
+                  <div style={{ marginTop: '18px' }}>
+                    <Button
+                      variant="primary"
+                      fullWidth={isMobileOrTablet}
+                      leftIcon={<CalendarPlusIcon size={17} />}
+                      onClick={() => setAdding(true)}
+                    >
+                      Add to my calendar
+                    </Button>
+                  </div>
+                )}
               </Card>
             )}
 
@@ -342,6 +374,14 @@ const ClassDetail: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* Built from the class as it stands right now rather than from a copy
+          taken when the button was pressed, so a refresh that moves the class
+          cannot leave the sheet handing out last week's time. */}
+      <AddToCalendarSheet
+        target={adding && klass ? classTarget(klass, new Date()) : null}
+        onClose={() => setAdding(false)}
+      />
     </PortalLayout>
   );
 };

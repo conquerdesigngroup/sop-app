@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { theme } from '../../theme';
 import { Card, EmptyState, Spinner } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import ClassFilterBar from '../../components/portal/ClassFilterBar';
 import ClassMobileSchedule from '../../components/portal/ClassMobileSchedule';
 import {
@@ -14,6 +15,7 @@ import {
   ClassFilters, ClassSort, ClassView, EMPTY_FILTERS, applyFilters, buildFacets,
   initialMonth, readClassView, sortClasses, writeClassView,
 } from '../../lib/portalClasses';
+import { classTarget } from '../../lib/classCalendar';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
 import { PortalClass } from '../../types';
 
@@ -127,6 +129,20 @@ const ProgramClasses: React.FC = () => {
   const [filters, setFilters] = useState<ClassFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<ClassSort>('schedule');
 
+  /**
+   * One sheet for the page, not one per card.
+   *
+   * A hundred and two classes means a hundred and two cards, and each of them
+   * owning its own sheet would be a hundred and two sets of hooks to service a
+   * panel only one of them can ever show. The page holds the class being added
+   * and the views pass a callback down — the same shape ProgramCalendar uses.
+   *
+   * The target is rebuilt on each render of the open sheet rather than stored,
+   * so the .ics can never describe a class the schedule has since refreshed.
+   */
+  const [addingTo, setAddingTo] = useState<PortalClass | null>(null);
+  const closeSheet = useCallback(() => setAddingTo(null), []);
+
   // The month view opens on the start of the season rather than on today, so
   // that looking at the schedule in August does not show an empty grid.
   const [cursor, setCursor] = useState<{ year: number; month: number } | null>(null);
@@ -222,6 +238,7 @@ const ProgramClasses: React.FC = () => {
                 classes={visible}
                 slug={slug}
                 showCategory={showCategory}
+                onAddToCalendar={setAddingTo}
                 // Only group under day headings when the list is actually in
                 // day order; grouping a teacher-sorted list would misdescribe it.
                 grouped={sort === 'schedule'}
@@ -233,6 +250,7 @@ const ProgramClasses: React.FC = () => {
                 classes={visible}
                 slug={slug}
                 showCategory={showCategory}
+                onAddToCalendar={setAddingTo}
                 year={month.year}
                 month={month.month}
                 onMonthChange={(year, m) => setCursor({ year, month: m })}
@@ -241,6 +259,11 @@ const ProgramClasses: React.FC = () => {
           </>
         )}
       </div>
+
+      <AddToCalendarSheet
+        target={addingTo ? classTarget(addingTo, new Date()) : null}
+        onClose={closeSheet}
+      />
     </PortalLayout>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Badge, EmptyState } from '../ui';
+import { Badge, CalendarPlusIcon, EmptyState } from '../ui';
 import { useResponsive } from '../../hooks/useResponsive';
 import {
   CLASS_CATEGORY_LABEL, ProgramSlug, dayName, formatTime, portalRoutes,
@@ -10,6 +10,7 @@ import {
   DAY_INITIALS, DAY_SHORT, MONTH_NAMES, ageRangeLabel, durationLabel,
   groupByDay, isoDate, minutesOfDay, monthGrid, occursOn,
 } from '../../lib/portalClasses';
+import { canAddClassToCalendar } from '../../lib/classCalendar';
 import type { PortalClass, PortalClassCategory } from '../../types';
 
 /**
@@ -53,12 +54,23 @@ interface CardProps {
   /** The week and month views already say which day it is. */
   showDay?: boolean;
   compact?: boolean;
+  /**
+   * Draws the add-to-calendar button. Omitted by the week view, whose 210px
+   * compact cards have no corner to spare, and by the month grid inside the
+   * phone's sheet, where the sheet is about to close on the tap anyway.
+   */
+  onAddToCalendar?: (klass: PortalClass) => void;
 }
 
 export const ClassCard: React.FC<CardProps> = ({
-  klass: c, slug, showCategory, showDay = false, compact = false,
+  klass: c, slug, showCategory, showDay = false, compact = false, onAddToCalendar,
 }) => {
   const [active, setActive] = useState(false);
+
+  // A class with no day, no start time, or a season already over has nothing
+  // to put in a calendar. Hiding the button is better than offering one that
+  // opens a sheet and then cannot fill it in.
+  const canAdd = !!onAddToCalendar && !compact && canAddClassToCalendar(c, new Date());
 
   const when = [showDay ? dayName(c.dayOfWeek) : null, timeRange(c), durationLabel(c)]
     .filter(Boolean).join(' · ');
@@ -73,88 +85,167 @@ export const ClassCard: React.FC<CardProps> = ({
     .filter(Boolean).join(' · ');
 
   return (
-    <Link
-      to={portalRoutes.classDetail(slug, c.id)}
+    /* The card's frame is the WRAPPER, not the link.
+
+       The Add button cannot live inside the anchor — a button nested in a link
+       is invalid and swallows its own clicks — so the two sit side by side in
+       a flex row and the border, background and padding move up to hold them.
+       Laid out rather than positioned: an absolute button needs the link to
+       reserve clearance for it, and that number is a guess that a longer label
+       or a bigger font silently breaks.
+
+       The hover handlers move up for the same reason. On the link, a mouse
+       travelling to the button would leave it and flicker the border off. */
+    <div
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => setActive(false)}
-      onFocus={() => setActive(true)}
-      onBlur={() => setActive(false)}
       style={{
-        display: 'block',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: canAdd ? '12px' : 0,
         backgroundColor: theme.colors.bg.secondary,
         border: `2px solid ${active ? theme.colors.primary : theme.colors.bdr.primary}`,
         borderRadius: theme.borderRadius.lg,
         padding: compact ? '10px 12px' : '16px 18px',
-        textDecoration: 'none',
         transition: 'border-color 0.15s ease',
-        // A class name has no natural break point and several are long
-        // ("Jr/Teen Turns & Jumps 2"), so say the cell may break anywhere
-        // rather than letting it push the column open.
         minWidth: 0,
-        overflowWrap: 'anywhere',
       }}
     >
-      {(showCategory || c.style) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-          {showCategory && (
-            <Badge variant={CATEGORY_VARIANT[c.category]} size="sm">
-              {CLASS_CATEGORY_LABEL[c.category]}
-            </Badge>
-          )}
-          {c.style && <Badge variant="default" size="sm">{c.style}</Badge>}
-        </div>
-      )}
-
-      <div
+      <Link
+        to={portalRoutes.classDetail(slug, c.id)}
+        onFocus={() => setActive(true)}
+        onBlur={() => setActive(false)}
         style={{
-          ...theme.typography.h3,
-          fontSize: compact ? '14px' : undefined,
-          color: theme.colors.txt.primary,
-          marginBottom: '6px',
+          display: 'block',
+          flex: 1,
+          textDecoration: 'none',
+          // A class name has no natural break point and several are long
+          // ("Jr/Teen Turns & Jumps 2"), so say the cell may break anywhere
+          // rather than letting it push the column open. minWidth AND
+          // overflowWrap: one without the other still overflows at 320px.
+          minWidth: 0,
+          overflowWrap: 'anywhere',
         }}
       >
-        {c.name}
-      </div>
+        {(showCategory || c.style) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+            {showCategory && (
+              <Badge variant={CATEGORY_VARIANT[c.category]} size="sm">
+                {CLASS_CATEGORY_LABEL[c.category]}
+              </Badge>
+            )}
+            {c.style && <Badge variant="default" size="sm">{c.style}</Badge>}
+          </div>
+        )}
 
-      {when && (
         <div
           style={{
-            ...theme.typography.bodySmall,
-            fontFamily: theme.fonts.mono,
-            fontSize: compact ? '12px' : undefined,
-            color: theme.colors.txt.secondary,
+            ...theme.typography.h3,
+            fontSize: compact ? '14px' : undefined,
+            color: theme.colors.txt.primary,
+            marginBottom: '6px',
           }}
         >
-          {when}
+          {c.name}
         </div>
-      )}
 
-      {who && (
-        <div
-          style={{
-            ...theme.typography.caption,
-            fontFamily: theme.fonts.primary,
-            color: theme.colors.txt.tertiary,
-            marginTop: '3px',
-          }}
-        >
-          {who}
-        </div>
-      )}
+        {when && (
+          <div
+            style={{
+              ...theme.typography.bodySmall,
+              fontFamily: theme.fonts.mono,
+              fontSize: compact ? '12px' : undefined,
+              color: theme.colors.txt.secondary,
+            }}
+          >
+            {when}
+          </div>
+        )}
 
-      {!compact && spec && (
-        <div
-          style={{
-            ...theme.typography.captionSmall,
-            fontFamily: theme.fonts.mono,
-            color: theme.colors.txt.tertiary,
-            marginTop: '6px',
-          }}
-        >
-          {spec}
-        </div>
+        {who && (
+          <div
+            style={{
+              ...theme.typography.caption,
+              fontFamily: theme.fonts.primary,
+              color: theme.colors.txt.tertiary,
+              marginTop: '3px',
+            }}
+          >
+            {who}
+          </div>
+        )}
+
+        {!compact && spec && (
+          <div
+            style={{
+              ...theme.typography.captionSmall,
+              fontFamily: theme.fonts.mono,
+              color: theme.colors.txt.tertiary,
+              marginTop: '6px',
+            }}
+          >
+            {spec}
+          </div>
+        )}
+      </Link>
+
+      {canAdd && (
+        <AddButton klass={c} onClick={onAddToCalendar!} />
       )}
-    </Link>
+    </div>
+  );
+};
+
+/**
+ * The Add button, beside the card's link rather than inside it.
+ *
+ * WHY IT SAYS "ADD TO CALENDAR" AND NOT "ADD"
+ *
+ * This is a page of classes a child could be signed up for, and on it "Add"
+ * reads as ENROL. A parent who taps expecting to put their dancer in the class
+ * and gets a calendar sheet has been misled by one word. The label carries the
+ * whole phrase and the icon repeats it.
+ *
+ * The aria-label names the class as well: on a list of a hundred, a screen
+ * reader would otherwise read out a hundred identical buttons with no way to
+ * tell which class each one belongs to.
+ */
+const AddButton: React.FC<{
+  klass: PortalClass;
+  onClick: (klass: PortalClass) => void;
+}> = ({ klass, onClick }) => {
+  const [hover, setHover] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(klass)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      aria-label={`Add ${klass.name} to my calendar`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '7px',
+        // Never squeezed by a long class name: the name wraps instead.
+        flexShrink: 0,
+        minHeight: '36px',
+        padding: '0 12px',
+        whiteSpace: 'nowrap',
+        borderRadius: theme.borderRadius.md,
+        border: `1px solid ${hover ? theme.colors.primary : theme.colors.bdr.primary}`,
+        backgroundColor: theme.colors.bg.tertiary,
+        color: hover ? theme.colors.primary : theme.colors.txt.secondary,
+        cursor: 'pointer',
+        fontFamily: theme.fonts.primary,
+        fontSize: '13px',
+        fontWeight: 600,
+        transition: 'color 0.15s ease, border-color 0.15s ease',
+      }}
+    >
+      <CalendarPlusIcon size={16} />
+      Add to calendar
+    </button>
   );
 };
 
@@ -192,6 +283,8 @@ interface ViewProps {
   classes: PortalClass[];
   slug: ProgramSlug;
   showCategory: boolean;
+  /** Opens the page's one add-to-calendar sheet. See ProgramClasses. */
+  onAddToCalendar?: (klass: PortalClass) => void;
 }
 
 /**
@@ -201,13 +294,20 @@ interface ViewProps {
  * the order, so `grouped` follows the sort rather than being a separate choice.
  */
 export const ClassListView: React.FC<ViewProps & { grouped: boolean }> = ({
-  classes, slug, showCategory, grouped,
+  classes, slug, showCategory, grouped, onAddToCalendar,
 }) => {
   if (!grouped) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {classes.map(c => (
-          <ClassCard key={c.id} klass={c} slug={slug} showCategory={showCategory} showDay />
+          <ClassCard
+            key={c.id}
+            klass={c}
+            slug={slug}
+            showCategory={showCategory}
+            onAddToCalendar={onAddToCalendar}
+            showDay
+          />
         ))}
       </div>
     );
@@ -220,7 +320,13 @@ export const ClassListView: React.FC<ViewProps & { grouped: boolean }> = ({
           <DayHeading day={group.day} count={group.classes.length} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {group.classes.map(c => (
-              <ClassCard key={c.id} klass={c} slug={slug} showCategory={showCategory} />
+              <ClassCard
+                key={c.id}
+                klass={c}
+                slug={slug}
+                showCategory={showCategory}
+                onAddToCalendar={onAddToCalendar}
+              />
             ))}
           </div>
         </section>
@@ -321,7 +427,9 @@ export const ClassMonthView: React.FC<
      */
     onPickDate?: (date: Date) => void;
   }
-> = ({ classes, slug, showCategory, year, month, onMonthChange, onPickDate }) => {
+> = ({
+  classes, slug, showCategory, year, month, onMonthChange, onPickDate, onAddToCalendar,
+}) => {
   const { isMobileOrTablet } = useResponsive();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -490,7 +598,13 @@ export const ClassMonthView: React.FC<
               .slice()
               .sort((a, b) => (minutesOfDay(a.startTime) ?? 0) - (minutesOfDay(b.startTime) ?? 0))
               .map(c => (
-                <ClassCard key={c.id} klass={c} slug={slug} showCategory={showCategory} />
+                <ClassCard
+                  key={c.id}
+                  klass={c}
+                  slug={slug}
+                  showCategory={showCategory}
+                  onAddToCalendar={onAddToCalendar}
+                />
               ))}
           </div>
         </div>
