@@ -167,10 +167,25 @@ const ProgramClasses: React.FC = () => {
       {/* Wider than the rest of the portal: the week view is six columns and
           the month view is seven, and 720px squeezes both. The phone gets a
           tighter gap because its shell is a stack of small pieces rather than
-          three big ones. */}
+          three big ones.
+
+          THE WEEK GETS MORE THAN THE OTHER TWO
+
+          1100px was picked to be generous and is 100px short of what six
+          190px day columns and their gaps actually need, so the week view
+          overflowed and clipped Saturday on every desktop — including a
+          1920px one, which had 800px going spare outside the cap.
+
+          So the week takes the whole shell, which PortalLayout already caps
+          at theme.pageLayout.maxWidth (1400px, less 40px padding a side =
+          1320px of content). Six columns and their gaps want 1200px, so they
+          now fit with room to grow into. The list and month keep 1100, where
+          a full-width row holding one class name would just be a long thin
+          line. Any number above 1320 here would be a fiction — the shell
+          clamps it — which is why this says 100% and not a bigger figure. */}
       <div
         style={{
-          maxWidth: '1100px',
+          maxWidth: view === 'week' && !isMobileOrTablet ? '100%' : '1100px',
           display: 'flex',
           flexDirection: 'column',
           gap: isMobileOrTablet ? '12px' : '20px',
