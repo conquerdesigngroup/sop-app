@@ -8,62 +8,12 @@ import { theme } from '../theme';
 import { APP_VERSION } from '../version';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormButton } from '../components/FormComponents';
+import { Toggle } from '../components/ui';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription } from '../lib/push';
-
-interface ToggleSwitchProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-}
-
-const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled }) => (
-  <button
-    type="button"
-    onClick={() => !disabled && onChange(!checked)}
-    style={{
-      ...toggleStyles.switch,
-      backgroundColor: checked ? theme.colors.primary : theme.colors.bg.tertiary,
-      opacity: disabled ? 0.5 : 1,
-      cursor: disabled ? 'not-allowed' : 'pointer',
-    }}
-    disabled={disabled}
-  >
-    <span
-      style={{
-        ...toggleStyles.knob,
-        left: checked ? '27px' : '3px',
-      }}
-    />
-  </button>
-);
-
-const toggleStyles: { [key: string]: React.CSSProperties } = {
-  switch: {
-    width: '52px',
-    height: '28px',
-    borderRadius: '14px',
-    border: 'none',
-    position: 'relative',
-    transition: 'background-color 0.2s ease',
-    flexShrink: 0,
-    padding: 0,
-  },
-  knob: {
-    position: 'absolute',
-    top: '50%',
-    marginTop: '-11px',
-    width: '22px',
-    height: '22px',
-    borderRadius: '11px',
-    backgroundColor: '#FFFFFF',
-    transition: 'transform 0.2s ease, left 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-  },
-};
 
 const SettingsPage: React.FC = () => {
   const { currentUser, updateUser, isAdmin } = useAuth();
@@ -450,8 +400,8 @@ const SettingsPage: React.FC = () => {
           <div style={styles.settingsList}>
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Push Notifications</span>
-                <span style={styles.settingDescription}>
+                <span id="setting-push-label" style={styles.settingLabel}>Push Notifications</span>
+                <span id="setting-push-desc" style={styles.settingDescription}>
                   {support === 'needs-install'
                     ? 'On iPhone, add the app to your Home Screen first — Safari cannot receive these on its own.'
                     : support === 'unsupported'
@@ -466,10 +416,12 @@ const SettingsPage: React.FC = () => {
                   )}
                 </span>
               </div>
-              <ToggleSwitch
+              <Toggle
                 checked={pushEnabled && pushOnThisDevice !== false}
                 onChange={handlePushToggle}
                 disabled={pushBusy || support !== 'ok'}
+                labelledBy="setting-push-label"
+                describedBy="setting-push-desc"
               />
             </div>
             {isAdmin && support === 'ok' && pushOnThisDevice && (
@@ -484,36 +436,51 @@ const SettingsPage: React.FC = () => {
 
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Email Notifications</span>
-                <span style={styles.settingDescription}>
+                <span id="setting-email-label" style={styles.settingLabel}>Email Notifications</span>
+                <span id="setting-email-desc" style={styles.settingDescription}>
                   Receive updates via email
                 </span>
               </div>
-              <ToggleSwitch checked={emailEnabled} onChange={setEmailEnabled} />
+              <Toggle
+                checked={emailEnabled}
+                onChange={setEmailEnabled}
+                labelledBy="setting-email-label"
+                describedBy="setting-email-desc"
+              />
             </div>
 
             <div style={styles.divider} />
 
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Task Reminders</span>
-                <span style={styles.settingDescription}>
+                <span id="setting-task-reminders-label" style={styles.settingLabel}>Task Reminders</span>
+                <span id="setting-task-reminders-desc" style={styles.settingDescription}>
                   Get reminded about upcoming tasks
                 </span>
               </div>
-              <ToggleSwitch checked={taskReminders} onChange={setTaskReminders} />
+              <Toggle
+                checked={taskReminders}
+                onChange={setTaskReminders}
+                labelledBy="setting-task-reminders-label"
+                describedBy="setting-task-reminders-desc"
+              />
             </div>
 
             <div style={styles.divider} />
 
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Overdue Alerts</span>
-                <span style={styles.settingDescription}>
+                <span id="setting-overdue-label" style={styles.settingLabel}>Overdue Alerts</span>
+                <span id="setting-overdue-desc" style={styles.settingDescription}>
                   Be notified when tasks are overdue
                 </span>
               </div>
-              <ToggleSwitch checked={overdueAlerts} onChange={setOverdueAlerts} />
+              <Toggle
+                checked={overdueAlerts}
+                onChange={setOverdueAlerts}
+                labelledBy="setting-overdue-label"
+                describedBy="setting-overdue-desc"
+              />
             </div>
           </div>
 
@@ -569,12 +536,17 @@ const SettingsPage: React.FC = () => {
           <div style={styles.settingsList}>
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={styles.settingLabel}>Auto-sync Tasks to Calendar</span>
-                <span style={styles.settingDescription}>
+                <span id="setting-calendar-sync-label" style={styles.settingLabel}>Auto-sync Tasks to Calendar</span>
+                <span id="setting-calendar-sync-desc" style={styles.settingDescription}>
                   Automatically sync new tasks to your connected calendar
                 </span>
               </div>
-              <ToggleSwitch checked={calendarSync} onChange={setCalendarSync} />
+              <Toggle
+                checked={calendarSync}
+                onChange={setCalendarSync}
+                labelledBy="setting-calendar-sync-label"
+                describedBy="setting-calendar-sync-desc"
+              />
             </div>
           </div>
 
@@ -612,24 +584,34 @@ const SettingsPage: React.FC = () => {
           <div style={styles.settingsList}>
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={{...styles.settingLabel, color: colors.txt.primary}}>Dark Mode</span>
-                <span style={{...styles.settingDescription, color: colors.txt.tertiary}}>
+                <span id="setting-dark-mode-label" style={{...styles.settingLabel, color: colors.txt.primary}}>Dark Mode</span>
+                <span id="setting-dark-mode-desc" style={{...styles.settingDescription, color: colors.txt.tertiary}}>
                   {isDark ? 'Dark theme is active' : 'Light theme is active'}
                 </span>
               </div>
-              <ToggleSwitch checked={isDark} onChange={toggleTheme} />
+              <Toggle
+                checked={isDark}
+                onChange={toggleTheme}
+                labelledBy="setting-dark-mode-label"
+                describedBy="setting-dark-mode-desc"
+              />
             </div>
 
             <div style={{...styles.divider, backgroundColor: colors.bdr.primary}} />
 
             <div style={styles.settingItem}>
               <div style={styles.settingInfo}>
-                <span style={{...styles.settingLabel, color: colors.txt.primary}}>Compact Mode</span>
-                <span style={{...styles.settingDescription, color: colors.txt.tertiary}}>
+                <span id="setting-compact-label" style={{...styles.settingLabel, color: colors.txt.primary}}>Compact Mode</span>
+                <span id="setting-compact-desc" style={{...styles.settingDescription, color: colors.txt.tertiary}}>
                   Show more content with less spacing
                 </span>
               </div>
-              <ToggleSwitch checked={compactMode} onChange={setCompactMode} />
+              <Toggle
+                checked={compactMode}
+                onChange={setCompactMode}
+                labelledBy="setting-compact-label"
+                describedBy="setting-compact-desc"
+              />
             </div>
 
             <div style={{...styles.divider, backgroundColor: colors.bdr.primary}} />
