@@ -73,6 +73,13 @@ drop policy "calendar_attachments_anon_read" on public.calendar_event_attachment
 create policy "calendar_attachments_portal_read" on public.calendar_event_attachments
   for select to authenticated using (is_portal_calendar(google_calendar_id));
 
+-- With the anon policy above gone, nothing anon-side calls is_portal_calendar
+-- any more. v31 stripped its PUBLIC grant; the anon grant had to wait for this
+-- exact moment, because a role needs EXECUTE on a function named in its
+-- policies — revoking earlier would have blanked the portal calendar's
+-- attachments for every visitor.
+revoke execute on function public.is_portal_calendar(text) from anon;
+
 drop policy "calendar_attachments_read" on storage.objects;
 create policy "calendar_attachments_read" on storage.objects
   for select to authenticated using (bucket_id = 'calendar-attachments');
