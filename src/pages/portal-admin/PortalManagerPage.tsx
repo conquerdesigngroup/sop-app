@@ -11,6 +11,7 @@ import PortalAdminTabs from '../../components/portal-admin/PortalAdminTabs';
 import UpdatesSection from '../../components/portal-admin/UpdatesSection';
 import EventsSection from '../../components/portal-admin/EventsSection';
 import ClassesSection from '../../components/portal-admin/ClassesSection';
+import TeachersSection from '../../components/portal-admin/TeachersSection';
 import ClassWorkspace from '../../components/portal-admin/ClassWorkspace';
 import AccessSection from '../../components/portal-admin/AccessSection';
 import { PortalClass } from '../../types';
@@ -43,7 +44,7 @@ import { portalRoutes, isProgramSlug } from '../../lib/portal';
  * bookmark or a link pasted to a colleague all land in the same place.
  */
 
-type SectionKey = 'classes' | 'updates' | 'calendar' | 'access';
+type SectionKey = 'classes' | 'teachers' | 'updates' | 'calendar' | 'access';
 
 /**
  * Classes lead: it is the way in to most of what anyone comes here to do, and
@@ -61,13 +62,22 @@ type SectionKey = 'classes' | 'updates' | 'calendar' | 'access';
  */
 const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
   { key: 'classes', label: 'Classes' },
+  // The one-pass way to fill in portal_class_instructors. Admin-only because
+  // portal_ci_write is, and studio-wide rather than per-program even though it
+  // sits under a program tab — a teacher holds Academy and All-Star classes
+  // alike, and splitting the job in two is how half of it gets forgotten.
+  { key: 'teachers', label: 'Teachers', adminOnly: true },
   // Admin-only, because a program-wide post has class_id NULL and
   // can_edit_portal_class(NULL) is false for everybody but an admin. Without
   // this a teacher saw a "New info post" button whose every save came back
   // "Pick one of your own classes" — a button that cannot work. Their posts go
   // through the class workspace, which is the right place for them anyway.
   { key: 'updates', label: 'Info', adminOnly: true },
-  { key: 'calendar', label: 'Calendar' },
+  // Admin-only since v44, and for the same reason as Info above: writing
+  // portal_events is now is_admin() alone, so every save a teacher made here
+  // would come back refused. Their class's events are still readable — they
+  // just are not theirs to change.
+  { key: 'calendar', label: 'Calendar', adminOnly: true },
   { key: 'access', label: 'Access code', adminOnly: true },
 ];
 
@@ -216,6 +226,8 @@ const PortalManagerPage: React.FC = () => {
               />
             )
           )}
+          {/* Studio-wide, not this program's: a teacher crosses both. */}
+          {section === 'teachers' && isAdmin && <TeachersSection />}
           {/* Studio-wide only. A class's own updates are in its workspace. */}
           {section === 'updates' && (
             <UpdatesSection program={program} classes={classes} scope={{ classId: null }} />
