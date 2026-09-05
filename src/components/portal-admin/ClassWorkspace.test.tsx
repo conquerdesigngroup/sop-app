@@ -154,14 +154,49 @@ describe('a class hidden from parents', () => {
 });
 
 describe('a teacher', () => {
-  it('sees their own class marked, and still gets all three tabs', () => {
+  beforeEach(() => {
     mockAuth.isAdmin = false;
     mockGrants.ids = ['class-1'];
-    renderWorkspace();
+  });
 
+  it('sees their own class marked', () => {
+    renderWorkspace();
     expect(screen.getByText('Yours')).toBeInTheDocument();
-    for (const label of ['Info', 'Files', 'Calendar']) {
-      expect(screen.getByRole('tab', { name: label })).toBeInTheDocument();
-    }
+  });
+
+  it('gets the info and files they own', () => {
+    renderWorkspace();
+    expect(screen.getByRole('tab', { name: 'Info' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Files' })).toBeInTheDocument();
+  });
+
+  it('is not offered the calendar, because v44 made writing events admin-only', () => {
+    // Not a style choice. portal_events_insert/update/delete are is_admin()
+    // alone, so every save from this tab would come back refused — the same
+    // dead button the program-wide Info tab was hidden for.
+    renderWorkspace();
+    expect(screen.queryByRole('tab', { name: 'Calendar' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('calendar')).not.toBeInTheDocument();
+  });
+
+  it('cannot reach the events editor even with the tab already selected', () => {
+    // The tab is local state, so a teacher can arrive holding 'calendar' from
+    // before their access narrowed. It must fall back, not render an editor.
+    const { rerender } = render(
+      <ClassWorkspace program={PROGRAM} klass={KLASS} classes={[KLASS]} onBack={jest.fn()} />
+    );
+    mockAuth.isAdmin = true;
+    rerender(
+      <ClassWorkspace program={PROGRAM} klass={KLASS} classes={[KLASS]} onBack={jest.fn()} />
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }));
+    expect(screen.getByTestId('calendar')).toBeInTheDocument();
+
+    mockAuth.isAdmin = false;
+    rerender(
+      <ClassWorkspace program={PROGRAM} klass={KLASS} classes={[KLASS]} onBack={jest.fn()} />
+    );
+    expect(screen.queryByTestId('calendar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('updates')).toBeInTheDocument();
   });
 });

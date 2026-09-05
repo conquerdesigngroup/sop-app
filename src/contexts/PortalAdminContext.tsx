@@ -216,6 +216,31 @@ interface PortalAdminContextValue {
   fetchClassInstructors: (classId: string) => Promise<string[]>;
   setClassInstructors: (classId: string, profileIds: string[]) => Promise<void>;
 
+  /**
+   * Every class in the studio, both programs at once.
+   *
+   * fetchClasses is program-scoped because every other screen is. Assigning
+   * teachers is the one job that is not: a teacher holds Academy and All-Star
+   * classes alike, and asking someone to do the same pass twice — once per
+   * program tab — is how half of it gets forgotten.
+   */
+  fetchAllClasses: () => Promise<PortalClass[]>;
+  /** Every grant in the studio, as (classId, profileId) pairs. */
+  fetchAllClassInstructors: () => Promise<{ classId: string; profileId: string }[]>;
+  /**
+   * Add grants in bulk. Add-only, and idempotent: a pair that already exists is
+   * left alone, and nothing is ever removed.
+   *
+   * Deliberately NOT setClassInstructors in a loop. That one treats the array
+   * it is given as the whole truth and DELETEs the rest, which is right for one
+   * class in front of you and catastrophic across 103 — a matcher that missed a
+   * hand-made grant would silently strip it. Revoking stays where it is
+   * visible: the class's own row in ClassesSection.
+   *
+   * Resolves with the number of grants actually created.
+   */
+  grantClassInstructors: (pairs: { classId: string; profileId: string }[]) => Promise<number>;
+
   /** Every calendar feeding this program, oldest first. Empty when none. */
   fetchCalendarSources: (programId: string) => Promise<PortalCalendarSource[]>;
   /**
@@ -909,6 +934,71 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     await load();
   }, [authorId, fetchClassInstructors, load]);
 
+  const fetchAllClasses = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('portal_classes')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(mapClass);
+  }, []);
+
+  const fetchAllClassInstructors = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('portal_class_instructors')
+      .select('class_id, profile_id');
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({ classId: r.class_id, profileId: r.profile_id }));
+  }, []);
+
+  const grantClassInstructors = useCallback(
+    async (pairs: { classId: string; profileId: string }[]) => {
+      if (!pairs.length) return 0;
+
+      // Against the pairs that are already there, so the count reported back is
+      // what was actually created rather than what was submitted. Re-running
+      // the screen after fixing one name should say "3 added", not "87".
+      const existing: { classId: string; profileId: string }[] = await fetchAllClassInstructors();
+      const seen = new Set(existing.map(g => `${g.classId}:${g.profileId}`));
+      const fresh = pairs.filter(p => !seen.has(`${p.classId}:${p.profileId}`));
+      if (!fresh.length) return 0;
+
+      // ignoreDuplicates rather than a plain insert: the read above can race a
+      // second admin on the same screen, and a duplicate key would abort the
+      // whole batch over a row that already says what we wanted it to say.
+      const { error } = await supabase
+        .from('portal_class_instructors')
+        .upsert(
+          fresh.map(p => ({
+            class_id: p.classId,
+            profile_id: p.profileId,
+            granted_by: authorId,
+          })),
+          { onConflict: 'class_id,profile_id', ignoreDuplicates: true }
+        );
+      if (error) throw error;
+
+      void logActivity({
+        action: 'class_updated',
+        entityType: 'class',
+        entityId: fresh[0].classId,
+        details: {
+          bulk_instructor_grant: {
+            granted: fresh.length,
+            classes: new Set(fresh.map(p => p.classId)).size,
+            teachers: new Set(fresh.map(p => p.profileId)).size,
+          },
+        },
+      });
+
+      // The signed-in admin may have just granted themselves a class.
+      await load();
+      return fresh.length;
+    },
+    [authorId, fetchAllClassInstructors, load]
+  );
+
   // -------------------------------------------------------- calendar sync
 
   /**
@@ -1050,6 +1140,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveEvent, deleteEvent,
     uploadDocument, uploadStreamVideo, refreshStreamStatus, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
+    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   }), [
@@ -1059,6 +1150,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveUpdate, deleteUpdate, saveEvent, deleteEvent,
     uploadDocument, uploadStreamVideo, refreshStreamStatus, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
+    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   ]);

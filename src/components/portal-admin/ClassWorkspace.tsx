@@ -44,10 +44,24 @@ import EventsSection from './EventsSection';
 
 type Tab = 'updates' | 'files' | 'calendar';
 
-const TABS: { key: Tab; label: string }[] = [
+/**
+ * Calendar is admin-only as of v44.
+ *
+ * The grant used to carry all three, because v9 had no reason to separate
+ * them. Switching the grants on for the whole studio was that reason: an info
+ * post and a file are a teacher talking to their own families, while an event
+ * lands in the portal calendar, syncs to Google and reaches subscribed phones
+ * that are not in the class — a mistake that deleting the row does not undo.
+ *
+ * portal_events_insert/update/delete are now is_admin() alone, so this is a
+ * mirror of a policy and not the thing enforcing it. It is hidden rather than
+ * disabled for the same reason the Info tab on the program screen is: a button
+ * whose every save comes back refused is worse than no button.
+ */
+const TABS: { key: Tab; label: string; adminOnly?: boolean }[] = [
   { key: 'updates', label: 'Info' },
   { key: 'files', label: 'Files' },
-  { key: 'calendar', label: 'Calendar' },
+  { key: 'calendar', label: 'Calendar', adminOnly: true },
 ];
 
 const ClassWorkspace: React.FC<{
@@ -62,6 +76,11 @@ const ClassWorkspace: React.FC<{
 
   const scope = { classId: klass.id };
   const isMine = editableClassIds.includes(klass.id);
+  const tabs = TABS.filter(t => isAdmin || !t.adminOnly);
+  // A teacher who had the Calendar open when their access narrowed, or who
+  // arrives with it in local state, falls back rather than rendering a tab that
+  // is no longer in the row above it.
+  const activeTab: Tab = tabs.some(t => t.key === tab) ? tab : 'updates';
 
   return (
     <>
@@ -109,19 +128,19 @@ const ClassWorkspace: React.FC<{
       <TabRow
         panelId="class-workspace-panel"
         groupLabel={`${klass.name} content`}
-        options={TABS}
-        active={tab}
+        options={tabs}
+        active={activeTab}
         onSelect={key => setTab(key as Tab)}
       />
 
       <div id="class-workspace-panel" role="tabpanel">
-        {tab === 'updates' && (
+        {activeTab === 'updates' && (
           <UpdatesSection program={program} classes={classes} scope={scope} />
         )}
-        {tab === 'files' && (
+        {activeTab === 'files' && (
           <DocumentsSection program={program} classes={classes} scope={scope} />
         )}
-        {tab === 'calendar' && (
+        {activeTab === 'calendar' && isAdmin && (
           <EventsSection program={program} classes={classes} scope={scope} />
         )}
       </div>
