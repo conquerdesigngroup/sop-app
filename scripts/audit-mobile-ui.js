@@ -103,6 +103,12 @@ const PUBLIC_ROUTES = [
   '/portal/allstars/updates',
   '/portal/allstars/documents',
   '/portal/allstars/calendar',
+  // The profile. Signed-out it renders the seed fixture rather than
+  // redirecting, but ONLY in a development build and only while
+  // REACT_APP_ATTENDANCE_LIVE is unset — see DEMO_ALLOWED in
+  // src/pages/portal/Profile.tsx. Against a production build this row
+  // measures the redirect, not the cards.
+  '/portal/profile',
 ];
 
 // Portal program pages sit behind a studio access code. The flag it sets is

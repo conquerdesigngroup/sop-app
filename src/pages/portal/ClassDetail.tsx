@@ -10,8 +10,7 @@ import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
-import { usePortalAuth } from '../../contexts/PortalAuthContext';
-import { logActivity } from '../../lib/activityLog';
+import { logDownload } from '../../lib/portalDownloads';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
 /**
@@ -42,10 +41,13 @@ const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const { slug, program } = useProgramPage();
   const { fetchClasses, fetchUpdates, fetchDocuments } = usePortal();
-  // Only a signed-in CLIENT's opens are the "who downloaded what" the audit log
-  // is for. Staff previewing the portal, and the flag-off anon path, do not log
-  // — isClient is false for both.
-  const { isClient } = usePortalAuth();
+  // Every open is logged, by anybody. This used to be gated on isClient, which
+  // meant it logged NOTHING AT ALL: client logins are still switched off, so
+  // isClient was false for every real visitor, and the audit log held zero
+  // download rows for its whole life. The people opening these files are
+  // access-code visitors with no account, and portal_log_download (v43) is
+  // built for exactly them — it records the file, the address and the country,
+  // and names the person only when there is a session to name them from.
 
   const [klass, setKlass] = useState<PortalClass | null>(null);
   const [updates, setUpdates] = useState<PortalUpdate[]>([]);
@@ -326,17 +328,14 @@ const ClassDetail: React.FC = () => {
 
                 <DocumentList
                   documents={documents}
-                  onDownload={isClient ? (doc) => {
+                  onDownload={(doc) => {
                     // Fire-and-forget; a logging hiccup must never block a
-                    // parent opening their child's file.
-                    void logActivity({
-                      action: 'document_downloaded',
-                      entityType: 'document',
-                      entityId: doc.id,
-                      entityTitle: doc.title,
-                      details: { classId: klass?.id, className: klass?.name, fileName: doc.fileName },
-                    });
-                  } : undefined}
+                    // parent opening their child's file. Title, file name and
+                    // class are no longer passed — the function reads them off
+                    // the document row, so they cannot be spoofed by a caller
+                    // and cannot drift from what was actually opened.
+                    void logDownload(doc.id);
+                  }}
                 />
               </div>
             )}

@@ -16,6 +16,7 @@ import {
   Select,
   Spinner,
 } from '../components/ui';
+import DownloadsPanel from '../components/DownloadsPanel';
 
 /**
  * Super-admin overwatch (AUDIT-LOG-SPEC.md §6). The bar it is built to: pick
@@ -315,10 +316,14 @@ const ActivityLogPage: React.FC = () => {
 
       const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const csv = [
-        ['time', 'actor', 'email', 'kind', 'role', 'action', 'result', 'entity_type', 'entity_id', 'entity_title', 'details'].join(','),
+        // ip and user_agent are on screen in the row detail but were missing
+        // from the export, which is the copy somebody actually analyses when
+        // they are asking "who downloaded this".
+        ['time', 'actor', 'email', 'kind', 'role', 'action', 'result', 'entity_type', 'entity_id', 'entity_title', 'ip_address', 'user_agent', 'details'].join(','),
         ...rows.map(r => [
           esc(r.created_at), esc(r.user_name), esc(r.user_email), esc(r.actor_kind), esc(r.actor_role),
           esc(r.action), esc(r.result), esc(r.entity_type), esc(r.entity_id), esc(r.entity_title),
+          esc(r.ip_address), esc(r.user_agent),
           esc(JSON.stringify(r.details ?? {})),
         ].join(',')),
       ].join('\n');
@@ -344,6 +349,8 @@ const ActivityLogPage: React.FC = () => {
     }
   };
 
+  const [showDownloads, setShowDownloads] = useState(false);
+
   const saveCurrentView = () => {
     const name = window.prompt('Name this view:');
     if (!name?.trim()) return;
@@ -360,10 +367,16 @@ const ActivityLogPage: React.FC = () => {
 
   // ------------------------------------------------------------- render
 
+  // The fall-through used to be Staff, which meant any actor_kind this page did
+  // not know about was labelled as a member of staff. 'visitor' (v43, an
+  // access-code portal user with no account) would have been badged Staff on
+  // every row.
   const kindBadge = (k: string) =>
     k === 'client' ? <Badge variant="info" size="sm">Client</Badge>
       : k === 'system' ? <Badge variant="default" size="sm">System</Badge>
-        : <Badge variant="primary" size="sm">Staff</Badge>;
+        : k === 'visitor' ? <Badge variant="warning" size="sm">Visitor</Badge>
+          : k === 'staff' ? <Badge variant="primary" size="sm">Staff</Badge>
+            : <Badge variant="default" size="sm">{k || 'Unknown'}</Badge>;
 
   const actorOptions = useMemo(() => {
     const list = facets?.actors ?? [];
@@ -376,6 +389,7 @@ const ActivityLogPage: React.FC = () => {
       { value: '', label: 'Everyone' },
       ...group('staff', 'Staff'),
       ...group('client', 'Client'),
+      ...group('visitor', 'Visitor'),
       ...group('system', 'System'),
     ];
   }, [facets]);
@@ -414,6 +428,13 @@ const ActivityLogPage: React.FC = () => {
         subtitle="Every action, every account — staff, clients and the system itself"
         actions={
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <Button
+              variant={showDownloads ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setShowDownloads(v => !v)}
+            >
+              Downloads
+            </Button>
             <Button variant="outline" size="sm" onClick={saveCurrentView} disabled={!filtersActive}>
               Save view
             </Button>
@@ -423,6 +444,12 @@ const ActivityLogPage: React.FC = () => {
           </div>
         }
       />
+
+      {showDownloads && (
+        <div style={{ margin: '0 0 16px' }}>
+          <DownloadsPanel />
+        </div>
+      )}
 
       {/* Saved views */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 12px' }}>
@@ -495,6 +522,7 @@ const ActivityLogPage: React.FC = () => {
               { value: '', label: 'Everyone' },
               { value: 'staff', label: 'Staff only' },
               { value: 'client', label: 'Clients only' },
+              { value: 'visitor', label: 'Visitors only' },
               { value: 'system', label: 'System only' },
             ]}
             value={kind}

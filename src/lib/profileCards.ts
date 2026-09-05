@@ -8,6 +8,7 @@ import AttendanceCardHost from '../components/profile/AttendanceCardHost';
 import UpdatesCard from '../components/profile/UpdatesCard';
 import DocumentsCard from '../components/profile/DocumentsCard';
 import ClassCalendarCard from '../components/profile/ClassCalendarCard';
+import NotificationsCard from '../components/profile/NotificationsCard';
 import AccountCard from '../components/profile/AccountCard';
 
 /**
@@ -113,6 +114,19 @@ export const PROFILE_CARDS: ProfileCard[] = [
     component: ClassCalendarCard,
     visible: ctx => !ctx.isStaff,
     defaultOrder: 50,
+  },
+  {
+    // Below the content cards and above Account: it is a settings control, not
+    // something a parent came to read, but it belongs with the account rather
+    // than buried under the sign-out button.
+    id: 'notifications',
+    title: 'Notifications',
+    component: NotificationsCard,
+    // Staff previewing the portal keep the Settings page toggle, which is
+    // wired to their own digest. Two switches over one subscription would
+    // fight.
+    visible: ctx => !ctx.isStaff,
+    defaultOrder: 80,
   },
   {
     id: 'account',
