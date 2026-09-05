@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import BottomNavigation from './BottomNavigation';
 import { MobileMenuProvider, useMobileMenu } from '../contexts/MobileMenuContext';
 import { JobTask } from '../types';
+import { studioToday, shiftIsoDays } from '../lib/studioDate';
 
 /**
  * The bottom bar, by role.
@@ -52,17 +53,15 @@ const MenuProbe: React.FC = () => {
   return <div data-testid="menu-state">{isOpen ? 'open' : 'closed'}</div>;
 };
 
-const yesterday = (): string => {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
-};
-
-const tomorrow = (): string => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
-};
+/**
+ * Relative to the STUDIO's date, because that is what the badge counts
+ * against (studioToday() in src/lib/studioDate.ts). Built from UTC these
+ * drifted by a day whenever the runner's UTC date was ahead of California's
+ * — every evening, Pacific — and the suite would then fail on a CI box in
+ * any zone but this one.
+ */
+const yesterday = (): string => shiftIsoDays(studioToday(), -1);
+const tomorrow = (): string => shiftIsoDays(studioToday(), 1);
 
 const task = (overrides: Partial<JobTask>): Partial<JobTask> => ({
   id: Math.random().toString(36).slice(2),
