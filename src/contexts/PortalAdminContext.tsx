@@ -100,6 +100,14 @@ export interface StreamUploadProgress {
   fraction: number;
 }
 
+/** One row of portal_class_instructors: who may edit which class, and whether. */
+export interface ClassGrant {
+  classId: string;
+  profileId: string;
+  /** v45. True means the assignment stands but editing is switched off. */
+  paused: boolean;
+}
+
 export interface ClassInput {
   id?: string;
   programId: string;
@@ -225,8 +233,21 @@ interface PortalAdminContextValue {
    * program tab — is how half of it gets forgotten.
    */
   fetchAllClasses: () => Promise<PortalClass[]>;
-  /** Every grant in the studio, as (classId, profileId) pairs. */
-  fetchAllClassInstructors: () => Promise<{ classId: string; profileId: string }[]>;
+  /**
+   * Every grant in the studio. `paused` (v45) is a grant that still records who
+   * teaches the class while their editing is switched off — distinct from no
+   * grant at all, which is what the bulk screen exists to fill in.
+   */
+  fetchAllClassInstructors: () => Promise<ClassGrant[]>;
+  /**
+   * Switch one teacher's editing on or off for one class.
+   *
+   * Pausing rather than deleting, because a deleted grant is not stable: the
+   * class still names the teacher on the schedule, so the next run of the bulk
+   * assign screen would put it straight back with nothing to show it had been
+   * removed. See v45.
+   */
+  setGrantPaused: (classId: string, profileId: string, paused: boolean) => Promise<void>;
   /**
    * Add grants in bulk. Add-only, and idempotent: a pair that already exists is
    * left alone, and nothing is ever removed.
@@ -336,7 +357,11 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
           supabase.rpc('can_edit_portal'),
           supabase
             .from('portal_class_instructors')
-            .select('class_id')
+            .select('class_id, is_paused')
+            // A paused grant is still a row, so it has to be filtered out here
+            // as well as inside can_edit_portal_class(). Left in, it would mark
+            // the class "Yours" and offer editors the database then refuses.
+            .neq('is_paused', true)
             .eq('profile_id', authorId ?? ''),
         ]);
 
@@ -944,13 +969,46 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     return (data ?? []).map(mapClass);
   }, []);
 
-  const fetchAllClassInstructors = useCallback(async () => {
+  const fetchAllClassInstructors = useCallback(async (): Promise<ClassGrant[]> => {
     const { data, error } = await supabase
       .from('portal_class_instructors')
-      .select('class_id, profile_id');
+      .select('class_id, profile_id, is_paused');
     if (error) throw error;
-    return (data ?? []).map((r: any) => ({ classId: r.class_id, profileId: r.profile_id }));
+    return (data ?? []).map((r: any) => ({
+      classId: r.class_id,
+      profileId: r.profile_id,
+      // Absent when v45 has not been applied yet, and an unapplied migration
+      // must read as "not paused" rather than silently switching everybody off.
+      paused: r.is_paused === true,
+    }));
   }, []);
+
+  const setGrantPaused = useCallback(
+    async (classId: string, profileId: string, paused: boolean) => {
+      const { error } = await supabase
+        .from('portal_class_instructors')
+        .update({
+          is_paused: paused,
+          paused_at: paused ? new Date().toISOString() : null,
+          paused_by: paused ? authorId : null,
+        })
+        .eq('class_id', classId)
+        .eq('profile_id', profileId);
+      if (error) throw error;
+
+      void logActivity({
+        action: 'class_updated',
+        entityType: 'class',
+        entityId: classId,
+        details: { instructor_grant: paused ? 'paused' : 'resumed', profile_id: profileId },
+      });
+
+      // An admin may have just paused their own grant, and canEdit is derived
+      // from a function that now ignores paused rows.
+      await load();
+    },
+    [authorId, load]
+  );
 
   const grantClassInstructors = useCallback(
     async (pairs: { classId: string; profileId: string }[]) => {
@@ -959,7 +1017,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       // Against the pairs that are already there, so the count reported back is
       // what was actually created rather than what was submitted. Re-running
       // the screen after fixing one name should say "3 added", not "87".
-      const existing: { classId: string; profileId: string }[] = await fetchAllClassInstructors();
+      // Paused rows count as present. A paused grant is a deliberate "off",
+      // and re-inserting it would be the exact silent re-enable v45 exists to
+      // stop -- so the key ignores `paused` on purpose.
+      const existing: ClassGrant[] = await fetchAllClassInstructors();
       const seen = new Set(existing.map(g => `${g.classId}:${g.profileId}`));
       const fresh = pairs.filter(p => !seen.has(`${p.classId}:${p.profileId}`));
       if (!fresh.length) return 0;
@@ -1140,7 +1201,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveEvent, deleteEvent,
     uploadDocument, uploadStreamVideo, refreshStreamStatus, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
-    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors,
+    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors, setGrantPaused,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   }), [
@@ -1150,7 +1211,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     saveUpdate, deleteUpdate, saveEvent, deleteEvent,
     uploadDocument, uploadStreamVideo, refreshStreamStatus, saveDocumentMeta, deleteDocument, getDocumentUrl, getDocumentUrls,
     saveClass, deleteClass, fetchClassInstructors, setClassInstructors,
-    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors,
+    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors, setGrantPaused,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
   ]);

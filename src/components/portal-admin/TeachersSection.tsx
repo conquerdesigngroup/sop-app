@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { theme } from '../../theme';
-import { Badge, Button, Card, Select, Spinner } from '../ui';
+import { Badge, Button, Card, Select, Spinner, Toggle } from '../ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useRefreshable } from '../../contexts/RefreshContext';
-import { usePortalAdmin, describeWriteError } from '../../contexts/PortalAdminContext';
+import {
+  usePortalAdmin, describeWriteError, ClassGrant,
+} from '../../contexts/PortalAdminContext';
 import { isManagementRole, roleLabel } from '../../lib/roles';
 import {
   matchInstructors, normalizeName, InstructorRow, MatchConfidence,
 } from '../../lib/instructorMatch';
 import { PortalClass } from '../../types';
+import { classSummary } from './shared';
 
 /**
  * Turning the per-class grants on, one teacher at a time instead of 103 classes
@@ -40,8 +43,21 @@ import { PortalClass } from '../../types';
  *
  * Apply never removes a grant. A bulk screen that could revoke would, on the
  * day somebody re-typed a teacher's name, quietly strip every class they hold —
- * and the only symptom is a teacher saying the app stopped working. Revoking
- * lives on the class itself, in ClassesSection, where it is one visible tick.
+ * and the only symptom is a teacher saying the app stopped working.
+ *
+ * TURNING ONE OFF (v45)
+ *
+ * Switching a class off pauses the grant rather than deleting it, and the two
+ * are not interchangeable. Deleting leaves no row, and no row is precisely what
+ * this screen is built to fill in — so the next person to press Apply would put
+ * it straight back, because the schedule still names that teacher. Nobody would
+ * be told. A paused row is a row: Apply counts it as handled and leaves it
+ * alone, so off stays off.
+ *
+ * It also keeps the answer to "who teaches this", which the delete threw away.
+ *
+ * The per-class tick list in ClassesSection still deletes, and that is still the
+ * right tool for a teacher who has actually left.
  *
  * ADMIN-ONLY, AND NOT BY CONVENTION
  *
@@ -64,25 +80,44 @@ const CONFIDENCE_BADGE: Record<
 /** Rows an admin should look at before pressing anything. */
 const NEEDS_A_LOOK: MatchConfidence[] = ['likely', 'review', 'ambiguous', 'none'];
 
+/** One class under a teacher, and what their editing is set to on it. */
+export interface GrantRow {
+  classId: string;
+  /** True when the class names this teacher on the schedule. */
+  onTheSchedule: boolean;
+  state: 'on' | 'paused' | 'none';
+}
+
 interface Row extends InstructorRow {
   key: string;
   /** The account currently selected for this name. '' means nobody. */
   chosen: string;
-  /** Classes on this row that already grant the chosen account. */
+  /** Classes on this row that already grant the chosen account, paused or not. */
   alreadyGranted: number;
   /** Classes on this row that would gain a grant if Apply were pressed now. */
   pending: number;
+  /**
+   * Every class this account holds, whether or not the schedule names them.
+   *
+   * Deliberately wider than `classIds`. A grant is per (class, account), and an
+   * admin can add one by hand on a class that lists somebody else entirely; if
+   * this listed only schedule matches, that grant would be invisible here and
+   * so impossible to switch off from the one screen built for switching things
+   * off.
+   */
+  held: GrantRow[];
+  paused: number;
 }
 
 const TeachersSection: React.FC = () => {
   const {
-    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors,
+    fetchAllClasses, fetchAllClassInstructors, grantClassInstructors, setGrantPaused,
   } = usePortalAdmin();
   const { users } = useAuth();
   const { success, error: toastError } = useToast();
 
   const [classes, setClasses] = useState<PortalClass[]>([]);
-  const [grants, setGrants] = useState<{ classId: string; profileId: string }[]>([]);
+  const [grants, setGrants] = useState<ClassGrant[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -95,6 +130,17 @@ const TeachersSection: React.FC = () => {
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
   const [statusLine, setStatusLine] = useState('');
+  /** Which teacher's class list is expanded. One at a time; the list is long. */
+  const [open, setOpen] = useState<string | null>(null);
+  /**
+   * The one grant currently being written, as "classId:profileId".
+   *
+   * A toggle is a single small UPDATE, but it is still a network round trip: a
+   * second tap on the same switch before the first lands would send a second,
+   * contradictory write. Keyed rather than a boolean so switching class A does
+   * not freeze the switch for class B.
+   */
+  const [busyGrant, setBusyGrant] = useState<string | null>(null);
   // A second tap can land between the first and the re-render that disables
   // the button, so the ref refuses it rather than granting everything twice.
   const busy = useRef(false);
@@ -128,15 +174,21 @@ const TeachersSection: React.FC = () => {
     [users]
   );
 
+  /** classId -> profileId -> paused. Presence is the grant; the value is its state. */
   const grantedByClass = useMemo(() => {
-    const map = new Map<string, Set<string>>();
+    const map = new Map<string, Map<string, boolean>>();
     for (const g of grants) {
-      const set = map.get(g.classId) ?? new Set<string>();
-      set.add(g.profileId);
-      map.set(g.classId, set);
+      const inner = map.get(g.classId) ?? new Map<string, boolean>();
+      inner.set(g.profileId, g.paused);
+      map.set(g.classId, inner);
     }
     return map;
   }, [grants]);
+
+  const classById = useMemo(
+    () => new Map(classes.map(c => [c.id, c])),
+    [classes]
+  );
 
   const rows: Row[] = useMemo(() => {
     const matched = matchInstructors(
@@ -156,18 +208,46 @@ const TeachersSection: React.FC = () => {
     return matched.map(row => {
       const key = normalizeName(row.scheduleName);
       const pick = key in chosen ? chosen[key] : row.suggestion?.id ?? '';
-      const alreadyGranted = pick
-        ? row.classIds.filter(id => grantedByClass.get(id)?.has(pick)).length
-        : 0;
+
+      const scheduled = new Set(row.classIds);
+      // Every class this account actually holds, plus every class the schedule
+      // names them on. The union, so a hand-made grant on a class listing
+      // somebody else is still switchable here.
+      const heldIds = new Set(row.classIds);
+      if (pick) {
+        for (const g of grants) if (g.profileId === pick) heldIds.add(g.classId);
+      }
+
+      const held: GrantRow[] = Array.from(heldIds)
+        .map(classId => {
+          const paused = pick ? grantedByClass.get(classId)?.get(pick) : undefined;
+          return {
+            classId,
+            onTheSchedule: scheduled.has(classId),
+            state: paused === undefined ? 'none' : paused ? 'paused' : 'on',
+          } as GrantRow;
+        })
+        .sort((a, b) =>
+          (classById.get(a.classId)?.name ?? '').localeCompare(
+            classById.get(b.classId)?.name ?? ''
+          )
+        );
+
+      const alreadyGranted = row.classIds.filter(
+        id => grantedByClass.get(id)?.has(pick)
+      ).length;
+
       return {
         ...row,
         key,
         chosen: pick,
-        alreadyGranted,
+        alreadyGranted: pick ? alreadyGranted : 0,
         pending: pick ? row.classIds.length - alreadyGranted : 0,
+        held: pick ? held : [],
+        paused: held.filter(h => h.state === 'paused').length,
       };
     });
-  }, [classes, staff, chosen, grantedByClass]);
+  }, [classes, staff, chosen, grants, grantedByClass, classById]);
 
   /**
    * An admin already publishes everywhere, so a grant for one would be a row
@@ -175,6 +255,14 @@ const TeachersSection: React.FC = () => {
    * name needs to find it — but they are not part of the work.
    */
   const actionable = rows.filter(r => r.chosen && r.pending > 0 && !r.alreadyCovered);
+  /**
+   * Only classes with NO grant row at all.
+   *
+   * `has` is true for a paused grant as well as a live one, which is the whole
+   * point of v45: switching a teacher off must survive the next person pressing
+   * Apply. Before the flag existed, "off" meant deleting the row, and this
+   * filter would have put it straight back.
+   */
   const pendingPairs = actionable.flatMap(r =>
     r.classIds
       .filter(id => !grantedByClass.get(id)?.has(r.chosen))
@@ -199,6 +287,29 @@ const TeachersSection: React.FC = () => {
     ],
     [staff]
   );
+
+  const handleTogglePaused = async (classId: string, profileId: string, paused: boolean) => {
+    const key = `${classId}:${profileId}`;
+    if (busyGrant === key) return;
+    setBusyGrant(key);
+
+    // Optimistic, because a switch that does not move until the server answers
+    // reads as broken. Rolled back below if the write is refused.
+    const before = grants;
+    setGrants(prev =>
+      prev.map(g => (g.classId === classId && g.profileId === profileId ? { ...g, paused } : g))
+    );
+
+    try {
+      await setGrantPaused(classId, profileId, paused);
+      await load(true);
+    } catch (e) {
+      setGrants(before);
+      toastError(describeWriteError(e));
+    } finally {
+      setBusyGrant(null);
+    }
+  };
 
   const handleApply = async () => {
     if (busy.current || !pendingPairs.length) return;
@@ -267,11 +378,16 @@ const TeachersSection: React.FC = () => {
           Giving someone their classes lets them post info and add files to those classes and
           nothing else — not the calendar, not another teacher's class, not the studio-wide posts.
         </p>
-        <p style={{ ...paragraph, margin: 0 }}>
+        <p style={paragraph}>
           The names on the schedule are what parents read, so they don't always match an account
           exactly. Check anything not marked <strong>Name matches</strong> before you apply.
-          Nothing is saved until you press the button, and applying never takes access away —
-          to remove someone, untick them on the class itself.
+          Nothing is saved until you press the button.
+        </p>
+        <p style={{ ...paragraph, margin: 0 }}>
+          To switch a teacher's editing off for a class, open{' '}
+          <strong>Turn classes on or off</strong> on their row. They stay listed as teaching it —
+          the editing is just off, and it stays off. Pressing the button above will not quietly
+          turn it back on.
         </p>
       </Card>
 
@@ -351,13 +467,16 @@ const TeachersSection: React.FC = () => {
           // Assembled here rather than interpolated inline, so it reaches the
           // DOM as one string. Split across JSX expressions it becomes half a
           // dozen text nodes, which reads the same and matches nothing.
+          const live = row.held.filter(h => h.state === 'on').length;
           const meta = [
             `${row.classIds.length} ${row.classIds.length === 1 ? 'class' : 'classes'}`,
-            row.alreadyGranted > 0 ? `${row.alreadyGranted} already granted` : null,
+            live > 0 ? `${live} on` : null,
+            row.paused > 0 ? `${row.paused} paused` : null,
             row.pending > 0 && !row.alreadyCovered ? `${row.pending} to add` : null,
           ]
             .filter(Boolean)
             .join(' · ');
+          const expanded = open === row.key;
           return (
             <Card key={row.key}>
               {/*
@@ -459,6 +578,100 @@ const TeachersSection: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/*
+                Switching editing off, per class.
+
+                Only appears once the teacher actually holds something. A row
+                with no grants has nothing to switch, and an empty disclosure on
+                every unmatched name would be noise on a list of thirteen.
+              */}
+              {row.held.some(h => h.state !== 'none') && (
+                <>
+                  <div style={{ marginTop: '12px' }}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setOpen(expanded ? null : row.key)}
+                      aria-expanded={expanded}
+                      aria-controls={`classes-${row.key}`}
+                      style={{ paddingLeft: 0 }}
+                    >
+                      {expanded ? 'Hide their classes' : 'Turn classes on or off'}
+                    </Button>
+                  </div>
+
+                  {expanded && (
+                    <div
+                      id={`classes-${row.key}`}
+                      style={{
+                        marginTop: '8px',
+                        borderTop: `1px solid ${theme.colors.bdr.primary}`,
+                        paddingTop: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                      }}
+                    >
+                      {row.held.filter(h => h.state !== 'none').map(h => {
+                        const klass = classById.get(h.classId);
+                        const labelId = `cls-${row.key}-${h.classId}`;
+                        const pending = busyGrant === `${h.classId}:${row.chosen}`;
+                        return (
+                          <div
+                            key={h.classId}
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '10px',
+                              alignItems: 'center',
+                              padding: '6px 0',
+                            }}
+                          >
+                            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                              <div
+                                id={labelId}
+                                style={{
+                                  ...theme.typography.bodySmall,
+                                  fontFamily: theme.fonts.primary,
+                                  color: theme.colors.txt.primary,
+                                  overflowWrap: 'anywhere',
+                                }}
+                              >
+                                {klass?.name ?? 'A class that is no longer listed'}
+                              </div>
+                              <div style={{
+                                ...theme.typography.captionSmall,
+                                fontFamily: theme.fonts.mono,
+                                color: theme.colors.txt.tertiary,
+                                overflowWrap: 'anywhere',
+                              }}>
+                                {[
+                                  klass ? classSummary(klass) : null,
+                                  h.state === 'paused' ? 'editing off' : 'editing on',
+                                  // Worth saying out loud: this grant is not
+                                  // explained by the schedule, so nobody should
+                                  // be surprised to find it here.
+                                  h.onTheSchedule ? null : 'not on the schedule',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </div>
+                            </div>
+
+                            <Toggle
+                              checked={h.state === 'on'}
+                              disabled={pending}
+                              labelledBy={labelId}
+                              onChange={on => handleTogglePaused(h.classId, row.chosen, !on)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </Card>
           );
         })}

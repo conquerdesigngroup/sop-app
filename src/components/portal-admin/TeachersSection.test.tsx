@@ -39,6 +39,7 @@ const mockApi = {
   fetchAllClasses: jest.fn(),
   fetchAllClassInstructors: jest.fn(),
   grantClassInstructors: jest.fn(),
+  setGrantPaused: jest.fn(),
 };
 const mockToast = { success: jest.fn(), error: jest.fn() };
 
@@ -58,6 +59,7 @@ beforeEach(() => {
   mockApi.fetchAllClasses.mockResolvedValue(CLASSES);
   mockApi.fetchAllClassInstructors.mockResolvedValue([]);
   mockApi.grantClassInstructors.mockResolvedValue(3);
+  mockApi.setGrantPaused.mockResolvedValue(undefined);
 });
 
 const renderAndSettle = async () => {
@@ -111,6 +113,8 @@ describe('applying', () => {
     expect(pairs).toHaveLength(3);
     expect(pairs).toEqual(
       expect.arrayContaining([
+        // pendingPairs, not grants: these are the rows Apply will create, and
+        // they carry no pause state of their own.
         { classId: 'c1', profileId: 'tara' },
         { classId: 'c2', profileId: 'tara' },
         { classId: 'c3', profileId: 'kyree' },
@@ -120,7 +124,7 @@ describe('applying', () => {
   });
 
   it('does not re-grant a class that already has that teacher', async () => {
-    mockApi.fetchAllClassInstructors.mockResolvedValue([{ classId: 'c1', profileId: 'tara' }]);
+    mockApi.fetchAllClassInstructors.mockResolvedValue([{ classId: 'c1', profileId: 'tara', paused: false }]);
     await renderAndSettle();
     fireEvent.click(applyButton());
 
@@ -168,9 +172,9 @@ describe('applying', () => {
 
   it('has nothing to do once every grant exists', async () => {
     mockApi.fetchAllClassInstructors.mockResolvedValue([
-      { classId: 'c1', profileId: 'tara' },
-      { classId: 'c2', profileId: 'tara' },
-      { classId: 'c3', profileId: 'kyree' },
+      { classId: 'c1', profileId: 'tara', paused: false },
+      { classId: 'c2', profileId: 'tara', paused: false },
+      { classId: 'c3', profileId: 'kyree', paused: false },
     ]);
     await renderAndSettle();
     expect(applyButton()).toBeDisabled();
@@ -204,5 +208,124 @@ describe('an admin overruling the suggestion', () => {
       classId: 'c5',
       profileId: 'tara',
     });
+  });
+});
+
+describe('switching a class off for one teacher', () => {
+  const granted = [
+    { classId: 'c1', profileId: 'tara', paused: false },
+    { classId: 'c2', profileId: 'tara', paused: false },
+  ];
+
+  const openTaraClasses = async () => {
+    await renderAndSettle();
+    fireEvent.click(screen.getAllByRole('button', { name: /Turn classes on or off/i })[0]);
+  };
+
+  beforeEach(() => {
+    mockApi.fetchAllClassInstructors.mockResolvedValue(granted);
+  });
+
+  it('does not offer the control to a teacher who holds nothing', async () => {
+    mockApi.fetchAllClassInstructors.mockResolvedValue([]);
+    await renderAndSettle();
+    expect(screen.queryByRole('button', { name: /Turn classes on or off/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it('lists the classes they hold, each with a switch that is on', async () => {
+    await openTaraClasses();
+    const switches = screen.getAllByRole('switch');
+    expect(switches).toHaveLength(2);
+    switches.forEach(s => expect(s).toBeChecked());
+  });
+
+  it('pauses rather than deletes when switched off', async () => {
+    await openTaraClasses();
+    fireEvent.click(screen.getAllByRole('switch')[0]);
+
+    await waitFor(() => expect(mockApi.setGrantPaused).toHaveBeenCalledTimes(1));
+    expect(mockApi.setGrantPaused).toHaveBeenCalledWith('c1', 'tara', true);
+  });
+
+  it('turns one back on', async () => {
+    mockApi.fetchAllClassInstructors.mockResolvedValue([
+      { classId: 'c1', profileId: 'tara', paused: true },
+      { classId: 'c2', profileId: 'tara', paused: false },
+    ]);
+    await openTaraClasses();
+
+    const off = screen.getAllByRole('switch').find(s => !(s as HTMLInputElement).checked)!;
+    fireEvent.click(off);
+
+    await waitFor(() => expect(mockApi.setGrantPaused).toHaveBeenCalledTimes(1));
+    expect(mockApi.setGrantPaused).toHaveBeenCalledWith('c1', 'tara', false);
+  });
+
+  it('counts what is on and what is paused', async () => {
+    mockApi.fetchAllClassInstructors.mockResolvedValue([
+      { classId: 'c1', profileId: 'tara', paused: true },
+      { classId: 'c2', profileId: 'tara', paused: false },
+    ]);
+    await renderAndSettle();
+    expect(screen.getByText(/2 classes · 1 on · 1 paused/)).toBeInTheDocument();
+  });
+
+  it('puts the switch back if the database refuses the write', async () => {
+    mockApi.setGrantPaused.mockRejectedValue(new Error('row-level security'));
+    await openTaraClasses();
+
+    const first = screen.getAllByRole('switch')[0];
+    fireEvent.click(first);
+
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
+    // Optimistic flip rolled back — a switch left showing "off" after a refused
+    // write is a teacher who still has access and an admin who thinks they don't.
+    expect(screen.getAllByRole('switch')[0]).toBeChecked();
+  });
+
+  it('ignores a second tap on the same switch while the first is in flight', async () => {
+    let release: () => void = () => {};
+    mockApi.setGrantPaused.mockReturnValue(new Promise<void>(r => { release = r; }));
+    await openTaraClasses();
+
+    const first = screen.getAllByRole('switch')[0];
+    fireEvent.click(first);
+    fireEvent.click(first);
+    fireEvent.click(first);
+
+    expect(mockApi.setGrantPaused).toHaveBeenCalledTimes(1);
+    release();
+    await waitFor(() => expect(mockApi.fetchAllClasses).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('a paused grant and the Apply button', () => {
+  it('is never silently turned back on by pressing Apply', async () => {
+    // The whole reason v45 is a flag and not a delete. The schedule still names
+    // Tara on c1 and c2, so with no row at all Apply would re-grant both.
+    mockApi.fetchAllClassInstructors.mockResolvedValue([
+      { classId: 'c1', profileId: 'tara', paused: true },
+      { classId: 'c2', profileId: 'tara', paused: true },
+      { classId: 'c3', profileId: 'kyree', paused: false },
+    ]);
+    await renderAndSettle();
+
+    expect(applyButton()).toBeDisabled();
+    expect(screen.getByText(/Nothing left to grant/i)).toBeInTheDocument();
+  });
+
+  it('still offers classes that have no grant at all', async () => {
+    mockApi.fetchAllClassInstructors.mockResolvedValue([
+      { classId: 'c1', profileId: 'tara', paused: true },
+    ]);
+    await renderAndSettle();
+    fireEvent.click(applyButton());
+
+    await waitFor(() => expect(mockApi.grantClassInstructors).toHaveBeenCalled());
+    const pairs = mockApi.grantClassInstructors.mock.calls[0][0];
+    // c2 has no row, so it is offered. c1 is paused, so it is left alone.
+    expect(pairs).toContainEqual({ classId: 'c2', profileId: 'tara' });
+    expect(pairs).not.toContainEqual({ classId: 'c1', profileId: 'tara' });
   });
 });
