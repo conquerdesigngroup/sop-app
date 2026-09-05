@@ -52,17 +52,26 @@ const MenuProbe: React.FC = () => {
   return <div data-testid="menu-state">{isOpen ? 'open' : 'closed'}</div>;
 };
 
-const yesterday = (): string => {
+/**
+ * A date string `days` from now, built in LOCAL time.
+ *
+ * Deliberately not `toISOString()`. The bar decides overdue against the local
+ * date, but an ISO string is UTC — so from 17:00 Pacific onwards, when it is
+ * already tomorrow in UTC, `yesterday()` handed back *today's* local date,
+ * nothing was overdue and the two badge tests below failed every evening and
+ * passed again the next morning. Same rule as `todayIso()` in
+ * supabase/functions/alert-push, which reads the parts rather than the offset.
+ */
+const dayFromNow = (days: number): string => {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  d.setDate(d.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-const tomorrow = (): string => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
-};
+const yesterday = (): string => dayFromNow(-1);
+
+const tomorrow = (): string => dayFromNow(1);
 
 const task = (overrides: Partial<JobTask>): Partial<JobTask> => ({
   id: Math.random().toString(36).slice(2),
