@@ -82,6 +82,19 @@ const DEVICES = [
   // measured six times in its phone layout and never once in the desktop one
   // it switches to at 768. Not a phone, and not here for the notch.
   { name: 'iPad portrait', width: 820, height: 1180, statusBar: 0 },
+  // A LAPTOP, which is not a phone either, and is here because a bug hid
+  // behind its absence for the life of this script.
+  //
+  // Every size above is narrower than theme.pageLayout.maxWidth (1400px), so
+  // the page was only ever measured in the band where the shell is the window.
+  // Above it the shell stops growing and the content inside gets a FIXED width
+  // — and the week view's six day columns wanted 1200px inside a container
+  // capped at 1100. Saturday was cut off by 302px on every desktop in the
+  // world, identically at 1280px and at 1920px, and six green phones plus an
+  // iPad said CLEAN. A cap only bites once the window is wider than it, so a
+  // sample on the far side of every WIDTH CAP is the same rule as a sample on
+  // the far side of every breakpoint.
+  { name: 'laptop', width: 1440, height: 900, statusBar: 0 },
 ];
 
 const PUBLIC_ROUTES = [
@@ -273,6 +286,34 @@ const collect = (statusBar) => {
 
     if (r.top < -1 && cs.position !== 'fixed' && !inScroller(el)) {
       problems.push({ kind: 'clipped-above-top', detail: `${describe(el)} top is ${Math.round(r.top)}` });
+    }
+
+    // A sideways scroller that is hiding content while the window has room
+    // to spare.
+    //
+    // Everything INSIDE a scroller is exempt from the overflow check above,
+    // and rightly so — a scroller is meant to scroll. That exemption is also
+    // a blind spot, and the week view sat in it: six day columns wanting
+    // 1200px inside a container capped at 1100 cut Saturday off by 302px on
+    // every desktop, identically at 1280 and at 1920, and this script called
+    // it CLEAN at every size for the life of the feature.
+    //
+    // The tell is not the overflow, it is the SLACK. When a scroller clips
+    // its content while hundreds of unused pixels sit beside it, the thing
+    // doing the clipping is a max-width upstream, not the screen — nobody
+    // chose that, and no reader can see what they are missing. A scroller
+    // that fills the width it is given is left alone, because then the
+    // window really is the constraint and scrolling is the honest answer.
+    if ((cs.overflowX === 'auto' || cs.overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 1) {
+      const slack = Math.round(vw - r.width);
+      if (slack > 100) {
+        problems.push({
+          kind: 'scroller-clipped-with-room',
+          detail: `${describe(el)} hides ${el.scrollWidth - el.clientWidth}px of content in a `
+            + `${Math.round(r.width)}px box, with ${slack}px of the ${vw}px viewport unused`
+            + `\n         something upstream is capping its width — the screen is not the limit`,
+        });
+      }
     }
 
     // Only leaf-ish elements, or every wrapper reports the same thing.

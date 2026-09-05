@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Badge, CalendarPlusIcon, EmptyState } from '../ui';
@@ -335,6 +335,67 @@ export const ClassListView: React.FC<ViewProps & { grouped: boolean }> = ({
   );
 };
 
+// -------------------------------------------------------------- edge fade
+
+/**
+ * "There is more week over there."
+ *
+ * A sideways scroller with nothing at its edge is a scroller nobody scrolls.
+ * The week grid was 302px wider than the page on EVERY desktop size and cut
+ * Saturday in half, and the only clue was a scrollbar macOS does not draw
+ * until you are already scrolling — so the column simply looked missing.
+ *
+ * Measured rather than assumed: the fade appears only when there is actually
+ * content past that edge, so once the days fit — which they now do on a normal
+ * screen — neither side paints anything.
+ */
+const useEdgeFade = () => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setMore({
+      // A pixel of slack: sub-pixel layout leaves scrollWidth a hair over
+      // clientWidth on grids that do fit, which would paint a fade forever.
+      left: el.scrollLeft > 1,
+      right: max > 1 && el.scrollLeft < max - 1,
+    });
+  }, []);
+
+  // Re-measured on resize as well as on scroll: widening the window can make
+  // the days fit, and the fade has to go away when it does.
+  useEffect(() => {
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [measure]);
+
+  return { ref, onScroll: measure, more, remeasure: measure };
+};
+
+const EdgeFade: React.FC<{ side: 'left' | 'right'; show: boolean }> = ({ side, show }) => (
+  <div
+    aria-hidden="true"
+    style={{
+      position: 'absolute',
+      top: 0,
+      bottom: '8px',
+      [side]: 0,
+      width: '28px',
+      pointerEvents: 'none',
+      opacity: show ? 1 : 0,
+      transition: 'opacity 0.15s ease',
+      // to right / to left from the page's own ground, so it reads as the
+      // content running under the edge in either theme.
+      background: `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, ${
+        theme.colors.bg.primary}, transparent)`,
+    }}
+  />
+);
+
 // ------------------------------------------------------------------ week
 
 /**
@@ -347,56 +408,85 @@ export const ClassListView: React.FC<ViewProps & { grouped: boolean }> = ({
 export const ClassWeekView: React.FC<ViewProps> = ({ classes, slug, showCategory }) => {
   const { isMobileOrTablet } = useResponsive();
   const groups = groupByDay(classes);
+  const scroller = useEdgeFade();
+
+  // Filtering changes how many day columns there are, which changes whether
+  // they fit. Without this the fade keeps whatever it decided on first paint.
+  const { remeasure } = scroller;
+  useEffect(() => { remeasure(); }, [groups.length, remeasure]);
 
   return (
-    <div style={{ overflowX: 'auto', paddingBottom: '8px', WebkitOverflowScrolling: 'touch' }}>
+    <div style={{ position: 'relative' }}>
       <div
-        style={{
-          display: 'grid',
-          gridAutoFlow: 'column',
-          gridAutoColumns: isMobileOrTablet ? '210px' : `minmax(190px, 1fr)`,
-          gap: '12px',
-          // Only stretch to fill on desktop. On a phone the columns keep their
-          // 210px and the row is meant to be wider than the screen.
-          minWidth: isMobileOrTablet ? 'min-content' : '100%',
-          alignItems: 'start',
-        }}
+        ref={scroller.ref}
+        onScroll={scroller.onScroll}
+        style={{ overflowX: 'auto', paddingBottom: '8px', WebkitOverflowScrolling: 'touch' }}
       >
-        {groups.map(group => (
-          <div key={group.day === null ? 'none' : group.day} style={{ minWidth: 0 }}>
-            <div
-              style={{
-                position: 'sticky',
-                top: 0,
-                backgroundColor: theme.colors.bg.primary,
-                paddingBottom: '8px',
-                marginBottom: '10px',
-                borderBottom: `2px solid ${theme.colors.bdr.primary}`,
-                zIndex: 1,
-              }}
-            >
-              <div style={{ ...theme.typography.h3, fontSize: '15px', color: theme.colors.txt.primary }}>
-                {group.day === null ? 'No set day' : DAY_SHORT[group.day]}
-              </div>
+        <div
+          style={{
+            display: 'grid',
+            // An EXPLICIT track list, not gridAutoColumns.
+            //
+            // `1fr` was silently dead here. Auto-flow columns inside an
+            // overflow-x container size against max-content, so the fr share
+            // resolved to nothing and every column sat at its 190px minimum —
+            // exactly 190 on a 1280px screen and on a 1920px one alike. Six of
+            // those plus their gaps want 1200px in a container that was capped
+            // at 1100, so Saturday was cut in half on every desktop in the
+            // world with no sign it was there. Naming the tracks against a
+            // definite width below is what gives fr something to divide.
+            gridTemplateColumns: isMobileOrTablet
+              ? `repeat(${groups.length}, 210px)`
+              : `repeat(${groups.length}, minmax(190px, 1fr))`,
+            gap: '12px',
+            // width, not minWidth: fr needs a definite width to divide, and
+            // min-width is not one. The tracks still overflow this box when
+            // 190px each does not fit — that is what the scroller is for.
+            width: isMobileOrTablet ? 'min-content' : '100%',
+            alignItems: 'start',
+          }}
+        >
+          {groups.map(group => (
+            <div key={group.day === null ? 'none' : group.day} style={{ minWidth: 0 }}>
               <div
                 style={{
-                  ...theme.typography.captionSmall,
-                  fontFamily: theme.fonts.mono,
-                  color: theme.colors.txt.tertiary,
+                  position: 'sticky',
+                  top: 0,
+                  backgroundColor: theme.colors.bg.primary,
+                  paddingBottom: '8px',
+                  marginBottom: '10px',
+                  borderBottom: `2px solid ${theme.colors.bdr.primary}`,
+                  zIndex: 1,
                 }}
               >
-                {group.classes.length} {group.classes.length === 1 ? 'class' : 'classes'}
+                <div style={{ ...theme.typography.h3, fontSize: '15px', color: theme.colors.txt.primary }}>
+                  {group.day === null ? 'No set day' : DAY_SHORT[group.day]}
+                </div>
+                <div
+                  style={{
+                    ...theme.typography.captionSmall,
+                    fontFamily: theme.fonts.mono,
+                    color: theme.colors.txt.tertiary,
+                  }}
+                >
+                  {group.classes.length} {group.classes.length === 1 ? 'class' : 'classes'}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {group.classes.map(c => (
+                  <ClassCard key={c.id} klass={c} slug={slug} showCategory={showCategory} compact />
+                ))}
               </div>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {group.classes.map(c => (
-                <ClassCard key={c.id} klass={c} slug={slug} showCategory={showCategory} compact />
-              ))}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
+
+      {/* Which way there is more week. Only drawn when the days genuinely do
+          not fit — on a wide screen they now do, and nothing is painted. */}
+      <EdgeFade side="left" show={scroller.more.left} />
+      <EdgeFade side="right" show={scroller.more.right} />
     </div>
   );
 };
