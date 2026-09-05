@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
+import { studioToday } from '../lib/studioDate';
 import { JobTask } from '../types';
 
 /**
@@ -19,15 +20,16 @@ import { JobTask } from '../types';
  * Deliberately NOT the stored `status === 'overdue'` alone. That is set by a
  * background sweep, so for the first part of every day a task that fell due
  * yesterday still reads 'pending' in the database.
+ *
+ * "Today" here is the STUDIO's date, not the viewer's — studioToday() pins
+ * America/Los_Angeles. A scheduledDate is a bare calendar date chosen in the
+ * studio's frame, and the push digest in supabase/functions/alert-push runs
+ * this identical predicate against the studio's date. A badge resolved in the
+ * viewer's zone would disagree with the notification landing on the same
+ * phone. See src/lib/studioDate.ts for the full reasoning.
  */
 
-const todayIso = (): string => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today.toISOString().split('T')[0];
-};
-
-export const isTaskOverdue = (task: JobTask, today: string = todayIso()): boolean => {
+export const isTaskOverdue = (task: JobTask, today: string = studioToday()): boolean => {
   if (task.status === 'archived' || task.status === 'draft' || task.status === 'completed') {
     return false;
   }
@@ -46,7 +48,7 @@ export const useTaskCounts = (): TaskCounts => {
   const { jobTasks } = useTask();
 
   return useMemo(() => {
-    const today = todayIso();
+    const today = studioToday();
     let myOverdue = 0;
     let allOverdue = 0;
     for (const task of jobTasks) {

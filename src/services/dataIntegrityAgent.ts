@@ -7,6 +7,7 @@
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
+import { studioToday } from '../lib/studioDate';
 
 // Types for integrity check results
 export interface IntegrityIssue {
@@ -267,8 +268,11 @@ async function checkOverdueTasks(): Promise<IntegrityIssue[]> {
 
     if (error || !tasks) return issues;
 
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    // The studio's date, not the server's or the browser's — this decides
+    // which tasks get WRITTEN as 'overdue', and isTaskOverdue() trusts that
+    // stored status without rechecking. On the old UTC date it started
+    // marking the day's own tasks overdue from 5pm Pacific onwards.
+    const today = studioToday();
 
     for (const task of tasks) {
       const dueDate = task.scheduled_date;
