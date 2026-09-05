@@ -85,14 +85,31 @@ export const ClassCard: React.FC<CardProps> = ({
     .filter(Boolean).join(' · ');
 
   return (
-    /* The hover handlers live on the wrapper, not the Link: the Add button is
-       a SIBLING of the link — a button nested inside an anchor is invalid and
-       swallows its own clicks — so a mouse moving onto it would otherwise
-       leave the link and flicker the card's border off. */
+    /* The card's frame is the WRAPPER, not the link.
+
+       The Add button cannot live inside the anchor — a button nested in a link
+       is invalid and swallows its own clicks — so the two sit side by side in
+       a flex row and the border, background and padding move up to hold them.
+       Laid out rather than positioned: an absolute button needs the link to
+       reserve clearance for it, and that number is a guess that a longer label
+       or a bigger font silently breaks.
+
+       The hover handlers move up for the same reason. On the link, a mouse
+       travelling to the button would leave it and flicker the border off. */
     <div
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => setActive(false)}
-      style={{ position: 'relative', minWidth: 0 }}
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: canAdd ? '12px' : 0,
+        backgroundColor: theme.colors.bg.secondary,
+        border: `2px solid ${active ? theme.colors.primary : theme.colors.bdr.primary}`,
+        borderRadius: theme.borderRadius.lg,
+        padding: compact ? '10px 12px' : '16px 18px',
+        transition: 'border-color 0.15s ease',
+        minWidth: 0,
+      }}
     >
       <Link
         to={portalRoutes.classDetail(slug, c.id)}
@@ -100,22 +117,12 @@ export const ClassCard: React.FC<CardProps> = ({
         onBlur={() => setActive(false)}
         style={{
           display: 'block',
-          backgroundColor: theme.colors.bg.secondary,
-          border: `2px solid ${active ? theme.colors.primary : theme.colors.bdr.primary}`,
-          borderRadius: theme.borderRadius.lg,
-          // Longhand, because the button's clearance overrides one side and
-          // mixing `padding` with `paddingRight` is React's conflicting-style
-          // warning. 56px is the button plus its inset plus a gap, so a long
-          // class name wraps before it reaches it rather than running under.
-          paddingTop: compact ? '10px' : '16px',
-          paddingBottom: compact ? '10px' : '16px',
-          paddingLeft: compact ? '12px' : '18px',
-          paddingRight: canAdd ? '56px' : (compact ? '12px' : '18px'),
+          flex: 1,
           textDecoration: 'none',
-          transition: 'border-color 0.15s ease',
           // A class name has no natural break point and several are long
           // ("Jr/Teen Turns & Jumps 2"), so say the cell may break anywhere
-          // rather than letting it push the column open.
+          // rather than letting it push the column open. minWidth AND
+          // overflowWrap: one without the other still overflows at 320px.
           minWidth: 0,
           overflowWrap: 'anywhere',
         }}
@@ -190,11 +197,18 @@ export const ClassCard: React.FC<CardProps> = ({
 };
 
 /**
- * The corner button, sitting over the card rather than inside its link.
+ * The Add button, beside the card's link rather than inside it.
  *
- * Named rather than aria-labelled "Add to calendar" alone: on a list of a
- * hundred classes a screen reader would otherwise read out a hundred
- * identical buttons with no way to tell which class each one belongs to.
+ * WHY IT SAYS "ADD TO CALENDAR" AND NOT "ADD"
+ *
+ * This is a page of classes a child could be signed up for, and on it "Add"
+ * reads as ENROL. A parent who taps expecting to put their dancer in the class
+ * and gets a calendar sheet has been misled by one word. The label carries the
+ * whole phrase and the icon repeats it.
+ *
+ * The aria-label names the class as well: on a list of a hundred, a screen
+ * reader would otherwise read out a hundred identical buttons with no way to
+ * tell which class each one belongs to.
  */
 const AddButton: React.FC<{
   klass: PortalClass;
@@ -208,26 +222,29 @@ const AddButton: React.FC<{
       onClick={() => onClick(klass)}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title="Add to my calendar"
       aria-label={`Add ${klass.name} to my calendar`}
       style={{
-        position: 'absolute',
-        top: '12px',
-        right: '12px',
-        width: '36px',
-        height: '36px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
+        gap: '7px',
+        // Never squeezed by a long class name: the name wraps instead.
+        flexShrink: 0,
+        minHeight: '36px',
+        padding: '0 12px',
+        whiteSpace: 'nowrap',
         borderRadius: theme.borderRadius.md,
         border: `1px solid ${hover ? theme.colors.primary : theme.colors.bdr.primary}`,
         backgroundColor: theme.colors.bg.tertiary,
-        color: hover ? theme.colors.primary : theme.colors.txt.tertiary,
+        color: hover ? theme.colors.primary : theme.colors.txt.secondary,
         cursor: 'pointer',
+        fontFamily: theme.fonts.primary,
+        fontSize: '13px',
+        fontWeight: 600,
         transition: 'color 0.15s ease, border-color 0.15s ease',
       }}
     >
-      <CalendarPlusIcon size={17} />
+      <CalendarPlusIcon size={16} />
+      Add to calendar
     </button>
   );
 };
