@@ -245,7 +245,10 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } finally {
       setLoading(false);
     }
-  }, []);
+    // loadLook is itself stable, so naming it here keeps loadPrograms stable
+    // too — which matters, because useRefreshable below is keyed on its
+    // identity and a new function each render would re-register the loader.
+  }, [loadLook]);
 
   useEffect(() => {
     loadPrograms();
