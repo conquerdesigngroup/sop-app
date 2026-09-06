@@ -362,6 +362,73 @@ export const loadAttendanceDetail = async (
 };
 
 /**
+ * Every session for one student, across every class, keyed by class id.
+ *
+ * WHY ONE QUERY AND NOT ONE PER ROW
+ *
+ * The summary card draws a strip of sessions on each class row, so it needs the
+ * detail for all of a child's classes at once. Asking per row would be three or
+ * four round trips on a page that already knows how to do one — and
+ * portal_attendance_detail is scoped by student, so the class filter was only
+ * ever narrowing a result the query would return anyway.
+ *
+ * NOT RANGE-SCOPED, BECAUSE THE VIEW ISN'T
+ *
+ * portal_attendance_detail has no `range` column. Clipping is the caller's job
+ * and `stripSessions` in lib/attendanceMarks.ts does it — including the check
+ * that refuses to draw when its clip disagrees with the server's count.
+ *
+ * A FAILURE HERE IS NOT AN ERROR ANYONE IS TOLD ABOUT
+ *
+ * Unlike every other loader in this file, this one swallows. The strip is an
+ * enrichment of a row that is already correct without it: if these rows do not
+ * arrive the row renders the bar, which is the server's own numbers. Raising a
+ * card-level error would replace a working attendance card with "we could not
+ * load this" over a decoration.
+ */
+export const loadStudentSessions = async (
+  src: AttendanceSource,
+  studentId: string,
+  settings: AttendanceSettings = DEFAULT_ATTENDANCE_SETTINGS,
+): Promise<Record<string, SessionAttendance[]>> => {
+  const byClass: Record<string, SessionAttendance[]> = {};
+
+  if (src.source === 'fixture') {
+    FIXTURE_ENROLLMENTS
+      .filter(e => e.studentId === studentId)
+      .forEach(e => { byClass[e.classId] = loadFixtureDetail(studentId, e.classId, settings); });
+    return byClass;
+  }
+
+  const { data, error } = await supabase
+    .from('portal_attendance_detail')
+    .select('class_id, session_id, session_date, session_status, note, status, counts_toward_total, excluded_reason')
+    .eq('student_id', studentId)
+    .order('session_date');
+
+  if (error) return {};
+
+  (data ?? []).forEach((row: any) => {
+    const list = byClass[row.class_id] ?? (byClass[row.class_id] = []);
+    list.push({
+      session: {
+        id: row.session_id,
+        classId: row.class_id,
+        sessionDate: row.session_date,
+        status: row.session_status,
+        source: 'import',
+        note: row.note,
+      },
+      status: row.status,
+      countsTowardTotal: row.counts_toward_total,
+      excludedReason: row.excluded_reason,
+    });
+  });
+
+  return byClass;
+};
+
+/**
  * One student's classes for one range — WITHOUT re-reading the household.
  *
  * DEFECT THIS FIXES
