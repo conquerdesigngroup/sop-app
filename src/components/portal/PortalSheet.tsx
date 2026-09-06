@@ -95,6 +95,9 @@ const PortalSheet: React.FC<Props> = ({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
+        // Centres the panel once it stops being as wide as the screen. See the
+        // maxWidth below — on a phone it changes nothing.
+        alignItems: 'center',
       }}
     >
       {/* Hardcoded black rather than a theme token: this is a scrim over
@@ -118,6 +121,14 @@ const PortalSheet: React.FC<Props> = ({
         style={{
           position: 'relative',
           maxHeight: '88dvh',
+          // Full width on a phone, which is every width below 520. Above it the
+          // sheet stops stretching: a row of a 20px icon, a label and a chevron
+          // spread across a 1400px desktop reads as a stray band across the
+          // bottom of the window rather than a panel, and the eye has to travel
+          // the whole width to get from the icon to the chevron that belongs
+          // with it. 520 is about the widest these rows still read as rows.
+          width: '100%',
+          maxWidth: '520px',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.colors.bg.secondary,

@@ -2,8 +2,7 @@ import React from 'react';
 import { theme } from '../../theme';
 import PortalSheet from './PortalSheet';
 import { useAddToCalendar } from './useAddToCalendar';
-import { describeEventWhen, formatEventDate } from '../../lib/portal';
-import { PortalEvent } from '../../types';
+import { CalendarTarget } from '../../lib/calendarTarget';
 
 /**
  * "Add to my calendar", asked properly.
@@ -16,12 +15,12 @@ import { PortalEvent } from '../../types';
  *
  * WHY A SHEET AND NOT THE DROPDOWN
  *
- * A dropdown has to be anchored, and this opens from two very different
- * places — the small Add button on a calendar row, and the primary button in
- * the event card, which is itself inside a Modal. A sheet is anchored to the
- * screen instead of to the thing that opened it, so both callers get the same
- * panel and neither has to reason about whether the menu will fit above or
- * below the button that spawned it.
+ * A dropdown has to be anchored, and this opens from several very different
+ * places — the small Add button on a calendar row, the primary button in the
+ * event card (itself inside a Modal), and the button on a class. A sheet is
+ * anchored to the screen instead of to the thing that opened it, so every
+ * caller gets the same panel and none has to reason about whether the menu
+ * will fit above or below the button that spawned it.
  *
  * ORDER IS DELIBERATE
  *
@@ -30,10 +29,18 @@ import { PortalEvent } from '../../types';
  * routes sit below the direct handoffs, and the plain download sits below the
  * share sheet, because it is the fallback for the parent none of the others
  * fit — not the default any more.
+ *
+ * WHAT IT TAKES
+ *
+ * A CalendarTarget, not an event. A one-off studio date and a class that
+ * repeats every week to the end of the season are different shapes with the
+ * same five ways out of the app; the target is what they have in common. A
+ * target with no Outlook link — a recurring class, whose recurrence that
+ * deeplink cannot express — simply does not draw that row.
  */
 
 interface Props {
-  event: PortalEvent | null;
+  target: CalendarTarget | null;
   onClose: () => void;
 }
 
@@ -178,30 +185,30 @@ const Row: React.FC<RowProps> = ({ icon, label, hint, disabled, onClick }) => (
 
 // ------------------------------------------------------------------- sheet
 
-const AddToCalendarSheet: React.FC<Props> = ({ event, onClose }) => {
+const AddToCalendarSheet: React.FC<Props> = ({ target, onClose }) => {
   const { openGoogle, openOutlook, saveToDevice, downloadFile, copyLink, busy } =
     useAddToCalendar();
 
   // Every route is a one-shot handoff, so the sheet closes behind each of
   // them. Leaving it open would put a panel over the tab Google just opened.
-  const run = (action: (e: PortalEvent) => void) => () => {
-    if (!event) return;
-    action(event);
+  const run = (action: (t: CalendarTarget) => void) => () => {
+    if (!target) return;
+    action(target);
     onClose();
   };
 
   return (
     <PortalSheet
-      isOpen={!!event}
+      isOpen={!!target}
       onClose={onClose}
       title="Add to my calendar"
       // Above Modal's 1100 overlay: this opens from inside the event card.
       zIndex={1200}
     >
-      {event && (
+      {target && (
         <>
-          {/* Which date is being saved. The sheet covers the row that was
-              tapped, so without this there is nothing on screen naming it. */}
+          {/* What is being saved. The sheet covers the row that was tapped, so
+              without this there is nothing on screen naming it. */}
           <div style={{
             padding: '12px 14px',
             background: theme.colors.bg.tertiary,
@@ -216,7 +223,7 @@ const AddToCalendarSheet: React.FC<Props> = ({ event, onClose }) => {
               fontWeight: 600,
               color: theme.colors.txt.primary,
             }}>
-              {event.title}
+              {target.title}
             </div>
             <div style={{
               ...theme.typography.caption,
@@ -224,12 +231,23 @@ const AddToCalendarSheet: React.FC<Props> = ({ event, onClose }) => {
               color: theme.colors.txt.secondary,
               marginTop: '3px',
             }}>
-              {formatEventDate(event.startsAt, event.isAllDay, {
-                weekday: 'short', month: 'short', day: 'numeric',
-              })}
-              {' · '}
-              {describeEventWhen(event.startsAt, event.endsAt, event.isAllDay)}
+              {target.when}
             </div>
+
+            {/* A repeating class says so here. "Add to calendar" on a class
+                that meets thirty times is a very different promise from the
+                same words on a single date, and the parent is entitled to know
+                which one they are about to press. */}
+            {target.note && (
+              <div style={{
+                ...theme.typography.captionSmall,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.tertiary,
+                marginTop: '6px',
+              }}>
+                {target.note}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -246,22 +264,31 @@ const AddToCalendarSheet: React.FC<Props> = ({ event, onClose }) => {
               disabled={busy}
               onClick={run(saveToDevice)}
             />
-            <Row
-              icon={<OutlookMark />}
-              label="Outlook"
-              hint="Opens filled in — just press Save"
-              onClick={run(openOutlook)}
-            />
+            {/* Dropped for a recurring class: the Outlook deeplink carries no
+                recurrence, so this row would quietly hand over one lesson out
+                of thirty. Those parents take the .ics row below, which
+                Outlook imports with the repeat intact. */}
+            {target.outlook && (
+              <Row
+                icon={<OutlookMark />}
+                label="Outlook"
+                hint="Opens filled in — just press Save"
+                onClick={run(openOutlook)}
+              />
+            )}
             <Row
               icon={<DownloadIcon />}
               label="Any other calendar"
-              hint="Downloads an .ics file"
+              hint={target.outlook
+                ? 'Downloads an .ics file'
+                : 'Outlook and the rest — downloads an .ics file'}
               onClick={run(downloadFile)}
             />
             <Row
               icon={<CopyIcon />}
               label="Copy link"
-              hint="Send the date to someone else"
+              // "the date" would be wrong for a class that meets thirty times.
+              hint="Send it to someone else"
               onClick={run(copyLink)}
             />
           </div>

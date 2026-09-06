@@ -22,6 +22,7 @@ import {
   describeEventWhen,
   dateKey,
 } from '../../lib/portal';
+import { eventTarget } from '../../lib/portalIcs';
 import {
   monthWeeks,
   layoutWeek,
@@ -831,7 +832,10 @@ const ProgramCalendar: React.FC = () => {
       </div>
 
       <EventCard event={opened} onClose={closeCard} onAddToCalendar={setAddingTo} />
-      <AddToCalendarSheet event={addingTo} onClose={closeSheet} />
+      <AddToCalendarSheet
+        target={addingTo ? eventTarget(addingTo) : null}
+        onClose={closeSheet}
+      />
       <SubscribeSheet
         isOpen={subscribing}
         onClose={closeSubscribe}
