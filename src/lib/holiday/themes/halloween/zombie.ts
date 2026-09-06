@@ -1,24 +1,28 @@
-import { drawSprite } from '../../draw';
-import { clamp01, lerp, shambleBob, shambleRoll, shambleStep, teeter } from '../../ease';
 import { unionRect } from '../../anchors';
+import { clamp01, lerp, shambleStep, teeter } from '../../ease';
+import { drawRig } from '../../rig';
 import type { ActDefinition } from '../../types';
 import { fallbackTile, groundShadow, sizeFor } from './look';
+import { zombieBob, zombieShamble, zombieTeeter, zombieTumble } from './poses';
+import { ZOMBIE } from './rigs';
 
 /**
  * The zombie: shambles along the top edge of the tiles, teeters on the corner
  * and falls off.
  *
- * Staged across the UNION of both tiles rather than one of them. A single tile
- * is about 138px wide on a 320px phone — two strides and a fall, which reads as
- * a stumble rather than a walk. The pair gives roughly 400px on a phone and 520
- * on a desktop, and the fall then happens off the outer corner, which is the
- * better shot anyway.
+ * Three beats, and now three POSES rather than one sprite being rotated: it
+ * walks with its arms out, throws them up as it loses the corner, and flails
+ * on the way down. The tumble in particular only reads because the limbs move
+ * independently of the body's spin — a rigid figure rotating is a wheel.
+ *
+ * Staged across the UNION of both tiles. A single tile is about 138px on a
+ * 320px phone, which is two strides and a fall.
  */
 
 const DURATION = 7.5;
 const WALK_END = 0.62;
 const TEETER_END = 0.73;
-/** Seconds of teeter shape squeezed into that window — tuned so it commits at the handoff. */
+/** Seconds of teeter shape squeezed into that window — commits at the handoff. */
 const TEETER_SPAN = 0.85;
 const STRIDE = 0.92;
 const GRAVITY = 1400;
@@ -26,7 +30,7 @@ const GRAVITY = 1400;
 export const zombie: ActDefinition = {
   id: 'zombie',
   layer: 'front',
-  needs: ['zombie'],
+  needs: ['zo_head', 'zo_torso', 'zo_upperArm', 'zo_foreArm', 'zo_leg'],
   // Below this there is not enough ledge to read as walking before it falls.
   canRun: (stage) => stage.vw >= 300,
   cast(rand) {
@@ -35,18 +39,16 @@ export const zombie: ActDefinition = {
     return {
       duration: DURATION,
       draw({ t, p, stage, sprites, paint }) {
-        const sprite = sprites.zombie;
-        if (!sprite) return;
-
         const scale = sizeFor(stage);
-        const w = sprite.w * scale;
         const shadow = groundShadow(paint);
+        // Torso centre above the feet, so the rig stands ON the ledge.
+        const hip = 40 * scale;
 
         const ledge = unionRect(
           stage.anchorOr('staff', fallbackTile(stage, 'left')),
           stage.anchorOr('dancer', fallbackTile(stage, 'right'))
         );
-        const startX = goRight ? ledge.x + w * 0.2 : ledge.x + ledge.w - w * 0.2;
+        const startX = goRight ? ledge.x + 14 : ledge.x + ledge.w - 14;
         const cornerX = goRight ? ledge.x + ledge.w : ledge.x;
         const topY = ledge.y;
 
@@ -56,18 +58,14 @@ export const zombie: ActDefinition = {
           const strides = walkT / STRIDE;
           const done = Math.floor(strides);
           const q = strides - done;
-          // The bad leg's drag is inside shambleStep; the distance still has to
-          // come out right over the whole walk, so progress is measured in
-          // completed strides plus the current one's partial.
-          const progress = (done + shambleStep(q)) / (WALK_END * DURATION / STRIDE);
+          const progress = (done + shambleStep(q)) / ((WALK_END * DURATION) / STRIDE);
 
-          drawSprite(paint, sprite, {
+          drawRig(paint, ZOMBIE, sprites, {
             x: lerp(startX, cornerX, clamp01(progress)),
-            y: topY + shambleBob(q),
+            y: topY - hip + zombieBob(q) * scale,
             scale,
-            rot: shambleRoll(q) * (goRight ? 1 : -1),
-            pivot: 'bottom',
             flip: !goRight,
+            pose: zombieShamble(q),
             shadow,
           });
           return;
@@ -75,14 +73,14 @@ export const zombie: ActDefinition = {
 
         // --- teeter: an inverted pendulum, pivoting on the corner underfoot ---
         if (p < TEETER_END) {
-          const u = ((p - WALK_END) / (TEETER_END - WALK_END)) * TEETER_SPAN;
-          drawSprite(paint, sprite, {
+          const u = (p - WALK_END) / (TEETER_END - WALK_END);
+          drawRig(paint, ZOMBIE, sprites, {
             x: cornerX,
-            y: topY,
+            y: topY - hip,
             scale,
-            rot: teeter(u) * (goRight ? 1 : -1),
-            pivot: 'bottom',
             flip: !goRight,
+            rot: teeter(u * TEETER_SPAN) * (goRight ? 1 : -1),
+            pose: zombieTeeter(u),
             shadow,
           });
           return;
@@ -91,22 +89,14 @@ export const zombie: ActDefinition = {
         // --- tumble ----------------------------------------------------------
         const u = (p - TEETER_END) * DURATION;
         const exitRot = teeter(TEETER_SPAN) * (goRight ? 1 : -1);
-        const h = sprite.h * scale;
 
-        // A falling body rotates about its centre of mass, but it was rotating
-        // about its foot a moment ago. Jumping between the two is visible, so
-        // the pivot is faked by sliding the draw point up to the centre over
-        // the first eighth of a second.
-        const toCentre = clamp01(u / 0.12);
-        const y = topY + 0.5 * GRAVITY * u * u - (h / 2) * toCentre;
-
-        drawSprite(paint, sprite, {
+        drawRig(paint, ZOMBIE, sprites, {
           x: cornerX + (goRight ? 40 : -40) * u,
-          y,
+          y: topY - hip + 0.5 * GRAVITY * u * u,
           scale,
-          rot: exitRot + (goRight ? 3.4 : -3.4) * u,
-          pivot: toCentre < 1 ? 'bottom' : 'center',
           flip: !goRight,
+          rot: exitRot + (goRight ? 3.4 : -3.4) * u,
+          pose: zombieTumble(u),
           shadow,
         });
       },

@@ -24,7 +24,15 @@ import type { Paint, Sprite } from './types';
  * reasons nobody can name.
  */
 
-export type Pivot = 'bottom' | 'center' | 'top';
+/**
+ * The point that (x, y) names.
+ *
+ * The three names cover whole-sprite staging. A `[u, v]` pair covers joints:
+ * a rigged limb rotates about a shoulder or a knee, which is a specific spot on
+ * that piece of art and not one of its edges. Fractions of the sprite box, so
+ * the numbers survive a re-render at a different size.
+ */
+export type Pivot = 'bottom' | 'center' | 'top' | readonly [number, number];
 
 export interface SpriteOptions {
   x: number;
@@ -47,8 +55,14 @@ export interface SpriteOptions {
   shadow?: { color: string; blur: number; offsetY: number } | null;
 }
 
-const pivotOffset = (pivot: Pivot, h: number): number =>
-  pivot === 'bottom' ? -h : pivot === 'center' ? -h / 2 : 0;
+/** Where the sprite's top-left goes, relative to the point (x, y) names. */
+const pivotOffset = (pivot: Pivot, w: number, h: number): { ox: number; oy: number } => {
+  if (Array.isArray(pivot)) return { ox: -pivot[0] * w, oy: -pivot[1] * h };
+  return {
+    ox: -w / 2,
+    oy: pivot === 'bottom' ? -h : pivot === 'center' ? -h / 2 : 0,
+  };
+};
 
 /**
  * The axis-aligned box a rotated, scaled sprite occupies, in canvas space.
@@ -64,17 +78,19 @@ export const spriteBounds = (
   const sx = (o.sx ?? 1) * scale;
   const sy = (o.sy ?? 1) * scale;
   const rot = o.rot ?? 0;
-  const oy = pivotOffset(o.pivot ?? 'center', sprite.h);
+  const { ox, oy } = pivotOffset(o.pivot ?? 'center', sprite.w, sprite.h);
 
   const W = Math.abs(sprite.w * sx);
   const H = Math.abs(sprite.h * sy);
   const c = Math.abs(Math.cos(rot));
   const s = Math.abs(Math.sin(rot));
 
-  // The sprite's own centre, in local space, is offset from the pivot.
+  // The sprite's own centre, in local space, is offset from the pivot — on both
+  // axes now that a pivot can sit anywhere on the art, not just on its midline.
+  const localCx = (ox + sprite.w / 2) * sx;
   const localCy = (oy + sprite.h / 2) * sy;
-  const cx = o.x - localCy * Math.sin(rot);
-  const cy = o.y + localCy * Math.cos(rot);
+  const cx = o.x + localCx * Math.cos(rot) - localCy * Math.sin(rot);
+  const cy = o.y + localCx * Math.sin(rot) + localCy * Math.cos(rot);
 
   const hw = (c * W + s * H) / 2;
   const hh = (s * W + c * H) / 2;
@@ -103,7 +119,8 @@ export const drawSprite = (paint: Paint, sprite: Sprite, o: SpriteOptions): void
   ctx.translate(o.x, o.y);
   if (o.rot) ctx.rotate(o.rot);
   ctx.scale(sx, sy);
-  ctx.drawImage(sprite.img, -sprite.w / 2, pivotOffset(o.pivot ?? 'center', sprite.h), sprite.w, sprite.h);
+  const p = pivotOffset(o.pivot ?? 'center', sprite.w, sprite.h);
+  ctx.drawImage(sprite.img, p.ox, p.oy, sprite.w, sprite.h);
   ctx.restore();
 };
 

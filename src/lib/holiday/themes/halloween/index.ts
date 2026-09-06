@@ -5,17 +5,28 @@ import { drawPumpkinsStill, pumpkins } from './pumpkins';
 import { skeleton } from './skeleton';
 import { zombie } from './zombie';
 
-import batDownUrl from '../../../../assets/holiday/halloween/batDown.webp';
-import batHangUrl from '../../../../assets/holiday/halloween/batHang.webp';
-import batLevelUrl from '../../../../assets/holiday/halloween/batLevel.webp';
-import batUpUrl from '../../../../assets/holiday/halloween/batUp.webp';
 import ghostUrl from '../../../../assets/holiday/halloween/ghost.webp';
 import pumpkinUrl from '../../../../assets/holiday/halloween/pumpkin.webp';
-import walk0Url from '../../../../assets/holiday/halloween/walk0.webp';
-import walk1Url from '../../../../assets/holiday/halloween/walk1.webp';
-import walk2Url from '../../../../assets/holiday/halloween/walk2.webp';
-import walk3Url from '../../../../assets/holiday/halloween/walk3.webp';
-import zombieUrl from '../../../../assets/holiday/halloween/zombie.webp';
+
+import baBody from '../../../../assets/holiday/halloween/ba_body.webp';
+import baFoot from '../../../../assets/holiday/halloween/ba_foot.webp';
+import baHead from '../../../../assets/holiday/halloween/ba_head.webp';
+import baWingIn from '../../../../assets/holiday/halloween/ba_wingIn.webp';
+import baWingOut from '../../../../assets/holiday/halloween/ba_wingOut.webp';
+
+import skForeArm from '../../../../assets/holiday/halloween/sk_foreArm.webp';
+import skPelvis from '../../../../assets/holiday/halloween/sk_pelvis.webp';
+import skRibs from '../../../../assets/holiday/halloween/sk_ribs.webp';
+import skShin from '../../../../assets/holiday/halloween/sk_shin.webp';
+import skSkull from '../../../../assets/holiday/halloween/sk_skull.webp';
+import skThigh from '../../../../assets/holiday/halloween/sk_thigh.webp';
+import skUpperArm from '../../../../assets/holiday/halloween/sk_upperArm.webp';
+
+import zoForeArm from '../../../../assets/holiday/halloween/zo_foreArm.webp';
+import zoHead from '../../../../assets/holiday/halloween/zo_head.webp';
+import zoLeg from '../../../../assets/holiday/halloween/zo_leg.webp';
+import zoTorso from '../../../../assets/holiday/halloween/zo_torso.webp';
+import zoUpperArm from '../../../../assets/holiday/halloween/zo_upperArm.webp';
 
 /**
  * Halloween: the cast, the palette and the running order.
@@ -57,17 +68,29 @@ export const halloween: HolidayTheme = {
   sprites: {
     ghost: { url: ghostUrl, w: 69, h: 76 },
     pumpkin: { url: pumpkinUrl, w: 72, h: 70 },
-    zombie: { url: zombieUrl, w: 58, h: 84 },
-    // One canvas for the cycle, so a frame swap never changes size or position.
-    walk0: { url: walk0Url, w: 39, h: 78 },
-    walk1: { url: walk1Url, w: 39, h: 78 },
-    walk2: { url: walk2Url, w: 39, h: 78 },
-    walk3: { url: walk3Url, w: 39, h: 78 },
-    batHang: { url: batHangUrl, w: 62, h: 72 },
-    // Wingspan, not body: the flight canvas is sized to the widest wing pose.
-    batUp: { url: batUpUrl, w: 80, h: 70 },
-    batLevel: { url: batLevelUrl, w: 80, h: 70 },
-    batDown: { url: batDownUrl, w: 80, h: 70 },
+
+    // Rig parts. Sizes are per PIECE, so the assembled character's height is
+    // the sum of its chain minus the joint overlaps — see rigs.ts. Every piece
+    // is drawn from art at least 2.5x its display size.
+    ba_body: { url: baBody, w: 32, h: 34 },
+    ba_head: { url: baHead, w: 34, h: 26 },
+    ba_wingIn: { url: baWingIn, w: 30, h: 18 },
+    ba_wingOut: { url: baWingOut, w: 30, h: 19 },
+    ba_foot: { url: baFoot, w: 7, h: 8 },
+
+    sk_skull: { url: skSkull, w: 22, h: 26 },
+    sk_ribs: { url: skRibs, w: 21, h: 30 },
+    sk_pelvis: { url: skPelvis, w: 11, h: 12 },
+    sk_upperArm: { url: skUpperArm, w: 8, h: 24 },
+    sk_foreArm: { url: skForeArm, w: 11, h: 17 },
+    sk_thigh: { url: skThigh, w: 9, h: 26 },
+    sk_shin: { url: skShin, w: 14, h: 20 },
+
+    zo_head: { url: zoHead, w: 26, h: 30 },
+    zo_torso: { url: zoTorso, w: 27, h: 30 },
+    zo_upperArm: { url: zoUpperArm, w: 10, h: 22 },
+    zo_foreArm: { url: zoForeArm, w: 9, h: 22 },
+    zo_leg: { url: zoLeg, w: 19, h: 32 },
   },
 
   acts: [ghost, bat, zombie, skeleton],
@@ -89,7 +112,7 @@ export const halloween: HolidayTheme = {
 
   // Reduced motion fetches only these — about 24KB instead of 111KB. The right
   // courtesy to somebody who has asked for less, and two lines to honour.
-  stillNeeds: ['pumpkin', 'batHang'],
+  stillNeeds: ['pumpkin', 'ba_body', 'ba_head', 'ba_wingIn', 'ba_wingOut', 'ba_foot'],
 
   drawStill(c) {
     drawPumpkinsStill(c);
