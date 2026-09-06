@@ -75,7 +75,15 @@ export const spriteBounds = (
   o: SpriteOptions
 ): { x: number; y: number; w: number; h: number } => {
   const scale = o.scale ?? 1;
-  const sx = (o.sx ?? 1) * scale;
+  // The flip MUST be here, exactly as drawSprite applies it. A mirrored sprite
+  // whose pivot is off its midline sits on the other side of that pivot, and a
+  // box computed without the sign covers empty canvas while the art itself is
+  // never cleared — which is a trail of the character smeared across the page.
+  //
+  // This was latent until the rig arrived: every pivot before it was 'center',
+  // 'top' or 'bottom', all of which put ox at -w/2 and make localCx exactly
+  // zero, where the sign cancels out and cannot be observed.
+  const sx = (o.sx ?? 1) * scale * (o.flip ? -1 : 1);
   const sy = (o.sy ?? 1) * scale;
   const rot = o.rot ?? 0;
   const { ox, oy } = pivotOffset(o.pivot ?? 'center', sprite.w, sprite.h);

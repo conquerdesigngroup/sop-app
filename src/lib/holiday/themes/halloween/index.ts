@@ -3,6 +3,7 @@ import { bat, drawBatStill } from './bat';
 import { ghost } from './ghost';
 import { drawPumpkinsStill, pumpkins } from './pumpkins';
 import { skeleton } from './skeleton';
+import { witch } from './witch';
 import { zombie } from './zombie';
 
 import ghostUrl from '../../../../assets/holiday/halloween/ghost.webp';
@@ -27,6 +28,10 @@ import zoHead from '../../../../assets/holiday/halloween/zo_head.webp';
 import zoLeg from '../../../../assets/holiday/halloween/zo_leg.webp';
 import zoTorso from '../../../../assets/holiday/halloween/zo_torso.webp';
 import zoUpperArm from '../../../../assets/holiday/halloween/zo_upperArm.webp';
+
+import wiBankL from '../../../../assets/holiday/halloween/wi_bankL.webp';
+import wiBankR from '../../../../assets/holiday/halloween/wi_bankR.webp';
+import wiLevel from '../../../../assets/holiday/halloween/wi_level.webp';
 
 /**
  * Halloween: the cast, the palette and the running order.
@@ -79,7 +84,12 @@ export const halloween: HolidayTheme = {
     ba_foot: { url: baFoot, w: 7, h: 8 },
 
     sk_skull: { url: skSkull, w: 22, h: 26 },
-    sk_ribs: { url: skRibs, w: 21, h: 30 },
+    // Narrowed on purpose. The ribcage was rendered front-on while the skull
+    // is a profile, so at full width the skeleton reads as facing two ways at
+    // once — which is exactly what it looked like. Squashed to a profile's
+    // width it reads as a ribcage seen from the side, which at 30px is all it
+    // has to do.
+    sk_ribs: { url: skRibs, w: 13, h: 30 },
     sk_pelvis: { url: skPelvis, w: 11, h: 12 },
     sk_upperArm: { url: skUpperArm, w: 8, h: 24 },
     sk_foreArm: { url: skForeArm, w: 11, h: 17 },
@@ -91,18 +101,26 @@ export const halloween: HolidayTheme = {
     zo_upperArm: { url: zoUpperArm, w: 10, h: 22 },
     zo_foreArm: { url: zoForeArm, w: 9, h: 22 },
     zo_leg: { url: zoLeg, w: 19, h: 32 },
+
+    // Baked from a 3D model at three bank angles — see witch.ts for why this
+    // one is frames rather than a rig. All three share one registered canvas,
+    // so swapping bank never shifts her position.
+    wi_bankL: { url: wiBankL, w: 68, h: 101 },
+    wi_level: { url: wiLevel, w: 68, h: 101 },
+    wi_bankR: { url: wiBankR, w: 68, h: 101 },
   },
 
-  acts: [ghost, bat, zombie, skeleton],
+  acts: [ghost, bat, witch, zombie, skeleton],
   ambient: [pumpkins],
 
   /**
-   * The ghost and the bat. Most visits contain exactly one performance, so the
-   * first pick is drawn from here rather than uniformly — meeting the skeleton
-   * plodding along the bottom edge is a much weaker first impression than
-   * either of these, and for most people it would be the only impression.
+   * The ghost, the bat and the witch. Most visits contain exactly one
+   * performance, so the first pick is drawn from here rather than uniformly —
+   * meeting the skeleton plodding along the bottom edge is a much weaker first
+   * impression than any of these, and for most people it would be the only
+   * impression they ever get.
    */
-  openers: ['ghost', 'bat'],
+  openers: ['ghost', 'bat', 'witch'],
 
   palette: {
     // Literal hex only. Canvas cannot resolve the var() tokens in theme.ts.
