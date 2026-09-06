@@ -9,6 +9,7 @@ import EventCard from '../../components/portal/EventCard';
 import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import SubscribeSheet from '../../components/portal/SubscribeSheet';
 import { RowSkeleton } from '../../components/portal/PortalSkeleton';
+import EmptyArt from '../../components/portal/EmptyArt';
 import { usePortal } from '../../contexts/PortalContext';
 import {
   portalRoutes,
@@ -710,6 +711,7 @@ const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd }) => {
   if (groups.length === 0) {
     return (
       <EmptyState
+        icon={<EmptyArt name="calendar" />}
         title="Nothing scheduled yet"
         description="Rehearsals, competitions and studio dates will appear here."
       />

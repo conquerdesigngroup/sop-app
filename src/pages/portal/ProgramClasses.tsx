@@ -3,6 +3,7 @@ import { theme } from '../../theme';
 import { Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import { RowSkeleton } from '../../components/portal/PortalSkeleton';
+import EmptyArt from '../../components/portal/EmptyArt';
 import ClassFilterBar from '../../components/portal/ClassFilterBar';
 import ClassMobileSchedule from '../../components/portal/ClassMobileSchedule';
 import {
@@ -178,6 +179,7 @@ const ProgramClasses: React.FC = () => {
 
         {!loading && !error && classes.length === 0 && (
           <EmptyState
+            icon={<EmptyArt name="classes" />}
             title="No classes listed yet"
             description="Class schedules for this program will appear here once the studio adds them."
           />

@@ -3,6 +3,7 @@ import { theme } from '../../theme';
 import { Badge, Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
+import EmptyArt from '../../components/portal/EmptyArt';
 import { usePortal } from '../../contexts/PortalContext';
 import { portalRoutes } from '../../lib/portal';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
@@ -70,6 +71,7 @@ const ProgramUpdates: React.FC = () => {
 
         {!loading && !error && updates.length === 0 && (
           <EmptyState
+            icon={<EmptyArt name="stage" />}
             title="Nothing posted yet"
             description="Announcements from the studio and your teachers will show up here."
           />

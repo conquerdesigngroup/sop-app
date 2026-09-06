@@ -11,6 +11,7 @@ import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
+import EmptyArt from '../../components/portal/EmptyArt';
 import { logDownload } from '../../lib/portalDownloads';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
@@ -278,6 +279,7 @@ const ClassDetail: React.FC = () => {
 
               {updates.length === 0 ? (
                 <EmptyState
+                  icon={<EmptyArt name="stage" />}
                   title="Nothing posted yet"
                   description={`Info from ${klass.instructorName || 'this class’s teacher'} will appear here.`}
                 />
