@@ -5,6 +5,7 @@ import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import CountdownBand from '../../components/portal/CountdownBand';
+import ProgramHero from '../../components/portal/ProgramHero';
 import { usePortal } from '../../contexts/PortalContext';
 import { portalRoutes, eventLastDayKey } from '../../lib/portal';
 import { studioToday } from '../../lib/studioDate';
@@ -25,7 +26,7 @@ const icon = (d: string) => (
 
 const ProgramHome: React.FC = () => {
   const { slug, program } = useProgramPage();
-  const { fetchUpdates, fetchEvents } = usePortal();
+  const { fetchUpdates, fetchEvents, heroUrls } = usePortal();
 
   const updates = useProgramQuery<PortalUpdate[]>(program?.id, fetchUpdates, []);
   const events = useProgramQuery<PortalEvent[]>(program?.id, fetchEvents, []);
@@ -59,6 +60,13 @@ const ProgramHome: React.FC = () => {
       slug={slug}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '720px' }}>
+        {/* Above the summary cards and outside the `busy` branch: the hero is
+            already in the provider by the time this page mounts, so gating it
+            on the updates fetch would hide a picture that is ready. It renders
+            nothing when the program has none. */}
+        {program && (
+          <ProgramHero url={heroUrls[program.id]} alt={program.heroAlt} />
+        )}
         {/* What's new — only rendered when there is something to show, so an
             empty section reads as deliberate rather than broken. */}
         {/* Only the two summary cards are skeletoned. The three nav tiles

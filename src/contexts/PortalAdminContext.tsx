@@ -11,7 +11,9 @@ import {
 import {
   mapProgram, mapClass, mapUpdate, mapEvent, mapDocument, mapCalendarSource,
 } from '../lib/portalMappers';
-import { buildStoragePath, MAX_DOCUMENT_MB } from '../lib/portalAdmin';
+import { buildStoragePath, buildHeroPath, MAX_DOCUMENT_MB } from '../lib/portalAdmin';
+import { InstructorLook, mapInstructorLook } from '../lib/instructorLook';
+import { validateAvatar } from '../lib/avatarPalette';
 import {
   createStreamUpload, uploadToStream, deleteStreamVideo, fetchStreamStatus, StreamUploadAborted,
 } from '../lib/portalStreamUpload';
@@ -275,6 +277,20 @@ interface PortalAdminContextValue {
   removeCalendarSource: (programId: string, googleCalendarId: string) => Promise<void>;
   /** Runs the sync now, for every calendar the program reads. */
   runCalendarSync: (programId: string) => Promise<SyncRunResult[]>;
+
+  /**
+   * The portal's look (v46). Super admin only in the UI — and, for the
+   * instructor table, in the database too. See the v46 header for why the
+   * program hero's own policy stays is_admin().
+   */
+  fetchInstructorLooks: () => Promise<InstructorLook[]>;
+  saveInstructorLook: (look: InstructorLook) => Promise<void>;
+  /** Deletes the row, which returns that teacher to the computed default. */
+  resetInstructorLook: (nameKey: string) => Promise<void>;
+  /** Uploads the picture, points the program at it, and removes the old one. */
+  uploadProgramHero: (program: PortalProgram, file: File, alt: string) => Promise<void>;
+  saveProgramHeroAlt: (programId: string, alt: string) => Promise<void>;
+  removeProgramHero: (program: PortalProgram) => Promise<void>;
 
   setRequiresCode: (programId: string, requiresCode: boolean) => Promise<void>;
   setAccessCode: (slug: PortalProgramSlug, code: string) => Promise<void>;
@@ -1149,6 +1165,142 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     return (data?.synced ?? []) as SyncRunResult[];
   }, []);
 
+  // ------------------------------------------------------------------- look
+
+  const fetchInstructorLooks = useCallback(async (): Promise<InstructorLook[]> => {
+    const { data, error } = await supabase
+      .from('portal_instructor_looks')
+      .select('name_key, display_name, mode, initials, icon_key, palette_key')
+      .order('display_name');
+    if (error) throw error;
+    return (data ?? []).map(mapInstructorLook);
+  }, []);
+
+  /**
+   * Upsert, keyed on the folded name.
+   *
+   * validateAvatar runs here as well as in the picker. §5.5's acceptance item
+   * is a crafted request storing an off-palette colour, and the only way that
+   * fails is if the check does not live solely in the component that draws the
+   * swatches. The v46 CHECK constraints are the third line, and the one that
+   * holds even if this file is bypassed entirely.
+   */
+  const saveInstructorLook = useCallback(async (look: InstructorLook) => {
+    const checked = validateAvatar(look);
+    if (!checked.ok) throw new Error(checked.error);
+
+    const { error } = await supabase.from('portal_instructor_looks').upsert({
+      name_key: look.nameKey,
+      display_name: look.displayName.trim(),
+      mode: checked.value.mode,
+      initials: checked.value.initials,
+      icon_key: checked.value.iconKey,
+      palette_key: checked.value.paletteKey,
+      updated_by: authorId,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'name_key' });
+    if (error) throw error;
+
+    void logActivity({
+      action: 'instructor_look_saved', entityType: 'program',
+      entityTitle: look.displayName,
+      details: { nameKey: look.nameKey, mode: checked.value.mode, paletteKey: checked.value.paletteKey },
+    });
+  }, [authorId]);
+
+  const resetInstructorLook = useCallback(async (nameKey: string) => {
+    const { error } = await supabase
+      .from('portal_instructor_looks')
+      .delete()
+      .eq('name_key', nameKey);
+    if (error) throw error;
+    void logActivity({
+      action: 'instructor_look_reset', entityType: 'program', entityTitle: nameKey,
+    });
+  }, []);
+
+  /**
+   * Object first, then the row, then the old object — the same order
+   * uploadDocument uses and for the same reason.
+   *
+   * A row pointing at an object that does not exist renders a program page with
+   * a hole in it for every parent. An object with no row pointing at it is
+   * invisible and costs a few hundred kilobytes. So the row is only moved once
+   * the new file is definitely there, and the PREVIOUS file is only removed
+   * once the row has definitely moved. A failure at any step leaves the program
+   * showing the picture it had.
+   */
+  const uploadProgramHero = useCallback(async (program: PortalProgram, file: File, alt: string) => {
+    const storagePath = buildHeroPath(program.slug, file.name);
+
+    const { error: uploadErr } = await supabase.storage
+      .from('portal-documents')
+      .upload(storagePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || undefined,
+      });
+    if (uploadErr) throw uploadErr;
+
+    const { error: rowErr } = await supabase
+      .from('portal_programs')
+      .update({ hero_path: storagePath, hero_alt: alt.trim() })
+      .eq('id', program.id);
+
+    if (rowErr) {
+      await supabase.storage.from('portal-documents').remove([storagePath])
+        .catch(() => { /* invisible object; the row is what matters */ });
+      throw rowErr;
+    }
+
+    if (program.heroPath && program.heroPath !== storagePath) {
+      await removeStorageObject('portal-documents', program.heroPath)
+        .catch(() => { /* orphan, not a failure worth undoing a good save for */ });
+    }
+
+    void logActivity({
+      action: 'program_hero_set', entityType: 'program', entityId: program.id,
+      entityTitle: program.name,
+      details: { fileName: file.name, sizeBytes: file.size },
+    });
+
+    setPrograms(prev => prev.map(p => (
+      p.id === program.id ? { ...p, heroPath: storagePath, heroAlt: alt.trim() } : p
+    )));
+  }, []);
+
+  const saveProgramHeroAlt = useCallback(async (programId: string, alt: string) => {
+    const { error } = await supabase
+      .from('portal_programs')
+      .update({ hero_alt: alt.trim() })
+      .eq('id', programId);
+    if (error) throw error;
+    setPrograms(prev => prev.map(p => (p.id === programId ? { ...p, heroAlt: alt.trim() } : p)));
+  }, []);
+
+  /** Row first here, because the point is to stop showing it. */
+  const removeProgramHero = useCallback(async (program: PortalProgram) => {
+    const { error } = await supabase
+      .from('portal_programs')
+      .update({ hero_path: null, hero_alt: '' })
+      .eq('id', program.id);
+    if (error) throw error;
+
+    if (program.heroPath) {
+      await removeStorageObject('portal-documents', program.heroPath)
+        .catch(() => { /* see above */ });
+    }
+
+    void logActivity({
+      action: 'program_hero_cleared', entityType: 'program', entityId: program.id,
+      entityTitle: program.name,
+    });
+
+    setPrograms(prev => prev.map(p => (
+      p.id === program.id ? { ...p, heroPath: null, heroAlt: '' } : p
+    )));
+  }, []);
+
   // ------------------------------------------------------------ access code
 
   const setRequiresCode = useCallback(async (programId: string, requiresCode: boolean) => {
@@ -1204,6 +1356,8 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchAllClasses, fetchAllClassInstructors, grantClassInstructors, setGrantPaused,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
+    fetchInstructorLooks, saveInstructorLook, resetInstructorLook,
+    uploadProgramHero, saveProgramHeroAlt, removeProgramHero,
   }), [
     canEdit, checking, editableClassIds, canEditClass,
     programs, programsLoading, reload,
@@ -1214,6 +1368,8 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchAllClasses, fetchAllClassInstructors, grantClassInstructors, setGrantPaused,
     fetchCalendarSources, saveCalendarSource, removeCalendarSource, runCalendarSync,
     setRequiresCode, setAccessCode, programHasCode,
+    fetchInstructorLooks, saveInstructorLook, resetInstructorLook,
+    uploadProgramHero, saveProgramHeroAlt, removeProgramHero,
   ]);
 
   return <PortalAdminContext.Provider value={value}>{children}</PortalAdminContext.Provider>;

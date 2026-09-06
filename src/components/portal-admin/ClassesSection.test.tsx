@@ -38,6 +38,8 @@ const PROGRAM: PortalProgram = {
   requiresCode: true,
   sortOrder: 2,
   isActive: true,
+  heroPath: null,
+  heroAlt: '',
 };
 
 /** A row exactly as the v25 import wrote it, with every column populated. */

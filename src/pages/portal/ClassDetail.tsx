@@ -12,6 +12,7 @@ import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import EmptyArt from '../../components/portal/EmptyArt';
+import TeacherAvatar from '../../components/portal/TeacherAvatar';
 import { logDownload } from '../../lib/portalDownloads';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
@@ -42,7 +43,7 @@ import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const { slug, program } = useProgramPage();
-  const { fetchClasses, fetchUpdates, fetchDocuments } = usePortal();
+  const { fetchClasses, fetchUpdates, fetchDocuments, instructorLooks } = usePortal();
   // Every open is logged, by anybody. This used to be gated on isClient, which
   // meant it logged NOTHING AT ALL: client logins are still switched off, so
   // isClient was false for every real visitor, and the audit log held zero
@@ -131,9 +132,12 @@ const ClassDetail: React.FC = () => {
   }
 
   const schedule = klass ? formatClassSchedule(klass.dayOfWeek, klass.startTime, klass.endTime) : null;
+  // The teacher is no longer in this list. It used to be the first of three
+  // interchangeable strings joined by a middot — "Sarah Davidson · Level 2 ·
+  // Studio B" — which files the one person in the sentence alongside a room
+  // number. It gets its own row below, with the mark that makes it findable.
   const details = klass
-    ? [klass.instructorName, klass.level ? `Level ${klass.level}` : null, klass.location]
-        .filter(Boolean)
+    ? [klass.level ? `Level ${klass.level}` : null, klass.location].filter(Boolean)
     : [];
 
   /**
@@ -182,7 +186,7 @@ const ClassDetail: React.FC = () => {
 
         {!loading && !error && klass && (
           <>
-            {(schedule || details.length > 0 || klass.description || facts.length > 0) && (
+            {(schedule || details.length > 0 || klass.instructorName || klass.description || facts.length > 0) && (
               <Card>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
                   <Badge
@@ -212,6 +216,43 @@ const ClassDetail: React.FC = () => {
                     color: theme.colors.txt.tertiary,
                   }}>
                     {details.join(' · ')}
+                  </div>
+                )}
+
+                {klass.instructorName && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginTop: '12px',
+                  }}>
+                    <TeacherAvatar
+                      instructorName={klass.instructorName}
+                      looks={instructorLooks}
+                      size={32}
+                    />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{
+                        display: 'block',
+                        ...theme.typography.captionSmall,
+                        fontFamily: theme.fonts.mono,
+                        color: theme.colors.txt.tertiary,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                      }}>
+                        Taught by
+                      </span>
+                      <span style={{
+                        display: 'block',
+                        ...theme.typography.bodySmall,
+                        fontFamily: theme.fonts.primary,
+                        fontWeight: 600,
+                        color: theme.colors.txt.primary,
+                        overflowWrap: 'anywhere',
+                      }}>
+                        {klass.instructorName}
+                      </span>
+                    </span>
                   </div>
                 )}
 

@@ -14,6 +14,7 @@ import ClassesSection from '../../components/portal-admin/ClassesSection';
 import TeachersSection from '../../components/portal-admin/TeachersSection';
 import ClassWorkspace from '../../components/portal-admin/ClassWorkspace';
 import AccessSection from '../../components/portal-admin/AccessSection';
+import LookSection from '../../components/portal-admin/LookSection';
 import { PortalClass } from '../../types';
 import { portalRoutes, isProgramSlug } from '../../lib/portal';
 
@@ -44,7 +45,7 @@ import { portalRoutes, isProgramSlug } from '../../lib/portal';
  * bookmark or a link pasted to a colleague all land in the same place.
  */
 
-type SectionKey = 'classes' | 'teachers' | 'updates' | 'calendar' | 'access';
+type SectionKey = 'classes' | 'teachers' | 'updates' | 'calendar' | 'look' | 'access';
 
 /**
  * Classes lead: it is the way in to most of what anyone comes here to do, and
@@ -60,7 +61,7 @@ type SectionKey = 'classes' | 'teachers' | 'updates' | 'calendar' | 'access';
  * it is, and whether one is required at all — so the longer label is no less
  * accurate. TabRow wraps, so it costs nothing on a phone.
  */
-const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
+const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean; superAdminOnly?: boolean }[] = [
   { key: 'classes', label: 'Classes' },
   // The one-pass way to fill in portal_class_instructors. Admin-only because
   // portal_ci_write is, and studio-wide rather than per-program even though it
@@ -78,6 +79,13 @@ const SECTIONS: { key: SectionKey; label: string; adminOnly?: boolean }[] = [
   // would come back refused. Their class's events are still readable — they
   // just are not theirs to change.
   { key: 'calendar', label: 'Calendar', adminOnly: true },
+  // Super-admin only, and the only tab that is. Half of what it writes is
+  // enforced there (portal_instructor_looks has an is_super_admin() policy) and
+  // half is not — the program hero lives on portal_programs, whose policy is
+  // is_admin() and cannot be split by column. See the v46 header. This is the
+  // UI being stricter than the database, which is the safe direction: an admin
+  // is never shown a control whose save would be refused.
+  { key: 'look', label: 'Look', superAdminOnly: true },
   { key: 'access', label: 'Access code', adminOnly: true },
 ];
 
@@ -87,7 +95,9 @@ const PortalManagerPage: React.FC = () => {
   const { isMobileOrTablet } = useResponsive();
   const [params, setParams] = useSearchParams();
 
-  const sections = SECTIONS.filter(s => isAdmin || !s.adminOnly);
+  const sections = SECTIONS.filter(s => (
+    (isAdmin || !s.adminOnly) && (isSuperAdmin || !s.superAdminOnly)
+  ));
 
   const programSlug = params.get('program');
   const program = useMemo(
@@ -234,6 +244,9 @@ const PortalManagerPage: React.FC = () => {
           )}
           {section === 'calendar' && (
             <EventsSection program={program} classes={classes} />
+          )}
+          {section === 'look' && isSuperAdmin && (
+            <LookSection program={program} />
           )}
           {section === 'access' && isAdmin && (
             <AccessSection program={program} />
