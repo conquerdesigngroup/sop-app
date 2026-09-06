@@ -45,6 +45,19 @@ const ProgramGate: React.FC = () => {
     return <Navigate to={portalRoutes.home} replace />;
   }
 
+  // STILL A SPINNER, ON PURPOSE.
+  //
+  // Every page behind this gate now loads as a skeleton shaped like its own
+  // content, and this one deliberately does not. The gate does not know what
+  // comes next: the same wait precedes the program overview's three tiles, the
+  // schedule's rows, the calendar's grid and a class page. A skeleton's whole
+  // value is that its shape is a promise, and a promise that is wrong four
+  // times out of five is worse than the spinner — the reader watches a layout
+  // appear and then be replaced.
+  //
+  // It is also first-load-only. The programs live in the provider for the rest
+  // of the session, so every navigation after this one goes straight to the
+  // page's own skeleton.
   if (loading) {
     return (
       <PortalLayout title="Parent Portal" backTo={portalRoutes.home}>

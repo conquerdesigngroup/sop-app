@@ -13,6 +13,7 @@ import {
 import {
   InstructorLook, instructorInitials, instructorKey, lookFor,
 } from '../../lib/instructorLook';
+import { splitInstructorNames } from '../../lib/instructorMatch';
 import { HERO_MIME, MAX_HERO_MB, MAX_HERO_BYTES } from '../../lib/portalAdmin';
 import { PortalClass, PortalProgram } from '../../types';
 
@@ -506,8 +507,14 @@ const LookSection: React.FC<{ program: PortalProgram }> = ({ program }) => {
   /**
    * One row per distinct teacher, with the class count beside them.
    *
-   * Folded by nameKey, which is what makes "Ky'Ree" and "Kyree" one person
-   * here as well as one look. The name shown is the first spelling the
+   * SPLIT FIRST. instructor_name holds a list as often as it holds a name —
+   * "Chill Kerney, Ky'ree Nevels", and four of them on the Saturday production.
+   * Listing the raw strings would put that pair in this editor as a single
+   * person nobody can style, while the two real teachers never appear at all.
+   * Same split the bulk-assign screen uses, for the same reason.
+   *
+   * Folded by nameKey after that, which is what makes "Ky'Ree" and "Kyree" one
+   * person here as well as one look. The name shown is the first spelling the
    * schedule uses; the count is every class under any of its spellings, which
    * is the honest number and also a quiet way to notice a typo.
    */
@@ -515,14 +522,14 @@ const LookSection: React.FC<{ program: PortalProgram }> = ({ program }) => {
     const byKey = new Map<string, { displayName: string; count: number }>();
 
     classes.forEach(c => {
-      const name = c.instructorName?.trim();
-      if (!name) return;
-      const key = instructorKey(name);
-      if (!key) return;
+      splitInstructorNames(c.instructorName).forEach(name => {
+        const key = instructorKey(name);
+        if (!key) return;
 
-      const found = byKey.get(key);
-      if (found) found.count += 1;
-      else byKey.set(key, { displayName: name, count: 1 });
+        const found = byKey.get(key);
+        if (found) found.count += 1;
+        else byKey.set(key, { displayName: name, count: 1 });
+      });
     });
 
     return Array.from(byKey.entries())

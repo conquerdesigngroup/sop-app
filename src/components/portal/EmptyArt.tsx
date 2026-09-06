@@ -28,11 +28,18 @@ import React from 'react';
  * #0B0B0D and on the light panel, which is why every icon already in this app
  * is drawn this way.
  *
- * THE VOCABULARY IS THE ONE THAT EXISTS
+ * THE VOCABULARY IS THE ONE THAT EXISTS, WHERE IT SURVIVES THE SCALE
  *
- * The star and the shoe below are the avatar glyphs from ProfileAvatar, scaled
- * up rather than redrawn. Inventing a second illustration style for the same
- * app is how a set of drawings starts looking like clip art from three places.
+ * The star is ProfileAvatar's own glyph, scaled up rather than redrawn —
+ * inventing a second illustration style for one app is how a set of drawings
+ * starts looking like clip art from three places.
+ *
+ * The shoe glyph does NOT survive it, which is worth recording because reusing
+ * it is the obvious next idea. It is drawn as a 24px SOLID, and at 3× it reads
+ * as a lump whether stroked or filled: the notch that makes it a shoe at avatar
+ * size becomes the whole shape at illustration size, and what a reader sees is
+ * a sofa. The barre below replaces it. A glyph designed to be recognised at
+ * 24px inside a coloured square is not automatically a drawing.
  */
 
 /**
@@ -55,9 +62,6 @@ interface EmptyArtProps {
 
 /** ProfileAvatar's star, on its own 24 grid so it can be transformed in place. */
 const STAR = 'M12 3.5l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.9l6-.8z';
-/** ProfileAvatar's shoe, likewise. */
-const SHOE = 'M3.5 15.5V8h3l2.5 3 3-3h6a3 3 0 013 3v4.5a1 1 0 01-1 1h-15a1 1 0 01-1-1z';
-
 const ART: Record<EmptyArtName, React.ReactNode> = {
   /**
    * A stage: rail, two curtains, a floor, and the star standing on it.
@@ -67,11 +71,18 @@ const ART: Record<EmptyArtName, React.ReactNode> = {
    */
   stage: (
     <>
-      <path d="M14 14h92" />
-      <path d="M28 14v52q-7 4-14 7V14" />
-      <path d="M92 14v52q7 4 14 7V14" />
-      <path d="M14 76h92" />
-      <g transform="translate(42 26) scale(1.5)" opacity="0.85">
+      {/* Rail, then the valance hanging off it. Without the scallops the two
+          uprights below read as a plain rectangular frame — which looked
+          deliberate but did not look like a stage, and the drawing has one job. */}
+      <path d="M12 12h96" />
+      <path d="M12 12q12 13 24 0 12 13 24 0 12 13 24 0 12 13 24 0" />
+      {/* Side curtains: gathered at the top, falling away at the foot. The
+          inner fold line is what stops each one reading as a bar. */}
+      <path d="M26 20v44q-7 5-14 7V16" />
+      <path d="M94 20v44q7 5 14 7V16" />
+      <path d="M20 30v38M100 30v38" opacity="0.45" />
+      <path d="M12 76h96" />
+      <g transform="translate(42 30) scale(1.5)" opacity="0.9">
         <path d={STAR} />
       </g>
     </>
@@ -87,14 +98,19 @@ const ART: Record<EmptyArtName, React.ReactNode> = {
     </>
   ),
 
-  /** A shoe on a studio floor. For a schedule with no classes on it. */
+  /**
+   * A barre on a studio floor. For a schedule with no classes on it.
+   *
+   * Four straight lines and two feet — which is the point. It is the only
+   * object in the building that is unmistakable in outline at this size, and it
+   * cannot be confused with the calendar above or the stage above that.
+   */
   classes: (
     <>
-      <g transform="translate(24 22) scale(3)">
-        <path d={SHOE} />
-      </g>
-      <path d="M14 76h92" />
-      <path d="M22 84h14M48 84h24M84 84h14" opacity="0.5" />
+      <path d="M14 32h92" />
+      <path d="M32 32v36M88 32v36" />
+      <path d="M22 68h20M78 68h20" />
+      <path d="M12 76h96" opacity="0.55" />
     </>
   ),
 };
