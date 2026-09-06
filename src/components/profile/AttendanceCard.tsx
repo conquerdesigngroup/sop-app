@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { theme } from '../../theme';
-import { Card, Spinner } from '../ui';
+import { Card } from '../ui';
 import { AttendanceRange } from '../../types/attendance';
 import { classAccent } from '../../lib/attendanceColors';
 import { dayName, formatTime } from '../../lib/portal';
@@ -13,6 +13,7 @@ import {
   studentLabel,
 } from '../../lib/attendanceQueries';
 import AttendanceProgress from './AttendanceProgress';
+import { AttendanceRowSkeleton } from '../portal/PortalSkeleton';
 import AttendanceDetail from './AttendanceDetail';
 import CardError from './CardError';
 import SegmentedControl from './SegmentedControl';
@@ -223,13 +224,7 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
     const failure = household.error ?? error;
     if (failure) return <CardError message={failure} onRetry={retry} />;
 
-    if (loading && !progress) {
-      return (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: theme.spacing.xl }}>
-          <Spinner size={24} color={theme.colors.primary} />
-        </div>
-      );
-    }
+    if (loading && !progress) return <AttendanceRowSkeleton count={2} />;
 
     // Empty state 1: signed in, but no child is attached to this household yet.
     // Deliberately not an error — the roster import runs on the studio's clock.

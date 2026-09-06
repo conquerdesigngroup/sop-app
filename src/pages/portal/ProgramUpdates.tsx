@@ -1,7 +1,8 @@
 import React from 'react';
 import { theme } from '../../theme';
-import { Badge, Card, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import { usePortal } from '../../contexts/PortalContext';
 import { portalRoutes } from '../../lib/portal';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
@@ -61,11 +62,7 @@ const ProgramUpdates: React.FC = () => {
       slug={slug}
     >
       <div style={{ maxWidth: '720px' }}>
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
+        {loading && <ContentCardSkeleton count={3} lines={3} />}
 
         {!loading && error && (
           <Card><p style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>{error}</p></Card>

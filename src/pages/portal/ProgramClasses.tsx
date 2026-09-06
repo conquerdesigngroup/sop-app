@@ -1,7 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { theme } from '../../theme';
-import { Card, EmptyState, Spinner } from '../../components/ui';
+import { Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import { RowSkeleton } from '../../components/portal/PortalSkeleton';
 import ClassFilterBar from '../../components/portal/ClassFilterBar';
 import ClassMobileSchedule from '../../components/portal/ClassMobileSchedule';
 import {
@@ -160,11 +161,7 @@ const ProgramClasses: React.FC = () => {
           gap: isMobileOrTablet ? '12px' : '20px',
         }}
       >
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
+        {loading && <RowSkeleton count={5} label="Loading the schedule…" />}
 
         {!loading && error && (
           <Card>

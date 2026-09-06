@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Badge, Card, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import { usePortal } from '../../contexts/PortalContext';
 import { useRefreshable } from '../../contexts/RefreshContext';
@@ -10,6 +10,7 @@ import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
+import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import { logDownload } from '../../lib/portalDownloads';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
@@ -172,11 +173,7 @@ const ClassDetail: React.FC = () => {
       slug={slug}
     >
       <div style={{ maxWidth: '720px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
+        {loading && <ContentCardSkeleton count={2} lines={3} />}
 
         {!loading && error && (
           <Card><p style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>{error}</p></Card>

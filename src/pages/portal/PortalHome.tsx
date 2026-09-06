@@ -1,9 +1,10 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Card, Spinner } from '../../components/ui';
+import { Card } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
+import { TileSkeleton } from '../../components/portal/PortalSkeleton';
 import { usePortal } from '../../contexts/PortalContext';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { CLIENT_AUTH_ENABLED, CLIENT_AUTH_REQUIRED } from '../../lib/clientAuth';
@@ -30,8 +31,8 @@ const PortalHome: React.FC = () => {
     if (authLoading) {
       return (
         <PortalLayout title="Parent Portal">
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={32} color={theme.colors.primary} />
+          <div style={{ maxWidth: '720px' }}>
+            <TileSkeleton count={3} withIcon={false} />
           </div>
         </PortalLayout>
       );
@@ -55,11 +56,10 @@ const PortalHome: React.FC = () => {
           href={ENROLLIO_URL}
         />
 
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
+        {/* Two tiles, not three: the Billing tile above is already rendered —
+            it does not wait on the program fetch — so the skeleton stands in
+            for exactly what is missing. */}
+        {loading && <TileSkeleton count={2} withIcon={false} />}
 
         {error && !loading && (
           <Card>

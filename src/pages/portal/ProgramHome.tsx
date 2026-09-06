@@ -1,8 +1,9 @@
 import React from 'react';
 import { theme } from '../../theme';
-import { Card, Spinner } from '../../components/ui';
+import { Card } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
+import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import { usePortal } from '../../contexts/PortalContext';
 import {
   portalRoutes, formatEventDate, formatEventTime, eventLastDayKey, dateKey,
@@ -61,11 +62,11 @@ const ProgramHome: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '720px' }}>
         {/* What's new — only rendered when there is something to show, so an
             empty section reads as deliberate rather than broken. */}
-        {busy && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
-            <Spinner size={24} color={theme.colors.primary} />
-          </div>
-        )}
+        {/* Only the two summary cards are skeletoned. The three nav tiles
+            below do not wait on a fetch — they are always there — so standing
+            them in as well would flash a placeholder over content that is
+            already on screen. */}
+        {busy && <ContentCardSkeleton count={2} lines={2} />}
 
         {!busy && (latest || nextEvent) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
