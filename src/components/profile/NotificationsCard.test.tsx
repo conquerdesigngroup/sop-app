@@ -59,6 +59,7 @@ jest.mock('../InstallAppGuide', () => () => <div data-testid="install-guide" />)
 const ctx: ProfileContext = {
   memberType: 'guardian',
   isStaff: false,
+  hasHousehold: true,
   source: { source: 'live' },
   flags: { unlockables: false },
 };

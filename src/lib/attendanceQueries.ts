@@ -614,24 +614,71 @@ export const loadHouseholdSummary = async (
 
   await ensureHouseholdLink();
 
-  // RLS scopes every read below to this household, so there is no household
-  // filter here by design (§6.3).
-  const [studentsRes, memberRes] = await Promise.all([
-    supabase
-      .from('portal_students')
-      .select('id, household_id, external_student_id, first_name, last_name, display_name, status')
-      .eq('status', 'active')
-      .order('first_name'),
-    supabase
-      .from('portal_household_members')
-      .select('member_type, student_id')
-      .maybeSingle(),
-  ]);
+  // WHOSE HOUSEHOLD, ASKED OUT LOUD.
+  //
+  // Every read below used to carry no filter at all, on the stated grounds
+  // that "RLS scopes them to this household". It does — for a parent. But
+  // portal_students_select is `can_see_student(id) OR is_admin()`, and the
+  // policies on portal_household_members and portal_enrollments are the same
+  // shape, so for an ADMIN they scope nothing: this returned all 388 students
+  // in the studio, every membership row, and all 1111 enrolments.
+  //
+  // Nobody saw it, because the card registry hid every card that reads this
+  // from staff. That made `visible: ctx => !ctx.isStaff` the thing standing
+  // between an admin and the whole studio's children — a visibility predicate
+  // doing a security boundary's job, which is exactly the arrangement that
+  // breaks the day somebody relaxes the predicate for a good reason.
+  //
+  // So the household is named here. A parent gets precisely what they got
+  // before, because RLS had already limited them to it; an admin gets their
+  // own family, or nothing. That is what lets a member of staff who is also a
+  // parent at the studio use the portal as a parent.
+  //
+  // COSTS ONE ROUND TRIP. The students query needs the household id, so it can
+  // no longer start in parallel with the membership read. Three sequential
+  // reads instead of two-then-one. Worth it: the alternative is fetching the
+  // studio and discarding it on the client, which is not a fix.
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData?.session?.user?.id ?? null;
+  if (!userId) return { ...EMPTY_HOUSEHOLD };
 
-  if (studentsRes.error) return { ...EMPTY_HOUSEHOLD, error: GENERIC_LOAD_ERROR };
+  // UNIQUE (profile_id) — a login belongs to exactly one household, which is
+  // why this is still maybeSingle. Without the filter it was maybeSingle over
+  // every membership in the studio, and for an admin that is an error rather
+  // than a row: `memberType` silently fell back to 'guardian'.
+  const { data: membership, error: memberErr } = await supabase
+    .from('portal_household_members')
+    .select('household_id, member_type, student_id')
+    .eq('profile_id', userId)
+    .maybeSingle();
 
-  const students: Student[] = (studentsRes.data ?? []).map(mapStudent);
-  const memberType = (memberRes.data?.member_type as MemberType) ?? 'guardian';
+  if (memberErr) return { ...EMPTY_HOUSEHOLD, error: GENERIC_LOAD_ERROR };
+  // No membership is not an error: it is a member of staff with no children at
+  // the studio, or a parent whose family has not been imported yet. Both get
+  // the calm "no dancers linked yet" empty state.
+  if (!membership) return { ...EMPTY_HOUSEHOLD };
+
+  const memberType = (membership.member_type as MemberType) ?? 'guardian';
+
+  let studentQuery = supabase
+    .from('portal_students')
+    .select('id, household_id, external_student_id, first_name, last_name, display_name, status')
+    .eq('household_id', membership.household_id)
+    .eq('status', 'active')
+    .order('first_name');
+
+  // A student member is pinned to one child by their membership row. RLS says
+  // so as well (can_see_student), and this does not replace that — it means
+  // the REQUEST asks only for what it is allowed, instead of asking for the
+  // household and trusting the answer to come back trimmed.
+  if (memberType === 'student' && membership.student_id) {
+    studentQuery = studentQuery.eq('id', membership.student_id);
+  }
+
+  const { data: studentRows, error: studentErr } = await studentQuery;
+  if (studentErr) return { ...EMPTY_HOUSEHOLD, memberType, error: GENERIC_LOAD_ERROR };
+
+  const students: Student[] = (studentRows ?? []).map(mapStudent);
   if (!students.length) return { ...EMPTY_HOUSEHOLD, memberType };
 
   // 'all' because the schedule is not a function of the range filter — a
@@ -640,7 +687,8 @@ export const loadHouseholdSummary = async (
   const { data, error } = await supabase
     .from('portal_my_enrollments')
     .select(ENROLLMENT_COLUMNS)
-    .eq('range', 'all');
+    .eq('range', 'all')
+    .in('student_id', students.map(s => s.id));
 
   if (error) return { ...EMPTY_HOUSEHOLD, students, memberType, error: GENERIC_LOAD_ERROR };
 

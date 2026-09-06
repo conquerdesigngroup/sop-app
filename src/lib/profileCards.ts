@@ -36,12 +36,44 @@ export interface ProfileContext {
   memberType: MemberType;
   /** Staff previewing the portal. They keep their own /profile for identity. */
   isStaff: boolean;
+  /**
+   * Is this login attached to a household — i.e. is there a family to show?
+   *
+   * Resolved by the page from the shared household read, so it costs nothing,
+   * and false while that read is in flight. It is only ever consulted for
+   * staff: a client is a family by definition and never waits on it.
+   */
+  hasHousehold: boolean;
   /** Where the attendance cards read from — fixture or the live tables. */
   source: AttendanceSource;
   flags: {
     unlockables: boolean;
   };
 }
+
+/**
+ * Cards that show a FAMILY, rather than an account.
+ *
+ * WHY THIS IS NOT JUST `!ctx.isStaff`
+ *
+ * It was, and the reasoning recorded against it — "staff previewing the portal
+ * have no household, so there is nothing for this card to read" — turned out to
+ * be both wrong and load-bearing. Staff do not have no household; under RLS an
+ * admin could read EVERY household, because portal_students_select is
+ * `can_see_student(id) OR is_admin()` and loadHouseholdSummary filtered by
+ * nothing. So this predicate was the only thing between an admin opening the
+ * portal profile and a list of all 388 children in the studio.
+ *
+ * That is fixed at the source: loadHouseholdSummary now names the household it
+ * wants. With the query honest, the predicate can go back to asking the
+ * question it was always meant to ask — is there a family here to show — which
+ * is what lets the teachers and the owner, who are parents at this studio too,
+ * open the portal and see their own children.
+ *
+ * Staff with no children at the studio are unchanged: no membership row, no
+ * household, no cards.
+ */
+const showsAFamily = (ctx: ProfileContext): boolean => !ctx.isStaff || ctx.hasHousehold;
 
 export interface ProfileCardProps {
   ctx: ProfileContext;
@@ -73,7 +105,7 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'up-next',
     title: 'Up next',
     component: UpNextCard,
-    visible: ctx => !ctx.isStaff,
+    visible: showsAFamily,
     defaultOrder: 15,
   },
   {
@@ -83,7 +115,7 @@ export const PROFILE_CARDS: ProfileCard[] = [
     // Renders nothing for a one-child household — the card itself makes that
     // call, because the registry cannot know the child count without querying,
     // and `visible` must stay synchronous and free.
-    visible: ctx => !ctx.isStaff && ctx.memberType === 'guardian',
+    visible: ctx => showsAFamily(ctx) && ctx.memberType === 'guardian',
     defaultOrder: 18,
   },
   {
@@ -95,37 +127,35 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'season-stats',
     title: 'At a glance',
     component: SeasonStatsCard,
-    visible: ctx => !ctx.isStaff,
+    visible: showsAFamily,
     defaultOrder: 19,
   },
   {
     id: 'attendance',
     title: 'Attendance',
     component: AttendanceCardHost,
-    // Staff previewing the portal have no household, so there is nothing for
-    // this card to read and no query worth issuing.
-    visible: ctx => !ctx.isStaff,
+    visible: showsAFamily,
     defaultOrder: 20,
   },
   {
     id: 'updates',
     title: 'Updates',
     component: UpdatesCard,
-    visible: ctx => !ctx.isStaff,
+    visible: showsAFamily,
     defaultOrder: 30,
   },
   {
     id: 'documents',
     title: 'Files & forms',
     component: DocumentsCard,
-    visible: ctx => !ctx.isStaff,
+    visible: showsAFamily,
     defaultOrder: 40,
   },
   {
     id: 'calendar',
     title: 'Add to your calendar',
     component: ClassCalendarCard,
-    visible: ctx => !ctx.isStaff,
+    visible: showsAFamily,
     defaultOrder: 50,
   },
   {
@@ -135,9 +165,13 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'notifications',
     title: 'Notifications',
     component: NotificationsCard,
-    // Staff previewing the portal keep the Settings page toggle, which is
-    // wired to their own digest. Two switches over one subscription would
-    // fight.
+    // The ONE card that stays `!isStaff` rather than moving to showsAFamily,
+    // and the reason is not the mistaken one the others carried. Staff keep
+    // the Settings page toggle, which is wired to their own digest over the
+    // SAME push subscription this card would switch. A member of staff who is
+    // also a parent would get both, pointed at one subscription, each
+    // reporting the state it last wrote. Two switches over one wire fight;
+    // there is no household test that makes them stop.
     visible: ctx => !ctx.isStaff,
     defaultOrder: 80,
   },

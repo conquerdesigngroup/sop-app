@@ -8,6 +8,7 @@ import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { ATTENDANCE_LIVE, AttendanceSource } from '../../lib/attendanceQueries';
 import { FIXTURE_SCENARIOS, FixtureScenario } from '../../lib/attendanceFixture';
 import { ProfileContext, UNLOCKABLES_ENABLED, orderedCards } from '../../lib/profileCards';
+import { useHousehold } from '../../components/profile/useHousehold';
 
 /**
  * The profile page (§5.1).
@@ -56,14 +57,33 @@ const Profile: React.FC = () => {
     [scenario],
   );
 
+  /**
+   * The ONE thing this page reads, and it reads it to build the context rather
+   * than to render anything.
+   *
+   * It is the shared, cached household promise the cards below use, so this
+   * costs no request — see components/profile/useHousehold.ts. What it answers
+   * is the question the registry cannot ask for itself: `visible` must stay
+   * synchronous, and "does this login have a family" is not knowable without a
+   * read. The page resolves it once and hands it down.
+   *
+   * Only staff are gated on it. A client is a family by definition, so
+   * showsAFamily short-circuits and no card waits for this to land.
+   */
+  const household = useHousehold(source);
+
   const ctx: ProfileContext = useMemo(() => ({
     // A student login sees only itself. The fixture carries that distinction so
     // the switcher-less student view can be reviewed before real logins exist.
     memberType: scenario === 'student' ? 'student' : 'guardian',
     isStaff: !!isStaff,
+    // False while the read is in flight, which is right: a staff member's cards
+    // appear once there is demonstrably a family behind them, rather than
+    // flashing and being taken away.
+    hasHousehold: (household.data?.students.length ?? 0) > 0,
     source,
     flags: { unlockables: UNLOCKABLES_ENABLED },
-  }), [scenario, isStaff, source]);
+  }), [scenario, isStaff, source, household.data]);
 
   const cards = useMemo(() => orderedCards(ctx), [ctx]);
 
