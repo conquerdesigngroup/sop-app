@@ -4,10 +4,10 @@ import { Card } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
+import CountdownBand from '../../components/portal/CountdownBand';
 import { usePortal } from '../../contexts/PortalContext';
-import {
-  portalRoutes, formatEventDate, formatEventTime, eventLastDayKey, dateKey,
-} from '../../lib/portal';
+import { portalRoutes, eventLastDayKey } from '../../lib/portal';
+import { studioToday } from '../../lib/studioDate';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
 import { PortalUpdate, PortalEvent } from '../../types';
 
@@ -22,12 +22,6 @@ const icon = (d: string) => (
     <path d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
-
-/** All-day events read in UTC, timed events in local time — see lib/portal.ts. */
-const describeEvent = (iso: string, allDay: boolean) => {
-  const date = formatEventDate(iso, allDay, { weekday: 'short', month: 'short', day: 'numeric' });
-  return allDay ? date : `${date} · ${formatEventTime(iso, false)}`;
-};
 
 const ProgramHome: React.FC = () => {
   const { slug, program } = useProgramPage();
@@ -46,7 +40,12 @@ const ProgramHome: React.FC = () => {
   // Comparing the event's LAST day against today's key fixes both: a run of
   // days stays "coming up" while it is still running, and no match means the
   // card simply does not render.
-  const todayKey = dateKey(new Date());
+  // The STUDIO's today, not the reader's. It was dateKey(new Date()) — the
+  // viewer's local date — which is the wrong frame for a studio date and would
+  // put the countdown below a day out for a grandparent watching from Chicago
+  // at 10pm. Same reasoning as lib/studioDate.ts, and the band is handed this
+  // exact string so the page has one clock rather than two.
+  const todayKey = studioToday();
   const nextEvent = events.data.find(
     e => eventLastDayKey(e.startsAt, e.endsAt, e.isAllDay) >= todayKey
   );
@@ -101,29 +100,11 @@ const ProgramHome: React.FC = () => {
             )}
 
             {nextEvent && (
-              <Card>
-                <div style={{
-                  ...theme.typography.captionSmall,
-                  fontFamily: theme.fonts.mono,
-                  color: theme.colors.txt.tertiary,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  marginBottom: '8px',
-                }}>
-                  Coming up
-                </div>
-                <div style={{ ...theme.typography.h3, color: theme.colors.txt.primary, marginBottom: '6px' }}>
-                  {nextEvent.title}
-                </div>
-                <div style={{
-                  ...theme.typography.bodySmall,
-                  fontFamily: theme.fonts.primary,
-                  color: theme.colors.txt.secondary,
-                }}>
-                  {describeEvent(nextEvent.startsAt, nextEvent.isAllDay)}
-                  {nextEvent.location ? ` · ${nextEvent.location}` : ''}
-                </div>
-              </Card>
+              <CountdownBand
+                event={nextEvent}
+                today={todayKey}
+                to={portalRoutes.calendar(slug)}
+              />
             )}
           </div>
         )}
