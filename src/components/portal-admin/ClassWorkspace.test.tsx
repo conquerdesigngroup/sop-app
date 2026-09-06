@@ -26,6 +26,8 @@ const PROGRAM: PortalProgram = {
   requiresCode: true,
   sortOrder: 2,
   isActive: true,
+  heroPath: null,
+  heroAlt: '',
 };
 
 const KLASS: PortalClass = {

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Badge, Button, CalendarPlusIcon, Card, EmptyState, Spinner } from '../../components/ui';
+import { Badge, Button, CalendarPlusIcon, Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import { usePortal } from '../../contexts/PortalContext';
@@ -13,6 +13,9 @@ import { canAddClassToCalendar, classTarget } from '../../lib/classCalendar';
 import { useProgramPage } from './useProgramPage';
 import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
+import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
+import EmptyArt from '../../components/portal/EmptyArt';
+import TeacherAvatar from '../../components/portal/TeacherAvatar';
 import { logDownload } from '../../lib/portalDownloads';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 
@@ -43,7 +46,7 @@ import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const { slug, program } = useProgramPage();
-  const { fetchClasses, fetchUpdates, fetchDocuments } = usePortal();
+  const { fetchClasses, fetchUpdates, fetchDocuments, instructorLooks } = usePortal();
   const { isMobileOrTablet } = useResponsive();
   // Every open is logged, by anybody. This used to be gated on isClient, which
   // meant it logged NOTHING AT ALL: client logins are still switched off, so
@@ -141,9 +144,12 @@ const ClassDetail: React.FC = () => {
   }
 
   const schedule = klass ? formatClassSchedule(klass.dayOfWeek, klass.startTime, klass.endTime) : null;
+  // The teacher is no longer in this list. It used to be the first of three
+  // interchangeable strings joined by a middot — "Sarah Davidson · Level 2 ·
+  // Studio B" — which files the one person in the sentence alongside a room
+  // number. It gets its own row below, with the mark that makes it findable.
   const details = klass
-    ? [klass.instructorName, klass.level ? `Level ${klass.level}` : null, klass.location]
-        .filter(Boolean)
+    ? [klass.level ? `Level ${klass.level}` : null, klass.location].filter(Boolean)
     : [];
 
   /**
@@ -184,11 +190,7 @@ const ClassDetail: React.FC = () => {
       slug={slug}
     >
       <div style={{ maxWidth: '720px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
+        {loading && <ContentCardSkeleton count={2} lines={3} />}
 
         {!loading && error && (
           <Card><p style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>{error}</p></Card>
@@ -196,7 +198,7 @@ const ClassDetail: React.FC = () => {
 
         {!loading && !error && klass && (
           <>
-            {(schedule || details.length > 0 || klass.description || facts.length > 0) && (
+            {(schedule || details.length > 0 || klass.instructorName || klass.description || facts.length > 0) && (
               <Card>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
                   <Badge
@@ -226,6 +228,43 @@ const ClassDetail: React.FC = () => {
                     color: theme.colors.txt.tertiary,
                   }}>
                     {details.join(' · ')}
+                  </div>
+                )}
+
+                {klass.instructorName && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginTop: '12px',
+                  }}>
+                    <TeacherAvatar
+                      instructorName={klass.instructorName}
+                      looks={instructorLooks}
+                      size={32}
+                    />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{
+                        display: 'block',
+                        ...theme.typography.captionSmall,
+                        fontFamily: theme.fonts.mono,
+                        color: theme.colors.txt.tertiary,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                      }}>
+                        Taught by
+                      </span>
+                      <span style={{
+                        display: 'block',
+                        ...theme.typography.bodySmall,
+                        fontFamily: theme.fonts.primary,
+                        fontWeight: 600,
+                        color: theme.colors.txt.primary,
+                        overflowWrap: 'anywhere',
+                      }}>
+                        {klass.instructorName}
+                      </span>
+                    </span>
                   </div>
                 )}
 
@@ -313,6 +352,7 @@ const ClassDetail: React.FC = () => {
 
               {updates.length === 0 ? (
                 <EmptyState
+                  icon={<EmptyArt name="stage" />}
                   title="Nothing posted yet"
                   description={`Info from ${klass.instructorName || 'this class’s teacher'} will appear here.`}
                 />

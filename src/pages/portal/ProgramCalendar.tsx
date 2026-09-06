@@ -1,13 +1,15 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { theme } from '../../theme';
 import {
-  Card, EmptyState, Spinner, ChevronLeftIcon, CalendarIcon,
+  Card, EmptyState, ChevronLeftIcon, CalendarIcon,
 } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import EventBar from '../../components/calendar/EventBar';
 import EventCard from '../../components/portal/EventCard';
 import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import SubscribeSheet from '../../components/portal/SubscribeSheet';
+import { RowSkeleton } from '../../components/portal/PortalSkeleton';
+import EmptyArt from '../../components/portal/EmptyArt';
 import { usePortal } from '../../contexts/PortalContext';
 import {
   portalRoutes,
@@ -710,6 +712,7 @@ const ListView: React.FC<ViewProps> = ({ events, onOpen, onAdd }) => {
   if (groups.length === 0) {
     return (
       <EmptyState
+        icon={<EmptyArt name="calendar" />}
         title="Nothing scheduled yet"
         description="Rehearsals, competitions and studio dates will appear here."
       />
@@ -806,11 +809,7 @@ const ProgramCalendar: React.FC = () => {
           {' '}to save one date to Google, Apple or Outlook.
         </p>
 
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
+        {loading && <RowSkeleton count={4} label="Loading the calendar…" />}
 
         {!loading && error && (
           <Card>

@@ -5,6 +5,8 @@ import { ProgramSlug, dayName, formatTime, portalRoutes } from '../../lib/portal
 import {
   TIME_BANDS, TimeBand, durationLabel, groupByDay, timeBandOf,
 } from '../../lib/portalClasses';
+import { usePortal } from '../../contexts/PortalContext';
+import TeacherAvatar from './TeacherAvatar';
 import type { PortalClass, PortalClassCategory } from '../../types';
 
 /**
@@ -44,6 +46,7 @@ const BAND_LABEL: Record<TimeBand, string> =
 
 const Row: React.FC<{ klass: PortalClass; slug: ProgramSlug }> = ({ klass: c, slug }) => {
   const [pressed, setPressed] = useState(false);
+  const { instructorLooks } = usePortal();
 
   const start = formatTime(c.startTime);
   const meta = [c.instructorName, c.location].filter(Boolean).join(' · ');
@@ -124,18 +127,26 @@ const Row: React.FC<{ klass: PortalClass; slug: ProgramSlug }> = ({ klass: c, sl
         </div>
 
         {meta && (
-          <div
-            style={{
-              ...theme.typography.caption,
-              fontFamily: theme.fonts.primary,
-              fontSize: '12px',
-              lineHeight: 1.35,
-              color: theme.colors.txt.secondary,
-              marginTop: '2px',
-              overflowWrap: 'anywhere',
-            }}
-          >
-            {meta}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px', minWidth: 0 }}>
+            {/* 16px here against 22 on a card: this row is 11px of padding and
+                three lines of type, and the mark has to sit inside the line
+                rather than set the row's height. */}
+            {c.instructorName && (
+              <TeacherAvatar instructorName={c.instructorName} looks={instructorLooks} size={16} />
+            )}
+            <span
+              style={{
+                ...theme.typography.caption,
+                fontFamily: theme.fonts.primary,
+                fontSize: '12px',
+                lineHeight: 1.35,
+                color: theme.colors.txt.secondary,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {meta}
+            </span>
           </div>
         )}
 

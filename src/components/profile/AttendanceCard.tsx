@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { theme } from '../../theme';
-import { Card, Spinner } from '../ui';
-import { AttendanceRange } from '../../types/attendance';
+import { Card } from '../ui';
+import { AttendanceRange, SessionAttendance } from '../../types/attendance';
 import { classAccent } from '../../lib/attendanceColors';
+import { stripSessions } from '../../lib/attendanceMarks';
+import { FIXTURE_TODAY } from '../../lib/attendanceFixture';
 import { dayName, formatTime } from '../../lib/portal';
 import {
   AttendanceSource,
@@ -10,9 +12,11 @@ import {
   LoadError,
   RANGE_LABELS,
   loadStudentProgress,
+  loadStudentSessions,
   studentLabel,
 } from '../../lib/attendanceQueries';
 import AttendanceProgress from './AttendanceProgress';
+import { AttendanceRowSkeleton } from '../portal/PortalSkeleton';
 import AttendanceDetail from './AttendanceDetail';
 import CardError from './CardError';
 import SegmentedControl from './SegmentedControl';
@@ -84,9 +88,11 @@ const EmptyNote: React.FC<{ title: string; body: string }> = ({ title, body }) =
 
 const ClassRow: React.FC<{
   progress: ClassProgress;
+  /** Already clipped and agreement-checked. Null falls back to the bar. */
+  sessions: SessionAttendance[] | null;
   muted?: boolean;
   onOpen: () => void;
-}> = ({ progress, muted, onOpen }) => {
+}> = ({ progress, sessions, muted, onOpen }) => {
   const accent = classAccent(progress.klass);
   const meta = classMeta(progress);
   const { percent } = progress.summary;
@@ -152,7 +158,7 @@ const ClassRow: React.FC<{
         </p>
       )}
 
-      <AttendanceProgress summary={progress.summary} accent={accent} />
+      <AttendanceProgress summary={progress.summary} accent={accent} sessions={sessions} />
     </button>
   );
 };
@@ -161,6 +167,9 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
   const [range, setRange] = useState<AttendanceRange>('season');
   const [studentId, setStudentId] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ current: ClassProgress[]; past: ClassProgress[] } | null>(null);
+  // Session-by-session rows for every class this child is in, keyed by class
+  // id. Enrichment only — an empty map means every row draws its bar.
+  const [sessions, setSessions] = useState<Record<string, SessionAttendance[]>>({});
   const [error, setError] = useState<LoadError>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
@@ -195,9 +204,18 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
     let cancelled = false;
     setLoading(true);
 
-    loadStudentProgress(source, selectedId, range).then(next => {
+    // Parallel, not sequential: the strip's rows do not depend on the
+    // summary rows, and awaiting them in turn would add a round trip to a
+    // page a parent opens on studio wifi. The sessions promise cannot reject
+    // — loadStudentSessions swallows, because a missing decoration must never
+    // take down a card whose numbers are fine.
+    Promise.all([
+      loadStudentProgress(source, selectedId, range),
+      loadStudentSessions(source, selectedId),
+    ]).then(([next, detail]) => {
       if (cancelled) return;
       setProgress({ current: next.current, past: next.past });
+      setSessions(detail);
       setError(next.error);
       setLoading(false);
     });
@@ -215,6 +233,27 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
     setAttempt(n => n + 1);
   };
 
+  /**
+   * The strip for one row, or null.
+   *
+   * `rowRange` is a parameter rather than the card's `range` because past
+   * enrollments are deliberately loaded with 'all' — see the note beside them
+   * below. Passing the wrong one is not a visual bug, it is a contradiction:
+   * stripSessions would clip to a period the fraction was not computed over.
+   *
+   * 'today' has to match whatever the summary was computed against, which for
+   * the fixture is its own frozen date and not the reader's clock.
+   */
+  const today = source.source === 'fixture' ? FIXTURE_TODAY : new Date();
+  const stripFor = (row: ClassProgress, rowRange: AttendanceRange) => stripSessions(
+    sessions[row.klass.id],
+    row.summary,
+    rowRange,
+    row.klass.seasonStart,
+    row.klass.seasonEnd,
+    today,
+  );
+
   const body = () => {
     // Error BEFORE every empty state. Each empty state below is a confident
     // sentence about a real family — "no dancers linked", "no classes this
@@ -223,13 +262,7 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
     const failure = household.error ?? error;
     if (failure) return <CardError message={failure} onRetry={retry} />;
 
-    if (loading && !progress) {
-      return (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: theme.spacing.xl }}>
-          <Spinner size={24} color={theme.colors.primary} />
-        </div>
-      );
-    }
+    if (loading && !progress) return <AttendanceRowSkeleton count={2} />;
 
     // Empty state 1: signed in, but no child is attached to this household yet.
     // Deliberately not an error — the roster import runs on the studio's clock.
@@ -258,6 +291,7 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
           <ClassRow
             key={row.enrollment.id}
             progress={row}
+            sessions={stripFor(row, range)}
             onOpen={() => setOpen(row)}
           />
         ))}
@@ -301,6 +335,11 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
               <ClassRow
                 key={row.enrollment.id}
                 progress={row}
+                /* 'all', matching the note above: past enrollments are loaded
+                   unclipped, so clipping their strip to the selected period
+                   would disagree with the fraction beside it and the strip
+                   would simply refuse to draw. */
+                sessions={stripFor(row, 'all')}
                 muted
                 onOpen={() => setOpen(row)}
               />

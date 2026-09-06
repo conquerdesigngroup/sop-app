@@ -27,6 +27,11 @@ export const mapProgram = (r: any): PortalProgram => ({
   requiresCode: r.requires_code,
   sortOrder: r.sort_order ?? 0,
   isActive: r.is_active,
+  // `?? null` rather than a bare read: a bundle running against a database
+  // where v46 has not been applied gets undefined here, and every consumer
+  // tests for null.
+  heroPath: r.hero_path ?? null,
+  heroAlt: r.hero_alt ?? '',
 });
 
 /**

@@ -418,6 +418,15 @@ export interface PortalProgram {
   requiresCode: boolean;
   sortOrder: number;
   isActive: boolean;
+  /**
+   * Object key of the program's picture in the private portal-documents
+   * bucket, always under the `programs/` prefix — v46 has a CHECK enforcing
+   * that, so the page cannot be pointed at a family's private file. Null is
+   * the normal state and renders no picture at all.
+   */
+  heroPath: string | null;
+  /** Written by whoever uploaded it. Empty means the picture is decorative. */
+  heroAlt: string;
 }
 
 /**

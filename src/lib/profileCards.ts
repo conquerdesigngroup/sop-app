@@ -4,6 +4,7 @@ import { AttendanceSource } from './attendanceQueries';
 import IdentityCard from '../components/profile/IdentityCard';
 import UpNextCard from '../components/profile/UpNextCard';
 import HouseholdCard from '../components/profile/HouseholdCard';
+import SeasonStatsCard from '../components/profile/SeasonStatsCard';
 import AttendanceCardHost from '../components/profile/AttendanceCardHost';
 import UpdatesCard from '../components/profile/UpdatesCard';
 import DocumentsCard from '../components/profile/DocumentsCard';
@@ -84,6 +85,18 @@ export const PROFILE_CARDS: ProfileCard[] = [
     // and `visible` must stay synchronous and free.
     visible: ctx => !ctx.isStaff && ctx.memberType === 'guardian',
     defaultOrder: 18,
+  },
+  {
+    // Directly above Attendance, as its headline: the glance, then the detail.
+    // It reads the household summary the cards around it have already loaded,
+    // so it costs no request — and it renders nothing at all for a household
+    // with no enrolments, which is why it can sit this high without being the
+    // first thing a brand-new family sees.
+    id: 'season-stats',
+    title: 'At a glance',
+    component: SeasonStatsCard,
+    visible: ctx => !ctx.isStaff,
+    defaultOrder: 19,
   },
   {
     id: 'attendance',

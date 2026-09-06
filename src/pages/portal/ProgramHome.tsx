@@ -1,12 +1,14 @@
 import React from 'react';
 import { theme } from '../../theme';
-import { Card, Spinner } from '../../components/ui';
+import { Card } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
+import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
+import CountdownBand from '../../components/portal/CountdownBand';
+import ProgramHero from '../../components/portal/ProgramHero';
 import { usePortal } from '../../contexts/PortalContext';
-import {
-  portalRoutes, formatEventDate, formatEventTime, eventLastDayKey, dateKey,
-} from '../../lib/portal';
+import { portalRoutes, eventLastDayKey } from '../../lib/portal';
+import { studioToday } from '../../lib/studioDate';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
 import { PortalUpdate, PortalEvent } from '../../types';
 
@@ -22,15 +24,9 @@ const icon = (d: string) => (
   </svg>
 );
 
-/** All-day events read in UTC, timed events in local time — see lib/portal.ts. */
-const describeEvent = (iso: string, allDay: boolean) => {
-  const date = formatEventDate(iso, allDay, { weekday: 'short', month: 'short', day: 'numeric' });
-  return allDay ? date : `${date} · ${formatEventTime(iso, false)}`;
-};
-
 const ProgramHome: React.FC = () => {
   const { slug, program } = useProgramPage();
-  const { fetchUpdates, fetchEvents } = usePortal();
+  const { fetchUpdates, fetchEvents, heroUrls } = usePortal();
 
   const updates = useProgramQuery<PortalUpdate[]>(program?.id, fetchUpdates, []);
   const events = useProgramQuery<PortalEvent[]>(program?.id, fetchEvents, []);
@@ -45,7 +41,12 @@ const ProgramHome: React.FC = () => {
   // Comparing the event's LAST day against today's key fixes both: a run of
   // days stays "coming up" while it is still running, and no match means the
   // card simply does not render.
-  const todayKey = dateKey(new Date());
+  // The STUDIO's today, not the reader's. It was dateKey(new Date()) — the
+  // viewer's local date — which is the wrong frame for a studio date and would
+  // put the countdown below a day out for a grandparent watching from Chicago
+  // at 10pm. Same reasoning as lib/studioDate.ts, and the band is handed this
+  // exact string so the page has one clock rather than two.
+  const todayKey = studioToday();
   const nextEvent = events.data.find(
     e => eventLastDayKey(e.startsAt, e.endsAt, e.isAllDay) >= todayKey
   );
@@ -59,13 +60,20 @@ const ProgramHome: React.FC = () => {
       slug={slug}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '720px' }}>
+        {/* Above the summary cards and outside the `busy` branch: the hero is
+            already in the provider by the time this page mounts, so gating it
+            on the updates fetch would hide a picture that is ready. It renders
+            nothing when the program has none. */}
+        {program && (
+          <ProgramHero url={heroUrls[program.id]} alt={program.heroAlt} />
+        )}
         {/* What's new — only rendered when there is something to show, so an
             empty section reads as deliberate rather than broken. */}
-        {busy && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
-            <Spinner size={24} color={theme.colors.primary} />
-          </div>
-        )}
+        {/* Only the two summary cards are skeletoned. The three nav tiles
+            below do not wait on a fetch — they are always there — so standing
+            them in as well would flash a placeholder over content that is
+            already on screen. */}
+        {busy && <ContentCardSkeleton count={2} lines={2} />}
 
         {!busy && (latest || nextEvent) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -100,29 +108,11 @@ const ProgramHome: React.FC = () => {
             )}
 
             {nextEvent && (
-              <Card>
-                <div style={{
-                  ...theme.typography.captionSmall,
-                  fontFamily: theme.fonts.mono,
-                  color: theme.colors.txt.tertiary,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  marginBottom: '8px',
-                }}>
-                  Coming up
-                </div>
-                <div style={{ ...theme.typography.h3, color: theme.colors.txt.primary, marginBottom: '6px' }}>
-                  {nextEvent.title}
-                </div>
-                <div style={{
-                  ...theme.typography.bodySmall,
-                  fontFamily: theme.fonts.primary,
-                  color: theme.colors.txt.secondary,
-                }}>
-                  {describeEvent(nextEvent.startsAt, nextEvent.isAllDay)}
-                  {nextEvent.location ? ` · ${nextEvent.location}` : ''}
-                </div>
-              </Card>
+              <CountdownBand
+                event={nextEvent}
+                today={todayKey}
+                to={portalRoutes.calendar(slug)}
+              />
             )}
           </div>
         )}

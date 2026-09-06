@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { theme } from '../../theme';
-import { Card, EmptyState, Spinner } from '../../components/ui';
+import { Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
+import { RowSkeleton } from '../../components/portal/PortalSkeleton';
+import EmptyArt from '../../components/portal/EmptyArt';
 import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import ClassFilterBar from '../../components/portal/ClassFilterBar';
 import ClassMobileSchedule from '../../components/portal/ClassMobileSchedule';
@@ -191,11 +193,7 @@ const ProgramClasses: React.FC = () => {
           gap: isMobileOrTablet ? '12px' : '20px',
         }}
       >
-        {loading && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-            <Spinner size={28} color={theme.colors.primary} />
-          </div>
-        )}
+        {loading && <RowSkeleton count={5} label="Loading the schedule…" />}
 
         {!loading && error && (
           <Card>
@@ -212,6 +210,7 @@ const ProgramClasses: React.FC = () => {
 
         {!loading && !error && classes.length === 0 && (
           <EmptyState
+            icon={<EmptyArt name="classes" />}
             title="No classes listed yet"
             description="Class schedules for this program will appear here once the studio adds them."
           />

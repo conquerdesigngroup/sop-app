@@ -110,6 +110,55 @@ export const buildStoragePath = (programSlug: PortalProgramSlug, fileName: strin
   return `${programSlug}/${randomId()}-${safe || 'file'}`;
 };
 
+// ----------------------------------------------------------------- program hero
+
+/**
+ * What a program's picture may be.
+ *
+ * NARROWER THAN THE BUCKET ON PURPOSE
+ *
+ * ALLOWED_DOCUMENT_MIME accepts gif and heic as well, and both are wrong here.
+ * HEIC is the one that matters: an iPhone shoots it, Safari renders it and
+ * Chrome shows a broken image — which is a decision DocumentList can defer to
+ * the browser, because a file that will not display there degrades to a
+ * download row. A hero has no such fallback. It is the top of the page or it is
+ * nothing, so a format that works on half the phones in the studio cannot be
+ * offered at all.
+ */
+export const HERO_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
+
+/**
+ * 8 MB, against the bucket's 250.
+ *
+ * Not a storage limit — a bandwidth one. Every parent opening the program page
+ * downloads this, most of them on a phone outside the studio, and a 40 MB
+ * photograph straight off a camera would cost them more than the rest of the
+ * portal put together. Anything a 16:6 band needs fits well inside 8.
+ */
+export const MAX_HERO_MB = 8;
+export const MAX_HERO_BYTES = MAX_HERO_MB * 1024 * 1024;
+
+/**
+ * Object key for a program hero.
+ *
+ * The `programs/` prefix is not cosmetic: v46 puts a CHECK on hero_path
+ * requiring it, because any key in this bucket can be signed and rendered, and
+ * an unconstrained column is a way to put a family's private upload on the
+ * front of a program page. Keep this function and that constraint in step.
+ *
+ * Random id rather than the file name, for the same reason buildStoragePath
+ * uses one — and additionally so that replacing a hero writes a NEW object.
+ * Overwriting the old key would leave every phone and CDN that already has it
+ * showing the previous picture for as long as it is cached.
+ */
+export const buildHeroPath = (programSlug: PortalProgramSlug, fileName: string): string => {
+  const ext = (fileName.split('.').pop() ?? 'jpg')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 5) || 'jpg';
+  return `programs/${programSlug}-${randomId()}.${ext}`;
+};
+
 // --------------------------------------------------------------------- events
 
 const pad = (n: number) => String(n).padStart(2, '0');

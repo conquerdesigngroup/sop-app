@@ -70,6 +70,23 @@ export interface InstructorRow {
 const SEPARATORS = /\s*(?:,|\/|&|\sand\s)\s*/i;
 
 /**
+ * One instructor_name field, as the list of people it actually names.
+ *
+ * Exported because the matcher is no longer the only thing that has to know a
+ * field can hold four teachers. The parent-facing avatars need the same split:
+ * "Chill Kerney, Ky'ree Nevels" folded whole gives the initials CN, which is
+ * not either of them — it is an invented third person on a page parents read.
+ *
+ * Empty pieces are dropped rather than kept as blanks, so a trailing comma or
+ * a doubled separator costs nothing.
+ */
+export const splitInstructorNames = (raw: string | null | undefined): string[] =>
+  (raw ?? '')
+    .split(SEPARATORS)
+    .map(piece => piece.trim())
+    .filter(piece => piece.length > 0 && normalizeName(piece).length > 0);
+
+/**
  * Anything a person might type where an apostrophe belongs. The profile row
  * reads "Ky’Ree" and the schedule reads "Ky'ree"; without folding these two the
  * best-matched teacher in the studio looks like a stranger.
@@ -189,10 +206,8 @@ export const matchInstructors = (
 
   for (const klass of classes) {
     if (klass.isActive === false) continue;
-    for (const piece of (klass.instructorName ?? '').split(SEPARATORS)) {
-      const display = piece.trim();
+    for (const display of splitInstructorNames(klass.instructorName)) {
       const key = normalizeName(display);
-      if (!key) continue;
       const existing = byName.get(key);
       if (existing) existing.classIds.push(klass.id);
       else byName.set(key, { display, classIds: [klass.id] });

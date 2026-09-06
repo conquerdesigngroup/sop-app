@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Badge, CalendarPlusIcon, EmptyState } from '../ui';
 import { useResponsive } from '../../hooks/useResponsive';
+import { usePortal } from '../../contexts/PortalContext';
+import TeacherAvatar from './TeacherAvatar';
 import {
   CLASS_CATEGORY_LABEL, ProgramSlug, dayName, formatTime, portalRoutes,
 } from '../../lib/portal';
@@ -66,6 +68,10 @@ export const ClassCard: React.FC<CardProps> = ({
   klass: c, slug, showCategory, showDay = false, compact = false, onAddToCalendar,
 }) => {
   const [active, setActive] = useState(false);
+  // Read from the provider rather than threaded through as a prop: this card is
+  // rendered by four different views and every one of them would have to carry
+  // the map through purely to hand it here.
+  const { instructorLooks } = usePortal();
 
   // A class with no day, no start time, or a season already over has nothing
   // to put in a calendar. Hiding the button is better than offering one that
@@ -165,13 +171,34 @@ export const ClassCard: React.FC<CardProps> = ({
         {who && (
           <div
             style={{
-              ...theme.typography.caption,
-              fontFamily: theme.fonts.primary,
-              color: theme.colors.txt.tertiary,
-              marginTop: '3px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginTop: '4px',
+              minWidth: 0,
             }}
           >
-            {who}
+            {/* The mark, not a photograph — see TeacherAvatar. It is the only
+                thing on this card that is found rather than read, which is the
+                whole reason a schedule of twenty grey cards needed one. */}
+            {c.instructorName && (
+              <TeacherAvatar
+                instructorName={c.instructorName}
+                looks={instructorLooks}
+                size={compact ? 18 : 22}
+              />
+            )}
+            <span
+              style={{
+                ...theme.typography.caption,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.tertiary,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {who}
+            </span>
           </div>
         )}
 

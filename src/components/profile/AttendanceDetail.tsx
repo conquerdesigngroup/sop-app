@@ -3,6 +3,7 @@ import { theme } from '../../theme';
 import { Modal, Spinner } from '../ui';
 import { SessionAttendance, Student } from '../../types/attendance';
 import { classAccent } from '../../lib/attendanceColors';
+import { describeMark } from '../../lib/attendanceMarks';
 import {
   AttendanceSource,
   ClassProgress,
@@ -51,40 +52,13 @@ const monthKey = (iso: string): string => {
   return `${MONTHS[m - 1]} ${y}`;
 };
 
-interface Mark {
-  label: string;
-  /** Null renders a hollow ring — used for absence, which needs no colour. */
-  dot: string | null;
-  muted: boolean;
-  strike: boolean;
-}
-
-const describe = (entry: SessionAttendance, accent: string): Mark => {
-  if (entry.excludedReason === 'cancelled' || entry.excludedReason === 'closed') {
-    return {
-      label: entry.session.note || (entry.excludedReason === 'cancelled' ? 'Class cancelled' : 'Studio closed'),
-      dot: null,
-      muted: true,
-      strike: true,
-    };
-  }
-  if (entry.excludedReason === 'before-enrollment') {
-    return { label: 'Before joining', dot: null, muted: true, strike: true };
-  }
-  if (entry.excludedReason === 'after-drop') {
-    return { label: 'After leaving', dot: null, muted: true, strike: true };
-  }
-  if (entry.excludedReason === 'excused') {
-    return { label: 'Excused', dot: theme.colors.status.info, muted: true, strike: false };
-  }
-
-  switch (entry.status) {
-    case 'present': return { label: 'Present', dot: accent, muted: false, strike: false };
-    case 'late': return { label: 'Late', dot: theme.colors.status.warning, muted: false, strike: false };
-    case 'absent': return { label: 'Absent', dot: null, muted: false, strike: false };
-    default: return { label: 'Not marked', dot: null, muted: true, strike: false };
-  }
-};
+/**
+ * `describe` used to live here, and it was the only reading of the domain in
+ * the app. It moved to lib/attendanceMarks.ts when the summary card started
+ * drawing the same sessions as a strip — two independent answers to "what does
+ * an excused absence look like" is how this modal ends up saying Excused in
+ * blue while the row behind it shows a plain absence.
+ */
 
 const AttendanceDetail: React.FC<AttendanceDetailProps> = ({ source, student, progress, onClose }) => {
   const [rows, setRows] = useState<SessionAttendance[] | null>(null);
@@ -161,7 +135,7 @@ const AttendanceDetail: React.FC<AttendanceDetailProps> = ({ source, student, pr
             </p>
 
             {group.entries.map(entry => {
-              const mark = describe(entry, accent);
+              const mark = describeMark(entry, accent);
               return (
                 <div
                   key={entry.session.id}

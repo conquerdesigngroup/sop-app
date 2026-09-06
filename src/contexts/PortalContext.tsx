@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { signDocumentUrls } from '../lib/portalStorage';
+import { InstructorLook, mapInstructorLook } from '../lib/instructorLook';
 import { useRefreshable } from './RefreshContext';
 import {
   PortalProgram,
@@ -91,6 +92,24 @@ interface PortalContextValue {
   error: string | null;
   getProgramBySlug: (slug: string) => PortalProgram | undefined;
 
+  /**
+   * A signed URL for each program's hero, keyed by program id.
+   *
+   * Signed once with the programs rather than per page, because the picture is
+   * on the program overview AND on the tile that leads to it, and signing it
+   * twice would be two requests for one image. Missing means either no picture
+   * or a signing that failed; both render the same and neither is an error a
+   * parent is told about.
+   */
+  heroUrls: Record<string, string>;
+
+  /**
+   * Teacher marks, keyed by normalised instructor name. Empty is normal — see
+   * lib/instructorLook.ts, where a missing row is the default rather than a
+   * missing feature.
+   */
+  instructorLooks: Record<string, InstructorLook>;
+
   /** Has this device cleared the access code for this program? */
   hasAccess: (slug: ProgramSlug) => boolean;
   /** Verify a code against the database. Returns true on success and records it. */
@@ -131,12 +150,60 @@ export const usePortal = () => {
 
 export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [programs, setPrograms] = useState<PortalProgram[]>([]);
+  const [heroUrls, setHeroUrls] = useState<Record<string, string>>({});
+  const [instructorLooks, setInstructorLooks] = useState<Record<string, InstructorLook>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Bumped by verifyCode so components re-read hasAccess, which is backed by
   // localStorage rather than state and would not otherwise trigger a render.
   const [accessVersion, setAccessVersion] = useState(0);
+
+  /**
+   * The two optional reads that make the portal look like something.
+   *
+   * Swallows everything. Every failure mode here degrades to the pre-v46
+   * appearance, which is a page that works — so there is nothing to tell a
+   * parent and nothing they could do about it. It also means this is safe to
+   * run against a database where v46 has not been applied: the table 404s, the
+   * catch fires, and the schedule renders with default marks.
+   */
+  const loadLook = useCallback(async (loaded: PortalProgram[]) => {
+    if (!supabase) return;
+
+    try {
+      const { data, error: err } = await supabase
+        .from('portal_instructor_looks')
+        .select('name_key, display_name, mode, initials, icon_key, palette_key');
+
+      if (!err && data) {
+        const byKey: Record<string, InstructorLook> = {};
+        data.forEach((row: any) => {
+          const look = mapInstructorLook(row);
+          byKey[look.nameKey] = look;
+        });
+        setInstructorLooks(byKey);
+      }
+    } catch {
+      /* Default marks. Nothing to say. */
+    }
+
+    // One signing call for every program that has a picture, or none at all.
+    const paths = loaded.map(p => p.heroPath).filter((v): v is string => !!v);
+    if (paths.length === 0) return;
+
+    try {
+      const signed = await signDocumentUrls(paths);
+      const byProgram: Record<string, string> = {};
+      loaded.forEach(p => {
+        const url = p.heroPath ? signed[p.heroPath] : undefined;
+        if (url) byProgram[p.id] = url;
+      });
+      setHeroUrls(byProgram);
+    } catch {
+      /* No picture. The page is the one it was before. */
+    }
+  }, []);
 
   const loadPrograms = useCallback(async () => {
     if (!isSupabaseConfigured() || !supabase) {
@@ -153,15 +220,35 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         .order('sort_order', { ascending: true });
 
       if (err) throw err;
-      setPrograms((data ?? []).map(mapProgram));
+
+      const mapped = (data ?? []).map(mapProgram);
+      setPrograms(mapped);
       setError(null);
+
+      // THE LOOK IS LOADED AFTER THE CONTENT, AND NEVER BLOCKS IT.
+      //
+      // Both of these are decoration: a hero that does not arrive leaves the
+      // page exactly as it was before v46, and a missing looks table leaves
+      // every teacher on the deterministic default. So they are awaited
+      // separately from the program fetch, after `error` has already been
+      // cleared and `loading` is about to end — a failure here must never turn
+      // into "Could not load the portal".
+      //
+      // Cost, measured against the accounting at the top of this file: ONE
+      // extra request per portal session for the looks, plus one for the
+      // signing when a program actually has a picture. Not per page — both
+      // live in this provider for as long as the portal is open.
+      void loadLook(mapped);
     } catch (e: any) {
       console.error('Failed to load portal programs:', e);
       setError('Could not load the portal. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, []);
+    // loadLook is itself stable, so naming it here keeps loadPrograms stable
+    // too — which matters, because useRefreshable below is keyed on its
+    // identity and a new function each render would re-register the loader.
+  }, [loadLook]);
 
   useEffect(() => {
     loadPrograms();
@@ -366,6 +453,8 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const value = useMemo<PortalContextValue>(
     () => ({
       programs,
+      heroUrls,
+      instructorLooks,
       loading,
       error,
       getProgramBySlug,
@@ -380,7 +469,7 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       getDocumentUrls,
     }),
     [
-      programs, loading, error, getProgramBySlug, hasAccess, verifyCode,
+      programs, heroUrls, instructorLooks, loading, error, getProgramBySlug, hasAccess, verifyCode,
       forgetAccess, fetchClasses, fetchUpdates, fetchEvents, fetchDocuments,
       getDocumentUrl, getDocumentUrls,
     ]
