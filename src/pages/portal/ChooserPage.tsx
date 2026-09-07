@@ -8,6 +8,7 @@ import { CLIENT_AUTH_ENABLED } from '../../lib/clientAuth';
 import InstallAppGuide from '../../components/InstallAppGuide';
 import ThemeToggle from '../../components/ThemeToggle';
 import RefractedGlassField from '../../components/RefractedGlassField';
+import HolidayLayer from '../../components/HolidayLayer';
 
 /**
  * The front door.
@@ -49,6 +50,13 @@ interface TileProps {
   icon: React.ReactNode;
   /** Marks the tile with the electric accent. Exactly one tile sets this. */
   accent?: boolean;
+  /**
+   * Names this tile to the decorative holiday layer, if one is mounted, so a
+   * character can be staged against its live rect — rising from behind this
+   * exact tile rather than drifting past at an arbitrary height. Inert when no
+   * layer is mounted, which is most of the year.
+   */
+  anchor?: string;
 }
 
 /**
@@ -70,7 +78,7 @@ interface TileProps {
  * that matters and simply grows on the one that does not. A tile a few pixels
  * off square beats a description hanging out of the bottom of one.
  */
-const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false }) => {
+const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false, anchor }) => {
   const [active, setActive] = useState(false);
   const { isMobileOrTablet } = useResponsive();
   const { mode } = useTheme();
@@ -79,6 +87,7 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false }) =
   return (
     <Link
       to={to}
+      data-holiday-anchor={anchor}
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => setActive(false)}
       onFocus={() => setActive(true)}
@@ -200,6 +209,13 @@ const ChooserPage: React.FC = () => {
     >
       <RefractedGlassField />
 
+      {/* Seasonal decoration, and only when REACT_APP_HOLIDAY names one —
+          otherwise this renders null and costs nothing. It must sit AFTER the
+          field: both back layers are z-index -1, and equal z-index resolves by
+          tree order, so this is what puts the characters in front of the
+          caustics rather than lost inside them. */}
+      <HolidayLayer />
+
       {/* Logo and toggle are one group with their own tighter gap, rather than
           two children of the page. As siblings they would each take the page's
           32/48px gap, which reads as three unrelated things stacked up and
@@ -225,6 +241,7 @@ const ChooserPage: React.FC = () => {
         <img
           src={BRAND_MARK}
           alt="Dancing Images Dance Center"
+          data-holiday-anchor="logo"
           style={{
             width: '100%',
             maxWidth: isMobileOrTablet ? '300px' : '440px',
@@ -251,8 +268,14 @@ const ChooserPage: React.FC = () => {
         {/* Both labels are two words of the same shape on purpose: they sit
             side by side at every width, and a one-word/two-word pair reads as
             two different components rather than one choice. */}
-        <ChooserTile to="/login" label="Staff Portal" icon={StaffIcon} />
-        <ChooserTile to={portalRoutes.home} label="Dancer Portal" icon={TeamIcon} accent />
+        <ChooserTile to="/login" label="Staff Portal" icon={StaffIcon} anchor="staff" />
+        <ChooserTile
+          to={portalRoutes.home}
+          label="Dancer Portal"
+          icon={TeamIcon}
+          accent
+          anchor="dancer"
+        />
       </div>
 
       <InstallAppGuide />

@@ -97,6 +97,18 @@ const DEVICES = [
   { name: 'laptop', width: 1440, height: 900, statusBar: 0 },
 ];
 
+// A note on the seasonal decoration layer, which is the other thing '/' can be
+// carrying: it only exists when the app was BUILT with REACT_APP_HOLIDAY naming
+// a holiday, so a default build measures the front door WITHOUT it. Same
+// problem and same answer as the client-auth flag below — audit a flag-on build
+// before shipping changes to it.
+//
+// It should never produce a finding either way. The layer is two
+// position:fixed, inset:0 canvases with no children, so it cannot report a rect
+// outside the viewport the way DOM sprites travelling off screen would — which
+// is precisely why it is drawn on a canvas. If '/' ever does report
+// horizontal-overflow on a holiday build, that is a real regression in the
+// layer and not a quirk of this script.
 const PUBLIC_ROUTES = [
   '/', '/login', '/reset-password', '/portal',
   // The client login build (W1 of CLIENT-AUTH-BUILD.md). These routes only
