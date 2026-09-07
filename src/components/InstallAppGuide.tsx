@@ -171,17 +171,55 @@ const Note: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </p>
 );
 
-const Outro: React.FC = () => (
+/**
+ * What this is FOR, before what to tap.
+ *
+ * The steps were fine and people still abandoned them, because a set of
+ * instructions with no stated payoff reads as an advert for something you did
+ * not ask for. Naming the payoff first — in the terms a parent cares about,
+ * not "PWA" or "offline cache" — is what makes the next thirty seconds worth
+ * spending.
+ */
+const Intro: React.FC = () => (
+  <p
+    style={{
+      ...theme.typography.body,
+      fontFamily: theme.fonts.primary,
+      color: theme.colors.txt.secondary,
+      margin: `0 0 ${theme.spacing.lg} 0`,
+    }}
+  >
+    This puts a <strong>DIDC</strong> button on your phone’s home screen, next to
+    your other apps. Tap it and you are straight into the schedule — no typing an
+    address, no hunting through browser tabs, and you stay signed in. It still
+    works when the signal is poor.
+  </p>
+);
+
+/**
+ * The confirmation step, which is not a step in any platform's instructions and
+ * is the one people most need.
+ *
+ * Somebody who is unsure whether it worked will simply do the whole thing again,
+ * or decide it failed and give up. Telling them exactly what to look for ends it.
+ */
+const DidItWork: React.FC = () => (
   <p
     style={{
       ...theme.typography.bodySmall,
       fontFamily: theme.fonts.primary,
-      color: theme.colors.txt.tertiary,
+      color: theme.colors.txt.secondary,
+      backgroundColor: theme.colors.bg.tertiary,
+      border: `1px solid ${theme.colors.bdr.primary}`,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
       margin: `${theme.spacing.lg} 0 0 0`,
     }}
   >
-    That is it. The DIDC icon appears on your home screen and opens like any other app —
-    no address to type, and it still works when the signal is poor.
+    <strong>Did it work?</strong> Close this and go to your home screen. You are
+    looking for an icon called <strong>DIDC</strong>, usually on the last page of
+    apps — swipe left a few times if you do not see it. Tap it once and it opens
+    like an app, without the address bar at the top.
   </p>
 );
 
@@ -205,19 +243,24 @@ const InstallAppGuide: React.FC = () => {
               these steps.
             </Note>
           )}
+          <Intro />
           <StepList>
             <Step n={1}>
-              Tap the <strong>Share</strong> button {ShareGlyph} — at the bottom of the screen
-              on an iPhone, or the top on an iPad.
+              Tap the <strong>Share</strong> button {ShareGlyph} — a square with an
+              arrow coming out of the top. It is along the bottom edge of the
+              screen on an iPhone, or the top right on an iPad.
             </Step>
             <Step n={2}>
-              Scroll down the list and tap <strong>Add to Home Screen</strong>.
+              A panel slides up. <strong>Scroll down inside it</strong> — past the
+              row of app icons, into the list below — and tap{' '}
+              <strong>Add to Home Screen</strong>. It is quite far down; keep
+              going if you do not see it yet.
             </Step>
             <Step n={3}>
               Tap <strong>Add</strong> in the top right corner.
             </Step>
           </StepList>
-          <Outro />
+          <DidItWork />
         </>
       );
     }
@@ -227,6 +270,7 @@ const InstallAppGuide: React.FC = () => {
         <>
           {canPromptDirectly ? (
             <>
+              <Intro />
               <p
                 style={{
                   ...theme.typography.body,
@@ -250,23 +294,25 @@ const InstallAppGuide: React.FC = () => {
               >
                 Tap the button above, then tap <strong>Install</strong> when your phone asks.
               </p>
+              <DidItWork />
             </>
           ) : (
             <>
+              <Intro />
               <StepList>
                 <Step n={1}>
-                  Tap the <strong>menu</strong> button {MenuGlyph} at the top right of your
-                  browser.
+                  Tap the <strong>menu</strong> button {MenuGlyph} — three dots in a
+                  vertical line, at the top right of your browser.
                 </Step>
                 <Step n={2}>
                   Tap <strong>Install app</strong>, or <strong>Add to Home screen</strong> if you
-                  do not see it.
+                  do not see it. You may need to scroll the menu.
                 </Step>
                 <Step n={3}>
                   Tap <strong>Install</strong> to confirm.
                 </Step>
               </StepList>
-              <Outro />
+              <DidItWork />
             </>
           )}
         </>
