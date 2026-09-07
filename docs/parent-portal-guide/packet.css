@@ -1,0 +1,448 @@
+/* ============================================================
+   DIDC Parent Portal Guide — print stylesheet
+   Letter portrait, full bleed. Light pages, dark phone mockups
+   that reproduce the app's actual dark theme.
+   ============================================================ */
+
+:root {
+  /* Brand (public/brand/tokens.json) */
+  --electric: #E2144F;
+  --electric2: #FF2D6B;
+  --ink: #111111;
+  --void: #0B0B0D;
+  --panel: #161618;
+  --panel2: #1E1E21;
+  --chalk: #F4F4F5;
+  --smoke: #9A9AA4;
+  /* App dark-theme UI tokens */
+  --app-txt: #F4F4F5;
+  --app-txt2: #C9C9D1;
+  --app-txt3: #9A9AA4;
+  --app-bdr: #26262B;
+  --app-bdr2: #36363D;
+  --ok: #10B981;
+  --warn: #F59E0B;
+  --info: #3B82F6;
+  /* Print-page (light) tokens */
+  --page-bg: #FFFFFF;
+  --page-panel: #F6F6F7;
+  --page-line: #E4E4E7;
+  --body-ink: #26262B;
+  --body-mut: #6E6E78;
+
+  --display: 'Kanit', 'Arial Black', sans-serif;
+  --body: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+@page { size: Letter; margin: 0; }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { background: #fff; }
+
+body {
+  font-family: var(--body);
+  color: var(--body-ink);
+  font-size: 10.5pt;
+  line-height: 1.55;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ---------- page chrome ---------- */
+
+.page {
+  width: 8.5in;
+  height: 11in;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+  background: var(--page-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.page--dark { background: var(--void); color: var(--app-txt); }
+
+.page__inner {
+  padding: 0.62in 0.66in 0.55in;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* running footer */
+.folio {
+  position: absolute;
+  left: 0.66in; right: 0.66in; bottom: 0.3in;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 6.6pt;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9a9aa4;
+}
+.folio__rule {
+  position: absolute;
+  left: 0.66in; right: 0.66in; bottom: 0.52in;
+  border-top: 1px solid var(--page-line);
+}
+.page--dark .folio__rule { border-color: #232327; }
+
+/* section header band */
+.band {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.22in;
+  margin-bottom: 0.28in;
+}
+.band__num {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 800;
+  font-size: 34pt;
+  line-height: 0.9;
+  color: var(--electric);
+  min-width: 0.52in;
+}
+.band__titles { padding-top: 2pt; }
+.band__kicker {
+  font-family: var(--mono);
+  font-size: 7pt;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--body-mut);
+  margin-bottom: 3pt;
+}
+.band__title {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 21pt;
+  line-height: 1;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+.band__sub {
+  margin-top: 6pt;
+  font-size: 10.5pt;
+  color: var(--body-mut);
+  max-width: 5.6in;
+}
+
+/* ---------- text bits ---------- */
+
+.h3 {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 11.5pt;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  margin-bottom: 6pt;
+}
+.h3 .tick { color: var(--electric); }
+
+.small { font-size: 9pt; color: var(--body-mut); }
+
+.mono-tag {
+  font-family: var(--mono);
+  font-size: 7.2pt;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.url-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 5px 14px;
+  border: 1.5px solid var(--electric);
+  color: var(--electric);
+  white-space: nowrap;
+}
+
+b, strong { font-weight: 600; color: var(--ink); }
+
+/* keyword chip: a UI label a parent should look for on screen */
+.ui {
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 0.92em;
+  color: var(--ink);
+  background: var(--page-panel);
+  border: 1px solid var(--page-line);
+  border-radius: 4px;
+  padding: 0.5pt 4.5pt;
+  white-space: nowrap;
+}
+
+/* ---------- step lists (mirrors the app's Step component) ---------- */
+
+.steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9pt;
+}
+.steps--tight { gap: 7pt; }
+.steps li {
+  display: flex;
+  gap: 8pt;
+  align-items: flex-start;
+}
+.steps .n {
+  flex-shrink: 0;
+  width: 17pt;
+  height: 17pt;
+  border-radius: 999px;
+  background: var(--electric);
+  color: #fff;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 9pt;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.5pt;
+}
+.steps .t { color: var(--body-ink); }
+.steps .t .sub {
+  display: block;
+  font-size: 8.6pt;
+  color: var(--body-mut);
+  margin-top: 1pt;
+}
+
+/* inline glyph well — a picture of the button, like the in-app guide */
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20pt;
+  height: 15pt;
+  margin: 0 2pt;
+  vertical-align: -3.5pt;
+  border-radius: 3.5pt;
+  background: var(--page-panel);
+  border: 1px solid #d6d6db;
+  color: var(--ink);
+}
+.glyph svg { width: 10.5pt; height: 10.5pt; }
+
+/* ---------- callout / note boxes ---------- */
+
+.note {
+  border: 1px solid var(--page-line);
+  background: var(--page-panel);
+  border-radius: 8pt;
+  padding: 9pt 11pt;
+  font-size: 9.2pt;
+  color: var(--body-ink);
+}
+.note--accent { border-left: 3pt solid var(--electric); border-radius: 4pt 8pt 8pt 4pt; }
+.note__head {
+  font-family: var(--mono);
+  font-size: 6.8pt;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--electric);
+  margin-bottom: 3pt;
+}
+
+/* ---------- layout helpers ---------- */
+
+.cols { display: flex; gap: 0.3in; align-items: flex-start; }
+.cols > * { min-width: 0; }
+.grow { flex: 1; }
+
+.card {
+  border: 1.5px solid var(--page-line);
+  border-radius: 10pt;
+  padding: 12pt 13pt;
+  background: #fff;
+}
+
+/* ============================================================
+   PHONE MOCKUP — reproduces the app's dark UI at print size
+   ============================================================ */
+
+.phone {
+  width: 2.36in;
+  border-radius: 22pt;
+  background: #101013;
+  border: 2.5pt solid #212126;
+  box-shadow: 0 0 0 1.2pt #0b0b0d;
+  padding: 5pt;
+  flex-shrink: 0;
+}
+.phone--wide { width: 2.62in; }
+.phone__screen {
+  border-radius: 17pt;
+  background: var(--void);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+/* opt-in: phone-like proportions for screens whose content is short
+   (overflow:hidden clips content taller than the ratio, so never use
+   this on a screen that fills itself) */
+.phone__screen--tall { aspect-ratio: 9 / 16.2; }
+.phone__notch {
+  width: 34%;
+  height: 7.5pt;
+  background: #060607;
+  border-radius: 999px;
+  margin: 4pt auto 0;
+}
+
+/* app screen typography (kept larger than true scale so print stays legible) */
+.scr { padding: 7pt 8pt 8pt; display: flex; flex-direction: column; gap: 5.5pt; flex: 1; }
+.scr-head { display: flex; align-items: center; justify-content: space-between; padding: 2pt 1pt 0; }
+.scr-logo { height: 8pt; }
+.scr-title {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--app-txt);
+  font-size: 10pt;
+  line-height: 1.05;
+}
+.scr-sub { font-size: 6pt; color: var(--app-txt3); }
+
+.scr-card {
+  background: var(--panel);
+  border: 1pt solid var(--app-bdr);
+  border-radius: 6pt;
+  padding: 6pt 7pt;
+}
+.scr-card--active { border-color: var(--electric); }
+
+.scr-row { display: flex; align-items: center; justify-content: space-between; gap: 4pt; }
+
+.scr-h { font-weight: 600; color: var(--app-txt); font-size: 6.8pt; line-height: 1.25; }
+.scr-p { color: var(--app-txt2); font-size: 5.8pt; line-height: 1.35; }
+.scr-m { font-family: var(--mono); color: var(--app-txt3); font-size: 4.9pt; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.scr-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 4.6pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1pt 3.5pt;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.scr-badge--pink { background: rgba(226,20,79,0.16); color: var(--electric2); }
+.scr-badge--ok { background: rgba(16,185,129,0.14); color: #34d399; }
+.scr-badge--info { background: rgba(59,130,246,0.14); color: #60a5fa; }
+.scr-badge--warn { background: rgba(245,158,11,0.16); color: #fbbf24; }
+
+.scr-btn {
+  border-radius: 5pt;
+  padding: 4.5pt 6pt;
+  text-align: center;
+  font-weight: 600;
+  font-size: 6.4pt;
+  color: #fff;
+  background: var(--electric);
+}
+.scr-btn--ghost {
+  background: transparent;
+  border: 1pt solid var(--app-bdr2);
+  color: var(--app-txt2);
+}
+.scr-input {
+  border-radius: 5pt;
+  border: 1pt solid var(--app-bdr2);
+  background: var(--panel2);
+  color: var(--app-txt3);
+  font-size: 6pt;
+  padding: 4.5pt 6pt;
+}
+.scr-input .lbl { display: block; font-size: 5pt; color: var(--app-txt2); font-weight: 600; margin-bottom: 1pt; }
+
+/* bottom tab bar */
+.scr-tabs {
+  margin-top: auto;
+  display: flex;
+  border-top: 1pt solid var(--app-bdr);
+  background: #0e0e11;
+  padding: 3.5pt 2pt 4.5pt;
+}
+.scr-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4pt;
+  color: var(--app-txt3);
+  font-size: 4.6pt;
+  font-weight: 600;
+}
+.scr-tab svg { width: 7.5pt; height: 7.5pt; }
+.scr-tab--on { color: var(--electric2); }
+
+/* numbered callout dot pinned onto the mockup */
+.pin {
+  position: absolute;
+  width: 13pt;
+  height: 13pt;
+  border-radius: 999px;
+  background: var(--electric);
+  color: #fff;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 7.4pt;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1.6pt #fff;
+}
+
+/* ---------- cover ---------- */
+
+.cover { justify-content: space-between; }
+.cover__grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(244,244,245,0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244,244,245,0.045) 1px, transparent 1px);
+  background-size: 0.5in 0.5in;
+}
+.cover__glow {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 90% 55% at 85% 108%, rgba(226,20,79,0.32), transparent 60%);
+}
+
+/* ---------- pathway (flow) diagram ---------- */
+
+.flow-node {
+  border: 1.4pt solid var(--page-line);
+  background: #fff;
+  border-radius: 8pt;
+  padding: 7pt 10pt;
+}
+.flow-node--start { border-color: var(--electric); }
+.flow-node__t { font-weight: 700; color: var(--ink); font-size: 9.5pt; }
+.flow-node__d { font-size: 8pt; color: var(--body-mut); line-height: 1.35; }
+
+/* checklist ticks */
+.ticks { list-style: none; display: flex; flex-direction: column; gap: 5.5pt; }
+.ticks li { display: flex; gap: 6pt; align-items: flex-start; font-size: 9.4pt; }
+.ticks svg { flex-shrink: 0; margin-top: 1.6pt; }

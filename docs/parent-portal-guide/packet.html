@@ -1,0 +1,1292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DIDC Parent Portal Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Kanit:ital,wght@1,700;1,800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="packet.css">
+<style>
+/* ---- packet-specific additions ---- */
+
+/* contents list */
+.toc { list-style: none; display: flex; flex-direction: column; }
+.toc li {
+  display: flex; align-items: baseline; gap: 8pt;
+  padding: 6.5pt 0; border-bottom: 1px solid var(--page-line);
+}
+.toc li:last-child { border-bottom: none; }
+.toc .no {
+  font-family: var(--display); font-style: italic; font-weight: 800;
+  color: var(--electric); font-size: 11pt; min-width: 16pt;
+}
+.toc .name { font-weight: 600; color: var(--ink); font-size: 10.5pt; }
+.toc .dots { flex: 1; border-bottom: 1.5px dotted #c9c9d1; transform: translateY(-2.5pt); }
+.toc .pg { font-family: var(--mono); font-size: 8pt; color: var(--body-mut); }
+
+/* chooser mockup tiles */
+.mk-tiles { display: flex; gap: 5pt; }
+.mk-tile {
+  flex: 1; aspect-ratio: 1 / 0.92;
+  border: 1pt solid var(--app-bdr2); border-radius: 7pt;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3.5pt;
+  color: var(--app-txt2); font-size: 6.6pt; font-weight: 600;
+}
+.mk-tile svg { width: 11pt; height: 11pt; }
+.mk-tile--accent { border: 1.4pt solid var(--electric); color: var(--app-txt); box-shadow: 0 0 7pt rgba(226,20,79,0.35); }
+
+/* theme toggle mockup */
+.mk-toggle {
+  display: flex; border: 1pt solid var(--app-bdr2); border-radius: 999px; overflow: hidden;
+  font-size: 5.2pt; font-weight: 600; width: fit-content; margin: 0 auto;
+}
+.mk-toggle span { padding: 2.4pt 7pt; color: var(--app-txt3); }
+.mk-toggle .on { background: var(--panel2); color: var(--app-txt); }
+
+/* day strip pills */
+.mk-days { display: flex; gap: 2.6pt; }
+.mk-day {
+  flex: 1; text-align: center; padding: 3pt 0 2.6pt;
+  border: 1pt solid var(--app-bdr); border-radius: 5pt;
+  color: var(--app-txt2); font-size: 5pt; font-weight: 600; position: relative;
+}
+.mk-day small { display: block; font-size: 4pt; color: var(--app-txt3); font-weight: 500; margin-top: 0.6pt; }
+.mk-day--on { background: var(--electric); border-color: var(--electric); color: #fff; }
+.mk-day--on small { color: rgba(255,255,255,0.8); }
+.mk-day .dot { position: absolute; top: 1.6pt; right: 3pt; width: 2.2pt; height: 2.2pt; border-radius: 999px; background: var(--electric2); }
+
+/* timeline rows */
+.mk-tl { display: flex; flex-direction: column; gap: 3.4pt; }
+.mk-tl-sec { font-family: var(--mono); font-size: 4.6pt; letter-spacing: 0.18em; color: var(--app-txt3); text-transform: uppercase; margin: 1.6pt 0 0.4pt; }
+.mk-slot { display: flex; gap: 4.5pt; align-items: stretch; }
+.mk-slot .when { width: 26pt; flex-shrink: 0; text-align: right; font-family: var(--mono); font-size: 4.8pt; color: var(--app-txt3); padding-top: 4.6pt; }
+.mk-slot .bar { width: 2.2pt; border-radius: 999px; flex-shrink: 0; }
+.mk-slot .card { flex: 1; background: var(--panel); border: 1pt solid var(--app-bdr); border-radius: 5pt; padding: 3.8pt 5pt; }
+
+/* facts list (class detail) */
+.mk-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 2.6pt 6pt; margin-top: 3pt; }
+.mk-facts div { font-size: 5.4pt; color: var(--app-txt2); }
+.mk-facts b { display: block; font-family: var(--mono); font-size: 4.3pt; letter-spacing: 0.14em; text-transform: uppercase; color: var(--app-txt3); font-weight: 500; margin-bottom: 0.6pt; }
+
+/* mini month grid */
+.mk-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1.6pt; }
+.mk-cal .dow { font-family: var(--mono); font-size: 3.9pt; color: var(--app-txt3); text-align: center; padding: 1pt 0; text-transform: uppercase; }
+.mk-cal .d {
+  aspect-ratio: 1/0.82; border-radius: 3pt; font-size: 4.6pt; color: var(--app-txt2);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 1.2pt; gap: 1pt;
+  border: 1pt solid transparent;
+}
+.mk-cal .d .ev { width: 70%; height: 1.8pt; border-radius: 999px; background: #3a3a41; }
+.mk-cal .d .ev--pink { background: var(--electric); opacity: 0.85; }
+.mk-cal .d--mut { color: #4a4a52; }
+.mk-cal .d--today { border-color: var(--electric); }
+.mk-cal .d--sel { background: var(--electric); color: #fff; }
+
+/* event row */
+.mk-ev { display: flex; align-items: center; gap: 5pt; background: var(--panel); border: 1pt solid var(--app-bdr); border-radius: 6pt; padding: 5pt 6pt; }
+.mk-ev .chip { text-align: center; flex-shrink: 0; width: 17pt; }
+.mk-ev .chip .wd { font-family: var(--mono); font-size: 4pt; color: var(--electric2); letter-spacing: 0.12em; }
+.mk-ev .chip .dn { font-family: var(--display); font-style: italic; font-weight: 800; font-size: 10pt; color: var(--app-txt); line-height: 1; }
+.mk-ev .add {
+  margin-left: auto; flex-shrink: 0;
+  border: 1pt solid var(--app-bdr2); border-radius: 5pt;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 19pt; height: 17pt; gap: 0.8pt; color: var(--app-txt2);
+}
+.mk-ev .add span { font-size: 3.6pt; font-weight: 700; letter-spacing: 0.1em; }
+.mk-ev .add svg { width: 6.5pt; height: 6.5pt; }
+
+/* bottom sheet mockup */
+.mk-sheet {
+  margin-top: auto; background: var(--panel); border: 1pt solid var(--app-bdr2); border-bottom: none;
+  border-radius: 10pt 10pt 0 0; padding: 5.5pt 7pt 7pt; position: relative;
+}
+.mk-sheet .grab { width: 14pt; height: 1.8pt; background: var(--app-bdr2); border-radius: 999px; margin: 0 auto 4.5pt; }
+.mk-opt { display: flex; align-items: center; gap: 5pt; padding: 4.2pt 1pt; border-bottom: 1pt solid var(--app-bdr); }
+.mk-opt:last-child { border-bottom: none; }
+.mk-opt svg { width: 8pt; height: 8pt; flex-shrink: 0; }
+.mk-opt .l { flex: 1; }
+.mk-opt .chev { color: var(--app-txt3); }
+
+/* flow diagram */
+.flow { display: flex; flex-direction: column; align-items: center; }
+.flow__arrow { display: flex; flex-direction: column; align-items: center; color: #c2c2c9; height: 19pt; justify-content: center; }
+.flow__fan { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7pt; width: 100%; }
+.tabchip {
+  border: 1.3pt solid var(--page-line); border-radius: 8pt; padding: 6.5pt 5pt;
+  display: flex; flex-direction: column; align-items: center; gap: 2.5pt; text-align: center;
+}
+.tabchip svg { width: 12pt; height: 12pt; color: var(--electric); }
+.tabchip .tl { font-weight: 700; font-size: 8.6pt; color: var(--ink); }
+.tabchip .td { font-size: 7pt; color: var(--body-mut); line-height: 1.3; }
+
+/* two-phone spread */
+.duo { display: flex; gap: 0.26in; align-items: flex-start; }
+
+/* platform column cards for install page */
+.plat { flex: 1; border: 1.5px solid var(--page-line); border-radius: 10pt; padding: 12pt 13pt; }
+.plat__head { display: flex; align-items: center; gap: 6pt; margin-bottom: 8pt; }
+.plat__head svg { width: 13pt; height: 13pt; }
+.plat__name { font-family: var(--display); font-style: italic; font-weight: 800; text-transform: uppercase; font-size: 12pt; color: var(--ink); }
+.plat__sub { font-family: var(--mono); font-size: 6.4pt; letter-spacing: 0.14em; text-transform: uppercase; color: var(--body-mut); }
+</style>
+</head>
+<body>
+
+<!-- ================= PAGE 1 · COVER ================= -->
+<section class="page page--dark cover">
+  <div class="cover__grid"></div>
+  <div class="cover__glow"></div>
+  <div class="page__inner" style="position:relative; padding:0.85in 0.8in 0.7in;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span class="mono-tag" style="color:var(--smoke);">Dancing Images Dance Center</span>
+      <span class="mono-tag" style="color:var(--smoke);">Family Handbook</span>
+    </div>
+
+    <div style="margin-top:1.5in;">
+      <img src="../../public/brand/logos/didc-mark-3d.png" alt="DIDC" style="height:0.62in; display:block;">
+      <h1 style="font-family:var(--display); font-style:italic; font-weight:800; text-transform:uppercase; font-size:64pt; line-height:0.94; color:var(--chalk); margin-top:0.32in; letter-spacing:0.005em;">
+        Parent<br><span style="color:var(--electric);">Portal</span><br>Guide
+      </h1>
+      <p style="margin-top:0.28in; font-size:13pt; color:#c9c9d1; max-width:4.6in; line-height:1.5;">
+        Schedules, studio info and important dates — on your phone,
+        in one place. Here is how to get in and find your way around.
+      </p>
+      <div style="margin-top:0.3in;">
+        <span class="url-pill" style="font-size:11pt; padding:7px 18px;">didc.app</span>
+      </div>
+    </div>
+
+    <div style="margin-top:auto; display:flex; justify-content:space-between; align-items:flex-end;">
+      <span class="mono-tag" style="color:var(--smoke);">You are your only limit</span>
+      <span class="mono-tag" style="color:var(--smoke);">didc.app</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PAGE 2 · WELCOME + CONTENTS ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__titles">
+        <div class="band__kicker">Welcome, dance families</div>
+        <div class="band__title">Before you start</div>
+        <div class="band__sub">The Parent Portal is the studio's home for class schedules, announcements
+        and dates that matter. It lives at <b>didc.app</b> and works on any phone — nothing to download
+        from an app store.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="grow">
+        <div class="h3"><span class="tick">//</span> All you need</div>
+        <ul class="ticks">
+          <li>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span><b>Your phone</b> (or a tablet or computer — everything works there too).</span>
+          </li>
+          <li>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>The <b>studio code</b> for your dancer's program — ask for it at the front desk.</span>
+          </li>
+        </ul>
+
+        <div class="note note--accent" style="margin-top:12pt;">
+          <div class="note__head">No account needed</div>
+          There is no username, no password and nothing to sign up for. One code opens
+          your program's section, and your phone remembers it — you enter it once.
+        </div>
+
+        <div class="h3" style="margin-top:14pt;"><span class="tick">//</span> The 60-second version</div>
+        <ol class="steps steps--tight">
+          <li><span class="n">1</span><span class="t">Open <b>didc.app</b> and tap <span class="ui">Dancer Portal</span>.</span></li>
+          <li><span class="n">2</span><span class="t">Pick your dancer's program and enter the <b>studio code</b>.</span></li>
+          <li><span class="n">3</span><span class="t">Use the tabs along the bottom — <b>Overview</b>, <b>Classes</b>, <b>Info</b> and <b>Calendar</b>.</span></li>
+        </ol>
+        <p class="small" style="margin-top:8pt;">The rest of this packet walks through each of those, screen by screen.</p>
+      </div>
+
+      <div style="width:3.15in; flex-shrink:0;">
+        <div class="card" style="padding:14pt 15pt;">
+          <div class="mono-tag" style="color:var(--electric); margin-bottom:8pt;">What's inside</div>
+          <ol class="toc">
+            <li><span class="no">1</span><span class="name">Getting in</span><span class="dots"></span><span class="pg">p. 3</span></li>
+            <li><span class="no">2</span><span class="name">Put it on your phone</span><span class="dots"></span><span class="pg">p. 4</span></li>
+            <li><span class="no">3</span><span class="name">Finding your way around</span><span class="dots"></span><span class="pg">p. 5</span></li>
+            <li><span class="no">4</span><span class="name">The class schedule</span><span class="dots"></span><span class="pg">p. 6</span></li>
+            <li><span class="no">5</span><span class="name">Inside a class page</span><span class="dots"></span><span class="pg">p. 7</span></li>
+            <li><span class="no">6</span><span class="name">Studio info &amp; announcements</span><span class="dots"></span><span class="pg">p. 8</span></li>
+            <li><span class="no">7</span><span class="name">The calendar &amp; saving dates</span><span class="dots"></span><span class="pg">p. 9</span></li>
+            <li><span class="no">8</span><span class="name">Questions &amp; fixes</span><span class="dots"></span><span class="pg">p. 11</span></li>
+          </ol>
+        </div>
+
+        <div class="note" style="margin-top:10pt;">
+          <div class="note__head" style="color:var(--body-mut);">Two programs, one portal</div>
+          <b>All-Star Dancers</b> is the competition team side; <b>Academy / TNT Dancers</b> is the
+          class side. Both work exactly the same way — this guide uses All-Stars in the
+          pictures, but every step applies to both.
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:auto; display:flex; gap:10pt; padding-bottom:14pt;">
+      <div class="card grow" style="display:flex; gap:8pt; align-items:flex-start; padding:11pt 12pt;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1pt;"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>
+        <span style="font-size:8.8pt; line-height:1.45;"><b>Nothing to install.</b> It's a website that
+        behaves like an app — always the latest version, nothing to update.</span>
+      </div>
+      <div class="card grow" style="display:flex; gap:8pt; align-items:flex-start; padding:11pt 12pt;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1pt;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span style="font-size:8.8pt; line-height:1.45;"><b>The whole family can use it.</b> Same code for
+        every parent, grandparent and babysitter, on any number of devices.</span>
+      </div>
+      <div class="card grow" style="display:flex; gap:8pt; align-items:flex-start; padding:11pt 12pt;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1pt;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span style="font-size:8.8pt; line-height:1.45;"><b>Always current.</b> Schedules and dates come
+        straight from the studio — what you see is what the front desk sees.</span>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>02</span></div>
+</section>
+
+<!-- ================= PAGE 3 · SECTION 1: GETTING IN ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">1</div>
+      <div class="band__titles">
+        <div class="band__kicker">First visit · about two minutes</div>
+        <div class="band__title">Getting in</div>
+        <div class="band__sub">Everything starts at <b>didc.app</b> — type it into Safari or Chrome
+        like any website.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <!-- steps -->
+      <div class="grow" style="padding-top:4pt;">
+        <ol class="steps" style="gap:12pt;">
+          <li><span class="n">1</span><span class="t">Open your phone's browser and go to <b>didc.app</b>.
+            <span class="sub">Safari on iPhone, Chrome on Android — either is fine.</span></span></li>
+          <li><span class="n">2</span><span class="t">Tap the pink <span class="ui">Dancer Portal</span> tile.
+            <span class="sub">Staff Portal is for teachers and front-desk staff — it asks for an email
+            and password you don't have. If you end up there, just go back and pick the other tile.</span></span></li>
+          <li><span class="n">3</span><span class="t">Tap your dancer's program — <span class="ui">All-Star Dancers</span> or <span class="ui">Academy&nbsp;/&nbsp;TNT Dancers</span>.
+            <span class="sub">The <span class="ui">Billing &amp; Admin</span> tile on this screen is for payments — more on that on page 5.</span></span></li>
+          <li><span class="n">4</span><span class="t">Type the <b>studio code</b> from the front desk.</span></li>
+          <li><span class="n">5</span><span class="t">Tap <span class="ui">Enter</span>. That's it — you're in.
+            <span class="sub">Your phone remembers the code. You won't be asked for it again on this device.</span></span></li>
+        </ol>
+      </div>
+
+      <!-- phone 1: chooser -->
+      <div style="flex-shrink:0;">
+        <div class="phone" style="width:2.24in;">
+          <div class="phone__screen phone__screen--tall" style="position:relative;">
+            <div class="phone__notch"></div>
+            <div class="scr" style="align-items:center; text-align:center; gap:8pt; padding-top:12pt;">
+              <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="height:11pt; margin-top:auto;">
+              <div class="mk-toggle"><span>Light Mode</span><span class="on">Dark Mode</span></div>
+              <div class="mk-tiles" style="width:100%; margin-top:3pt;">
+                <div class="mk-tile">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+                  Staff Portal
+                </div>
+                <div class="mk-tile mk-tile--accent">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
+                  Dancer Portal
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:3pt; color:var(--app-txt3); font-size:5.6pt; text-decoration:underline; text-underline-offset:1.6pt;">
+                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3" stroke-linecap="round"/></svg>
+                Add this app to my phone
+              </div>
+              <div class="scr-m" style="margin-top:auto; padding-bottom:4pt;">You are your only limit</div>
+            </div>
+            <div class="pin" style="top:44%; right:6pt;">2</div>
+          </div>
+        </div>
+        <p class="small" style="text-align:center; margin-top:6pt; font-size:8pt;"><b>Step 2</b> — the front door</p>
+      </div>
+
+      <!-- phone 2: gate -->
+      <div style="flex-shrink:0;">
+        <div class="phone" style="width:2.24in;">
+          <div class="phone__screen phone__screen--tall" style="position:relative;">
+            <div class="phone__notch"></div>
+            <div class="scr" style="gap:6pt;">
+              <div class="scr-head">
+                <div style="display:flex; align-items:center; gap:4pt;">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="height:6.5pt;">
+                </div>
+                <span class="scr-m">Parent Portal</span>
+              </div>
+              <div>
+                <div class="scr-title">All-Star Dancers</div>
+                <div class="scr-sub" style="margin-top:2pt;">Enter the studio code to see schedules, info and documents.</div>
+              </div>
+              <div class="scr-input" style="margin-top:2pt;">
+                <span class="lbl">Studio code</span>
+                <span style="letter-spacing:2.5pt; color:var(--app-txt);">••••••</span>
+              </div>
+              <div class="scr-btn">Enter</div>
+              <div class="scr-sub" style="text-align:center; padding-bottom:3pt;">Need the code? Ask us at the front desk.</div>
+            </div>
+            <div class="pin" style="top:25.5%; right:6pt;">4</div>
+            <div class="pin" style="top:32.5%; right:6pt;">5</div>
+          </div>
+        </div>
+        <p class="small" style="text-align:center; margin-top:6pt; font-size:8pt;"><b>Steps 4–5</b> — the studio code</p>
+      </div>
+    </div>
+
+    <div class="note note--accent" style="margin-top:auto; margin-bottom:14pt;">
+      <div class="note__head">Good to know</div>
+      The same code works for everyone in the family — grandparents included, on as many devices
+      as you like. If the code ever stops working, the studio has changed it: just ask the front
+      desk for the new one. And if you type it wrong, the screen simply says
+      <i>"That code is not right. Check with the front desk."</i> — try again, no harm done.
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>03</span></div>
+</section>
+
+<!-- ================= PAGE 4 · SECTION 2: INSTALL ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">2</div>
+      <div class="band__titles">
+        <div class="band__kicker">One-time setup · optional but worth it</div>
+        <div class="band__title">Put it on your phone</div>
+        <div class="band__sub">Add DIDC to your home screen and it opens like a regular app —
+        no address to type, and it still works when the signal is poor.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="plat">
+        <div class="plat__head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3" stroke-linecap="round"/></svg>
+          <div>
+            <div class="plat__name">On iPhone</div>
+            <div class="plat__sub">Using Safari</div>
+          </div>
+        </div>
+        <ol class="steps">
+          <li><span class="n">1</span><span class="t">Open <b>didc.app</b> in <b>Safari</b>, then tap the <b>Share</b> button
+            <span class="glyph"><svg viewBox="0 0 24 24" fill="none"><path d="M8.5 11H6.5A1.5 1.5 0 005 12.5v7A1.5 1.5 0 006.5 21h11a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0017.5 11h-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 15V3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8.4 7.1L12 3.5l3.6 3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            — at the bottom of the screen on an iPhone, the top on an iPad.</span></li>
+          <li><span class="n">2</span><span class="t">Scroll down the list and tap <span class="ui">Add to Home Screen</span>.</span></li>
+          <li><span class="n">3</span><span class="t">Tap <span class="ui">Add</span> in the top right corner.</span></li>
+        </ol>
+      </div>
+
+      <div class="plat">
+        <div class="plat__head">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><circle cx="12" cy="18" r="1" fill="#111" stroke="none"/></svg>
+          <div>
+            <div class="plat__name">On Android</div>
+            <div class="plat__sub">Using Chrome</div>
+          </div>
+        </div>
+        <ol class="steps">
+          <li><span class="n">1</span><span class="t">Open <b>didc.app</b> in <b>Chrome</b>, then tap the <b>menu</b> button
+            <span class="glyph"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="19" r="1.9" fill="currentColor"/></svg></span>
+            at the top right.</span></li>
+          <li><span class="n">2</span><span class="t">Tap <span class="ui">Install app</span> — or <span class="ui">Add to Home screen</span> if you don't see it.</span></li>
+          <li><span class="n">3</span><span class="t">Tap <span class="ui">Install</span> to confirm.</span></li>
+        </ol>
+        <p class="small" style="margin-top:9pt;">Some Android phones skip the menu entirely — the front door
+        shows a one-tap <span class="ui">Add DIDC to my home screen</span> button instead. Tap it, then tap
+        <b>Install</b> when your phone asks.</p>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:14pt; display:flex; gap:10pt; align-items:center;">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><rect x="2.5" y="2.5" width="19" height="19" rx="4.5" fill="#0B0B0D"/><text x="12" y="15.4" text-anchor="middle" font-family="Kanit, sans-serif" font-style="italic" font-weight="800" font-size="8" fill="#fff">DIDC</text></svg>
+      <span>When you're done, the <b>DIDC icon</b> appears on your home screen and opens like any other app.
+      The in-app version of these steps lives on the front door — tap
+      <span class="ui">Add this app to my phone</span> and it shows the right steps for whichever phone
+      you're holding.</span>
+    </div>
+
+    <div class="note" style="margin-top:10pt;">
+      <div class="note__head" style="color:var(--body-mut);">On a computer?</div>
+      Everything works in a normal browser tab too — just bookmark <b>didc.app</b>. If you'd like it as
+      an app, look for the <b>install icon</b> at the right-hand end of the address bar and click
+      <span class="ui">Install</span>.
+    </div>
+
+    <!-- the result: home screen strip -->
+    <div style="margin-top:auto; margin-bottom:14pt; background:var(--void); border-radius:12pt; padding:16pt 18pt; display:flex; align-items:center; gap:16pt;">
+      <div style="flex:1;">
+        <div class="mono-tag" style="color:var(--electric2); margin-bottom:4pt;">The result</div>
+        <div style="color:var(--chalk); font-weight:600; font-size:11pt; line-height:1.35;">One tap from the
+        home screen, straight to the studio.</div>
+        <div style="color:#9A9AA4; font-size:8.6pt; margin-top:3pt; line-height:1.45;">No address to type, no
+        app store, and it still opens when the signal at the studio is poor.</div>
+      </div>
+      <div style="display:flex; gap:9pt; align-items:flex-start; flex-shrink:0;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:2.5pt;">
+          <div style="width:27pt; height:27pt; border-radius:7pt; background:#26262B;"></div>
+          <span style="font-size:5.4pt; color:#9A9AA4;">Photos</span>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:2.5pt;">
+          <div style="width:27pt; height:27pt; border-radius:7pt; background:#26262B;"></div>
+          <span style="font-size:5.4pt; color:#9A9AA4;">Messages</span>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:2.5pt; position:relative;">
+          <div style="width:27pt; height:27pt; border-radius:7pt; background:#0B0B0D; border:1.2pt solid #36363D; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 1.8pt var(--electric);">
+            <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="width:21pt;">
+          </div>
+          <span style="font-size:5.4pt; color:#F4F4F5; font-weight:700;">DIDC</span>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:2.5pt;">
+          <div style="width:27pt; height:27pt; border-radius:7pt; background:#26262B;"></div>
+          <span style="font-size:5.4pt; color:#9A9AA4;">Camera</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>04</span></div>
+</section>
+
+<!-- ================= PAGE 5 · SECTION 3: FINDING YOUR WAY ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">3</div>
+      <div class="band__titles">
+        <div class="band__kicker">The map</div>
+        <div class="band__title">Finding your way around</div>
+        <div class="band__sub">Every path through the portal, on one page. Four tabs along the bottom
+        of your phone do most of the work.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="grow">
+        <div class="flow">
+          <div class="flow-node flow-node--start" style="width:74%;">
+            <div class="flow-node__t">didc.app <span style="color:var(--body-mut); font-weight:500;">— the front door</span></div>
+            <div class="flow-node__d">Tap <b>Dancer Portal</b> (Staff Portal is for teachers)</div>
+          </div>
+          <div class="flow__arrow"><svg width="10" height="12" viewBox="0 0 10 12" fill="none"><path d="M5 0v10M1.5 7L5 10.5 8.5 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="flow-node" style="width:74%;">
+            <div class="flow-node__t">Parent Portal</div>
+            <div class="flow-node__d">Pick your program — plus <b>Billing &amp; Admin</b> for payments (see box below)</div>
+          </div>
+          <div class="flow__arrow"><svg width="10" height="12" viewBox="0 0 10 12" fill="none"><path d="M5 0v10M1.5 7L5 10.5 8.5 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="flow-node" style="width:74%;">
+            <div class="flow-node__t">Your program's Overview</div>
+            <div class="flow-node__d">Latest update, what's coming up, and the way into everything else</div>
+          </div>
+          <div class="flow__arrow"><svg width="10" height="12" viewBox="0 0 10 12" fill="none"><path d="M5 0v10M1.5 7L5 10.5 8.5 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="flow__fan">
+            <div class="tabchip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+              <span class="tl">Overview</span>
+              <span class="td">The front page of your program</span>
+            </div>
+            <div class="tabchip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><path d="M9 11a4 4 0 100-8 4 4 0 000 8z"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
+              <span class="tl">Classes</span>
+              <span class="td">Weekly schedule &amp; each class's page</span>
+            </div>
+            <div class="tabchip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+              <span class="tl">Info</span>
+              <span class="td">Announcements from the studio</span>
+            </div>
+            <div class="tabchip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              <span class="tl">Calendar</span>
+              <span class="td">Rehearsals, competitions, studio dates</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cols" style="margin-top:13pt; gap:10pt;">
+          <div class="note note--accent grow">
+            <div class="note__head">Lost? Tap the logo</div>
+            The <b>DIDC logo</b> at the top of every page always takes you back to the front
+            door. The <b>&lsaquo; back arrow</b> next to it steps back one screen.
+          </div>
+          <div class="note note--accent grow">
+            <div class="note__head">Payments live elsewhere</div>
+            Tuition, registration and account details are handled in <b>Enrollio</b>, the studio's
+            billing system. The <span class="ui">Billing &amp; Admin</span> tile on the Parent Portal
+            page takes you straight there — it opens in its own tab.
+          </div>
+        </div>
+      </div>
+
+      <!-- overview mockup -->
+      <div style="flex-shrink:0;">
+      <div class="phone">
+        <div class="phone__screen" style="position:relative;">
+          <div class="phone__notch"></div>
+          <div class="scr" style="gap:5pt;">
+            <div class="scr-head">
+              <div style="display:flex; align-items:center; gap:4pt;">
+                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="height:6.5pt;">
+              </div>
+              <span class="scr-m">Parent Portal</span>
+            </div>
+            <div>
+              <div class="scr-title">All-Star Dancers</div>
+              <div class="scr-sub">Competition team schedules, info and documents</div>
+            </div>
+            <div class="scr-card">
+              <span class="scr-badge scr-badge--pink">Latest update</span>
+              <div class="scr-h" style="margin-top:2pt;">Recital tickets on sale Friday</div>
+              <div class="scr-p">Tickets go live at 9 AM on the front-desk iPad and online. Every family…</div>
+            </div>
+            <div class="scr-card">
+              <div class="scr-m" style="margin-bottom:1.6pt;">Coming up</div>
+              <div class="scr-h">Winter Showcase</div>
+              <div class="scr-p">Saturday, Dec 12 · 5:00 PM · Main Stage</div>
+            </div>
+            <div class="scr-card"><div class="scr-row"><div><div class="scr-h">Classes</div><div class="scr-p">Schedules, and the info and files for each one</div></div><span style="color:#9A9AA4; font-size:7pt;">›</span></div></div>
+            <div class="scr-card"><div class="scr-row"><div><div class="scr-h">Info</div><div class="scr-p">Announcements from the studio and your teachers</div></div><span class="scr-badge scr-badge--pink">4</span></div></div>
+            <div class="scr-card"><div class="scr-row"><div><div class="scr-h">Calendar</div><div class="scr-p">Rehearsals, competitions and studio dates</div></div><span style="color:#9A9AA4; font-size:7pt;">›</span></div></div>
+            <div class="scr-tabs">
+              <div class="scr-tab scr-tab--on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>Overview</div>
+              <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><path d="M9 11a4 4 0 100-8 4 4 0 000 8z"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>Classes</div>
+              <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>Info</div>
+              <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</div>
+            </div>
+          </div>
+        </div>
+      </div>
+        <p class="small" style="margin:7pt 4pt 2pt; text-align:center; width:2.36in;">The tab bar sits at the
+        bottom of every screen on a phone. On a computer, the same places are tiles on the page itself.</p>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>05</span></div>
+</section>
+
+<!-- ================= PAGE 6 · SECTION 4: THE CLASS SCHEDULE ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">4</div>
+      <div class="band__titles">
+        <div class="band__kicker">Classes tab</div>
+        <div class="band__title">The class schedule</div>
+        <div class="band__sub">The whole week, one day at a time — with search and filters when
+        you only care about your dancer's classes.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <!-- classes mockup -->
+      <div style="flex-shrink:0;">
+        <div class="phone" style="width:2.56in;">
+          <div class="phone__screen" style="position:relative;">
+            <div class="phone__notch"></div>
+            <div class="scr" style="gap:4.5pt;">
+              <div class="scr-head">
+                <div style="display:flex; align-items:center; gap:4pt;">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="height:6.5pt;">
+                </div>
+                <span class="scr-m">Parent Portal</span>
+              </div>
+              <div class="scr-title">Classes</div>
+              <div style="display:flex; gap:3pt;">
+                <div class="scr-input" style="flex:1; display:flex; align-items:center; gap:3pt; padding:3.5pt 5pt;">
+                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+                  Search classes
+                </div>
+                <div class="scr-input" style="display:flex; align-items:center; justify-content:center; width:15pt; padding:0;">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#C9C9D1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                </div>
+                <div class="scr-input" style="display:flex; align-items:center; justify-content:center; width:15pt; padding:0; position:relative;">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#C9C9D1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>
+                  <span style="position:absolute; top:-2.5pt; right:-2.5pt; background:var(--electric); color:#fff; font-family:var(--mono); font-size:3.8pt; font-weight:700; border-radius:999px; width:6.5pt; height:6.5pt; display:flex; align-items:center; justify-content:center;">2</span>
+                </div>
+              </div>
+              <div class="mk-days">
+                <div class="mk-day">All</div>
+                <div class="mk-day">Mon<small>12</small></div>
+                <div class="mk-day mk-day--on">Tue<small>14</small><span class="dot" style="background:#fff;"></span></div>
+                <div class="mk-day">Wed<small>9</small></div>
+                <div class="mk-day">Thu<small>11</small></div>
+                <div class="mk-day">Fri<small>6</small></div>
+                <div class="mk-day">Sat<small>8</small></div>
+              </div>
+              <div class="scr-row">
+                <span class="scr-h" style="font-size:6.2pt;">Tuesday <span style="color:#9A9AA4; font-weight:500;">· 14 classes</span></span>
+                <span style="color:var(--electric2); font-size:5pt; font-weight:600;">Clear filters</span>
+              </div>
+              <div class="mk-tl">
+                <div class="mk-tl-sec">Morning</div>
+                <div class="mk-slot">
+                  <div class="when">9:00 AM</div><div class="bar" style="background:#3B82F6;"></div>
+                  <div class="card"><div class="scr-h">Ballet Level 2</div><div class="scr-p">Ms. Taylor · Studio A</div><div class="scr-m" style="margin-top:1pt;">Ballet · Level 2</div></div>
+                </div>
+                <div class="mk-tl-sec">Afternoon</div>
+                <div class="mk-slot">
+                  <div class="when">4:30 PM</div><div class="bar" style="background:#E2144F;"></div>
+                  <div class="card"><div class="scr-h">Junior Company Jazz</div><div class="scr-p">Ms. Rivera · Studio B</div><div class="scr-m" style="margin-top:1pt;">Jazz · Level 3</div></div>
+                </div>
+                <div class="mk-slot">
+                  <div class="when">5:30 PM</div><div class="bar" style="background:#F59E0B;"></div>
+                  <div class="card"><div class="scr-h">Hip Hop Ages 8–10</div><div class="scr-p">Mr. Cole · Studio C</div><div class="scr-m" style="margin-top:1pt;">Hip Hop</div></div>
+                </div>
+                <div class="mk-tl-sec">Evening</div>
+                <div class="mk-slot">
+                  <div class="when">6:30 PM</div><div class="bar" style="background:#3B82F6;"></div>
+                  <div class="card"><div class="scr-h">Turns &amp; Jumps</div><div class="scr-p">Ms. Taylor · Studio A</div><div class="scr-m" style="margin-top:1pt;">Technique · Level 2</div></div>
+                </div>
+              </div>
+              <div class="scr-tabs">
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>Overview</div>
+                <div class="scr-tab scr-tab--on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><path d="M9 11a4 4 0 100-8 4 4 0 000 8z"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>Classes</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>Info</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</div>
+              </div>
+            </div>
+            <div class="pin" style="top:15.5%; left:6pt;">2</div>
+            <div class="pin" style="top:15.5%; right:6pt;">3</div>
+            <div class="pin" style="top:24.5%; left:6pt;">1</div>
+            <div class="pin" style="top:33.5%; right:6pt;">4</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grow">
+        <ol class="steps">
+          <li><span class="n">1</span><span class="t"><b>Pick a day</b> on the strip. The little number is how many
+            classes run that day; a dot marks today. Tap <span class="ui">All</span> to see the whole week at once.</span></li>
+          <li><span class="n">2</span><span class="t"><b>Search</b> by class name — or use the small calendar button
+            to open the <span class="ui">Season calendar</span> and jump to any date.</span></li>
+          <li><span class="n">3</span><span class="t"><b>Filter</b> with the funnel button: by program, time of day,
+            style, age group, teacher or studio room.
+            <span class="sub">The handiest one is <span class="ui">Dancer's age</span> — type their age and the list
+            shows only classes they are old enough for. Tap <span class="ui">Show N classes</span> to apply,
+            <span class="ui">Clear all</span> to start over.</span></span></li>
+          <li><span class="n">4</span><span class="t"><b>Tap any class</b> to open its page — schedule details,
+            teacher notes and files live there (next page).</span></li>
+        </ol>
+
+        <div class="card" style="margin-top:11pt; padding:10pt 12pt;">
+          <div class="mono-tag" style="color:var(--body-mut); margin-bottom:5pt;">The color stripes</div>
+          <div style="display:flex; flex-direction:column; gap:4pt; font-size:9pt;">
+            <div style="display:flex; align-items:center; gap:6pt;"><span style="width:3pt; height:11pt; border-radius:999px; background:#E2144F;"></span><b>Pink</b>&nbsp;— All-Stars (competition team)</div>
+            <div style="display:flex; align-items:center; gap:6pt;"><span style="width:3pt; height:11pt; border-radius:999px; background:#3B82F6;"></span><b>Blue</b>&nbsp;— Academy classes</div>
+            <div style="display:flex; align-items:center; gap:6pt;"><span style="width:3pt; height:11pt; border-radius:999px; background:#F59E0B;"></span><b>Amber</b>&nbsp;— TNT classes</div>
+          </div>
+        </div>
+
+        <div class="note" style="margin-top:10pt;">
+          <div class="note__head" style="color:var(--body-mut);">On a computer</div>
+          The schedule gains a <span class="ui">List / Week / Month</span> switch and a full filter bar with
+          sorting — same information, more room. Your view choice is remembered for next time.
+        </div>
+
+        <div class="note" style="margin-top:10pt;">
+          <div class="note__head" style="color:var(--body-mut);">Why is a class missing?</div>
+          The schedule shows what the studio has published for your program. If your dancer's class
+          isn't listed, or a detail looks off, tell the front desk — they can fix it in minutes.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>06</span></div>
+</section>
+
+<!-- ================= PAGE 7 · SECTION 5: INSIDE A CLASS PAGE ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">5</div>
+      <div class="band__titles">
+        <div class="band__kicker">Tap any class to open it</div>
+        <div class="band__title">Inside a class page</div>
+        <div class="band__sub">Every class has its own page: the details, notes from the teacher,
+        and any photos, videos or music they've shared.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="grow" style="padding-top:2pt;">
+        <ol class="steps" style="gap:11pt;">
+          <li><span class="n">1</span><span class="t"><b>The class card</b> — day and time, teacher, level and
+            studio room, plus length, ages, style and season underneath.</span></li>
+          <li><span class="n">2</span><span class="t"><b>Class info</b> — notes posted for <i>this class only</i>:
+            costume details, schedule tweaks, what to bring.
+            <span class="sub">If it says "Nothing posted yet", the teacher simply hasn't posted — it fills in over the season.</span></span></li>
+          <li><span class="n">3</span><span class="t"><b>Class content</b> — the files.
+            <span class="sub">Photos open full-size when tapped. Videos play right on the page. Music and
+            paperwork download when tapped. The <span class="ui">Save</span> link under a photo or video
+            puts a copy on your phone.</span></span></li>
+        </ol>
+
+        <div class="note note--accent" style="margin-top:12pt;">
+          <div class="note__head">Data-friendly</div>
+          Videos only load a preview frame until you press play, so browsing the page won't
+          eat your data plan. If a file shows <i>"Could not open — try again"</i>, it's usually the
+          signal — tap it once more.
+        </div>
+      </div>
+
+      <!-- class detail mockup -->
+      <div style="flex-shrink:0;">
+        <div class="phone" style="width:2.56in;">
+          <div class="phone__screen" style="position:relative;">
+            <div class="phone__notch"></div>
+            <div class="scr" style="gap:5pt;">
+              <div class="scr-head">
+                <div style="display:flex; align-items:center; gap:4pt;">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="height:6.5pt;">
+                </div>
+                <span class="scr-m">Parent Portal</span>
+              </div>
+              <div>
+                <div class="scr-title">Junior Company Jazz</div>
+                <div class="scr-sub">All-Star Dancers</div>
+              </div>
+              <div class="scr-card">
+                <div style="display:flex; gap:3pt; margin-bottom:2.5pt;">
+                  <span class="scr-badge scr-badge--pink">All-Stars</span>
+                  <span class="scr-badge" style="background:#26262B; color:#C9C9D1;">Jazz</span>
+                </div>
+                <div class="scr-h">Tuesday · 4:30 PM – 5:30 PM</div>
+                <div class="scr-p">Ms. Rivera · Level 3 · Studio B</div>
+                <div class="mk-facts">
+                  <div><b>Length</b>60 minutes</div>
+                  <div><b>Ages</b>8 – 11</div>
+                  <div><b>Style</b>Jazz</div>
+                  <div><b>Season</b>2026 – 27</div>
+                </div>
+              </div>
+              <div class="scr-m">Class info</div>
+              <div class="scr-card">
+                <div class="scr-m" style="font-size:4.3pt;">Aug 18, 2026</div>
+                <div class="scr-h" style="margin-top:1pt;">Costume fitting next week</div>
+                <div class="scr-p">Fittings run during regular class time. Please arrive ten minutes early…</div>
+              </div>
+              <div class="scr-m">Class content</div>
+              <div class="scr-card" style="padding:0; overflow:hidden;">
+                <div style="height:34pt; background:linear-gradient(135deg,#2a2a30 0%,#1b1b1f 60%, #232329 100%); display:flex; align-items:center; justify-content:center;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#55555e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                </div>
+                <div class="scr-row" style="padding:3.5pt 5pt;">
+                  <div><div class="scr-h" style="font-size:5.6pt;">Recital costume</div><div class="scr-m" style="font-size:4.2pt;">Photo · 1.8 MB</div></div>
+                  <span style="color:var(--electric2); font-size:5pt; font-weight:600;">Save</span>
+                </div>
+              </div>
+              <div class="scr-card">
+                <div class="scr-row">
+                  <div style="display:flex; align-items:center; gap:4pt;">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#C9C9D1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                    <div><div class="scr-h" style="font-size:5.6pt;">Competition music — Act 1</div><div class="scr-m" style="font-size:4.2pt;">Audio · 3.2 MB</div></div>
+                  </div>
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                </div>
+              </div>
+              <div class="scr-tabs">
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>Overview</div>
+                <div class="scr-tab scr-tab--on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><path d="M9 11a4 4 0 100-8 4 4 0 000 8z"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>Classes</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>Info</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</div>
+              </div>
+            </div>
+            <div class="pin" style="top:23%; right:6pt;">1</div>
+            <div class="pin" style="top:50%; right:6pt;">2</div>
+            <div class="pin" style="top:63.5%; right:6pt;">3</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:auto; display:flex; gap:10pt; padding-bottom:14pt;">
+      <div class="card grow" style="display:flex; gap:8pt; align-items:flex-start; padding:11pt 12pt;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1pt;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        <span style="font-size:8.8pt; line-height:1.45;"><b>Photos</b> — tap to see full size. Use
+        <b>Save</b> underneath to keep a copy on your phone.</span>
+      </div>
+      <div class="card grow" style="display:flex; gap:8pt; align-items:flex-start; padding:11pt 12pt;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1pt;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span style="font-size:8.8pt; line-height:1.45;"><b>Videos</b> — press play and they run right
+        on the page, sound and all.</span>
+      </div>
+      <div class="card grow" style="display:flex; gap:8pt; align-items:flex-start; padding:11pt 12pt;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1pt;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        <span style="font-size:8.8pt; line-height:1.45;"><b>Music &amp; paperwork</b> — tap once and the
+        file downloads to your phone.</span>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>07</span></div>
+</section>
+
+<!-- ================= PAGE 8 · SECTION 6: STUDIO INFO ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">6</div>
+      <div class="band__titles">
+        <div class="band__kicker">Info tab</div>
+        <div class="band__title">Studio info &amp; announcements</div>
+        <div class="band__sub">One feed for everything the studio and your teachers post — closures,
+        deadlines, procedures and news.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <!-- info mockup -->
+      <div style="flex-shrink:0;">
+        <div class="phone" style="width:2.56in;">
+          <div class="phone__screen" style="position:relative;">
+            <div class="phone__notch"></div>
+            <div class="scr" style="gap:5pt;">
+              <div class="scr-head">
+                <div style="display:flex; align-items:center; gap:4pt;">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="height:6.5pt;">
+                </div>
+                <span class="scr-m">Parent Portal</span>
+              </div>
+              <div>
+                <div class="scr-title">Info</div>
+                <div class="scr-sub">All-Star Dancers</div>
+              </div>
+              <div class="scr-card scr-card--active">
+                <div style="display:flex; align-items:center; gap:3pt;">
+                  <span class="scr-badge scr-badge--pink">Pinned</span>
+                  <span class="scr-m" style="font-size:4.3pt;">Nov 2, 2026</span>
+                </div>
+                <div class="scr-h" style="margin-top:2pt;">Studio closed Thanksgiving week</div>
+                <div class="scr-p">No classes Monday Nov 23 through Sunday Nov 29. Regular schedule resumes…</div>
+              </div>
+              <div class="scr-card">
+                <div class="scr-m" style="font-size:4.3pt;">Oct 28, 2026</div>
+                <div class="scr-h" style="margin-top:1.5pt;">New lobby pickup procedure</div>
+                <div class="scr-p">Starting Monday, dancers under 10 will be walked to the lobby by their teacher…</div>
+              </div>
+              <div class="scr-card">
+                <div class="scr-m" style="font-size:4.3pt;">Oct 21, 2026</div>
+                <div class="scr-h" style="margin-top:1.5pt;">Recital tickets on sale Friday</div>
+                <div class="scr-p">Tickets go live at 9 AM at the front desk and online. Every family…</div>
+              </div>
+              <div class="scr-card">
+                <div class="scr-m" style="font-size:4.3pt;">Oct 14, 2026</div>
+                <div class="scr-h" style="margin-top:1.5pt;">Team photo day — what to wear</div>
+                <div class="scr-p">Full team warm-ups, hair in a low bun. Photos start at…</div>
+              </div>
+              <div class="scr-tabs">
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>Overview</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><path d="M9 11a4 4 0 100-8 4 4 0 000 8z"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>Classes</div>
+                <div class="scr-tab scr-tab--on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>Info</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</div>
+              </div>
+            </div>
+            <div class="pin" style="top:22%; right:6pt;">2</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grow">
+        <ol class="steps" style="gap:11pt;">
+          <li><span class="n">1</span><span class="t">Tap <span class="ui">Info</span> in the bottom tabs.
+            <span class="sub">The little pink number on the Overview page's Info tile is how many
+            announcements are posted.</span></span></li>
+          <li><span class="n">2</span><span class="t"><b>Pinned</b> means important — it stays at the top no matter
+            how old it is. Everything else runs newest first.</span></li>
+          <li><span class="n">3</span><span class="t">Announcements come from two places: the <b>studio</b> (everyone
+            sees these) and <b>your dancer's teachers</b> (class notes, which also appear on that class's own page).</span></li>
+        </ol>
+
+        <div class="note note--accent" style="margin-top:12pt;">
+          <div class="note__head">Make it a habit</div>
+          The portal doesn't send notifications — it's a bulletin board, not a group chat.
+          A quick glance at <b>Info</b> while you wait at drop-off or pick-up is the easiest way to
+          never miss a closure, a costume deadline or a schedule change. The newest post is always
+          right on your program's <b>Overview</b> page too.
+        </div>
+
+        <div class="note" style="margin-top:10pt;">
+          <div class="note__head" style="color:var(--body-mut);">Read-only, on purpose</div>
+          There's nothing to reply to and no comment box — if a post raises a question, ask the
+          front desk or your teacher, exactly like you would about a paper notice.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>08</span></div>
+</section>
+
+<!-- ================= PAGE 9 · SECTION 7: CALENDAR ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">7</div>
+      <div class="band__titles">
+        <div class="band__kicker">Calendar tab · part one</div>
+        <div class="band__title">The calendar</div>
+        <div class="band__sub">Rehearsals, competitions, showcases and closures — everything dated,
+        in a month grid or a simple list.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="grow" style="padding-top:2pt;">
+        <ol class="steps" style="gap:11pt;">
+          <li><span class="n">1</span><span class="t">Switch between <span class="ui">MONTH</span> and
+            <span class="ui">LIST</span> at the top.
+            <span class="sub">Month is the grid you see here. List is everything upcoming, in order,
+            grouped by month — past events drop off by themselves. The app remembers which one you prefer.</span></span></li>
+          <li><span class="n">2</span><span class="t"><b>Tap a date</b> with a little bar under it — its events
+            appear below the grid.
+            <span class="sub">Today is outlined in pink; the day you tapped is filled in. Multi-day events, like
+            a holiday closure, stretch across the grid as one long bar.</span></span></li>
+          <li><span class="n">3</span><span class="t"><b>Tap the event itself</b> for the full details —
+            when, where, the full write-up, and any attached files.</span></li>
+          <li><span class="n">4</span><span class="t">Press <span class="ui">ADD</span> to save the date to your
+            own phone's calendar — that's the next page.</span></li>
+        </ol>
+
+        <div class="note note--accent" style="margin-top:12pt;">
+          <div class="note__head">Where these events come from</div>
+          The portal calendar is fed directly from the studio's own calendar, so it is
+          always the latest word. If a date here disagrees with a paper handout, trust the portal.
+        </div>
+
+        <div class="note" style="margin-top:10pt;">
+          <div class="note__head" style="color:var(--body-mut);">Browsing the season</div>
+          The arrows step month by month — up to a year ahead, and one month back. Use
+          <span class="ui">LIST</span> when you just want "what's next" without hunting through a grid.
+        </div>
+      </div>
+
+      <!-- calendar mockup -->
+      <div style="flex-shrink:0;">
+        <div class="phone" style="width:2.42in;">
+          <div class="phone__screen phone__screen--tall" style="position:relative;">
+            <div class="phone__notch"></div>
+            <div class="scr" style="gap:4.5pt;">
+              <div class="scr-head">
+                <div style="display:flex; align-items:center; gap:4pt;">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  <img src="../../public/brand/logos/didc-mark-3d.png" alt="" style="height:6.5pt;">
+                </div>
+                <span class="scr-m">Parent Portal</span>
+              </div>
+              <div class="scr-row">
+                <div class="scr-title">Calendar</div>
+                <div style="display:flex; border:1pt solid var(--app-bdr2); border-radius:4pt; overflow:hidden; font-size:4.6pt; font-weight:700; letter-spacing:0.08em;">
+                  <span style="padding:2pt 5pt; color:#9A9AA4;">LIST</span>
+                  <span style="padding:2pt 5pt; background:var(--electric); color:#fff;">MONTH</span>
+                </div>
+              </div>
+              <div class="scr-p" style="font-size:5pt;">Tap an event for full details, or press <b style="color:#C9C9D1;">Add</b> to save it to Google, Apple or Outlook.</div>
+              <div class="scr-row" style="margin-top:1pt;">
+                <span style="color:#9A9AA4; font-size:6pt;">‹</span>
+                <span class="scr-h" style="font-size:6.4pt;">December 2026</span>
+                <span style="color:#9A9AA4; font-size:6pt;">›</span>
+              </div>
+              <div class="mk-cal">
+                <div class="dow">Su</div><div class="dow">Mo</div><div class="dow">Tu</div><div class="dow">We</div><div class="dow">Th</div><div class="dow">Fr</div><div class="dow">Sa</div>
+                <div class="d d--mut">29</div><div class="d d--mut">30</div><div class="d">1</div><div class="d">2</div><div class="d">3<span class="ev"></span></div><div class="d">4</div><div class="d">5</div>
+                <div class="d">6</div><div class="d">7</div><div class="d d--today">8</div><div class="d">9</div><div class="d">10</div><div class="d">11<span class="ev"></span></div><div class="d">12<span class="ev"></span></div>
+                <div class="d">13</div><div class="d">14</div><div class="d">15<span class="ev"></span></div><div class="d">16</div><div class="d">17</div><div class="d">18</div><div class="d">19</div>
+                <div class="d">20</div><div class="d">21<span class="ev ev--pink"></span></div><div class="d">22<span class="ev ev--pink"></span></div><div class="d">23<span class="ev ev--pink"></span></div><div class="d">24<span class="ev ev--pink"></span></div><div class="d">25<span class="ev ev--pink"></span></div><div class="d">26<span class="ev ev--pink"></span></div>
+                <div class="d">27</div><div class="d">28</div><div class="d">29</div><div class="d">30</div><div class="d">31</div><div class="d d--mut">1</div><div class="d d--mut">2</div>
+              </div>
+              <div class="scr-h" style="font-size:6pt; margin-top:1pt;">All of December</div>
+              <div class="mk-ev">
+                <div class="chip"><div class="wd">SAT</div><div class="dn">12</div></div>
+                <div>
+                  <div class="scr-h" style="font-size:6pt;">Winter Showcase</div>
+                  <div class="scr-p" style="font-size:5pt;">5:00 PM – 8:00 PM · Main Stage</div>
+                </div>
+                <div class="add">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 13v5M9.5 15.5h5"/></svg>
+                  <span>ADD</span>
+                </div>
+              </div>
+              <div class="mk-ev">
+                <div class="chip"><div class="wd">MON</div><div class="dn">21</div></div>
+                <div>
+                  <div class="scr-h" style="font-size:6pt;">Winter break — studio closed</div>
+                  <div class="scr-p" style="font-size:5pt;">Dec 21 – Jan 3</div>
+                </div>
+                <div class="add">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 13v5M9.5 15.5h5"/></svg>
+                  <span>ADD</span>
+                </div>
+              </div>
+              <div class="scr-tabs">
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>Overview</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><path d="M9 11a4 4 0 100-8 4 4 0 000 8z"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>Classes</div>
+                <div class="scr-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>Info</div>
+                <div class="scr-tab scr-tab--on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Calendar</div>
+              </div>
+            </div>
+            <div class="pin" style="top:12.5%; right:6pt;">1</div>
+            <div class="pin" style="top:42%; right:6pt;">2</div>
+            <div class="pin" style="top:68.5%; left:6pt;">3</div>
+            <div class="pin" style="top:68.5%; right:6pt;">4</div>
+          </div>
+        </div>
+        <p class="small" style="text-align:center; margin-top:6pt; font-size:8pt;">The pink stretch Dec 21–26 is
+        one multi-day event — winter break.</p>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>09</span></div>
+</section>
+
+<!-- ================= PAGE 10 · SECTION 7B: SAVING DATES ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">7</div>
+      <div class="band__titles">
+        <div class="band__kicker">Calendar tab · part two</div>
+        <div class="band__title">Saving a date to your phone</div>
+        <div class="band__sub">Press <b>ADD</b> on any event and pick where it should go. Whichever you
+        choose, the event arrives with the time, place and details already filled in.</div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <!-- add-sheet mockup -->
+      <div style="flex-shrink:0;">
+        <div class="phone" style="width:2.42in;">
+          <div class="phone__screen phone__screen--tall" style="position:relative; background:#060608;">
+            <div class="phone__notch" style="opacity:0.5;"></div>
+            <div class="scr" style="opacity:0.28; gap:4.5pt;">
+              <div class="scr-row">
+                <div class="scr-title">Calendar</div>
+              </div>
+              <div class="scr-h" style="font-size:6pt;">Saturday, December 12</div>
+              <div class="mk-ev">
+                <div class="chip"><div class="wd">SAT</div><div class="dn">12</div></div>
+                <div><div class="scr-h" style="font-size:6pt;">Winter Showcase</div><div class="scr-p" style="font-size:5pt;">5:00 PM – 8:00 PM</div></div>
+              </div>
+            </div>
+            <div class="mk-sheet">
+              <div class="grab"></div>
+              <div class="scr-h" style="font-size:6.8pt;">Add to my calendar</div>
+              <div class="scr-p" style="font-size:5pt; margin-bottom:3pt;">Winter Showcase — Saturday, Dec 12</div>
+              <div class="mk-opt">
+                <span style="width:10pt; height:10pt; border-radius:999px; background:#26262B; color:#F4F4F5; display:flex; align-items:center; justify-content:center; font-size:5.5pt; font-weight:700;">G</span>
+                <div class="l"><div class="scr-h" style="font-size:5.8pt;">Google Calendar</div><div class="scr-m" style="font-size:4.2pt; text-transform:none; letter-spacing:0;">Opens filled in — just press Save</div></div>
+                <span class="chev" style="font-size:6pt;">›</span>
+              </div>
+              <div class="mk-opt">
+                <span style="width:10pt; height:10pt; border-radius:999px; background:#26262B; color:#F4F4F5; display:flex; align-items:center; justify-content:center;"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></span>
+                <div class="l"><div class="scr-h" style="font-size:5.8pt;">Apple Calendar</div><div class="scr-m" style="font-size:4.2pt; text-transform:none; letter-spacing:0;">iPhone, iPad or Mac</div></div>
+                <span class="chev" style="font-size:6pt;">›</span>
+              </div>
+              <div class="mk-opt">
+                <span style="width:10pt; height:10pt; border-radius:999px; background:#26262B; color:#F4F4F5; display:flex; align-items:center; justify-content:center; font-size:5.5pt; font-weight:700;">O</span>
+                <div class="l"><div class="scr-h" style="font-size:5.8pt;">Outlook</div><div class="scr-m" style="font-size:4.2pt; text-transform:none; letter-spacing:0;">Opens filled in — just press Save</div></div>
+                <span class="chev" style="font-size:6pt;">›</span>
+              </div>
+              <div class="mk-opt">
+                <span style="width:10pt; height:10pt; border-radius:999px; background:#26262B; color:#F4F4F5; display:flex; align-items:center; justify-content:center;"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span>
+                <div class="l"><div class="scr-h" style="font-size:5.8pt;">Any other calendar</div><div class="scr-m" style="font-size:4.2pt; text-transform:none; letter-spacing:0;">Downloads an .ics file</div></div>
+                <span class="chev" style="font-size:6pt;">›</span>
+              </div>
+              <div class="mk-opt">
+                <span style="width:10pt; height:10pt; border-radius:999px; background:#26262B; color:#F4F4F5; display:flex; align-items:center; justify-content:center;"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></span>
+                <div class="l"><div class="scr-h" style="font-size:5.8pt;">Copy link</div><div class="scr-m" style="font-size:4.2pt; text-transform:none; letter-spacing:0;">Send the date to someone else</div></div>
+                <span class="chev" style="font-size:6pt;">›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="small" style="text-align:center; margin-top:6pt; font-size:8pt;">The sheet slides up when you
+        press <b>ADD</b> — one tap on a row does the rest.</p>
+      </div>
+
+      <div class="grow">
+        <div class="h3"><span class="tick">//</span> Which one should I pick?</div>
+        <ul class="ticks" style="gap:8pt;">
+          <li>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span><b>You use Gmail?</b> Pick <span class="ui">Google Calendar</span>. It opens with everything
+            filled in — press <b>Save</b> there and you're done.</span>
+          </li>
+          <li>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span><b>You use the iPhone calendar?</b> Pick <span class="ui">Apple Calendar</span> — your phone
+            offers to add the event straight away.</span>
+          </li>
+          <li>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span><b>Work calendar in Outlook?</b> Pick <span class="ui">Outlook</span> — same idea, press
+            <b>Save</b> when it opens.</span>
+          </li>
+          <li>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span><b>Anything else</b> — <span class="ui">Any other calendar</span> downloads a small calendar
+            file; open it and your calendar app takes over.</span>
+          </li>
+          <li>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span><b>Sharing with the other parent?</b> <span class="ui">Copy link</span> puts the date on your
+            clipboard — paste it into the family group chat.</span>
+          </li>
+        </ul>
+
+        <div class="note note--accent" style="margin-top:12pt;">
+          <div class="note__head">One thing to remember</div>
+          A saved date is a <b>copy</b>. If the studio later moves the event, the copy in your phone
+          doesn't move with it — the portal calendar is always the source of truth. For anything
+          critical, glance at the portal the day before.
+        </div>
+
+        <div class="note" style="margin-top:10pt;">
+          <div class="note__head" style="color:var(--body-mut);">The little messages</div>
+          After you tap, a small note at the bottom of the screen confirms what happened —
+          <i>"Opening Google Calendar — press Save there to keep it."</i>,
+          <i>"Calendar file saved — open it to add the date."</i> or <i>"Link copied."</i>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:auto; padding-bottom:14pt;">
+      <div class="mono-tag" style="color:var(--body-mut); margin-bottom:7pt;">Start to finish — the usual case</div>
+      <div style="display:flex; align-items:center; gap:8pt;">
+        <div class="flow-node grow" style="display:flex; gap:7pt; align-items:center;">
+          <span class="n" style="flex-shrink:0; width:15pt; height:15pt; border-radius:999px; background:var(--electric); color:#fff; font-family:var(--mono); font-weight:700; font-size:8pt; display:flex; align-items:center; justify-content:center;">1</span>
+          <span style="font-size:8.6pt; line-height:1.35;">Press <b>ADD</b> on the event</span>
+        </div>
+        <svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="flex-shrink:0;"><path d="M0 5h10M7 1.5L10.5 5 7 8.5" stroke="#c2c2c9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="flow-node grow" style="display:flex; gap:7pt; align-items:center;">
+          <span class="n" style="flex-shrink:0; width:15pt; height:15pt; border-radius:999px; background:var(--electric); color:#fff; font-family:var(--mono); font-weight:700; font-size:8pt; display:flex; align-items:center; justify-content:center;">2</span>
+          <span style="font-size:8.6pt; line-height:1.35;">Tap your calendar — say, <b>Google</b></span>
+        </div>
+        <svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="flex-shrink:0;"><path d="M0 5h10M7 1.5L10.5 5 7 8.5" stroke="#c2c2c9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="flow-node grow" style="display:flex; gap:7pt; align-items:center;">
+          <span class="n" style="flex-shrink:0; width:15pt; height:15pt; border-radius:999px; background:var(--electric); color:#fff; font-family:var(--mono); font-weight:700; font-size:8pt; display:flex; align-items:center; justify-content:center;">3</span>
+          <span style="font-size:8.6pt; line-height:1.35;">Press <b>Save</b> when it opens</span>
+        </div>
+        <svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="flex-shrink:0;"><path d="M0 5h10M7 1.5L10.5 5 7 8.5" stroke="#c2c2c9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="flow-node grow" style="display:flex; gap:7pt; align-items:center; border-color:var(--electric);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;"><circle cx="12" cy="12" r="10" fill="#E2144F"/><path d="M8 12.5l2.6 2.6L16 9.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span style="font-size:8.6pt; line-height:1.35;"><b>Done</b> — it's on your phone</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>10</span></div>
+</section>
+
+<!-- ================= PAGE 11 · SECTION 8: QUESTIONS & FIXES ================= -->
+<section class="page">
+  <div class="page__inner">
+    <div class="band">
+      <div class="band__num">8</div>
+      <div class="band__titles">
+        <div class="band__kicker">When something's off</div>
+        <div class="band__title">Questions &amp; fixes</div>
+      </div>
+    </div>
+
+    <div class="cols" style="gap:0.28in;">
+      <div class="grow" style="display:flex; flex-direction:column; gap:9pt;">
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"I don't have the studio code."</div>
+          <p style="font-size:9.2pt;">Ask at the front desk — they'll give it to you on the spot. There's
+          nothing to sign up for and no email involved.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"The code stopped working."</div>
+          <p style="font-size:9.2pt;">The studio changes the code from time to time. Ask the front desk
+          for the current one and enter it once — your phone remembers it again.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"It's asking for an email and password."</div>
+          <p style="font-size:9.2pt;">You've landed on the <b>Staff</b> sign-in. Go back and tap
+          <span class="ui">Dancer Portal</span> instead — parents never need an account.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"Where do I pay tuition or update my details?"</div>
+          <p style="font-size:9.2pt;">In <b>Enrollio</b>, the studio's billing system — tap
+          <span class="ui">Billing &amp; Admin</span> on the Parent Portal page and it opens in its own tab.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"Do I need to update the app?"</div>
+          <p style="font-size:9.2pt;">Never — it's a website, so you have the latest version the moment
+          you open it.</p>
+        </div>
+      </div>
+      <div class="grow" style="display:flex; flex-direction:column; gap:9pt;">
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"A page didn't load or looks stuck."</div>
+          <p style="font-size:9.2pt;">Usually just the signal. Close the app and open it again — or reload
+          the page in your browser. Everything picks up where you left off.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"A photo or file won't open."</div>
+          <p style="font-size:9.2pt;">If you see <i>"Could not open — try again"</i>, tap it once more —
+          large videos can take a moment on studio Wi-Fi.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"A date on my phone doesn't match the portal."</div>
+          <p style="font-size:9.2pt;">Saved dates are copies and don't update themselves. Check the portal
+          calendar, then press <span class="ui">ADD</span> again to save the corrected one.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"Can I see the other program too?"</div>
+          <p style="font-size:9.2pt;">Yes — tap the DIDC logo, go back into the portal and pick the other
+          section. It has its own studio code, also available at the front desk.</p>
+        </div>
+        <div class="card" style="padding:10pt 12pt;">
+          <div class="h3" style="font-size:10pt; margin-bottom:3pt;">"Is my family's information in there?"</div>
+          <p style="font-size:9.2pt;">The portal shows studio-published schedules, announcements and files —
+          your account and payment details stay in Enrollio.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- quick reference -->
+    <div style="margin-top:auto; margin-bottom:14pt; background:var(--void); border-radius:12pt; padding:15pt 18pt; position:relative; overflow:hidden;">
+      <div style="position:absolute; inset:0; background:radial-gradient(ellipse 70% 90% at 92% 110%, rgba(226,20,79,0.30), transparent 60%);"></div>
+      <div style="position:relative; display:flex; align-items:center; gap:16pt;">
+        <div style="flex:1;">
+          <div class="mono-tag" style="color:var(--electric2); margin-bottom:5pt;">Keep this line somewhere handy</div>
+          <div style="color:var(--chalk); font-size:11pt; font-weight:600; line-height:1.4; white-space:nowrap;">
+            <span class="url-pill" style="border-color:var(--electric2); color:#fff; font-size:9pt; padding:3px 10px;">didc.app</span>
+            &nbsp;→&nbsp; Dancer Portal &nbsp;→&nbsp; your program &nbsp;→&nbsp; studio code
+          </div>
+          <div style="color:#9A9AA4; font-size:8.6pt; margin-top:6pt;">Anything this guide doesn't answer —
+          just ask us at the front desk. We'll get you sorted in a minute.</div>
+        </div>
+        <div style="flex-shrink:0; text-align:right;">
+          <img src="../../public/brand/logos/didc-mark-3d.png" alt="DIDC" style="height:0.3in; display:block; margin-left:auto;">
+          <div class="mono-tag" style="color:var(--smoke); margin-top:6pt;">You are your only limit</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="folio__rule"></div>
+  <div class="folio"><span>DIDC · Parent Portal Guide</span><span>11</span></div>
+</section>
+
+</body>
+</html>
