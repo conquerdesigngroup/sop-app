@@ -80,3 +80,24 @@ create policy "calendar_attachments_portal_read" on public.calendar_event_attach
 drop policy "calendar_attachments_read" on storage.objects;
 create policy "calendar_attachments_read" on storage.objects
   for select to authenticated using (bucket_id = 'calendar-attachments');
+
+-- ---------------------------------------------------------------------------
+-- Added 2026-09-07, at the point of applying this.
+--
+-- This file was written on 2026-08-29 and then sat unapplied for nine days
+-- while v31–v46 landed. v46 (2026-09-06) created portal_instructor_looks with
+-- a `to anon, authenticated` SELECT policy, so as written this migration closed
+-- eight of the nine anon doors and quietly left the ninth open — a stale
+-- migration is not a safe one, and the audit that catches this is
+-- `select * from pg_policies where roles::text like '%anon%'`, not a re-read of
+-- the file.
+--
+-- Currently zero rows and only cosmetic display data (an instructor's shown
+-- name, initials, icon and palette for the portal's class cards). It closes
+-- anyway: the reason anon can read anything here is the access-code portal, and
+-- after this migration there is no anon portal to serve.
+--
+-- Was: to anon, authenticated USING (true).
+drop policy if exists "portal_instructor_looks_read" on public.portal_instructor_looks;
+create policy "portal_instructor_looks_read" on public.portal_instructor_looks
+  for select to authenticated using (true);
