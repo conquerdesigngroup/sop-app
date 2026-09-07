@@ -202,11 +202,20 @@ const PortalSignUp: React.FC = () => {
                 disabled={busy}
                 style={inputFontFix}
               />
+              {/* Repeats the paragraph above, inside the field where the
+                  mistake actually gets made — a parent who skimmed the copy
+                  meets it again with their thumb on the keyboard.
+                  SUPPLEMENTARY ONLY: a placeholder vanishes the moment they
+                  type and is low-contrast by definition, so it can never be
+                  the only place this is said. Kept short because placeholders
+                  clip rather than wrap, and this field is about 290px on a
+                  375px phone. */}
               <Input
                 label="Email"
                 type="email"
                 autoComplete="email"
                 autoCapitalize="none"
+                placeholder="Same as your Enrollio email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 disabled={busy}
