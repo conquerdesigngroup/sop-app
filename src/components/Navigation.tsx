@@ -354,7 +354,6 @@ const Navigation: React.FC = () => {
       const adminItems: NavItem[] = [
         { path: '/team', label: 'Team', icon: icons.team },
         { path: '/task-library', label: 'Task Library', icon: icons.library },
-        { path: '/test', label: 'Test', icon: icons.activity },
       ];
       if (isSuperAdmin) {
         adminItems.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });
@@ -399,7 +398,6 @@ const Navigation: React.FC = () => {
       const management: NavItem[] = [
         { path: '/team', label: 'Team', icon: icons.team },
         { path: '/task-library', label: 'Task Library', icon: icons.library },
-        { path: '/test', label: 'Test', icon: icons.activity },
       ];
       if (isSuperAdmin) {
         management.push({ path: '/hours', label: 'Team Schedule', icon: icons.hours });

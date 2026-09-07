@@ -148,7 +148,7 @@ describe('mobile menu sheet', () => {
     // remembered yet), so it is opened here to read its rows.
     fireEvent.click(within(sheet).getByRole('button', { name: /management/i }));
     const labels = within(sheet).getAllByRole('link').map(a => a.textContent);
-    expect(labels).toEqual(['SOPs', 'Hours Input', 'Team', 'Task Library', 'Test', 'Portal Manager']);
+    expect(labels).toEqual(['SOPs', 'Hours Input', 'Team', 'Task Library', 'Portal Manager']);
 
     // Nothing in the sheet duplicates the admin bar, which carries Job Tasks.
     within(sheet).getAllByRole('link').forEach(a => {
