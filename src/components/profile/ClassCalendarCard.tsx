@@ -13,6 +13,7 @@ import {
 } from '../../lib/upcomingClasses';
 import { ProfileCardProps } from '../../lib/profileCards';
 import { useHousehold } from './useHousehold';
+import CollapsibleCard from './CollapsibleCard';
 
 /**
  * Put my children's classes in my own calendar.
@@ -82,17 +83,14 @@ const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
     }
   };
 
+  /**
+   * Shut by default (see CollapsibleCard). Adding a weekly class to your own
+   * calendar is something a family does once a season and then never again —
+   * the card is worth having on the dashboard and is not worth the eight
+   * buttons of vertical space it occupies for the rest of the year.
+   */
   return (
-    <Card>
-      <h3 style={{
-        ...theme.typography.h3,
-        fontFamily: theme.fonts.display,
-        color: theme.colors.txt.primary,
-        margin: `0 0 ${theme.spacing.xs}`,
-      }}>
-        Add to your calendar
-      </h3>
-
+    <CollapsibleCard id="calendar" title="Add to your calendar">
       <p style={{
         ...theme.typography.captionSmall,
         fontFamily: theme.fonts.primary,
@@ -154,7 +152,7 @@ const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
           </div>
         </div>
       ))}
-    </Card>
+    </CollapsibleCard>
   );
 };
 

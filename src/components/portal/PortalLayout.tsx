@@ -59,8 +59,7 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
   // Any portal session gets a persistent way out. Gated on the flag so the
   // access-code-only portal (no sessions) shows nothing. hasSession is true for
   // a client and for staff previewing — both need to be able to sign out, and
-  // The profile handles which is which: a client gets the full set of cards, a
-  // staff member previewing the portal gets identity and the way out.
+  // the account page is the same for both: identity, password, notifications.
   const { hasSession } = usePortalAuth();
   const showAccount = CLIENT_AUTH_ENABLED && hasSession;
 
@@ -206,11 +205,11 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
 
             {showAccount && (
               <Link
-                // The profile is the signed-in home — identity, what's on next,
-                // attendance, updates, files, and the Account card carrying the
-                // email, password change and sign-out. /portal/account redirects
-                // here, so this icon and the home tile lead to one place rather
-                // than two doors onto the same room.
+                // The ONLY door to the account page, on purpose. The family
+                // content it used to hold — what's on next, attendance,
+                // updates, files — now opens on /portal itself, so what is
+                // behind this icon is identity, password, notifications and
+                // the way out. /portal/account still redirects here.
                 to="/portal/profile"
                 aria-label="My profile"
                 style={{
