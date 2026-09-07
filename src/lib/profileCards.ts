@@ -171,12 +171,20 @@ export const PROFILE_CARDS: ProfileCard[] = [
     defaultOrder: 20,
   },
   {
+    // Second on the dashboard, above the roster and the numbers.
+    //
+    // It was below attendance, on the reasoning that the schedule is what a
+    // parent opens the app for. That is right about "up next" and wrong about
+    // everything under it: an announcement is the one thing here that is NEW,
+    // has a deadline attached, and is useless once missed — a cancelled class
+    // or a costume date read on Thursday is not the same information read on
+    // Sunday. Who your dancers are does not change between visits.
     id: 'updates',
     title: 'Updates',
     component: UpdatesCard,
     surface: 'dashboard',
     visible: showsAFamily,
-    defaultOrder: 30,
+    defaultOrder: 16,
   },
   {
     id: 'documents',

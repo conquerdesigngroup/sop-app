@@ -47,6 +47,29 @@ import { ENROLLIO_URL, portalRoutes, ProgramSlug } from '../../lib/portal';
  * back.
  */
 
+const icon = (d: string) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d={d} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/**
+ * A glyph per program, keyed by SLUG rather than by name.
+ *
+ * Names live in portal_programs and the studio may rename a section without a
+ * deploy; the slugs are typed constants that routes are already built from, so
+ * they are the stable thing to key on. A slug added to the database before it
+ * is added here falls back rather than rendering an empty box.
+ */
+const PROGRAM_ICON: Partial<Record<ProgramSlug, React.ReactNode>> = {
+  // Star: the competition teams.
+  allstars: icon('M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z'),
+  // Mortarboard: the class program.
+  academy: icon('M22 10L12 5 2 10l10 5 10-5z M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5'),
+};
+
+const PROGRAM_ICON_FALLBACK = icon('M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10');
+
 const PortalHome: React.FC = () => {
   const { programs, loading: programsLoading, error } = usePortal();
   const { loading: authLoading, hasSession } = usePortalAuth();
@@ -142,12 +165,89 @@ const PortalHome: React.FC = () => {
           </div>
         )}
 
-        {/* The family's own cards, above the navigation. A parent opening this
-            on the way out of the house is asking "where do they need to be",
-            not "which section of the studio". Each card handles its own
-            loading and empty states, and renders nothing at all when there is
-            nothing to say — so a member of staff with no children here, or a
-            family whose import has not run, sees the tiles below and no gap. */}
+        {/* The three destinations, side by side, above everything.
+            
+            They were a vertical list at the FOOT of the page, which put the
+            studio's own sections below a dashboard that can run to seven cards
+            — so the one thing on this page that is pure navigation was the one
+            thing you had to scroll to reach. Three across is the whole set in
+            a single glance and about 100px of height instead of 400.
+
+            A grid rather than a flex row, and `minmax(0, 1fr)` rather than
+            `1fr`: a grid track's floor is min-content, so plain `1fr` refuses
+            to shrink below the longest word in "Academy / TNT Dancers" and
+            pushes the third tile off the right edge at 320px. This is the grid
+            spelling of the `minWidth: 0` rule in CLAUDE.md, and it is paired
+            with `overflowWrap` inside the tile for the same reason: one
+            without the other still overflows. */}
+        <nav aria-label="Studio sections">
+          <h2 style={{
+            ...theme.typography.captionSmall,
+            fontFamily: theme.fonts.mono,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: theme.colors.txt.tertiary,
+            margin: `0 0 ${theme.spacing.sm}`,
+          }}>
+            The studio
+          </h2>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: theme.spacing.sm,
+            alignItems: 'stretch',
+          }}>
+            {/* Always available — Enrollio has its own login, so it is not
+                gated and does not depend on the program fetch. */}
+            <NavTile
+              compact
+              label="Billing & Admin"
+              href={ENROLLIO_URL}
+              icon={icon('M2 10h20 M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z')}
+            />
+
+            {/* Two tiles, not three: the Billing tile above is already
+                rendered — it does not wait on the program fetch — so the
+                skeleton stands in for exactly what is missing. */}
+            {programsLoading && <TileSkeleton count={2} withIcon={false} />}
+
+            {!programsLoading && !error && programs.map(program => (
+              <NavTile
+                compact
+                key={program.id}
+                label={program.name}
+                to={portalRoutes.program(program.slug as ProgramSlug)}
+                icon={PROGRAM_ICON[program.slug as ProgramSlug] ?? PROGRAM_ICON_FALLBACK}
+              />
+            ))}
+          </div>
+
+          {error && !programsLoading && (
+            <div style={{ marginTop: theme.spacing.sm }}>
+              <Card>
+                <p style={{
+                  ...theme.typography.body,
+                  fontFamily: theme.fonts.primary,
+                  color: theme.colors.txt.secondary,
+                  margin: 0,
+                }}>
+                  {error}
+                </p>
+              </Card>
+            </div>
+          )}
+        </nav>
+
+        {/* The family's own cards, below the three studio tiles.
+            
+            The tiles go first because they are fixed, tiny and the same every
+            visit — a stable strip you aim at without reading. The cards below
+            are what a parent came to read, starting with what is on next and
+            what the studio has just announced. Each handles its own loading
+            and empty states and renders nothing at all when there is nothing
+            to say, so a member of staff with no children here sees the tiles
+            above and no gap where a dashboard would be. */}
         {cards.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
             {cards.map(card => {
@@ -164,54 +264,6 @@ const PortalHome: React.FC = () => {
             })}
           </div>
         )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <h2 style={{
-            ...theme.typography.captionSmall,
-            fontFamily: theme.fonts.mono,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: theme.colors.txt.tertiary,
-            margin: 0,
-          }}>
-            The studio
-          </h2>
-
-          {/* Always available — Enrollio has its own login, so it is not gated
-              and does not depend on the program fetch. */}
-          <NavTile
-            label="Billing & Admin"
-            description="Payments, registration and account details in Enrollio."
-            href={ENROLLIO_URL}
-          />
-
-          {/* Two tiles, not three: the Billing tile above is already rendered —
-              it does not wait on the program fetch — so the skeleton stands in
-              for exactly what is missing. */}
-          {programsLoading && <TileSkeleton count={2} withIcon={false} />}
-
-          {error && !programsLoading && (
-            <Card>
-              <p style={{
-                ...theme.typography.body,
-                fontFamily: theme.fonts.primary,
-                color: theme.colors.txt.secondary,
-                margin: 0,
-              }}>
-                {error}
-              </p>
-            </Card>
-          )}
-
-          {!programsLoading && !error && programs.map(program => (
-            <NavTile
-              key={program.id}
-              label={program.name}
-              description={program.blurb}
-              to={portalRoutes.program(program.slug as ProgramSlug)}
-            />
-          ))}
-        </div>
       </div>
     </PortalLayout>
   );

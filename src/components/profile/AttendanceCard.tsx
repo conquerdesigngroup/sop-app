@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { theme } from '../../theme';
-import { Card } from '../ui';
 import { AttendanceRange, SessionAttendance } from '../../types/attendance';
 import { classAccent } from '../../lib/attendanceColors';
 import { stripSessions } from '../../lib/attendanceMarks';
@@ -18,6 +17,7 @@ import {
 import AttendanceProgress from './AttendanceProgress';
 import { AttendanceRowSkeleton } from '../portal/PortalSkeleton';
 import AttendanceDetail from './AttendanceDetail';
+import CollapsibleCard from './CollapsibleCard';
 import CardError from './CardError';
 import SegmentedControl from './SegmentedControl';
 import { useHousehold } from './useHousehold';
@@ -350,32 +350,29 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
     );
   };
 
+  /**
+   * Shut by default (see CollapsibleCard).
+   *
+   * "At a glance" sits directly above this card as its headline — classes this
+   * week, classes danced, hours — so closing this one leaves the numbers a
+   * parent glances at on screen and puts the per-class breakdown one tap away.
+   * The card's own note already says it: attendance answers "did they go?",
+   * which is asked about once a month, while the cards above it answer "where
+   * do they need to be?", which is asked three times a week.
+   */
   return (
-    <Card>
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: theme.spacing.sm,
-        marginBottom: theme.spacing.md,
-      }}>
-        <h3 style={{
-          ...theme.typography.h3,
-          fontFamily: theme.fonts.display,
-          color: theme.colors.txt.primary,
-          margin: 0,
-        }}>
-          Attendance
-        </h3>
+    <CollapsibleCard
+      id="attendance"
+      title="Attendance"
+      headerRight={
         <SegmentedControl
           options={RANGE_LABELS}
           value={range}
           onChange={setRange}
           ariaLabel="Attendance period"
         />
-      </div>
-
+      }
+    >
       {showSwitcher && (
         <div style={{ marginBottom: theme.spacing.md }}>
           <SegmentedControl
@@ -397,7 +394,7 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
           onClose={() => setOpen(null)}
         />
       )}
-    </Card>
+    </CollapsibleCard>
   );
 };
 

@@ -41,7 +41,13 @@ const ctx = (over: Partial<ProfileContext> = {}): ProfileContext => ({
 const idsFor = (c: ProfileContext, surface?: PortalSurface) =>
   orderedCards(c, surface).map(card => card.id);
 
-const FAMILY_CARDS = ['up-next', 'household', 'season-stats', 'attendance', 'updates', 'documents', 'calendar'];
+/**
+ * In dashboard order, which the surface test below asserts exactly.
+ *
+ * Updates sits second, above the roster: it is the only card here whose
+ * content is new, dated and useless once missed.
+ */
+const FAMILY_CARDS = ['up-next', 'updates', 'household', 'season-stats', 'attendance', 'documents', 'calendar'];
 
 describe('who sees the family cards', () => {
   it('shows them to a client immediately, without waiting for the household read', () => {
