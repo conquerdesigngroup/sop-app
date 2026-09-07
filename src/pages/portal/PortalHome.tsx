@@ -7,6 +7,8 @@ import NavTile from '../../components/portal/NavTile';
 import { TileSkeleton } from '../../components/portal/PortalSkeleton';
 import { usePortal } from '../../contexts/PortalContext';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
+import { useHousehold } from '../../components/profile/useHousehold';
+import { AttendanceSource } from '../../lib/attendanceQueries';
 import { CLIENT_AUTH_ENABLED, CLIENT_AUTH_REQUIRED } from '../../lib/clientAuth';
 import { ENROLLIO_URL, portalRoutes, ProgramSlug } from '../../lib/portal';
 
@@ -18,9 +20,43 @@ import { ENROLLIO_URL, portalRoutes, ProgramSlug } from '../../lib/portal';
  * family sign-in. Program names come from the database, so renaming a section
  * does not need a deploy.
  */
+/**
+ * Live, always. This tile only ever renders for a signed-in member of staff,
+ * and the question it asks — does this login have children at the studio — has
+ * no fixture answer worth showing. Module scope so the cache key is stable.
+ */
+const LIVE_SOURCE: AttendanceSource = { source: 'live' };
+
+/**
+ * The "My Profile" tile for a member of staff who is ALSO a parent here.
+ *
+ * Its own component so the household read fires for STAFF ONLY. A client's
+ * tile is unconditional (a client is a family by definition), and the portal
+ * home is the most-visited page in the app — making every family pay three
+ * sequential queries for a tile they already have would be a poor trade. The
+ * read is the same cached promise the profile page uses, so a staff member who
+ * follows this tile pays for it once, not twice.
+ *
+ * The predicate matches `showsAFamily` in profileCards (183d4b1): the
+ * family view appears once there is demonstrably a family behind it, rather
+ * than flashing and being taken away while the read lands. No household, no
+ * tile — a teacher with no children at the studio sees the portal unchanged.
+ */
+const StaffFamilyTile: React.FC = () => {
+  const household = useHousehold(LIVE_SOURCE);
+  if ((household.data?.students.length ?? 0) === 0) return null;
+  return (
+    <NavTile
+      label="My Profile"
+      description="Your dancers, schedule and account."
+      to="/portal/profile"
+    />
+  );
+};
+
 const PortalHome: React.FC = () => {
   const { programs, loading, error } = usePortal();
-  const { loading: authLoading, hasSession, isClient, profile } = usePortalAuth();
+  const { loading: authLoading, hasSession, isClient, isStaff, profile } = usePortalAuth();
 
   // FULL LAUNCH only: the whole portal sits behind the sign-in. In the parallel
   // TEST stage (ENABLED but not REQUIRED) this page renders normally for
@@ -96,6 +132,13 @@ const PortalHome: React.FC = () => {
             to="/portal/profile"
           />
         )}
+
+        {/* The owner and several teachers have children at this studio. The
+            profile page already serves them correctly — 183d4b1 named the
+            household in the query so an admin gets their own family instead of
+            all 388 students — but nothing in the portal linked to it, because
+            this tile was `isClient` only. */}
+        {CLIENT_AUTH_ENABLED && isStaff && <StaffFamilyTile />}
       </div>
     </PortalLayout>
   );
