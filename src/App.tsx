@@ -33,6 +33,7 @@ const JobTasksPage = lazy(() => import('./pages/JobTasksPage'));
 const TaskLibraryPage = lazy(() => import('./pages/TaskLibraryPage'));
 const MyTasksPage = lazy(() => import('./pages/MyTasksPage'));
 const TeamManagementPage = lazy(() => import('./pages/TeamManagementPage'));
+const TestPage = lazy(() => import('./pages/TestPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ArchivePage = lazy(() => import('./pages/ArchivePage'));
@@ -301,6 +302,14 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute adminOnly>
                 <TeamManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/test"
+            element={
+              <ProtectedRoute adminOnly>
+                <TestPage />
               </ProtectedRoute>
             }
           />
