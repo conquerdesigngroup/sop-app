@@ -150,11 +150,12 @@ export const PROFILE_CARDS: ProfileCard[] = [
     defaultOrder: 18,
   },
   {
-    // Directly above Attendance, as its headline: the glance, then the detail.
-    // It reads the household summary the cards around it have already loaded,
-    // so it costs no request — and it renders nothing at all for a household
-    // with no enrolments, which is why it can sit this high without being the
-    // first thing a brand-new family sees.
+    // The headline for the two cards under it: the glance, then the classes it
+    // is counting, then the attendance detail. It reads the household summary
+    // the cards around it have already loaded, so it costs no request — and it
+    // renders nothing at all for a household with no enrolments, which is why
+    // it can sit this high without being the first thing a brand-new family
+    // sees.
     id: 'season-stats',
     title: 'At a glance',
     component: SeasonStatsCard,
@@ -163,12 +164,25 @@ export const PROFILE_CARDS: ProfileCard[] = [
     defaultOrder: 19,
   },
   {
+    // Under "At a glance", which is the summary of exactly these classes, and
+    // above Attendance, which is a record of them. It was last on the page
+    // when it was only a calendar export; it is now the roster of what the
+    // family is actually enrolled in and the way through to each class, so it
+    // belongs with the two cards that describe the same set.
+    id: 'calendar',
+    title: 'Your classes',
+    component: ClassCalendarCard,
+    surface: 'dashboard',
+    visible: showsAFamily,
+    defaultOrder: 20,
+  },
+  {
     id: 'attendance',
     title: 'Attendance',
     component: AttendanceCardHost,
     surface: 'dashboard',
     visible: showsAFamily,
-    defaultOrder: 20,
+    defaultOrder: 22,
   },
   {
     // Second on the dashboard, above the roster and the numbers.
@@ -193,14 +207,6 @@ export const PROFILE_CARDS: ProfileCard[] = [
     surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 40,
-  },
-  {
-    id: 'calendar',
-    title: 'Add to your calendar',
-    component: ClassCalendarCard,
-    surface: 'dashboard',
-    visible: showsAFamily,
-    defaultOrder: 50,
   },
   {
     // A settings control, not something a parent came to read — so it lives

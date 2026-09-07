@@ -1,9 +1,11 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Button, Card, Spinner } from '../ui';
 import { useToast } from '../../contexts/ToastContext';
 import { classAccent } from '../../lib/attendanceColors';
 import { studentLabel } from '../../lib/attendanceQueries';
+import { portalRoutes, programSlugForCategory } from '../../lib/portal';
 import {
   UpcomingClass,
   buildSeriesIcs,
@@ -16,7 +18,21 @@ import { useHousehold } from './useHousehold';
 import CollapsibleCard from './CollapsibleCard';
 
 /**
- * Put my children's classes in my own calendar.
+ * Every class my children are in: open it, or put it in my own calendar.
+ *
+ * THE ROSTER FIRST, THE EXPORT SECOND
+ *
+ * This started as a calendar card and the calendar is now the smaller half of
+ * it. A family's enrolments are the one list the dashboard can state exactly —
+ * "Ava is in these four, Leo is in these two" — and the schedule pages, which
+ * list the whole studio, cannot. So each row is a way through to the class's
+ * own page, the same page the All-Star and Academy schedules link to, reached
+ * without first knowing which section the class is filed under.
+ *
+ * The section is derived from the class's category (see
+ * programSlugForCategory). The enrolment view carries a category and no
+ * program id, and adding one would mean a migration to a view every family
+ * reads — for a link that the categories already answer.
  *
  * THE WHOLE SEASON, NOT THE NEXT LESSON
  *
@@ -46,6 +62,61 @@ const CalendarGlyph: React.FC = () => (
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
     />
   </svg>
+);
+
+const ChevronGlyph: React.FC = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/**
+ * The dot, the name and the when — the part of a row that identifies the class.
+ *
+ * Shared between the linked and unlinked forms so the two cannot drift apart
+ * visually. A class whose category names no section is not a link: there is
+ * nowhere honest to send the tap, and a link that lands on "class not found"
+ * is worse than a line of text.
+ */
+const ClassLine: React.FC<{ item: UpcomingClass; showWho: boolean; linked: boolean }> = ({
+  item, showWho, linked,
+}) => (
+  <>
+    <span
+      aria-hidden="true"
+      style={{
+        width: '8px',
+        height: '8px',
+        borderRadius: theme.borderRadius.full,
+        background: classAccent(item.klass),
+        flexShrink: 0,
+      }}
+    />
+    <span style={{ minWidth: 0, flex: 1, overflowWrap: 'anywhere' }}>
+      <span style={{
+        ...theme.typography.bodySmall,
+        fontFamily: theme.fonts.primary,
+        fontWeight: 600,
+        color: theme.colors.txt.primary,
+      }}>
+        {item.klass.name}
+      </span>
+      <span style={{
+        ...theme.typography.captionSmall,
+        fontFamily: theme.fonts.primary,
+        color: theme.colors.txt.tertiary,
+        display: 'block',
+      }}>
+        {showWho ? `${studentLabel(item.student)} · ` : ''}
+        weekly, {clockTime(item.startsAt)}
+      </span>
+    </span>
+    {linked && (
+      <span aria-hidden="true" style={{ color: theme.colors.txt.tertiary, display: 'flex' }}>
+        <ChevronGlyph />
+      </span>
+    )}
+  </>
 );
 
 const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
@@ -84,13 +155,14 @@ const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   };
 
   /**
-   * Shut by default (see CollapsibleCard). Adding a weekly class to your own
-   * calendar is something a family does once a season and then never again —
-   * the card is worth having on the dashboard and is not worth the eight
-   * buttons of vertical space it occupies for the rest of the year.
+   * Shut by default (see CollapsibleCard). Even as a roster this is the
+   * longest card on the dashboard — six classes is six names and twelve
+   * buttons — and it answers a question ("which classes are we in, and where
+   * is that one's page") that a parent asks deliberately, not on the way past.
+   * "Up next" is what they see without opening anything.
    */
   return (
-    <CollapsibleCard id="calendar" title="Add to your calendar">
+    <CollapsibleCard id="calendar" title="Your classes">
       <p style={{
         ...theme.typography.captionSmall,
         fontFamily: theme.fonts.primary,
@@ -98,60 +170,79 @@ const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
         margin: `0 0 ${theme.spacing.md}`,
         maxWidth: '46ch',
       }}>
-        Adds the weekly class through to the end of the season. Dates the studio
-        has already closed are left out.
+        Tap a class for its details, updates and files. Adding to a calendar
+        takes the weekly class through to the end of the season, leaving out
+        dates the studio has already closed.
       </p>
 
-      {series.map((item, index) => (
-        <div
-          key={`${item.klass.id}-${item.student.id}`}
-          style={{
-            padding: `${theme.spacing.sm} 0`,
-            borderTop: index === 0 ? 'none' : `1px solid ${theme.colors.bdr.primary}`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, marginBottom: theme.spacing.xs }}>
-            <span
-              aria-hidden="true"
-              style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: theme.borderRadius.full,
-                background: classAccent(item.klass),
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ minWidth: 0, flex: 1, overflowWrap: 'anywhere' }}>
-              <span style={{
-                ...theme.typography.bodySmall,
-                fontFamily: theme.fonts.primary,
-                fontWeight: 600,
-                color: theme.colors.txt.primary,
-              }}>
-                {item.klass.name}
-              </span>
-              <span style={{
-                ...theme.typography.captionSmall,
-                fontFamily: theme.fonts.primary,
-                color: theme.colors.txt.tertiary,
-                display: 'block',
-              }}>
-                {showWho ? `${studentLabel(item.student)} · ` : ''}
-                weekly, {clockTime(item.startsAt)}
-              </span>
-            </span>
-          </div>
+      {series.map((item, index) => {
+        const slug = programSlugForCategory(item.klass.category);
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-            <Button variant="outline" size="sm" leftIcon={<CalendarGlyph />} onClick={() => addGoogle(item)}>
-              Google
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => addFile(item)}>
-              Apple / other
-            </Button>
+        /* The buttons cannot live inside the anchor — a button nested in a
+           link is invalid and swallows its own clicks — so the class line is
+           the link and they sit under it, exactly as the schedule rows do. */
+        return (
+          <div
+            key={`${item.klass.id}-${item.student.id}`}
+            style={{
+              padding: `${theme.spacing.sm} 0`,
+              borderTop: index === 0 ? 'none' : `1px solid ${theme.colors.bdr.primary}`,
+            }}
+          >
+            {slug ? (
+              <Link
+                to={portalRoutes.classDetail(slug, item.klass.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: theme.spacing.sm,
+                  // Two lines of text is already close to a thumb's worth; the
+                  // padding takes it past 44px without moving the row apart,
+                  // because the margin below gives it back.
+                  padding: `${theme.spacing.xs} 0`,
+                  margin: `0 0 ${theme.spacing.xs}`,
+                  textDecoration: 'none',
+                  minWidth: 0,
+                }}
+              >
+                <ClassLine item={item} showWho={showWho} linked />
+              </Link>
+            ) : (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: theme.spacing.sm,
+                marginBottom: theme.spacing.xs,
+                minWidth: 0,
+              }}>
+                <ClassLine item={item} showWho={showWho} linked={false} />
+              </div>
+            )}
+
+            {/* Named per class. Five rows of "Google" is five identical
+                buttons to anyone reading the page rather than looking at it. */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<CalendarGlyph />}
+                onClick={() => addGoogle(item)}
+                aria-label={`Add ${item.klass.name} to Google Calendar`}
+              >
+                Google
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => addFile(item)}
+                aria-label={`Download ${item.klass.name} for Apple or another calendar`}
+              >
+                Apple / other
+              </Button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </CollapsibleCard>
   );
 };

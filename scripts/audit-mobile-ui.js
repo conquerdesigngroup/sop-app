@@ -155,12 +155,21 @@ const CLASSES_VIEW = ['list', 'week'].includes(process.env.AUDIT_CLASSES_VIEW)
   ? process.env.AUDIT_CLASSES_VIEW
   : 'month';
 
+// The dashboard's two collapsible cards, opened.
+//
+// Same reasoning as the calendar view above: a card that is shut renders a
+// title and nothing else, so leaving them at their defaults means the audit
+// measures a header bar and reports CLEAN for the longest content on the page
+// — the attendance chart and the whole class list, which are the parts that
+// can actually overflow. Ids come from CollapsibleCard's own storage keys.
 const PORTAL_ACCESS_INIT = `
   try {
     localStorage.setItem('didc_portal_access_allstars', 'granted');
     localStorage.setItem('didc_portal_access_academy', 'granted');
     localStorage.setItem('didc_portal_calendar_view', '${PORTAL_VIEW}');
     localStorage.setItem('didc_portal_classes_view', '${CLASSES_VIEW}');
+    localStorage.setItem('didc_portal_open_attendance', '1');
+    localStorage.setItem('didc_portal_open_calendar', '1');
   } catch (e) {}
 `;
 
