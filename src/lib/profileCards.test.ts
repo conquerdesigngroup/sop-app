@@ -16,7 +16,7 @@ jest.mock('../components/profile/NotificationsCard', () => ({ __esModule: true, 
 jest.mock('../components/profile/AccountCard', () => ({ __esModule: true, default: 'div' }), { virtual: true });
 
 // eslint-disable-next-line import/first
-import { ProfileContext, orderedCards } from './profileCards';
+import { PROFILE_CARDS, PortalSurface, ProfileContext, orderedCards } from './profileCards';
 
 /**
  * Who sees which cards.
@@ -38,7 +38,8 @@ const ctx = (over: Partial<ProfileContext> = {}): ProfileContext => ({
   ...over,
 });
 
-const idsFor = (c: ProfileContext) => orderedCards(c).map(card => card.id);
+const idsFor = (c: ProfileContext, surface?: PortalSurface) =>
+  orderedCards(c, surface).map(card => card.id);
 
 const FAMILY_CARDS = ['up-next', 'household', 'season-stats', 'attendance', 'updates', 'documents', 'calendar'];
 
@@ -75,5 +76,45 @@ describe('who sees the family cards', () => {
     [ctx(), ctx({ isStaff: true }), ctx({ isStaff: true, hasHousehold: true })].forEach(c => {
       expect(idsFor(c)).toEqual(expect.arrayContaining(['identity', 'account']));
     });
+  });
+});
+
+/**
+ * Which page a card lands on.
+ *
+ * The dashboard exists because the family content used to be buried behind an
+ * avatar builder on a page called "My Profile". The rule that keeps it that way
+ * is one field per card, so the way to break it again is to add a card and
+ * forget to think about where it goes — hence a test that every card has an
+ * opinion, and that the two lists stay disjoint.
+ */
+describe('the surface split', () => {
+  it('gives the family content to the dashboard', () => {
+    expect(idsFor(ctx(), 'dashboard')).toEqual(FAMILY_CARDS);
+  });
+
+  it('keeps identity, notifications and account off it', () => {
+    expect(idsFor(ctx(), 'account')).toEqual(['identity', 'notifications', 'account']);
+  });
+
+  it('puts every card on exactly one surface', () => {
+    const dashboard = PROFILE_CARDS.filter(c => c.surface === 'dashboard').map(c => c.id);
+    const account = PROFILE_CARDS.filter(c => c.surface === 'account').map(c => c.id);
+
+    expect(dashboard.length + account.length).toBe(PROFILE_CARDS.length);
+    expect(dashboard.filter(id => account.includes(id))).toEqual([]);
+  });
+
+  it('leaves a member of staff with no children at the studio an empty dashboard', () => {
+    // Not a broken page: PortalHome renders the section tiles underneath and
+    // simply omits the card column.
+    expect(idsFor(ctx({ isStaff: true }), 'dashboard')).toEqual([]);
+    expect(idsFor(ctx({ isStaff: true }), 'account')).toEqual(['identity', 'account']);
+  });
+
+  it('still answers the visibility question without a surface', () => {
+    // Who may see a card and which page renders it are separate rules, and the
+    // tests above this block deliberately ask only the first.
+    expect(idsFor(ctx())).toEqual(expect.arrayContaining([...FAMILY_CARDS, 'identity', 'account']));
   });
 });

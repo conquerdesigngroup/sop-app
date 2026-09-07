@@ -1,154 +1,64 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { theme } from '../../theme';
 import PortalLayout from '../../components/portal/PortalLayout';
-import SegmentedControl from '../../components/profile/SegmentedControl';
 import { portalRoutes } from '../../lib/portal';
-import { usePortalAuth } from '../../contexts/PortalAuthContext';
-import { ATTENDANCE_LIVE, AttendanceSource } from '../../lib/attendanceQueries';
-import { FIXTURE_SCENARIOS, FixtureScenario } from '../../lib/attendanceFixture';
-import { ProfileContext, UNLOCKABLES_ENABLED, orderedCards } from '../../lib/profileCards';
-import { useHousehold } from '../../components/profile/useHousehold';
+import { DEMO_ALLOWED, usePortalCards } from '../../components/profile/usePortalCards';
 
 /**
- * The profile page (§5.1).
+ * The account page (§5.1).
  *
  * IT RENDERS THE REGISTRY AND NOTHING ELSE
  *
  * There is no feature logic below — no attendance query, no avatar state, no
- * knowledge of what a card contains. That is the whole design: the next feature
- * to land on the profile adds a file and a registry entry, and this file is not
+ * knowledge of what a card contains. That is the whole design: the next thing
+ * to land on this page adds a file and a registry entry, and this file is not
  * touched. If you find yourself editing it to add a card, the registry is the
  * thing to edit instead.
  *
- * THE DEMO SWITCHER
+ * WHAT THIS PAGE IS NOT, ANY MORE
  *
- * In a development build the cards read the in-repo seed fixture and the page
- * offers a scenario picker, because the states that actually matter here — no
- * children linked, no classes, a class that has not met — are the ones a real
- * account cannot easily be put into, and a state nobody can look at is a state
- * nobody designs.
+ * It used to be the signed-in home: identity AND what's on next AND attendance
+ * AND updates AND files, with the account controls at the bottom of a long
+ * scroll. All of that now opens on /portal, where a family lands, and this page
+ * keeps what a parent comes here on purpose to change — who they are, their
+ * password, their notifications. See the surface split in lib/profileCards.
  *
- * The v33 tables now exist, so a production build always reads them. See
- * USE_FIXTURE below for why that is a build-time fact rather than an env var.
+ * It costs no household read as a result. Nothing here asks who the dancers
+ * are, so nothing here waits for the answer.
  */
-
-const DEMO_ALLOWED = !ATTENDANCE_LIVE && process.env.NODE_ENV !== 'production';
-
-/**
- * The fixture is a DEVELOPMENT artefact and may never reach a real family.
- *
- * This used to key off REACT_APP_ATTENDANCE_LIVE alone, which made a missing or
- * misspelled Vercel variable enough to serve invented children — names, classes
- * and attendance percentages — to a parent who trusted them. An env var is not
- * a safety mechanism; a production build is.
- *
- * So production always reads the real tables. With no data yet a family sees
- * the calm empty states, which is true, instead of somebody else's fiction.
- */
-const USE_FIXTURE = DEMO_ALLOWED;
-
 const Profile: React.FC = () => {
-  const { loading, hasSession, isStaff, profile } = usePortalAuth();
-  const [scenario, setScenario] = useState<FixtureScenario>('guardian');
-
-  const source: AttendanceSource = useMemo(
-    () => (USE_FIXTURE ? { source: 'fixture', scenario } : { source: 'live' }),
-    [scenario],
-  );
-
-  /**
-   * The ONE thing this page reads, and it reads it to build the context rather
-   * than to render anything.
-   *
-   * It is the shared, cached household promise the cards below use, so this
-   * costs no request — see components/profile/useHousehold.ts. What it answers
-   * is the question the registry cannot ask for itself: `visible` must stay
-   * synchronous, and "does this login have a family" is not knowable without a
-   * read. The page resolves it once and hands it down.
-   *
-   * Only staff are gated on it. A client is a family by definition, so
-   * showsAFamily short-circuits and no card waits for this to land.
-   */
-  const household = useHousehold(source);
-
-  const ctx: ProfileContext = useMemo(() => ({
-    // A student login sees only itself. The fixture carries that distinction so
-    // the switcher-less student view can be reviewed before real logins exist.
-    memberType: scenario === 'student' ? 'student' : 'guardian',
-    isStaff: !!isStaff,
-    // False while the read is in flight, which is right: a staff member's cards
-    // appear once there is demonstrably a family behind them, rather than
-    // flashing and being taken away.
-    hasHousehold: (household.data?.students.length ?? 0) > 0,
-    source,
-    flags: { unlockables: UNLOCKABLES_ENABLED },
-  }), [scenario, isStaff, source, household.data]);
-
-  const cards = useMemo(() => orderedCards(ctx), [ctx]);
+  const { loading, hasSession, cards, ctx, identity } = usePortalCards('account');
 
   if (loading) return <PortalLayout title="Profile" backTo={portalRoutes.home}><div /></PortalLayout>;
 
-  // A real deployment sends a signed-out visitor to the login, exactly as
-  // /portal/account does. Locally the demo stands in, so the page is reviewable
-  // without a client account existing yet.
+  // A real deployment sends a signed-out visitor to the login. Locally the demo
+  // stands in, so the page is reviewable without a client account existing yet.
   if (!hasSession && !DEMO_ALLOWED) {
     return <Navigate to="/portal/login" state={{ from: '/portal/profile' }} replace />;
   }
 
-  const demo = !hasSession && DEMO_ALLOWED;
-
   return (
-    <PortalLayout title="Profile" backTo={portalRoutes.home}>
+    <PortalLayout
+      title="Profile"
+      subtitle="Your details, your password and what we notify you about."
+      backTo={portalRoutes.home}
+    >
       <div style={{
         display: 'flex',
         flexDirection: 'column',
         gap: theme.spacing.md,
         maxWidth: '560px',
       }}>
-        {USE_FIXTURE && (
-          <div style={{
-            border: `1px dashed ${theme.colors.bdr.secondary}`,
-            borderRadius: theme.borderRadius.lg,
-            padding: theme.spacing.md,
-            background: theme.colors.bg.secondary,
-          }}>
-            <p style={{
-              ...theme.typography.captionSmall,
-              fontFamily: theme.fonts.mono,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: theme.colors.txt.tertiary,
-              margin: `0 0 ${theme.spacing.xs}`,
-            }}>
-              Demo data · no attendance tables yet
-            </p>
-            <SegmentedControl
-              options={FIXTURE_SCENARIOS.map(s => ({ value: s.value, label: s.label }))}
-              value={scenario}
-              onChange={setScenario}
-              ariaLabel="Demo scenario"
-            />
-            <p style={{
-              ...theme.typography.captionSmall,
-              fontFamily: theme.fonts.primary,
-              color: theme.colors.txt.tertiary,
-              margin: `${theme.spacing.xs} 0 0`,
-            }}>
-              {FIXTURE_SCENARIOS.find(s => s.value === scenario)?.hint}
-            </p>
-          </div>
-        )}
-
         {cards.map(card => {
           const Component = card.component;
           return (
             <Component
               key={card.id}
               ctx={ctx}
-              firstName={profile?.firstName ?? (demo ? 'Rosa' : '')}
-              lastName={profile?.lastName ?? (demo ? 'Alvarez' : '')}
-              email={profile?.email ?? (demo ? 'alvarez.family@example.com' : '')}
+              firstName={identity.firstName}
+              lastName={identity.lastName}
+              email={identity.email}
             />
           );
         })}

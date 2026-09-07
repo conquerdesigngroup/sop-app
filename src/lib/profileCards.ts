@@ -13,16 +13,30 @@ import NotificationsCard from '../components/profile/NotificationsCard';
 import AccountCard from '../components/profile/AccountCard';
 
 /**
- * The profile's card registry (§5.1).
+ * The portal's card registry (§5.1).
  *
  * WHY A REGISTRY AND NOT A PAGE
  *
- * The profile is going to accumulate: goals, tokens, rewards, per-user alerts.
- * Every one of those is a temptation to add another block to Profile.tsx, and
- * three features later that file is where all the feature logic lives and every
- * change touches it. So the page renders this array and nothing else — adding a
- * card means writing a component and adding one entry here, and the page is
- * never edited again.
+ * The portal is going to accumulate: goals, tokens, rewards, per-user alerts.
+ * Every one of those is a temptation to add another block to a page, and three
+ * features later that file is where all the feature logic lives and every
+ * change touches it. So the pages render this array and nothing else — adding a
+ * card means writing a component and adding one entry here, and no page is
+ * edited again.
+ *
+ * TWO SURFACES, ONE REGISTRY
+ *
+ * Every card declares where it belongs. `dashboard` is the portal home — what
+ * is on next, who is dancing, attendance, updates, files: the things a family
+ * opens the app to find out. `account` is /portal/profile — who you are, your
+ * password, your notifications: the things you change and then leave alone.
+ *
+ * The split matters because the two are read on completely different schedules.
+ * The dashboard is opened in a car three times a week; the account page is
+ * opened twice a year. Putting them on one page meant a parent scrolling past
+ * an avatar builder to find out what time class starts, which is the wrong way
+ * round — and it is why the dashboard cards used to sit one tap down behind a
+ * tile called "My Profile".
  *
  * `visible` RUNS BEFORE THE COMPONENT MOUNTS
  *
@@ -31,6 +45,14 @@ import AccountCard from '../components/profile/AccountCard';
  * guardian-only card's network request in the tab is the same leak whether or
  * not the pixels appear (§5.5 item 2).
  */
+
+/**
+ * Which page a card belongs on.
+ *
+ * 'dashboard' — /portal, the signed-in home. Family content.
+ * 'account'   — /portal/profile. Identity, password, notifications.
+ */
+export type PortalSurface = 'dashboard' | 'account';
 
 export interface ProfileContext {
   memberType: MemberType;
@@ -87,6 +109,8 @@ export interface ProfileCard {
   id: string;
   title: string;
   component: React.ComponentType<ProfileCardProps>;
+  /** Which page renders it. A card belongs to exactly one. */
+  surface: PortalSurface;
   visible: (ctx: ProfileContext) => boolean;
   defaultOrder: number;
 }
@@ -96,6 +120,10 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'identity',
     title: 'Identity',
     component: IdentityCard,
+    // Account, not dashboard. The avatar builder and the household nickname
+    // are set once and then left alone for a year; a parent checking what time
+    // class starts should not have to scroll past them.
+    surface: 'account',
     visible: () => true,
     defaultOrder: 10,
   },
@@ -105,6 +133,8 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'up-next',
     title: 'Up next',
     component: UpNextCard,
+    // The first thing on the dashboard, and the reason the dashboard exists.
+    surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 15,
   },
@@ -112,6 +142,7 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'household',
     title: 'Your dancers',
     component: HouseholdCard,
+    surface: 'dashboard',
     // Renders nothing for a one-child household — the card itself makes that
     // call, because the registry cannot know the child count without querying,
     // and `visible` must stay synchronous and free.
@@ -127,6 +158,7 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'season-stats',
     title: 'At a glance',
     component: SeasonStatsCard,
+    surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 19,
   },
@@ -134,6 +166,7 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'attendance',
     title: 'Attendance',
     component: AttendanceCardHost,
+    surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 20,
   },
@@ -141,6 +174,7 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'updates',
     title: 'Updates',
     component: UpdatesCard,
+    surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 30,
   },
@@ -148,6 +182,7 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'documents',
     title: 'Files & forms',
     component: DocumentsCard,
+    surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 40,
   },
@@ -155,16 +190,18 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'calendar',
     title: 'Add to your calendar',
     component: ClassCalendarCard,
+    surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 50,
   },
   {
-    // Below the content cards and above Account: it is a settings control, not
-    // something a parent came to read, but it belongs with the account rather
-    // than buried under the sign-out button.
+    // A settings control, not something a parent came to read — so it lives
+    // with the account rather than on the dashboard, above the sign-out button
+    // rather than buried under it.
     id: 'notifications',
     title: 'Notifications',
     component: NotificationsCard,
+    surface: 'account',
     // The ONE card that stays `!isStaff` rather than moving to showsAFamily,
     // and the reason is not the mistaken one the others carried. Staff keep
     // the Settings page toggle, which is wired to their own digest over the
@@ -179,26 +216,35 @@ export const PROFILE_CARDS: ProfileCard[] = [
     id: 'account',
     title: 'Account',
     component: AccountCard,
+    surface: 'account',
     visible: () => true,
     defaultOrder: 90,
   },
 ];
 
 /**
- * Registry order, with the user's saved order winning where it has an opinion.
+ * One surface's cards, in order, with the user's saved order winning where it
+ * has an opinion.
+ *
+ * `surface` is optional and omitting it returns every card, which is what the
+ * visibility tests want: who may see a card is a question about the context,
+ * not about which page happens to render it, and the two should be able to
+ * regress independently.
  *
  * A saved order that names a card which no longer exists is ignored rather than
  * treated as an error — a family that reordered their cards before a feature
- * was retired should not get a broken profile because of it.
+ * was retired should not get a broken page because of it.
  */
 export const orderedCards = (
   ctx: ProfileContext,
+  surface?: PortalSurface,
   savedOrder: string[] = [],
   hidden: string[] = [],
 ): ProfileCard[] => {
   const rank = new Map(savedOrder.map((id, index) => [id, index]));
 
   return PROFILE_CARDS
+    .filter(card => !surface || card.surface === surface)
     .filter(card => card.visible(ctx))
     .filter(card => !hidden.includes(card.id))
     .slice()

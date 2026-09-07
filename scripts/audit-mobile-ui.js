@@ -116,11 +116,15 @@ const PUBLIC_ROUTES = [
   '/portal/allstars/updates',
   '/portal/allstars/documents',
   '/portal/allstars/calendar',
-  // The profile. Signed-out it renders the seed fixture rather than
+  // The account page — identity, notifications, password. Short by design
+  // since the family cards moved to the dashboard on /portal.
+  //
+  // Signed out, BOTH it and /portal above render the seed fixture rather than
   // redirecting, but ONLY in a development build and only while
   // REACT_APP_ATTENDANCE_LIVE is unset — see DEMO_ALLOWED in
-  // src/pages/portal/Profile.tsx. Against a production build this row
-  // measures the redirect, not the cards.
+  // src/components/profile/usePortalCards.ts. Against a production build these
+  // two rows measure the redirect, not the cards, so the dashboard's real
+  // height is only ever measured by a development run.
   '/portal/profile',
 ];
 
