@@ -29,9 +29,14 @@ import zoLeg from '../../../../assets/holiday/halloween/zo_leg.webp';
 import zoTorso from '../../../../assets/holiday/halloween/zo_torso.webp';
 import zoUpperArm from '../../../../assets/holiday/halloween/zo_upperArm.webp';
 
-import wiBankL from '../../../../assets/holiday/halloween/wi_bankL.webp';
-import wiBankR from '../../../../assets/holiday/halloween/wi_bankR.webp';
-import wiLevel from '../../../../assets/holiday/halloween/wi_level.webp';
+import wiFly0 from '../../../../assets/holiday/halloween/wi_fly0.webp';
+import wiFly1 from '../../../../assets/holiday/halloween/wi_fly1.webp';
+import wiFly2 from '../../../../assets/holiday/halloween/wi_fly2.webp';
+import wiFly3 from '../../../../assets/holiday/halloween/wi_fly3.webp';
+import wiFly4 from '../../../../assets/holiday/halloween/wi_fly4.webp';
+import wiFly5 from '../../../../assets/holiday/halloween/wi_fly5.webp';
+import wiFly6 from '../../../../assets/holiday/halloween/wi_fly6.webp';
+import wiFly7 from '../../../../assets/holiday/halloween/wi_fly7.webp';
 
 /**
  * Halloween: the cast, the palette and the running order.
@@ -102,12 +107,19 @@ export const halloween: HolidayTheme = {
     zo_foreArm: { url: zoForeArm, w: 9, h: 22 },
     zo_leg: { url: zoLeg, w: 19, h: 32 },
 
-    // Baked from a 3D model at three bank angles — see witch.ts for why this
-    // one is frames rather than a rig. All three share one registered canvas,
-    // so swapping bank never shifts her position.
-    wi_bankL: { url: wiBankL, w: 68, h: 101 },
-    wi_level: { url: wiLevel, w: 68, h: 101 },
-    wi_bankR: { url: wiBankR, w: 68, h: 101 },
+    // A seamless 8-frame flight cycle baked from the supplied 3D model, whose
+    // hat and broom were bone-parented to its rig first so the body could
+    // actually be posed — see the witch.ts header. All eight are cropped from
+    // one union box across the whole cycle, so a frame swap moves only her and
+    // never her position.
+    wi_fly0: { url: wiFly0, w: 67, h: 101 },
+    wi_fly1: { url: wiFly1, w: 67, h: 101 },
+    wi_fly2: { url: wiFly2, w: 67, h: 101 },
+    wi_fly3: { url: wiFly3, w: 67, h: 101 },
+    wi_fly4: { url: wiFly4, w: 67, h: 101 },
+    wi_fly5: { url: wiFly5, w: 67, h: 101 },
+    wi_fly6: { url: wiFly6, w: 67, h: 101 },
+    wi_fly7: { url: wiFly7, w: 67, h: 101 },
   },
 
   acts: [ghost, bat, witch, zombie, skeleton],
