@@ -29,7 +29,20 @@ import { portalRoutes } from '../../lib/portal';
 
 type Step = 'details' | 'password' | 'verify';
 
-const RESEND_COOLDOWN_S = 30;
+/**
+ * Must be >= Supabase's smtp_max_frequency, which is 60 on this project.
+ *
+ * It was 30, and that is a silent dead end rather than a cosmetic mismatch.
+ * GoTrue refuses a second email to the same address inside its minimum
+ * interval, and portal-signup answers 200 { ok: true } whatever happened —
+ * the enumeration contract, and the right call — so a parent who tapped
+ * "Send a new code" at 31 seconds got a fresh countdown, no error, and no
+ * email. They then wait for something that was never sent.
+ *
+ * Raise the Supabase setting and this may come down again. Not the other way
+ * round: the button must never re-enable before the server will act on it.
+ */
+const RESEND_COOLDOWN_S = 60;
 
 const PortalSignUp: React.FC = () => {
   const navigate = useNavigate();
@@ -159,8 +172,19 @@ const PortalSignUp: React.FC = () => {
           <form onSubmit={submitDetails}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <p style={{ ...bodyText, margin: 0 }}>
-                Use the email address you gave the studio when you enrolled —
-                that is how we know it’s you.
+                Use the same email address as your <strong>Enrollio</strong>
+                {' '}account — the one the studio already has for you. That is how
+                we know it’s you.
+              </p>
+              {/* Stated as a consequence, not a rule. "Use your Enrollio email"
+                  reads as a preference; "another address will not work" is the
+                  thing that stops a parent typing their newer Gmail. It cannot
+                  be enforced in the answer — every response to this form is
+                  identical by design — so it has to be said in advance. */}
+              <p style={{ ...bodyText, margin: 0, color: theme.colors.txt.tertiary }}>
+                A different address will not be recognised, and no code will
+                arrive. If you are not sure which one it is, ask at the front
+                desk.
               </p>
               <Input
                 label="Your first name"
@@ -242,9 +266,24 @@ const PortalSignUp: React.FC = () => {
                 If <strong>{email.trim().toLowerCase()}</strong> is on our roster,
                 a 6-digit code is on its way to it. Enter the code to finish.
               </p>
+              {/* Promoted out of the muted tertiary line it used to be. On a
+                  brand-new sending domain this is the single most likely thing
+                  to go wrong, and a parent who does not find the email assumes
+                  the app is broken rather than that their mail app filed it. */}
+              <p style={{ ...bodyText, margin: 0 }}>
+                <strong>Check your spam or junk folder.</strong> The code often
+                lands there the first time. On a phone, look under{' '}
+                <strong>All Mail</strong> or <strong>Junk</strong> as well as
+                your inbox.
+              </p>
+              {/* There is no clock on this screen and there should not appear
+                  to be one. mailer_otp_exp is 3600, so the code is good for a
+                  full hour; the only countdown here is the resend cooldown,
+                  and parents were reading it as a deadline to type against. */}
               <p style={{ ...bodyText, margin: 0, color: theme.colors.txt.tertiary }}>
-                No email after a few minutes? Check spam, make sure this is the
-                address you enrolled with, or ask us at the front desk.
+                There is no rush — the code works for a whole hour, so you can
+                go and find the email and come back. Still nothing? Make sure
+                this is your Enrollio address, or ask us at the front desk.
               </p>
               <Input
                 label="Code from your email"
@@ -257,10 +296,10 @@ const PortalSignUp: React.FC = () => {
                 style={{ ...inputFontFix, letterSpacing: '0.25em', fontFamily: theme.fonts.mono }}
               />
               <Button type="submit" variant="primary" fullWidth loading={busy} disabled={code.trim().length < 6}>
-                Verify and sign in
+                Verify and log in
               </Button>
               <Button type="button" variant="ghost" size="sm" onClick={handleResend} disabled={cooldown > 0 || busy}>
-                {cooldown > 0 ? `Send a new code (${cooldown}s)` : 'Send a new code'}
+                {cooldown > 0 ? `Send a new code in ${cooldown}s` : 'Send a new code'}
               </Button>
             </div>
           </form>
@@ -276,7 +315,7 @@ const PortalSignUp: React.FC = () => {
       }}>
         Already have an account?{' '}
         <Link to="/portal/login" style={{ color: theme.colors.primary, fontWeight: 600 }}>
-          Sign in
+          Log in
         </Link>
       </p>
     </PortalLayout>
