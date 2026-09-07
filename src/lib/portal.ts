@@ -69,6 +69,44 @@ export const CLASS_CATEGORY_LABEL: Record<PortalClassCategory, string> = {
 /** Display order wherever all three appear together. */
 export const CLASS_CATEGORY_ORDER: readonly PortalClassCategory[] = ['allstars', 'academy', 'tnt'];
 
+/**
+ * Which section to open a class in, given only its category.
+ *
+ * The dashboard knows a family's classes from their enrolments, which carry a
+ * category and no program — so this is what lets a class listed there be
+ * tapped through to the same page the schedules link to.
+ *
+ * DERIVED, NOT WRITTEN OUT
+ *
+ * PROGRAM_CLASS_CATEGORIES is the one place that decides where a category is
+ * listed, and a hand-kept inverse of it here would go stale the first time a
+ * schedule's categories changed — silently, pointing at a section that no
+ * longer lists the class, where ClassDetail would report it missing.
+ *
+ * A category on more than one schedule resolves to the NARROWEST. TNT is
+ * listed on the All-Star schedule as well as its own, and sending a TNT parent
+ * to /portal/allstars would give them a back button into the company section,
+ * which is closed to them. Its own section is the honest home.
+ *
+ * Null for a class whose category is missing or unrecognised. Callers render
+ * it as plain text rather than guessing a section.
+ */
+export const programSlugForCategory = (
+  category: string | null | undefined,
+): ProgramSlug | null => {
+  if (!category) return null;
+
+  const listedOn = PROGRAM_SLUGS.filter(slug =>
+    (PROGRAM_CLASS_CATEGORIES[slug] as readonly string[]).includes(category));
+
+  if (!listedOn.length) return null;
+
+  return listedOn.reduce((narrowest, slug) =>
+    PROGRAM_CLASS_CATEGORIES[slug].length < PROGRAM_CLASS_CATEGORIES[narrowest].length
+      ? slug
+      : narrowest);
+};
+
 // ---------------------------------------------------------------- routes
 
 export const portalRoutes = {

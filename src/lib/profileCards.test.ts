@@ -45,9 +45,11 @@ const idsFor = (c: ProfileContext, surface?: PortalSurface) =>
  * In dashboard order, which the surface test below asserts exactly.
  *
  * Updates sits second, above the roster: it is the only card here whose
- * content is new, dated and useless once missed.
+ * content is new, dated and useless once missed. The three that describe the
+ * same set of enrolments — the glance, the classes, the attendance — then run
+ * together rather than with the class list stranded at the bottom.
  */
-const FAMILY_CARDS = ['up-next', 'updates', 'household', 'season-stats', 'attendance', 'documents', 'calendar'];
+const FAMILY_CARDS = ['up-next', 'updates', 'household', 'season-stats', 'calendar', 'attendance', 'documents'];
 
 describe('who sees the family cards', () => {
   it('shows them to a client immediately, without waiting for the household read', () => {
