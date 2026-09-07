@@ -317,6 +317,34 @@ Deno.serve(async (req: Request) => {
             .select('id');
           if (claimErr) console.error('portal-signup claim failed:', claimErr.message);
 
+          // Claim the HOUSEHOLD as well (v47). portal_household_members is the
+          // row every RLS policy pivots on and the row the Portal Viewer counts
+          // as "Signed up"; a client without one sees an empty portal.
+          //
+          // IT HAS TO HAPPEN HERE, not in a trigger on auth.users. The profile
+          // rebuild above is a DELETE, and portal_household_members.profile_id
+          // is ON DELETE CASCADE — a membership created any earlier is taken
+          // out on its way past, silently, leaving exactly the bug v47 exists
+          // to fix.
+          //
+          // Before v47 nothing here created it at all: the only writer was the
+          // client's own first household read, i.e. whichever page happened to
+          // load it. Until the dashboard landed that was /portal/profile, one
+          // tap in from the front door. Of the four families who signed up on
+          // 2026-09-07, the two who tapped through were linked and the two who
+          // stopped at the front door were not — indistinguishable in the
+          // Viewer from the 334 who never signed up.
+          //
+          // Logged and continued rather than failed. A family with an account
+          // and no membership sees an empty portal, which is bad; a family
+          // refused an account because the link failed is worse, and
+          // link_household_member() still runs on their first portal read.
+          const { data: linkedHousehold, error: linkErr } = await admin.rpc(
+            'link_household_member_for',
+            { p_profile_id: userId },
+          );
+          if (linkErr) console.error('portal-signup household link failed:', linkErr.message);
+
           // The six-digit code, sent from the server so GoTrue's "no such
           // account" 422 is never visible to a browser. The Magic Link email
           // template must contain {{ .Token }}.
@@ -329,7 +357,16 @@ Deno.serve(async (req: Request) => {
           await log(
             'client_signed_up',
             'success',
-            { email, roster_rows_claimed: claimed?.length ?? 0, otp_sent: !otpErr },
+            {
+              email,
+              roster_rows_claimed: claimed?.length ?? 0,
+              otp_sent: !otpErr,
+              // Recorded so an unlinked signup is visible in the activity log
+              // on the day it happens, rather than as a wrong number in the
+              // Viewer a fortnight later. False means no ACTIVE household
+              // carries this address — the family needs looking up by hand.
+              household_linked: !linkErr && !!linkedHousehold,
+            },
             { id: userId, email, name },
           );
         })(),
