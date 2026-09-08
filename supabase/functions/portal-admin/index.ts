@@ -63,6 +63,7 @@ interface Body {
     | 'roster_deactivate'
     | 'roster_reactivate'
     | 'client_list'
+    | 'client_access_events'
     | 'client_set_email'
     | 'client_set_password'
     | 'client_set_active'
@@ -72,6 +73,7 @@ interface Body {
   rosterId?: string;
   filter?: string;
   search?: string;
+  days?: number;
   limit?: number;
   offset?: number;
   userId?: string;
@@ -306,6 +308,172 @@ Deno.serve(async (req: Request) => {
         });
         if (error) return json(400, { error: error.message });
         return json(200, { success: true, ...data });
+      }
+
+      // --------------------------------------------- client_access_events
+      // WHO IS TRYING TO GET IN, AND WHETHER THEY CAN.
+      //
+      // Read-only. The four things the front desk needs the morning after a
+      // launch — a failed sign-in, a reset request, a registration, a failed
+      // code — already write to activity_logs; nothing new is recorded here.
+      // What this adds is the three facts that say what the event MEANT, none
+      // of which the browser can see for itself:
+      //
+      //   * is there an account on this address at all
+      //   * has that account claimed a household (v47/v48's "signed up" as
+      //     against "account not linked")
+      //   * is the address one the studio actually holds
+      //
+      // Without the first one, every row reads "failed to sign in" and the
+      // family who has no account to sign in TO is indistinguishable from the
+      // one who fat-fingered a password. Those two need opposite phone calls.
+      //
+      // WHY NOT portal_signup_attempts: that table is the rate-limit ledger,
+      // and portal-signup prunes it to the last 24 hours on every call, so it
+      // cannot answer "what happened this week". Measured 2026-09-08: 95
+      // sign-in failures in activity_logs against 66 surviving in the ledger.
+      //
+      // NOT LOGGED, deliberately. This is a read, and the app-wide refresh
+      // calls it on every pull-to-refresh; an audit row per glance would bury
+      // the rows worth reading. client_list does not log either.
+      case 'client_access_events': {
+        const days = Math.min(Math.max(Math.round(body.days ?? 30), 1), 90);
+        const since = new Date(Date.now() - days * 86400000).toISOString();
+
+        // activity_logs action -> the word the front desk uses for it.
+        const KIND: Record<string, string> = {
+          user_sign_in_failed: 'signin_failed',
+          user_password_reset_requested: 'reset_requested',
+          client_signed_up: 'registered',
+          client_email_verified: 'verified',
+          client_email_verify_failed: 'verify_failed',
+          client_signup_rejected: 'rejected',
+        };
+
+        const { data: logs, error: logErr } = await admin
+          .from('activity_logs')
+          .select('action, details, entity_title, user_email, created_at')
+          .in('action', Object.keys(KIND))
+          .gte('created_at', since)
+          .order('created_at', { ascending: false })
+          .limit(4000);
+        if (logErr) return json(400, { error: logErr.message });
+
+        // user_sign_in_failed is written by the STAFF login too (AuthContext).
+        // Only the portal's rows carry one of these two marks, and a staff
+        // member's mistyped password has no business on a parents screen.
+        const isPortalRow = (row: any) => {
+          if (row.action !== 'user_sign_in_failed') return true;
+          const d = row.details ?? {};
+          return d.source === 'client_reported' || d.surface === 'portal';
+        };
+
+        // The address is in a different place depending on who wrote the row:
+        // portal-signup puts it in details.email, a signed-in client's own
+        // rows carry user_email, and the deactivated-sign-in path has only
+        // entity_title.
+        const emailOf = (row: any) =>
+          String(row.details?.email ?? row.user_email ?? row.entity_title ?? '')
+            .trim()
+            .toLowerCase();
+
+        const rows = (logs ?? []).filter(
+          (r: any) => isPortalRow(r) && emailOf(r).includes('@'),
+        );
+
+        // Reference data. Whole-table reads on purpose: these are 38 profiles,
+        // 349 households, 395 students and 17 memberships as of 2026-09-08, and
+        // matching in memory is what lets the join be case-insensitive on both
+        // sides — PostgREST .in() is not. Bounded so a future 10k roster
+        // degrades to a partial answer rather than a timeout.
+        const [profRes, hhRes, memRes, stuRes] = await Promise.all([
+          admin.from('profiles').select('id, email, role, is_active').limit(5000),
+          admin.from('portal_households').select('id, primary_email, display_name, status').limit(5000),
+          admin.from('portal_household_members').select('profile_id, household_id').limit(5000),
+          admin.from('portal_students').select('household_id').limit(20000),
+        ]);
+
+        const linkedProfileIds = new Set(
+          (memRes.data ?? []).map((m: any) => m.profile_id),
+        );
+        const profileByEmail = new Map<string, any>();
+        for (const p of profRes.data ?? []) {
+          const key = String(p.email ?? '').trim().toLowerCase();
+          if (key) profileByEmail.set(key, p);
+        }
+        const studentsByHousehold = new Map<string, number>();
+        for (const st of stuRes.data ?? []) {
+          if (!st.household_id) continue;
+          studentsByHousehold.set(st.household_id, (studentsByHousehold.get(st.household_id) ?? 0) + 1);
+        }
+        const householdByEmail = new Map<string, any>();
+        for (const h of hhRes.data ?? []) {
+          const key = String(h.primary_email ?? '').trim().toLowerCase();
+          if (key) householdByEmail.set(key, h);
+        }
+
+        const blank = () => ({
+          signin_failed: 0,
+          reset_requested: 0,
+          registered: 0,
+          verified: 0,
+          verify_failed: 0,
+          rejected: 0,
+        });
+
+        const people = new Map<string, any>();
+        const events: any[] = [];
+
+        for (const row of rows) {
+          const email = emailOf(row);
+          const kind = KIND[row.action];
+          const at = row.created_at;
+
+          let person = people.get(email);
+          if (!person) {
+            const profile = profileByEmail.get(email) ?? null;
+            const household = householdByEmail.get(email) ?? null;
+            person = {
+              email,
+              householdId: household?.id ?? null,
+              householdName: household?.display_name ?? null,
+              householdStatus: household?.status ?? null,
+              studentCount: household ? studentsByHousehold.get(household.id) ?? 0 : 0,
+              emailKnown: !!household,
+              hasAccount: !!profile,
+              accountRole: profile?.role ?? null,
+              accountActive: profile ? profile.is_active !== false : null,
+              isLinked: profile ? linkedProfileIds.has(profile.id) : false,
+              counts: blank(),
+              firstAt: at,
+              lastAt: at,
+              lastIp: row.details?.ip ?? null,
+            };
+            people.set(email, person);
+          }
+
+          person.counts[kind] += 1;
+          // rows arrive newest first, so only the floor ever moves.
+          if (at < person.firstAt) person.firstAt = at;
+
+          if (events.length < 300) {
+            events.push({
+              at,
+              kind,
+              email,
+              ip: row.details?.ip ?? null,
+              reason: row.details?.reason ?? null,
+            });
+          }
+        }
+
+        return json(200, {
+          success: true,
+          days,
+          people: Array.from(people.values()),
+          events,
+          truncated: rows.length >= 4000,
+        });
       }
 
       // --------------------------------------------------- client_set_email

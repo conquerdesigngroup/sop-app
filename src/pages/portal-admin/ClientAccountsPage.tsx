@@ -7,6 +7,7 @@ import { useRefreshable } from '../../contexts/RefreshContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { parseCsvToObjects } from '../../lib/csv';
 import { callPortalAdmin } from '../../lib/portalAdminApi';
+import AccessEventsPanel from '../../components/portal-admin/AccessEventsPanel';
 import { CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
 import {
   Badge,
@@ -365,6 +366,17 @@ const ClientAccountsPage: React.FC = () => {
             </Button>
           </div>
         }
+      />
+
+      {/* Above the roster because it is the only part of this page that can be
+          URGENT: a family locked out today is worth more of the reader's
+          attention than a roster that has not changed since the last import.
+          "Find in roster" drops an address into the search below. */}
+      <AccessEventsPanel
+        onFindInRoster={email => {
+          setFilter('all');
+          setSearch(email);
+        }}
       />
 
       {/* Filter row. Wraps — see the mobile rules in CLAUDE.md. */}
