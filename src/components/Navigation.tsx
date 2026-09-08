@@ -13,6 +13,7 @@ import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
 import { useTaskCounts } from '../hooks/useTaskCounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useSheetDrag } from '../hooks/useSheetDrag';
 import { bottomNavPathsFor } from './BottomNavigation';
 
 // Icons
@@ -208,6 +209,13 @@ const Navigation: React.FC = () => {
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const { myOverdue, allOverdue } = useTaskCounts();
   const reducedMotion = useReducedMotion();
+
+  // The grabber at the top of the sheet is a drag handle now, not a decal.
+  const sheetDrag = useSheetDrag({
+    isOpen: showMobileMenu,
+    onDismiss: closeMobileMenu,
+    reducedMotion,
+  });
   // Whichever control opened the menu that is currently showing, so Escape
   // can hand focus back to it instead of dropping it on the body.
   const lastTriggerRef = useRef<HTMLElement | null>(null);
@@ -772,11 +780,23 @@ const Navigation: React.FC = () => {
                   role="dialog"
                   aria-modal="true"
                   aria-label="More pages"
+                  ref={sheetDrag.sheetRef}
                   className={reducedMotion ? undefined : 'bottom-sheet-enter'}
-                  style={{...styles.mobileMenu, backgroundColor: colors.bg.secondary, borderTopColor: colors.bdr.secondary}}
+                  style={{
+                    ...styles.mobileMenu,
+                    backgroundColor: colors.bg.secondary,
+                    borderTopColor: colors.bdr.secondary,
+                    ...sheetDrag.sheetStyle,
+                  }}
                 >
-                  {/* Drag handle indicator */}
-                  <div style={styles.dragHandle}>
+                  {/* The grab handle. Pull it down to dismiss — aria-hidden
+                      because it is pointer-only and adds nothing Escape and
+                      the backdrop do not already offer. */}
+                  <div
+                    aria-hidden="true"
+                    {...sheetDrag.handleProps}
+                    style={{...styles.dragHandle, ...sheetDrag.handleProps.style}}
+                  >
                     <div style={{...styles.dragHandleBar, backgroundColor: colors.bdr.secondary}} />
                   </div>
                   <div style={styles.mobileMenuContent}>
@@ -1082,7 +1102,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   dragHandle: {
     display: 'flex',
     justifyContent: 'center',
-    padding: '12px 0 8px 0',
+    // 34px tall, not the 24px it was drawn at: this is a drag target now, and
+    // the bar itself is 4px of it.
+    padding: '16px 0 14px 0',
   },
   dragHandleBar: {
     width: '36px',
