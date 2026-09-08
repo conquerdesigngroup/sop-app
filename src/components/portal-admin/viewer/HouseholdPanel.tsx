@@ -21,6 +21,7 @@ import {
 import { PortalProgram } from '../../../types';
 import {
   ViewerHouseholdDetail,
+  ACCESS_BADGE,
   accessLabel,
   ageFrom,
   deleteHouseholdNote,
@@ -227,7 +228,7 @@ const HouseholdPanel: React.FC<{
         </h2>
 
         <ChipRow>
-          <Badge variant={access.ok ? 'success' : 'default'} size="sm">{access.text}</Badge>
+          <Badge variant={ACCESS_BADGE[access.state]} size="sm">{access.text}</Badge>
           <CategoryChips categories={household.categories} />
           {household.status !== 'active' && <Badge variant="warning" size="sm">Inactive</Badge>}
         </ChipRow>
