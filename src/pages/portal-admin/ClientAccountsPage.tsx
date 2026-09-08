@@ -67,6 +67,11 @@ interface ImportResult {
   updated: number;
   unchanged: number;
   auto_claimed: number;
+  households_created: number;
+  students_created: number;
+  students_updated: number;
+  /** Rows that got an allowlist entry but no student record, for want of a dob. */
+  students_skipped_no_dob: number;
   rejected: { row: number; email: string; reason: string }[];
 }
 
@@ -82,6 +87,7 @@ const FILTER_OPTIONS = [
 const REJECT_REASON: Record<string, string> = {
   invalid_email: 'not a valid email address',
   missing_student_name: 'no student name',
+  invalid_dob: 'date of birth is not a real past date',
   unknown_program: 'unknown program',
   duplicate_in_file: 'duplicate row in the file',
 };
@@ -122,11 +128,22 @@ const parseCsv = (text: string): string[][] => {
   return rows;
 };
 
-/** Header names as the enrollment export (or a hand-made sheet) writes them. */
+/**
+ * Header names as the enrollment export (or a hand-made sheet) writes them.
+ *
+ * Deliberately absent: bare `first name` / `last name`. In a parents-and-students
+ * export those belong to the PARENT, and mapping them onto the child would file
+ * a family under the wrong person's name — silently, because both spellings are
+ * plausible. The student's own columns have to say `student`.
+ */
 const HEADER_MAP: Record<string, string> = {
   email: 'email', 'guardian email': 'email', 'parent email': 'email',
   student: 'student_name', 'student name': 'student_name', student_name: 'student_name', dancer: 'student_name',
+  'student first': 'student_first_name', 'student first name': 'student_first_name', student_first_name: 'student_first_name',
+  'student last': 'student_last_name', 'student last name': 'student_last_name', student_last_name: 'student_last_name',
   guardian: 'guardian_name', 'guardian name': 'guardian_name', guardian_name: 'guardian_name', parent: 'guardian_name', 'parent name': 'guardian_name',
+  dob: 'date_of_birth', 'date of birth': 'date_of_birth', date_of_birth: 'date_of_birth',
+  'student dob': 'date_of_birth', student_dob: 'date_of_birth', birthday: 'date_of_birth', birthdate: 'date_of_birth',
   program: 'program_slug', program_slug: 'program_slug',
   id: 'external_id', external_id: 'external_id', 'enrollment id': 'external_id', 'student id': 'external_id',
   notes: 'notes',
@@ -137,8 +154,14 @@ const csvToRosterRows = (text: string): { rows: Record<string, string>[]; error?
   if (table.length < 2) return { rows: [], error: 'Need a header row and at least one data row.' };
 
   const headers = table[0].map(h => HEADER_MAP[h.trim().toLowerCase()] ?? null);
-  if (!headers.includes('email') || !headers.includes('student_name')) {
-    return { rows: [], error: 'The header row must include "email" and "student_name" (or "student") columns.' };
+  const hasSplitName = headers.includes('student_first_name') && headers.includes('student_last_name');
+  if (!headers.includes('email') || !(headers.includes('student_name') || hasSplitName)) {
+    return {
+      rows: [],
+      error:
+        'The header row must include "email", plus either "student_name" or both ' +
+        '"student_first_name" and "student_last_name".',
+    };
   }
 
   const rows = table.slice(1).map(cells => {
@@ -260,7 +283,11 @@ const ClientAccountsPage: React.FC = () => {
     setModalError('');
     try {
       // Chunked so a big season export cannot hit the function's body cap.
-      const totals: ImportResult = { inserted: 0, updated: 0, unchanged: 0, auto_claimed: 0, rejected: [] };
+      const totals: ImportResult = {
+        inserted: 0, updated: 0, unchanged: 0, auto_claimed: 0,
+        households_created: 0, students_created: 0, students_updated: 0,
+        students_skipped_no_dob: 0, rejected: [],
+      };
       for (let i = 0; i < parsed.length; i += 500) {
         const chunk = parsed.slice(i, i + 500);
         const data = await callPortalAdmin({
@@ -273,6 +300,11 @@ const ClientAccountsPage: React.FC = () => {
         totals.updated += r.updated;
         totals.unchanged += r.unchanged;
         totals.auto_claimed += r.auto_claimed;
+        // Absent when the function predates v49; ?? 0 keeps an older deploy readable.
+        totals.households_created += r.households_created ?? 0;
+        totals.students_created += r.students_created ?? 0;
+        totals.students_updated += r.students_updated ?? 0;
+        totals.students_skipped_no_dob += r.students_skipped_no_dob ?? 0;
         // Rejected row numbers are chunk-relative; shift them back to the file.
         totals.rejected.push(...r.rejected.map(x => ({ ...x, row: x.row + i })));
       }
@@ -616,6 +648,21 @@ const ClientAccountsPage: React.FC = () => {
               {importResult.inserted} added · {importResult.updated} updated · {importResult.unchanged} unchanged
               {importResult.auto_claimed > 0 && ` · ${importResult.auto_claimed} linked to existing accounts`}
             </p>
+            {(importResult.students_created > 0 || importResult.students_updated > 0 || importResult.households_created > 0) && (
+              <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>
+                Student records: {importResult.students_created} created
+                {importResult.students_updated > 0 && `, ${importResult.students_updated} birthday corrected`}
+                {importResult.households_created > 0 && ` · ${importResult.households_created} new famil${importResult.households_created === 1 ? 'y' : 'ies'}`}
+              </p>
+            )}
+            {importResult.students_skipped_no_dob > 0 && (
+              <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.status.warning, margin: 0 }}>
+                {importResult.students_skipped_no_dob} row
+                {importResult.students_skipped_no_dob === 1 ? '' : 's'} got a sign-up entry but no student
+                record, because the date of birth was missing. Those parents can still register; the child
+                will have no age, classes or attendance until you re-import with a date of birth.
+              </p>
+            )}
             {importResult.rejected.length > 0 && (
               <div>
                 <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.status.warning, margin: '0 0 6px' }}>
@@ -642,10 +689,15 @@ const ClientAccountsPage: React.FC = () => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>
-              Paste CSV from the enrollment export, or pick a file. Needs
-              columns <code>email</code> and <code>student_name</code>; optional{' '}
-              <code>guardian_name</code>, <code>program</code> (allstars/academy),{' '}
-              <code>external_id</code>, <code>notes</code>.
+              Paste CSV from the enrollment export, or pick a file. One row per dancer — a
+              parent with three children gets three rows sharing their email.
+            </p>
+            <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>
+              Needs <code>email</code>, plus either <code>student_name</code> or{' '}
+              <code>student_first_name</code> + <code>student_last_name</code>. Include{' '}
+              <code>student_dob</code> and the import also creates the child's student
+              record; without it the parent can sign up but the child has no age, classes
+              or attendance. Optional: <code>guardian_name</code>, <code>notes</code>.
             </p>
             <div>
               <input
@@ -668,7 +720,11 @@ const ClientAccountsPage: React.FC = () => {
               rows={10}
               value={importText}
               onChange={e => setImportText(e.target.value)}
-              placeholder={'email,student_name,guardian_name,program\nfamily@example.com,Mia Jones,Sarah Jones,allstars'}
+              placeholder={
+                'email,guardian_name,student_first_name,student_last_name,student_dob\n' +
+                'family@example.com,Jones,Mia,Jones,2018-04-12\n' +
+                'family@example.com,Jones,Leo,Jones,2020-11-03'
+              }
               disabled={importBusy}
               error={modalError || undefined}
               style={{ fontFamily: theme.fonts.mono, fontSize: '12px' }}
