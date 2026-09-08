@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
 import {
   Button, Card, Input, Modal, Select, Textarea, Badge, Divider, EmptyState,
@@ -15,6 +15,25 @@ import { isManagementRole, roleLabel } from '../../lib/roles';
 import { DAY_OPTIONS, timeColumnToInput, timeInputToColumn } from '../../lib/portalAdmin';
 import { CLASS_CATEGORY_LABEL, CLASS_CATEGORY_ORDER, dayName } from '../../lib/portal';
 import { ManagerList, RowActions, RowMeta, classSummary, FieldPair, useAutoFocus } from './shared';
+import { callPortalAdmin } from '../../lib/portalAdminApi';
+import { classesCsvToRows } from '../../lib/classImport';
+
+interface ClassImportResult {
+  inserted: number;
+  updated: number;
+  unchanged: number;
+  rejected: { row: number; title: string; reason: string }[];
+  new_classes: { title: string; name: string }[];
+  active_not_in_file: { name: string; match_key: string }[];
+}
+
+const CLASS_REJECT_REASON: Record<string, string> = {
+  missing_title: 'no title',
+  invalid_day: 'day is missing or not a single weekday',
+  invalid_time: 'start time is not a time',
+  unknown_group: 'Group is not Academy, TNT or All-Stars',
+  duplicate_in_file: 'duplicate of another row in the file',
+};
 
 /**
  * The class list, and who may publish to each one.
@@ -308,13 +327,54 @@ const ClassesSection: React.FC<{
     }
   };
 
+  // ---------------------------------------------------------- class import
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importSkipped, setImportSkipped] = useState<{ row: number; title: string; reason: string }[]>([]);
+  const [importResult, setImportResult] = useState<ClassImportResult | null>(null);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
+
+  const closeImport = () => {
+    setShowImport(false);
+    setImportText('');
+    setImportError('');
+    setImportSkipped([]);
+    setImportResult(null);
+  };
+
+  const runClassImport = async () => {
+    const { rows, skipped, error } = classesCsvToRows(importText);
+    if (error) { setImportError(error); return; }
+    if (rows.length === 0) { setImportError('No classes could be read from that file.'); return; }
+
+    setImportBusy(true);
+    setImportError('');
+    try {
+      const data = await callPortalAdmin({
+        action: 'class_import',
+        rows,
+        filename: `classes ${new Date().toISOString().slice(0, 10)} (${rows.length} classes)`,
+      });
+      setImportSkipped(skipped);
+      setImportResult(data.result);
+      reload();
+    } catch (e: any) {
+      setImportError(e.message || 'The import failed');
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
   const toggleInstructor = (profileId: string, on: boolean) =>
     setInstructorIds(prev => on ? [...prev, profileId] : prev.filter(id => id !== profileId));
 
   return (
     <>
       {isAdmin ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <Button variant="outline" onClick={() => setShowImport(true)}>Import classes</Button>
           <Button leftIcon={<PlusIcon />} onClick={startNew}>New class</Button>
         </div>
       ) : (
@@ -710,6 +770,137 @@ const ClassesSection: React.FC<{
                 {formError}
               </p>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* ------------------------------------------- import classes modal */}
+      <Modal
+        isOpen={showImport}
+        onClose={() => !importBusy && closeImport()}
+        title="Import classes"
+        size="lg"
+        footer={
+          importResult ? (
+            <Button variant="primary" onClick={closeImport}>Done</Button>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={closeImport} disabled={importBusy}>Cancel</Button>
+              <Button variant="primary" onClick={runClassImport} loading={importBusy} disabled={!importText.trim()}>
+                Import
+              </Button>
+            </>
+          )
+        }
+      >
+        {importResult ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <p style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, color: theme.colors.txt.primary, margin: 0 }}>
+              {importResult.inserted} added · {importResult.updated} updated · {importResult.unchanged} unchanged
+            </p>
+
+            {importResult.new_classes.length > 0 && (
+              <div>
+                <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.status.warning, margin: '0 0 6px' }}>
+                  New to the schedule — check these are genuinely new, and not a class that moved
+                  day or time (a moved class arrives as a new one, and its old row keeps its attendance):
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                  {importResult.new_classes.map((c, i) => (
+                    <li key={i} style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.mono, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' }}>
+                      {c.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {importResult.active_not_in_file.length > 0 && (
+              <div>
+                <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: '0 0 6px' }}>
+                  {importResult.active_not_in_file.length} active class
+                  {importResult.active_not_in_file.length === 1 ? ' is' : 'es are'} not in this file.
+                  Nothing was changed — deactivate any that have genuinely ended:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                  {importResult.active_not_in_file.slice(0, 20).map((c, i) => (
+                    <li key={i} style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.mono, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' }}>
+                      {c.name}
+                    </li>
+                  ))}
+                  {importResult.active_not_in_file.length > 20 && (
+                    <li style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.tertiary }}>
+                      …and {importResult.active_not_in_file.length - 20} more
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {(importResult.rejected.length > 0 || importSkipped.length > 0) && (
+              <div>
+                <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.status.warning, margin: '0 0 6px' }}>
+                  {importResult.rejected.length + importSkipped.length} row
+                  {importResult.rejected.length + importSkipped.length === 1 ? '' : 's'} skipped:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                  {importSkipped.map((r, i) => (
+                    <li key={`s${i}`} style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.mono, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' }}>
+                      row {r.row} ({r.title || 'no title'}) — {r.reason}
+                    </li>
+                  ))}
+                  {importResult.rejected.map((r, i) => (
+                    <li key={`r${i}`} style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.mono, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' }}>
+                      {r.title || 'no title'} — {CLASS_REJECT_REASON[r.reason] ?? r.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <p style={{ ...theme.typography.caption, fontFamily: theme.fonts.primary, color: theme.colors.txt.tertiary, margin: 0 }}>
+              Nothing is deleted or deactivated by an import, and no enrolment or attendance
+              was touched. Style, level, age group and running order stay as you set them here.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>
+              The classes export from the enrollment system, pasted or as a file. It updates
+              schedule, room, instructor, description, fees, capacity, age range and season
+              dates. Style, level, age group, running order and what-to-bring are yours and
+              are never overwritten.
+            </p>
+            <div>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: 'none' }}
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) {
+                    const reader = new FileReader();
+                    reader.onload = () => setImportText(String(reader.result ?? ''));
+                    reader.readAsText(f);
+                  }
+                  e.target.value = '';
+                }}
+              />
+              <Button variant="outline" size="sm" onClick={() => importFileRef.current?.click()} disabled={importBusy}>
+                Choose CSV file
+              </Button>
+            </div>
+            <Textarea
+              label="CSV"
+              rows={10}
+              value={importText}
+              onChange={e => { setImportText(e.target.value); setImportError(''); }}
+              placeholder={'Title,Location,Days,Start Time,End Time,...'}
+              disabled={importBusy}
+              error={importError || undefined}
+              style={{ fontFamily: theme.fonts.mono, fontSize: '12px' }}
+            />
           </div>
         )}
       </Modal>

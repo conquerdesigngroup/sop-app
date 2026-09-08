@@ -5,7 +5,8 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { useToast } from '../../contexts/ToastContext';
 import { useRefreshable } from '../../contexts/RefreshContext';
 import { useConfirm } from '../../hooks/useConfirm';
-import { supabase } from '../../lib/supabase';
+import { parseCsvToObjects } from '../../lib/csv';
+import { callPortalAdmin } from '../../lib/portalAdminApi';
 import { CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
 import {
   Badge,
@@ -95,40 +96,6 @@ const REJECT_REASON: Record<string, string> = {
 // ------------------------------------------------------------------ CSV
 
 /**
- * Small CSV parser: quoted fields, embedded commas and quotes, CRLF. Kept here
- * because the import is the only CSV in the app; if a second appears, promote
- * it to lib.
- */
-const parseCsv = (text: string): string[][] => {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }
-        else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ',') {
-      row.push(field); field = '';
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field); field = '';
-      if (row.some(v => v.trim() !== '')) rows.push(row);
-      row = [];
-    } else field += c;
-  }
-  row.push(field);
-  if (row.some(v => v.trim() !== '')) rows.push(row);
-  return rows;
-};
-
-/**
  * Header names as the enrollment export (or a hand-made sheet) writes them.
  *
  * Deliberately absent: bare `first name` / `last name`. In a parents-and-students
@@ -150,10 +117,9 @@ const HEADER_MAP: Record<string, string> = {
 };
 
 const csvToRosterRows = (text: string): { rows: Record<string, string>[]; error?: string } => {
-  const table = parseCsv(text);
-  if (table.length < 2) return { rows: [], error: 'Need a header row and at least one data row.' };
+  const { rows, headers } = parseCsvToObjects(text, HEADER_MAP);
+  if (rows.length === 0) return { rows: [], error: 'Need a header row and at least one data row.' };
 
-  const headers = table[0].map(h => HEADER_MAP[h.trim().toLowerCase()] ?? null);
   const hasSplitName = headers.includes('student_first_name') && headers.includes('student_last_name');
   if (!headers.includes('email') || !(headers.includes('student_name') || hasSplitName)) {
     return {
@@ -163,14 +129,6 @@ const csvToRosterRows = (text: string): { rows: Record<string, string>[]; error?
         '"student_first_name" and "student_last_name".',
     };
   }
-
-  const rows = table.slice(1).map(cells => {
-    const obj: Record<string, string> = {};
-    headers.forEach((key, i) => {
-      if (key && cells[i] !== undefined) obj[key] = cells[i].trim();
-    });
-    return obj;
-  });
   return { rows };
 };
 
@@ -205,19 +163,6 @@ const ClientAccountsPage: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const callPortalAdmin = useCallback(async (body: Record<string, unknown>) => {
-    const { data, error } = await supabase.functions.invoke('portal-admin', { body });
-    if (error) {
-      let message = error.message || 'The request failed';
-      try {
-        const parsed = await (error as any).context?.json?.();
-        if (parsed?.error) message = parsed.error;
-      } catch { /* keep the generic message */ }
-      throw new Error(message);
-    }
-    if (data?.error) throw new Error(data.error);
-    return data;
-  }, []);
 
   // `silent` is the app-wide refresh: same first page, but the list stays on
   // screen while it loads instead of dropping to a spinner.

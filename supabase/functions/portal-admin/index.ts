@@ -59,6 +59,7 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
 interface Body {
   action:
     | 'roster_import'
+    | 'class_import'
     | 'roster_deactivate'
     | 'roster_reactivate'
     | 'client_list'
@@ -209,6 +210,41 @@ Deno.serve(async (req: Request) => {
           unchanged: data?.unchanged ?? 0,
           auto_claimed: data?.auto_claimed ?? 0,
           rejected: Array.isArray(data?.rejected) ? data.rejected.length : 0,
+          filename: body.filename ?? null,
+        });
+
+        return json(200, { success: true, result: data });
+      }
+
+      // ------------------------------------------------------ class_import
+      //
+      // The schedule half of the Enrolio export. Same shape as roster_import:
+      // the RPC does the work and gates on is_admin() about the real caller,
+      // this logs it once so the log cannot be forgotten by one path.
+      case 'class_import': {
+        if (!Array.isArray(body.rows) || body.rows.length === 0) {
+          return json(400, { error: 'rows must be a non-empty array' });
+        }
+        if (body.rows.length > 2000) {
+          return json(400, { error: 'Import at most 2000 rows at a time' });
+        }
+
+        const { data, error } = await caller.rpc('admin_class_import', {
+          p_rows: body.rows,
+          p_filename: body.filename ?? null,
+        });
+        if (error) {
+          await log('classes_imported', 'class', null, body.filename ?? 'class import',
+            { reason: error.message }, 'failure');
+          return json(400, { error: error.message });
+        }
+
+        await log('classes_imported', 'class', null, body.filename ?? 'class import', {
+          inserted: data?.inserted ?? 0,
+          updated: data?.updated ?? 0,
+          unchanged: data?.unchanged ?? 0,
+          rejected: Array.isArray(data?.rejected) ? data.rejected.length : 0,
+          active_not_in_file: Array.isArray(data?.active_not_in_file) ? data.active_not_in_file.length : 0,
           filename: body.filename ?? null,
         });
 
