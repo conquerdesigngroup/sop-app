@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { theme } from '../../theme';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useSheetDrag } from '../../hooks/useSheetDrag';
 
 /**
  * A bottom sheet, for the phone.
@@ -10,7 +12,8 @@ import { theme } from '../../theme';
  * is a box floating in the middle of the screen with the page dimmed behind it,
  * and anything tall inside it fights the keyboard. A sheet anchored to the
  * bottom edge is what a phone expects, reaches the thumb, and can be dismissed
- * by tapping the part of the page still visible above it.
+ * by pulling its header down, or by tapping the part of the page still visible
+ * above it.
  *
  * MEASUREMENTS THAT MATTER
  *
@@ -51,6 +54,13 @@ const PortalSheet: React.FC<Props> = ({
   // is simply born at its final position and nothing moves.
   const [mounted, setMounted] = useState(isOpen);
   const [shown, setShown] = useState(false);
+
+  const reducedMotion = useReducedMotion();
+  // slideOut: false — the exit below already slides this panel to
+  // translateY(100%). A second slide from the hook would race it and lose.
+  const drag = useSheetDrag({
+    isOpen, onDismiss: onClose, reducedMotion, slideOut: false,
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -115,6 +125,7 @@ const PortalSheet: React.FC<Props> = ({
       />
 
       <div
+        ref={drag.sheetRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -135,12 +146,20 @@ const PortalSheet: React.FC<Props> = ({
           borderTop: `1px solid ${theme.colors.bdr.primary}`,
           borderTopLeftRadius: theme.borderRadius.xl,
           borderTopRightRadius: theme.borderRadius.xl,
-          transform: shown ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)',
+          // Composed rather than spread from drag.sheetStyle: this panel
+          // already owns its transform, and an undefined one from the hook
+          // would erase the open and close slide entirely.
+          transform: drag.offset > 0
+            ? `translateY(${drag.offset}px)`
+            : (shown ? 'translateY(0)' : 'translateY(100%)'),
+          transition: drag.dragging
+            ? 'none'
+            : 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)',
           overflow: 'hidden',
         }}
       >
         <div
+          {...drag.handleProps}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -148,10 +167,11 @@ const PortalSheet: React.FC<Props> = ({
             padding: '14px 16px 12px',
             borderBottom: `1px solid ${theme.colors.bdr.primary}`,
             flexShrink: 0,
+            ...drag.handleProps.style,
           }}
         >
-          {/* The grabber. Decorative — dragging is not wired up — but it is the
-              thing that tells a thumb this panel came from the bottom edge. */}
+          {/* The grabber. The whole header strip below it is the drag zone —
+              36x4px is a signal, not a target. */}
           <div
             aria-hidden="true"
             style={{
@@ -182,6 +202,7 @@ const PortalSheet: React.FC<Props> = ({
           <button
             type="button"
             onClick={onClose}
+            onPointerDown={e => e.stopPropagation()}
             aria-label={`Close ${title.toLowerCase()}`}
             style={{
               width: '36px',

@@ -66,13 +66,30 @@ interface Options {
   isOpen: boolean;
   onDismiss: () => void;
   reducedMotion: boolean;
+  /**
+   * Whether to carry the throw out on release. Default true, for a sheet that
+   * simply unmounts when it closes.
+   *
+   * Pass false for one that animates its own exit — PortalSheet slides itself
+   * to translateY(100%) over 220ms — where a slide-out here would be a second
+   * animation racing the host's, and the host's would win anyway.
+   */
+  slideOut?: boolean;
 }
 
 export interface SheetDrag {
   /** Attach to the sheet itself — read for its height when sliding out. */
   sheetRef: React.RefObject<HTMLDivElement | null>;
-  /** Merge into the sheet's style, after its own transform if it has one. */
+  /**
+   * Merge into the sheet's style. Only for a sheet with no transform of its
+   * own: `transform` here is undefined at rest, and spreading that over a
+   * host's own translate erases it. Compose from `offset` instead in that case.
+   */
   sheetStyle: React.CSSProperties;
+  /** How far down the sheet is being held, in px. 0 at rest. */
+  offset: number;
+  /** True while a finger is down — compose a transition off this. */
+  dragging: boolean;
   /** Spread onto the grab handle. */
   handleProps: {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => void;
@@ -90,7 +107,9 @@ interface Sample {
   t: number;
 }
 
-export const useSheetDrag = ({ isOpen, onDismiss, reducedMotion }: Options): SheetDrag => {
+export const useSheetDrag = ({
+  isOpen, onDismiss, reducedMotion, slideOut = true,
+}: Options): SheetDrag => {
   const sheetRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -129,7 +148,7 @@ export const useSheetDrag = ({ isOpen, onDismiss, reducedMotion }: Options): She
   }, [isOpen]);
 
   const dismiss = useCallback(() => {
-    if (reducedMotion) {
+    if (reducedMotion || !slideOut) {
       setPhase('idle');
       setOffset(0);
       onDismiss();
@@ -146,7 +165,7 @@ export const useSheetDrag = ({ isOpen, onDismiss, reducedMotion }: Options): She
       timer.current = null;
       onDismiss();
     }, SLIDE_OUT_MS);
-  }, [onDismiss, reducedMotion]);
+  }, [onDismiss, reducedMotion, slideOut]);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
     // Ignore a right-click drag; every touch and pen contact counts.
@@ -211,6 +230,8 @@ export const useSheetDrag = ({ isOpen, onDismiss, reducedMotion }: Options): She
 
   return {
     sheetRef,
+    offset,
+    dragging: phase === 'dragging',
     sheetStyle: {
       transform: offset > 0 ? `translateY(${offset}px)` : undefined,
       // 1:1 with the finger while it is down; eased only once it lifts.
