@@ -184,7 +184,14 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
       if (/banned/i.test(msg)) {
         return { ok: false, error: 'This account has been disabled. Please contact the studio.' };
       }
-      return { ok: false, error: 'That email and password don’t match. Try again, or reset your password below.' };
+      // Deliberately does NOT say "reset your password below". GoTrue answers
+      // a wrong password and an address with no account identically, and for
+      // the second family that advice is a trap: the reset says "if that
+      // address has an account, a link is on its way", so they go and wait for
+      // an email that will never be sent. Six households did exactly that in
+      // the first day of the launch. PortalLogin offers BOTH doors under this
+      // message instead — the same two for everybody, so nothing is revealed.
+      return { ok: false, error: 'That email and password don’t match.' };
     }
 
     const p = await loadProfile(data.user.id);

@@ -47,6 +47,59 @@ const DoorOption: React.FC<{ action: React.ReactNode; children: React.ReactNode 
   </div>
 );
 
+/**
+ * The way out of the dead end, offered under a failed sign-in and under the
+ * reset confirmation alike.
+ *
+ * THE TRAP IT CLOSES. A parent who has never made an account types the email
+ * the studio has for them, invents a password, and is told the two do not
+ * match — which is true, and which reads as "wrong password". So they tap
+ * Forgot your password, are told a link is on its way if the address has an
+ * account, and go and wait for an email that will never be sent. Measured over
+ * the first day of the launch (2026-09-07/08): six households, forty failed
+ * sign-ins, eight reset requests, and not one registration between them. The
+ * named-doors chooser was already live the whole time — it is not enough,
+ * because by the time somebody is on this form they have already chosen.
+ *
+ * SAYS THE SAME THING TO EVERYBODY, which is what makes it safe. It never
+ * claims the address has no account — it cannot know, and answering that would
+ * turn this form into a test for who attends the studio. It states the one
+ * fact that is true for every reader: an Enrollio address is not a login until
+ * somebody signs up.
+ */
+const NoAccountHelp: React.FC<{ onSignUp: () => void }> = ({ onSignUp }) => (
+  <div
+    style={{
+      marginTop: '16px',
+      padding: '12px',
+      borderRadius: theme.borderRadius.md,
+      border: `1px solid ${theme.colors.bdr.secondary}`,
+      background: theme.colors.bg.tertiary,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+    }}
+  >
+    <p
+      style={{
+        ...theme.typography.bodySmall,
+        fontFamily: theme.fonts.primary,
+        color: theme.colors.txt.secondary,
+        margin: 0,
+      }}
+    >
+      <strong>Never made an account here?</strong> Then there is nothing to log
+      in to yet. Your email address on its own will not get you in — you have to
+      sign up once, and then it will.
+    </p>
+    <div>
+      <Button variant="primary" size="sm" onClick={onSignUp}>
+        Sign up
+      </Button>
+    </div>
+  </div>
+);
+
 const ChooseDoor: React.FC<{ onLogIn: () => void }> = ({ onLogIn }) => {
   const navigate = useNavigate();
   return (
@@ -149,6 +202,11 @@ const PortalLogin: React.FC = () => {
     );
   }
 
+  // Carries the address across so nobody retypes it — PortalSignUp prefills
+  // from location.state.email.
+  const goToSignUp = () =>
+    navigate('/portal/signup', { state: { email: email.trim().toLowerCase() } });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
@@ -239,6 +297,11 @@ const PortalLogin: React.FC = () => {
           </div>
         </form>
 
+        {/* Only after a failure. Shown before the reset link on purpose: the
+            reset is the wrong answer for the family this rescues, and it is
+            the one they reach for unaided. */}
+        {error && <NoAccountHelp onSignUp={goToSignUp} />}
+
         <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {!showReset ? (
             <button
@@ -259,15 +322,36 @@ const PortalLogin: React.FC = () => {
               Forgot your password?
             </button>
           ) : resetSent ? (
-            <p style={{
-              ...theme.typography.bodySmall,
-              fontFamily: theme.fonts.primary,
-              color: theme.colors.txt.secondary,
-              margin: 0,
-            }}>
-              If that address has an account, a reset link is on its way. Check
-              your inbox (and spam folder).
-            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <p style={{
+                ...theme.typography.bodySmall,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.secondary,
+                margin: 0,
+              }}>
+                If that address has an account, a reset link is on its way.
+                Check your inbox (and spam folder).
+              </p>
+              {/* The second half of the same sentence, and the half that was
+                  missing. Said to everybody, so it still reveals nothing about
+                  which addresses have accounts — but a parent who never signed
+                  up now learns it here instead of waiting for an email that is
+                  never sent. */}
+              <p style={{
+                ...theme.typography.bodySmall,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.secondary,
+                margin: 0,
+              }}>
+                <strong>If you have never made an account here, no email will
+                come.</strong> Sign up first — it only takes a minute.
+              </p>
+              <div>
+                <Button variant="primary" size="sm" onClick={goToSignUp}>
+                  Sign up
+                </Button>
+              </div>
+            </div>
           ) : (
             <form onSubmit={handleReset}>
               <p style={{
@@ -298,7 +382,12 @@ const PortalLogin: React.FC = () => {
 
       {/* Was "New here? Create your family account" — the sentence the
           chooser now replaces. It stays as a way BACK, for someone who tapped
-          Log in and then realised they have never made an account. */}
+          Log in and then realised they have never made an account.
+
+          Hidden once NoAccountHelp is up: that block says the same thing in
+          the same words, and two "Never made an account here?" on one screen
+          reads as a page that is not sure what it is telling you. */}
+      {!error && (
       <p style={{
         ...theme.typography.body,
         fontFamily: theme.fonts.primary,
@@ -307,11 +396,16 @@ const PortalLogin: React.FC = () => {
         maxWidth: '440px',
       }}>
         Never made an account here?{' '}
-        <Link to="/portal/signup" style={{ color: theme.colors.primary, fontWeight: 600 }}>
+        <Link
+          to="/portal/signup"
+          state={{ email: email.trim().toLowerCase() }}
+          style={{ color: theme.colors.primary, fontWeight: 600 }}
+        >
           Sign up instead
         </Link>
         .
       </p>
+      )}
       </>
       )}
     </PortalLayout>
