@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useSheetDrag } from '../hooks/useSheetDrag';
 
 /**
  * The floating "+" above the bottom bar, for management on a phone.
@@ -103,6 +105,9 @@ const QuickAddButton: React.FC = () => {
   const location = useLocation();
   const colors = useThemeColors();
   const [open, setOpen] = useState(false);
+  const reducedMotion = useReducedMotion();
+  // Same grabber, same gesture as the nav sheet.
+  const drag = useSheetDrag({ isOpen: open, onDismiss: () => setOpen(false), reducedMotion });
 
   // A new page means the action landed; close so the sheet is not still up
   // over the editor it opened.
@@ -180,6 +185,7 @@ const QuickAddButton: React.FC = () => {
             }}
           />
           <div
+            ref={drag.sheetRef}
             role="dialog"
             aria-label="Quick add"
             className="bottom-sheet-enter"
@@ -197,9 +203,21 @@ const QuickAddButton: React.FC = () => {
               paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
               maxHeight: '70dvh',
               overflowY: 'auto',
+              ...drag.sheetStyle,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+            {/* Pull down to dismiss. Padded to a 34px strip because it is a
+                drag target, not a decal. */}
+            <div
+              aria-hidden="true"
+              {...drag.handleProps}
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                padding: '16px 0 14px',
+                ...drag.handleProps.style,
+              }}
+            >
               <div style={{ width: '36px', height: '4px', borderRadius: '2px', backgroundColor: colors.bdr.secondary }} />
             </div>
             <div style={{
