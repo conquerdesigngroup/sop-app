@@ -43,8 +43,16 @@ export interface ViewerHousehold {
   name: string;
   status: 'active' | 'inactive';
   studentCount: number;
-  /** Rows in portal_household_members: 0 = nobody has signed up and linked yet. */
+  /** Rows in portal_household_members: 0 = nobody has claimed this family yet. */
   linkedLogins: number;
+  /**
+   * Client accounts carrying this family's address that have NOT claimed it.
+   *
+   * The difference between "they have never signed up" and "they signed up and
+   * cannot see their dancers", which used to be one number and needed to be
+   * two — see accessLabel.
+   */
+  unlinkedAccounts: number;
   enrollmentCount: number;
   /** Class categories the household's children are enrolled in — All-Stars, Academy, TNT. */
   categories: string[];
@@ -137,6 +145,10 @@ const mapHousehold = (r: any): ViewerHousehold => ({
   status: r.status,
   studentCount: r.student_count ?? 0,
   linkedLogins: r.linked_logins ?? 0,
+  // Absent until v48 is applied, and 0 is the honest reading of that: it says
+  // "no stranded account known", which is what the Viewer showed before the
+  // column existed. Never undefined reaching a comparison.
+  unlinkedAccounts: r.unlinked_accounts ?? 0,
   enrollmentCount: r.enrollment_count ?? 0,
   categories: r.categories ?? [],
   lastNoteAt: r.last_note_at ?? null,
@@ -265,15 +277,52 @@ export const classMatches = (c: ViewerClass, query: string): boolean => {
 /**
  * What to say about a family's access, in the words the owner would use.
  *
- * "Signed up" means a portal login has claimed this household. It is derived
- * from portal_household_members rather than auth.users because that is the
- * question worth answering — an account that exists but never linked sees an
- * empty portal, which is indistinguishable from having no account at all.
+ * THREE STATES, BECAUSE THEY NEED THREE DIFFERENT RESPONSES
+ *
+ * This used to be a boolean over portal_household_members, and the note
+ * against it said an unlinked account "is indistinguishable from having no
+ * account at all". That was true of the data and false of the studio: one
+ * family needs chasing to sign up, the other has already signed up and cannot
+ * see their dancers. Collapsing them put two families with working, verified
+ * accounts into a 330-row chase list on 2026-09-07, where nobody would have
+ * found them.
+ *
+ * 'linked'      — a login has claimed this household. Nothing to do.
+ * 'unlinked'    — an account carries this address and has not claimed it. A
+ *                 fault, not a to-do: an inactive household, an address that
+ *                 changed in Enrolio after the account was made, or a link
+ *                 that errored. Somebody has to look at it. v47 stops this
+ *                 arising at signup; it does not stop it arising.
+ * 'none'        — never signed up. The chase list.
+ *
+ * A household with a linked login AND a stranded second guardian reads as
+ * 'linked'. The family has access, which is what this column answers; the
+ * second account shows up in the ACCESS filter's own count, not here.
  */
-export const accessLabel = (h: ViewerHousehold): { text: string; ok: boolean } =>
-  h.linkedLogins > 0
-    ? { text: h.linkedLogins > 1 ? `${h.linkedLogins} logins` : 'Signed up', ok: true }
-    : { text: 'Not signed up', ok: false };
+export type AccessState = 'linked' | 'unlinked' | 'none';
+
+/** Badge colour per state, so the two screens rendering it cannot disagree. */
+export const ACCESS_BADGE: Record<AccessState, 'success' | 'warning' | 'default'> = {
+  linked: 'success',
+  unlinked: 'warning',
+  none: 'default',
+};
+
+export const accessLabel = (h: ViewerHousehold): { text: string; state: AccessState } => {
+  if (h.linkedLogins > 0) {
+    return {
+      text: h.linkedLogins > 1 ? `${h.linkedLogins} logins` : 'Signed up',
+      state: 'linked',
+    };
+  }
+  if (h.unlinkedAccounts > 0) {
+    // Deliberately not "Signed up (broken)". It names what is true — the
+    // account exists, the link does not — so the owner knows the family is
+    // not waiting on an invitation.
+    return { text: 'Account not linked', state: 'unlinked' };
+  }
+  return { text: 'Not signed up', state: 'none' };
+};
 
 // ------------------------------------------------------------------ queries
 
@@ -513,7 +562,15 @@ export const deleteHouseholdNote = async (id: string): Promise<ViewerError> => {
 /** The pseudo-division for "no active enrollment". Never a real category. */
 export const NO_DIVISION = 'none';
 
-export type AccessFilter = 'any' | 'signed-up' | 'not-signed-up';
+/**
+ * 'not-signed-up' means NO ACCOUNT, not "no membership row".
+ *
+ * That is the change of meaning v48 brings, and it is the point of the filter:
+ * it is the chase list, and a family who has already signed up does not belong
+ * on it. They are under 'not-linked', which is a much shorter list and a
+ * different job.
+ */
+export type AccessFilter = 'any' | 'signed-up' | 'not-linked' | 'not-signed-up';
 export type ActivityFilter = 'any' | 'active' | 'inactive';
 
 export interface ViewerFilters {
@@ -558,7 +615,10 @@ export const householdPasses = (h: ViewerHousehold, query: string, f: ViewerFilt
   if (!householdMatches(h, query)) return false;
   if (!matchesDivisions(h.categories, f.divisions)) return false;
   if (f.access === 'signed-up' && h.linkedLogins === 0) return false;
-  if (f.access === 'not-signed-up' && h.linkedLogins > 0) return false;
+  if (f.access === 'not-linked' && !(h.linkedLogins === 0 && h.unlinkedAccounts > 0)) return false;
+  // Not "no membership row" — no ACCOUNT. A family who signed up and failed to
+  // link is not waiting to be invited and must not appear on the chase list.
+  if (f.access === 'not-signed-up' && (h.linkedLogins > 0 || h.unlinkedAccounts > 0)) return false;
   if (f.activity === 'active' && h.status !== 'active') return false;
   if (f.activity === 'inactive' && h.status === 'active') return false;
   return true;

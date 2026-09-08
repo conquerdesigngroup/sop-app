@@ -10,6 +10,7 @@ import {
   ViewerFilters,
   ViewerHousehold,
   ViewerStudent,
+  ACCESS_BADGE,
   accessLabel,
   ageFrom,
   classPasses,
@@ -140,11 +141,16 @@ export const HouseholdList: React.FC<{
         filters={filters} setFilters={setFilters}
         shown={shown.length} total={households.length} noun="families"
       >
-        {/* The filter the beta actually needs: who still has to sign up. */}
+        {/* The filter the beta actually needs: who still has to sign up.
+            "Not linked" sits between the two because it is neither — an
+            account that exists and cannot see its dancers. It is normally
+            empty, and when it is not, those families need looking at rather
+            than chasing. */}
         <FilterChips
           label="Access"
           options={[
             { value: 'signed-up', label: 'Signed up' },
+            { value: 'not-linked', label: 'Not linked' },
             { value: 'not-signed-up', label: 'Not signed up' },
           ]}
           selected={filters.access === 'any' ? [] : [filters.access]}
@@ -173,7 +179,7 @@ export const HouseholdList: React.FC<{
                   well renders the same long address twice on one row. */}
               {h.name !== h.email && <RowSub mono>{h.email}</RowSub>}
               <ChipRow>
-                <Badge variant={access.ok ? 'success' : 'default'} size="sm">{access.text}</Badge>
+                <Badge variant={ACCESS_BADGE[access.state]} size="sm">{access.text}</Badge>
                 <Badge variant="default" size="sm">
                   {h.studentCount === 1 ? '1 dancer' : `${h.studentCount} dancers`}
                 </Badge>

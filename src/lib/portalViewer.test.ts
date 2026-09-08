@@ -1,6 +1,7 @@
 import {
   ViewerHousehold,
   ViewerStudent,
+  ACCESS_BADGE,
   accessLabel,
   ageFrom,
   classMatches,
@@ -17,6 +18,7 @@ const household = (over: Partial<ViewerHousehold> = {}): ViewerHousehold => ({
   status: 'active',
   studentCount: 3,
   linkedLogins: 0,
+  unlinkedAccounts: 0,
   enrollmentCount: 4,
   categories: ['allstars'],
   lastNoteAt: null,
@@ -132,16 +134,39 @@ describe('classMatches', () => {
 });
 
 describe('accessLabel', () => {
-  it('says a family has not signed up when nothing has claimed the household', () => {
-    expect(accessLabel(household({ linkedLogins: 0 }))).toEqual({ text: 'Not signed up', ok: false });
+  it('says a family has not signed up when there is no account and no link', () => {
+    expect(accessLabel(household({ linkedLogins: 0, unlinkedAccounts: 0 })))
+      .toEqual({ text: 'Not signed up', state: 'none' });
   });
 
   it('says signed up for exactly one login', () => {
-    expect(accessLabel(household({ linkedLogins: 1 }))).toEqual({ text: 'Signed up', ok: true });
+    expect(accessLabel(household({ linkedLogins: 1 }))).toEqual({ text: 'Signed up', state: 'linked' });
   });
 
   it('counts when two parents have both claimed the same household', () => {
-    expect(accessLabel(household({ linkedLogins: 2 }))).toEqual({ text: '2 logins', ok: true });
+    expect(accessLabel(household({ linkedLogins: 2 }))).toEqual({ text: '2 logins', state: 'linked' });
+  });
+
+  /**
+   * The distinction this whole state exists for. On 2026-09-07 two families
+   * with real, verified accounts were rendered identically to the 330 who had
+   * never signed up, because the label was a boolean over membership rows.
+   */
+  it('separates an account that never linked from a family that never signed up', () => {
+    expect(accessLabel(household({ linkedLogins: 0, unlinkedAccounts: 1 })))
+      .toEqual({ text: 'Account not linked', state: 'unlinked' });
+  });
+
+  it('reads as signed up when one guardian linked and a second did not', () => {
+    // The family has access, which is what the badge answers.
+    expect(accessLabel(household({ linkedLogins: 1, unlinkedAccounts: 1 })))
+      .toEqual({ text: 'Signed up', state: 'linked' });
+  });
+
+  it('gives every state a badge colour', () => {
+    expect(ACCESS_BADGE.linked).toBe('success');
+    expect(ACCESS_BADGE.unlinked).toBe('warning');
+    expect(ACCESS_BADGE.none).toBe('default');
   });
 });
 
@@ -221,6 +246,24 @@ describe('householdPasses', () => {
     expect(householdPasses(not, '', filters({ access: 'not-signed-up' }))).toBe(true);
     expect(householdPasses(signedUp, '', filters({ access: 'not-signed-up' }))).toBe(false);
     expect(householdPasses(signedUp, '', filters({ access: 'signed-up' }))).toBe(true);
+  });
+
+  /**
+   * The chase list must not contain families who have already signed up. That
+   * is the whole reason "not linked" is its own filter rather than a badge
+   * alone: someone working the "Not signed up" list should never be emailing
+   * "please create an account" to a family who created one an hour ago.
+   */
+  it('keeps a family who signed up but never linked off the chase list', () => {
+    const stranded = household({ linkedLogins: 0, unlinkedAccounts: 1 });
+    expect(householdPasses(stranded, '', filters({ access: 'not-signed-up' }))).toBe(false);
+    expect(householdPasses(stranded, '', filters({ access: 'not-linked' }))).toBe(true);
+    expect(householdPasses(stranded, '', filters({ access: 'signed-up' }))).toBe(false);
+  });
+
+  it('shows nobody under "not linked" once everyone with an account has one', () => {
+    expect(householdPasses(household({ linkedLogins: 1 }), '', filters({ access: 'not-linked' }))).toBe(false);
+    expect(householdPasses(household({ linkedLogins: 0 }), '', filters({ access: 'not-linked' }))).toBe(false);
   });
 
   it('applies the search AND the filters, not one or the other', () => {
