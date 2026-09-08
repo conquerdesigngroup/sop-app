@@ -21,35 +21,16 @@ import {
   countDays,
   formatHours,
   formatDateShort,
-  formatTime12,
-  toCSV,
   downloadCSV,
   todayISO,
 } from './hoursUtils';
+import { buildPayrollCSV, EmployeeRollup } from './payrollExport';
 
 const PRESETS: PeriodPreset[] = ['this-week', 'last-week', 'this-month', 'last-month', 'all'];
 
 const money = (n: number) =>
   `$${(Number.isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-interface EmployeeRollup {
-  employeeId: string;
-  name: string;
-  email: string;
-  entries: WorkHoursEntry[];
-  /** Approved + pending. Excludes rejected — see sumPayableHours. */
-  total: number;
-  approved: number;
-  pending: number;
-  rejected: number;
-  days: number;
-  /** Frozen pay for approved entries. Authoritative — this is what is owed. */
-  approvedPay: number;
-  /** Pending hours priced at today's rates. An estimate, not a commitment. */
-  estimatedPendingPay: number;
-  /** Approved entries that had no rate configured, so were frozen at $0.00. */
-  missingRateCount: number;
-}
 
 /**
  * Admin-only view of everyone's logged hours, for running payroll by hand
@@ -289,69 +270,36 @@ const TeamHoursPanel: React.FC = () => {
     }
   };
 
+  /**
+   * Hand the accountant a payroll file, not a transaction log.
+   *
+   * The whole build lives in payrollExport so it can be tested; this only
+   * supplies what the panel already has on screen and reports the result.
+   */
   const handleExport = () => {
-    const rows: (string | number)[][] = [
-      ['Employee', 'Email', 'Date', 'Time In', 'Time Out', 'Break (min)', 'Hours', 'Category', 'Status', 'Rate', 'Amount', 'Note'],
-    ];
-
-    rollups.forEach(r => {
-      r.entries.forEach(e => {
-        const frozen = getPayForEntry(e.id);
-        const liveRate = getEmployeePayRate(r.employeeId, e.categoryId);
-
-        // Approved rows carry the frozen figures — those are what is owed.
-        // Anything else is priced at today's rate and marked "(est.)" so a
-        // pending line is never mistaken for a settled one.
-        const rate = e.status === 'approved' ? frozen?.rateSnapshot : liveRate;
-        const amount = e.status === 'approved'
-          ? frozen?.payAmount
-          : (e.status === 'pending' ? (e.totalHours || 0) * (liveRate ?? 0) : undefined);
-        const suffix = e.status === 'approved' ? '' : ' (est.)';
-
-        rows.push([
-          r.name,
-          r.email,
-          e.workDate,
-          formatTime12(e.startTime),
-          formatTime12(e.endTime),
-          e.breakMinutes || 0,
-          formatHours(e.totalHours),
-          getWorkCategoryName(e.categoryId) || '',
-          e.status,
-          rate === undefined ? 'no rate set' : rate.toFixed(2),
-          amount === undefined ? '' : amount.toFixed(2) + suffix,
-          e.notes || '',
-        ]);
-      });
+    const { csv, filename, entryCount, employeeCount } = buildPayrollCSV({
+      rollups,
+      range,
+      lookups: {
+        getCategoryName: getWorkCategoryName,
+        getFrozenPay: getPayForEntry,
+        getRate: getEmployeePayRate,
+      },
+      generatedBy: currentUser
+        ? `${currentUser.firstName} ${currentUser.lastName}`.trim() || currentUser.email
+        : undefined,
     });
 
-    if (rows.length === 1) {
+    if (entryCount === 0) {
       showToast('Nothing to export for this period', 'warning');
       return;
     }
 
-    const entryCount = rows.length - 1;
-
-    // Break the footer out by status. A single TOTAL would either silently
-    // include rejected hours (and risk overpaying) or silently drop them
-    // (and look like the rows do not add up). Showing all three lines makes
-    // the arithmetic checkable at a glance.
-    rows.push([]);
-    rows.push(['TOTAL HOURS TO PAY (approved + pending)', '', '', '', '', '', formatHours(teamTotal), '', '', '', '', '']);
-    rows.push(['  of which approved', '', '', '', '', '', formatHours(approvedTotal), '', '', '', '', '']);
-    rows.push(['  of which pending', '', '', '', '', '', formatHours(pendingTotal), '', '', '', '', '']);
-    if (rejectedTotal > 0) {
-      rows.push(['REJECTED (not included above)', '', '', '', '', '', formatHours(rejectedTotal), '', '', '', '', '']);
-    }
-    rows.push([]);
-    rows.push(['APPROVED PAY (owed)', '', '', '', '', '', '', '', '', '', approvedPayTotal.toFixed(2), '']);
-    rows.push(['ESTIMATED PENDING PAY (not yet approved)', '', '', '', '', '', '', '', '', '', estPendingPayTotal.toFixed(2), '']);
-    if (missingRateTotal > 0) {
-      rows.push([`WARNING: ${missingRateTotal} approved entr${missingRateTotal === 1 ? 'y' : 'ies'} had no rate set and were locked at 0.00`, '', '', '', '', '', '', '', '', '', '', '']);
-    }
-
-    downloadCSV(`hours_${range.start}_to_${range.end}.csv`, toCSV(rows));
-    showToast(`Exported ${entryCount} ${entryCount === 1 ? 'entry' : 'entries'}`, 'success');
+    downloadCSV(filename, csv);
+    showToast(
+      `Exported ${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} for ${employeeCount} ${employeeCount === 1 ? 'person' : 'people'}`,
+      'success'
+    );
   };
 
   // ---------------------------------------------------------------- render
@@ -480,7 +428,7 @@ const TeamHoursPanel: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-          <Button variant="primary" onClick={handleExport}>Export CSV</Button>
+          <Button variant="primary" onClick={handleExport}>Export payroll CSV</Button>
           {hasV7Schema && (
             <>
               <Button variant="outline" onClick={() => setShowRates(true)}>Pay rates</Button>

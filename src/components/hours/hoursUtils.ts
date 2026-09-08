@@ -74,6 +74,10 @@ export const formatDateLong = (iso: string): string =>
     day: 'numeric',
   });
 
+/** "2026-08-11" -> "Tue" */
+export const formatWeekday = (iso: string): string =>
+  parseISODate(iso).toLocaleDateString('en-US', { weekday: 'short' });
+
 // ---------------------------------------------------------------- hours
 
 /** Decimal hours, always 2dp — 3.67, not 3:40. Matches payroll convention. */
