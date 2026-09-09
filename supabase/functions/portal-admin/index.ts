@@ -60,6 +60,8 @@ interface Body {
   action:
     | 'roster_import'
     | 'class_import'
+    | 'roster_add_student'
+    | 'roster_revoke_student'
     | 'roster_deactivate'
     | 'roster_reactivate'
     | 'client_list'
@@ -71,6 +73,8 @@ interface Body {
   rows?: unknown[];
   filename?: string;
   rosterId?: string;
+  studentId?: string;
+  notes?: string;
   filter?: string;
   search?: string;
   days?: number;
@@ -250,6 +254,64 @@ Deno.serve(async (req: Request) => {
           filename: body.filename ?? null,
         });
 
+        return json(200, { success: true, result: data });
+      }
+
+      // ------------------------------------------------- roster_add_student
+      //
+      // Grants ONE dancer their own login. The RPC holds every refusal — it has
+      // to read students, households, profiles and memberships to decide, and
+      // half of those checks are not expressible as a single guarded update the
+      // way roster_deactivate is.
+      case 'roster_add_student': {
+        if (!body.studentId) return json(400, { error: 'studentId is required' });
+        if (!body.newEmail || !EMAIL_RE.test(body.newEmail.trim())) {
+          return json(400, { error: 'A valid email address is required' });
+        }
+
+        const { data, error } = await caller.rpc('admin_roster_add_student', {
+          p_student_id: body.studentId,
+          p_email: body.newEmail.trim(),
+          p_notes: body.notes ?? null,
+        });
+        if (error) {
+          await log('student_login_granted', 'roster', body.studentId, null,
+            { email: body.newEmail, reason: error.message }, 'failure');
+          return json(400, { error: error.message });
+        }
+
+        await log('student_login_granted', 'roster', data?.roster_id ?? null,
+          data?.student_name ?? null, {
+            email: data?.email ?? null,
+            student_id: body.studentId,
+            household: data?.household_name ?? null,
+            claimed: data?.claimed ?? false,
+            linked: data?.linked ?? false,
+          });
+        return json(200, { success: true, result: data });
+      }
+
+      // ---------------------------------------------- roster_revoke_student
+      //
+      // The real undo. Deactivating the roster row alone revokes nothing once
+      // somebody has registered: access lives in portal_household_members.
+      case 'roster_revoke_student': {
+        if (!body.rosterId) return json(400, { error: 'rosterId is required' });
+
+        const { data, error } = await caller.rpc('admin_roster_revoke_student', {
+          p_roster_id: body.rosterId,
+        });
+        if (error) {
+          await log('student_login_revoked', 'roster', body.rosterId, null,
+            { reason: error.message }, 'failure');
+          return json(400, { error: error.message });
+        }
+
+        await log('student_login_revoked', 'roster', body.rosterId,
+          data?.student_name ?? null, {
+            email: data?.email ?? null,
+            logins_removed: data?.logins_removed ?? 0,
+          });
         return json(200, { success: true, result: data });
       }
 

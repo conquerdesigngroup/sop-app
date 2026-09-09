@@ -7,6 +7,13 @@ import { useRefreshable } from '../../contexts/RefreshContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { parseCsvToObjects } from '../../lib/csv';
 import { callPortalAdmin } from '../../lib/portalAdminApi';
+import { supabase } from '../../lib/supabase';
+import {
+  loadStudents, studentMatches, studentFullName, ageFrom, ViewerStudent,
+} from '../../lib/portalViewer';
+import {
+  normaliseEmail, isValidEmail, dancerBlockedReason, emailBlockedReason,
+} from '../../lib/studentLogin';
 import AccessEventsPanel from '../../components/portal-admin/AccessEventsPanel';
 import { CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
 import {
@@ -62,6 +69,17 @@ interface ClientRow {
   last_sign_in_at: string | null;
   email_confirmed_at: string | null;
   banned_until: string | null;
+  /** 'student' rows are one dancer's own login; 'guardian' is a parent sign-up. */
+  member_type: 'guardian' | 'student';
+  student_id: string | null;
+  dancer_name: string | null;
+  /**
+   * Whether a portal_household_members row actually exists for this dancer.
+   * THE MEMBERSHIP IS THE ACCESS: a student row can be deactivated while the
+   * membership stands, which is why Deactivate cannot be described as revoking
+   * anything for these rows.
+   */
+  has_login: boolean;
 }
 
 interface ImportResult {
@@ -83,6 +101,7 @@ const FILTER_OPTIONS = [
   { value: 'all', label: 'All roster rows' },
   { value: 'claimed', label: 'Linked to an account' },
   { value: 'unclaimed', label: 'Not signed up yet' },
+  { value: 'student', label: 'Dancer logins' },
   { value: 'inactive', label: 'Deactivated rows' },
 ];
 
@@ -154,6 +173,23 @@ const ClientAccountsPage: React.FC = () => {
   const [importText, setImportText] = useState('');
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  // ------------------------------------------------ give a dancer a login
+  //
+  // The dancer is picked, never typed. A roster row for a dancer login must
+  // resolve to a real portal_students id — that id is what pins the login to
+  // one child AND to the right family, since the dancer's own address matches
+  // no household. Typing a name could only ever be matched back to an id, and
+  // two dancers share a name often enough that guessing is not acceptable.
+  const [showGrant, setShowGrant] = useState(false);
+  const [grantStudents, setGrantStudents] = useState<ViewerStudent[]>([]);
+  const [grantTaken, setGrantTaken] = useState<Set<string>>(new Set());
+  const [grantLoading, setGrantLoading] = useState(false);
+  const [grantSearch, setGrantSearch] = useState('');
+  const [grantPicked, setGrantPicked] = useState<ViewerStudent | null>(null);
+  const [grantEmail, setGrantEmail] = useState('');
+  const [grantBusy, setGrantBusy] = useState(false);
+  const [grantError, setGrantError] = useState('');
 
   const [emailTarget, setEmailTarget] = useState<ClientRow | null>(null);
   const [newEmail, setNewEmail] = useState('');
@@ -263,6 +299,63 @@ const ClientAccountsPage: React.FC = () => {
     }
   };
 
+  const openGrant = async () => {
+    setShowGrant(true);
+    setGrantSearch(''); setGrantPicked(null); setGrantEmail(''); setGrantError('');
+    setGrantLoading(true);
+    try {
+      // portal_admin_student_overview is security_invoker and both underlying
+      // policies end in `or is_admin()`, so an admin reads every dancer here
+      // without a bespoke endpoint.
+      const [{ rows, error }, taken] = await Promise.all([
+        loadStudents(),
+        supabase.from('portal_household_members').select('student_id').eq('member_type', 'student'),
+      ]);
+      if (error) setGrantError(error);
+      setGrantStudents(rows);
+      setGrantTaken(new Set(
+        (taken.data ?? []).map((m: { student_id: string | null }) => m.student_id ?? '').filter(Boolean),
+      ));
+    } finally {
+      setGrantLoading(false);
+    }
+  };
+
+  const grantMatches = useMemo(() => {
+    const q = grantSearch.trim();
+    if (!q) return [];
+    return grantStudents.filter(s => s.status === 'active' && studentMatches(s, q));
+  }, [grantStudents, grantSearch]);
+
+  const submitGrant = async () => {
+    if (!grantPicked) return;
+    const email = normaliseEmail(grantEmail);
+    if (!isValidEmail(email)) {
+      setGrantError('That is not a valid email address.'); return;
+    }
+    setGrantBusy(true);
+    setGrantError('');
+    try {
+      const data = await callPortalAdmin({
+        action: 'roster_add_student',
+        studentId: grantPicked.id,
+        newEmail: email,
+      });
+      const r = data.result ?? {};
+      success(
+        r.linked
+          ? `${r.student_name} is set up at ${email}, and the account already on that address is now linked. It sees only their own dancing.`
+          : `${r.student_name} can now register at ${email}. Their login will see only their own dancing.`,
+      );
+      setShowGrant(false);
+      await fetchRows(0, false);
+    } catch (e: any) {
+      setGrantError(e.message || 'Could not set that up');
+    } finally {
+      setGrantBusy(false);
+    }
+  };
+
   const submitEmailChange = async () => {
     if (!emailTarget?.claimed_by) return;
     setModalBusy(true);
@@ -336,6 +429,8 @@ const ClientAccountsPage: React.FC = () => {
 
   const accountBadges = (r: ClientRow) => {
     const badges: React.ReactNode[] = [];
+    // First, because it changes what every badge after it means.
+    if (r.member_type === 'student') badges.push(<Badge key="dl" variant="info">Dancer login</Badge>);
     if (r.status === 'inactive') badges.push(<Badge key="ri" variant="default">Roster row off</Badge>);
     if (!r.claimed_by) {
       if (r.status === 'active') badges.push(<Badge key="uc" variant="warning">Not signed up</Badge>);
@@ -364,6 +459,7 @@ const ClientAccountsPage: React.FC = () => {
             >
               Import roster
             </Button>
+            <Button variant="outline" onClick={openGrant}>Give a dancer a login</Button>
           </div>
         }
       />
@@ -432,13 +528,57 @@ const ClientAccountsPage: React.FC = () => {
                       minWidth: 0,
                       overflowWrap: 'anywhere',
                     }}>
-                      {accountName || head.guardian_name || head.email}
+                      {head.member_type === 'student'
+                        ? (head.dancer_name || head.student_name)
+                        : (accountName || head.guardian_name || head.email)}
                     </span>
                     {accountBadges(head)}
                   </div>
                   <span style={mono}>{head.email}</span>
 
-                  {/* Students on this email */}
+                  {head.member_type === 'student' && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{
+                        ...theme.typography.bodySmall,
+                        fontFamily: theme.fonts.primary,
+                        color: theme.colors.txt.tertiary,
+                        minWidth: 0,
+                      }}>
+                        {head.guardian_name ? `${head.guardian_name} family · ` : ''}
+                        sees only their own classes and attendance
+                      </span>
+                      {head.has_login && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={rowBusy}
+                          onClick={async () => {
+                            if (await confirm({
+                              title: 'Remove this dancer login?',
+                              message:
+                                `${head.dancer_name || head.student_name} loses access to the portal, and ` +
+                                `${head.email} can no longer register. Their account is not deleted and the ` +
+                                `family's own login is untouched. You can grant it again afterwards.`,
+                              variant: 'danger',
+                            })) {
+                              runRowAction(
+                                head.id,
+                                { action: 'roster_revoke_student', rosterId: head.id },
+                                'Dancer login removed',
+                              );
+                            }
+                          }}
+                        >
+                          Remove dancer login
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Students on this email. A dancer login is one row naming the
+                      same person as the header, so listing it again reads as two
+                      different people. */}
+                  {head.member_type !== 'student' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {family.map(r => (
                       <div key={r.id} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -474,6 +614,7 @@ const ClientAccountsPage: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                  )}
 
                   {/* Account facts */}
                   {claimed && (
@@ -545,7 +686,14 @@ const ClientAccountsPage: React.FC = () => {
                         onClick={async () => {
                           if (await confirm({
                             title: 'Deactivate roster row?',
-                            message: `${head.student_name} will no longer count for portal sign-up under ${head.email}.`,
+                            // THE MEMBERSHIP IS THE ACCESS. For a dancer who has
+                            // already registered, deactivating this row stops a
+                            // future sign-up and revokes nothing at all — saying
+                            // otherwise is how somebody ends up believing they
+                            // have removed access they have not removed.
+                            message: head.member_type === 'student' && head.has_login
+                              ? `${head.dancer_name || head.student_name} KEEPS their login and keeps seeing their own dancing — this only stops ${head.email} registering again. To take the login away, use "Remove dancer login".`
+                              : `${head.student_name} will no longer count for portal sign-up under ${head.email}.`,
                             variant: 'danger',
                           })) {
                             runRowAction(head.id, { action: 'roster_deactivate', rosterId: head.id }, 'Roster row deactivated');
@@ -686,6 +834,128 @@ const ClientAccountsPage: React.FC = () => {
               error={modalError || undefined}
               style={{ fontFamily: theme.fonts.mono, fontSize: '12px' }}
             />
+          </div>
+        )}
+      </Modal>
+
+      {/* ------------------------------------------ give a dancer a login */}
+      <Modal
+        isOpen={showGrant}
+        onClose={() => !grantBusy && setShowGrant(false)}
+        title="Give a dancer a login"
+        size="md"
+        footer={
+          grantPicked ? (
+            <>
+              <Button variant="secondary" onClick={() => setShowGrant(false)} disabled={grantBusy}>Cancel</Button>
+              <Button variant="primary" onClick={submitGrant} loading={grantBusy} disabled={!grantEmail.trim()}>
+                Create sign-up
+              </Button>
+            </>
+          ) : (
+            <Button variant="secondary" onClick={() => setShowGrant(false)}>Cancel</Button>
+          )
+        }
+      >
+        {grantPicked ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <Card padding="sm">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ ...theme.typography.body, fontFamily: theme.fonts.primary, fontWeight: 600, color: theme.colors.txt.primary }}>
+                  {studentFullName(grantPicked)}
+                </span>
+                <span style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.tertiary }}>
+                  {grantPicked.householdName} family
+                  {ageFrom(grantPicked.dateOfBirth, new Date()) !== null && ` · ${ageFrom(grantPicked.dateOfBirth, new Date())}`}
+                  {` · ${grantPicked.enrollmentCount} class${grantPicked.enrollmentCount === 1 ? '' : 'es'}`}
+                </span>
+              </div>
+            </Card>
+            <Button variant="ghost" size="sm" onClick={() => { setGrantPicked(null); setGrantError(''); }} disabled={grantBusy}>
+              Choose a different dancer
+            </Button>
+            <Input
+              label="The dancer's own email"
+              type="email"
+              autoCapitalize="none"
+              placeholder="dancer@example.com"
+              value={grantEmail}
+              onChange={e => { setGrantEmail(e.target.value); setGrantError(''); }}
+              error={grantError || undefined}
+              disabled={grantBusy}
+            />
+            {emailBlockedReason(grantPicked, grantEmail) && (
+              <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.status.warning, margin: 0 }}>
+                {emailBlockedReason(grantPicked, grantEmail)}
+              </p>
+            )}
+            <p style={{ ...theme.typography.caption, fontFamily: theme.fonts.primary, color: theme.colors.txt.tertiary, margin: 0 }}>
+              They must register with exactly this address — any other one is not on the roster
+              and will be turned away. Their login sees only this dancer, never a sibling.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.txt.secondary, margin: 0 }}>
+              Find the dancer, then give them their own email address. Only dancers already on
+              file can be given a login — if someone is missing, import the roster first.
+            </p>
+            <SearchInput
+              placeholder="Search by dancer, family or email…"
+              value={grantSearch}
+              onChange={e => setGrantSearch(e.target.value)}
+              onClear={() => setGrantSearch('')}
+              autoFocus
+              disabled={grantLoading}
+            />
+            {grantError && (
+              <p style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, color: theme.colors.status.error, margin: 0 }}>
+                {grantError}
+              </p>
+            )}
+            {grantLoading ? (
+              <Spinner />
+            ) : !grantSearch.trim() ? (
+              <EmptyState title="Search for a dancer" description="By their name, their family name, or the family's email." />
+            ) : grantMatches.length === 0 ? (
+              <EmptyState
+                title="No dancer matches that"
+                description="Only dancers already on file appear here. If they are new, import the roster with their date of birth first."
+              />
+            ) : (
+              <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {grantMatches.slice(0, 30).map(s => {
+                  const blocked = dancerBlockedReason(s, grantTaken);
+                  const age = ageFrom(s.dateOfBirth, new Date());
+                  return (
+                    <Card
+                      key={s.id}
+                      padding="sm"
+                      hover={!blocked}
+                      onClick={blocked ? undefined : () => { setGrantPicked(s); setGrantError(''); }}
+                      style={blocked ? { opacity: 0.55 } : undefined}
+                    >
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, fontWeight: 600, color: theme.colors.txt.primary, minWidth: 0, overflowWrap: 'anywhere' }}>
+                          {studentFullName(s)}
+                        </span>
+                        {blocked && <Badge variant="info" size="sm">Has a login</Badge>}
+                        <span style={{ ...theme.typography.caption, fontFamily: theme.fonts.primary, color: theme.colors.txt.tertiary, minWidth: 0, overflowWrap: 'anywhere' }}>
+                          {s.householdName}
+                          {age !== null && ` · ${age}`}
+                          {` · ${s.enrollmentCount} class${s.enrollmentCount === 1 ? '' : 'es'}`}
+                        </span>
+                      </div>
+                    </Card>
+                  );
+                })}
+                {grantMatches.length > 30 && (
+                  <span style={{ ...theme.typography.caption, fontFamily: theme.fonts.primary, color: theme.colors.txt.tertiary }}>
+                    {grantMatches.length - 30} more — keep typing to narrow it down.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Modal>
