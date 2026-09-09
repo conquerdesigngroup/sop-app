@@ -19,6 +19,9 @@ const look = (over: Partial<InstructorLook> = {}): InstructorLook => ({
   initials: '',
   iconKey: 'star',
   paletteKey: 'teal',
+  shape: 'rounded',
+  pattern: 'none',
+  ring: false,
   ...over,
 });
 

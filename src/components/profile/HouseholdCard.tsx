@@ -1,7 +1,7 @@
 import React from 'react';
 import { theme } from '../../theme';
 import { Card, Spinner } from '../ui';
-import { AVATAR_PALETTE, initialsFrom } from '../../lib/avatarPalette';
+import { AVATAR_PALETTE, DEFAULT_AVATAR, initialsFrom } from '../../lib/avatarPalette';
 import { overallPercent, studentLabel } from '../../lib/attendanceQueries';
 import { clockTime, relativeDay } from '../../lib/upcomingClasses';
 import { FIXTURE_TODAY } from '../../lib/attendanceFixture';
@@ -86,9 +86,9 @@ const HouseholdCard: React.FC<ProfileCardProps> = ({ ctx }) => {
           >
             <ProfileAvatar
               config={{
+                ...DEFAULT_AVATAR,
                 mode: 'initials',
                 initials: initialsFrom(student.firstName, student.lastName),
-                iconKey: 'star',
                 paletteKey: palette.key,
               }}
               fallbackInitials={initialsFrom(student.firstName, student.lastName)}
