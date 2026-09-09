@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useMobileMenu } from '../contexts/MobileMenuContext';
+import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { useTaskCounts, TaskCounts } from '../hooks/useTaskCounts';
 import { theme } from '../theme';
@@ -73,6 +74,13 @@ const icons = {
       <line x1="16" y1="17" x2="8" y2="17" />
     </svg>
   ),
+  attendance: (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
+      <path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3" />
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M8 13l2.5 2.5L16 10" />
+    </svg>
+  ),
   more: (
     <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
       <circle cx="5" cy="12" r="1.5" />
@@ -91,8 +99,19 @@ const icons = {
  * which an admin opens far less often, had a permanent tab. The admin bar
  * trades Hours and SOPs for Job Tasks and More; both remain one tap away
  * in the sheet, and the quick-add button logs hours from anywhere.
+ *
+ * `teaches` is the third case, and it is deliberately not "is a team member".
+ * It mirrors can_edit_portal() — does this person hold ANY class — because a
+ * team member with no classes has no attendance to take and putting the tab in
+ * front of them would be a permanent dead end. Someone who does hold a class
+ * gets Attendance in place of SOPs: reference material is looked up now and
+ * then, attendance happens at the top of every single lesson.
+ *
+ * SOPs is not lost; it moves into the sheet, which a teacher with a class
+ * already has for Portal Manager. A team member WITHOUT a class keeps exactly
+ * the bar they had, and still has no sheet at all.
  */
-const tabsFor = (isAdmin: boolean, counts: TaskCounts, onMore: () => void): NavTab[] => [
+const tabsFor = (isAdmin: boolean, teaches: boolean, counts: TaskCounts, onMore: () => void): NavTab[] => [
   { key: 'home', path: '/dashboard', label: 'Home', icon: icons.home },
   { key: 'my-tasks', path: '/my-tasks', label: 'Tasks', icon: icons.tasks, badge: counts.myOverdue },
   ...(isAdmin
@@ -106,7 +125,9 @@ const tabsFor = (isAdmin: boolean, counts: TaskCounts, onMore: () => void): NavT
         // Hours Input, not the /hours schedule: logging time is the thing an
         // employee does on a phone.
         { key: 'hours', path: '/hours-input', label: 'Hours', icon: icons.hours },
-        { key: 'sop', path: '/sop', label: 'SOPs', icon: icons.sop },
+        teaches
+          ? { key: 'attendance', path: '/attendance', label: 'Attendance', icon: icons.attendance }
+          : { key: 'sop', path: '/sop', label: 'SOPs', icon: icons.sop },
       ]),
 ];
 
@@ -119,8 +140,8 @@ const noop = () => {};
  * member without a class that is nothing, and the sheet is never drawn.
  * Derived from the same list the bar renders, so the two cannot drift.
  */
-export const bottomNavPathsFor = (isAdmin: boolean): readonly string[] =>
-  tabsFor(isAdmin, NO_COUNTS, noop).flatMap(tab => (tab.path ? [tab.path] : []));
+export const bottomNavPathsFor = (isAdmin: boolean, teaches = false): readonly string[] =>
+  tabsFor(isAdmin, teaches, NO_COUNTS, noop).flatMap(tab => (tab.path ? [tab.path] : []));
 
 /**
  * The count pill on a tab icon. Electric pink is the one accent the brand
@@ -167,8 +188,10 @@ const BottomNavigation: React.FC = () => {
   const colors = useThemeColors();
   const menu = useMobileMenu();
   const counts = useTaskCounts();
+  // Mirrors can_edit_portal(): admin, or holds at least one class.
+  const { canEdit: teaches } = usePortalAdmin();
 
-  const tabs = tabsFor(isAdmin, counts, menu.toggle);
+  const tabs = tabsFor(isAdmin, teaches, counts, menu.toggle);
 
   const isActive = (tab: NavTab) => {
     if (!tab.path) return menu.isOpen;

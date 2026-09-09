@@ -38,6 +38,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ArchivePage = lazy(() => import('./pages/ArchivePage'));
 const ActivityLogPage = lazy(() => import('./pages/ActivityLogPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
+const AttendancePage = lazy(() => import('./pages/AttendancePage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
@@ -365,6 +366,17 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <HoursInputPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* Not adminOnly. Taking attendance is the whole job of a teacher on
+              the `team` role, and the page shows only the classes they hold —
+              v52's can_edit_portal_class() decides that in Postgres, not here. */}
+          <Route
+            path="/attendance"
+            element={
+              <ProtectedRoute>
+                <AttendancePage />
               </ProtectedRoute>
             }
           />

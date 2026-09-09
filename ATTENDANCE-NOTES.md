@@ -3,6 +3,11 @@
 Working notes for this branch. Written 2026-08-31, while the work is parked
 waiting on a real Enrolio export. Read this before picking it back up.
 
+> **UPDATE 2026-09-08 — v52 landed and several items below are now stale.**
+> See "What v52 changed" at the bottom before acting on anything in this file.
+> In short: v33 is applied and populated, teachers can now take attendance in
+> the app, and the "staff access is admin-only" gap is closed.
+
 The three defects found in review are **fixed** and are not listed here. What
 follows is what is still outstanding, in the order I would do it.
 
@@ -197,3 +202,103 @@ and it becomes writable the moment v33 lands.
 - **The Enrolio import is still the source of truth.** The Viewer cannot edit an
   enrollment, a roster or a child's details, and should not learn to: two places
   to change the same fact is how the Kettenbrink/Ketenbrink split survived.
+
+
+---
+
+# What v52 changed (2026-09-08)
+
+Attendance is now TAKEN in the app, not only imported. That makes several
+items above stale, and adds three things worth knowing before touching this.
+
+## Stale above
+
+- **Item 3 (the contract test) is now more urgent, not less.** There are still
+  two implementations of the percentage and they now have a THIRD consumer:
+  `tally()` in `src/components/attendance/attendanceExport.ts`, which the CSV
+  and the PDF both print. All three say "present + late over everything that
+  counts". If that formula changes it changes in three files. Still no contract
+  test — it remains the highest-value correctness work available.
+- **Item 5 (what a makeup is) is still open.** v52 added `sick`, which is NOT
+  an answer to it: a makeup has to decide which session it credits, and that is
+  a join, not a status.
+- **"Staff access is admin/super_admin only" (v33 header) is fixed.** It was
+  written when `portal_classes.instructor_name` was the only link to a person.
+  `portal_class_instructors` has been populated since (69 grants, 11 teachers),
+  so `can_edit_portal_class()` scopes a teacher to their own classes and v52
+  adds the four matching SELECT policies.
+- **The seed is gone.** The v33 demo rows — 53 marks, 56 sessions, one dancer
+  marked per session across four classes — were deleted on 2026-09-08. Three of
+  those dates fell after `season_start`, so they would have shown live families
+  absences that never happened.
+
+## New, and load-bearing
+
+### 1. The denominator now stops at today
+
+`portal_attendance_summary` and `portal_attendance_detail` both gained
+`session_date <= studio_today()`, and the detail view gained an `upcoming`
+exclusion reason. `src/lib/attendanceSummary.ts` carries the identical change.
+
+This was not a refinement. v52 generates every session for the season — 4,326
+rows through 2027-06-19 — and the old views counted a `held` session with no
+mark as an absence with no upper bound on the date. Without the change every
+dancer would have read about 3%: measured, not estimated (max counted per
+dancer went from a possible 42 to an actual 2).
+
+**If you add a third reader of these rows, it inherits this rule or it lies.**
+
+### 2. Writes go through RPCs, and the RLS story is unchanged
+
+There is still no INSERT/UPDATE/DELETE policy on any attendance table, for any
+role. `staff_mark_attendance` and `staff_set_session_status` are SECURITY
+DEFINER and re-check `can_edit_portal_class()` themselves. Verified against
+production under a real teacher's JWT, in a rolled-back transaction:
+
+| | |
+|---|---|
+| their own class | written, stamped `source=app` with their `recorded_by` |
+| the same mark twice | `unchanged`, no second history row |
+| another teacher's class | refused, and RLS hides the session from them anyway |
+| a class that has not happened | refused |
+| a dancer not on that day's roster | refused |
+| a status that does not exist | refused |
+| `portal_households` | 0 rows — a teacher never sees a family record |
+
+### 3. History is the reason unlimited editing is safe
+
+The studio chose (2026-09-08) that a teacher may correct their own class with
+no time limit. `portal_attendance_history` is what makes that a decision rather
+than a hole: every change keeps its previous value, author and timestamp. It is
+append-only and admin-read — a teacher cannot read back their own trail, which
+is deliberate.
+
+It is also where the Enrolio cutover lands. The studio chose "import wins, the
+app's mark is kept in history". **The importer does not exist yet**, and when it
+is written it MUST write a history row for every mark it overwrites, with
+`source='import'` and its `import_batch_id`. Without that, `portal_attendance`'s
+unique key means the import silently destroys what a teacher recorded in the
+room.
+
+### 4. Sick counts against
+
+Studio decision, 2026-09-08. It needs no arithmetic of its own — it is simply
+not `excused` (so it stays in the denominator) and not in `('present','late')`
+(so it is not attendance). The work is in never letting it render as a bare
+absence: the reason survives into `portal_attendance_detail`, onto the teacher's
+screen, into both exports, and onto the parent's own card.
+
+## Still to do
+
+- **`REACT_APP_ATTENDANCE_LIVE` is still false.** Flipping it is what makes any
+  of this visible to a parent. **Do not flip it until the backfill is done** —
+  143 sessions from the season's first week have no marks, so every dancer
+  currently reads 0%.
+- **The Enrolio importer** (see 3 above).
+- **38 of 103 classes have no instructor grant.** Those teachers cannot see
+  their class at all. Fixed in Portal Manager, not in code.
+- **`excused_counts_against` is still unread from `portal_settings`** — item 4
+  above, unchanged.
+- **The roster screen has no URL.** It is a state inside `/attendance`, so
+  `npm run audit:mobile` measures the day list and never the screen a teacher
+  actually spends the class on. Check that one by hand on a phone.
