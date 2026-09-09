@@ -61,10 +61,28 @@ const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   </p>
 );
 
-const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, email }) => {
+/**
+ * EVERYONE GETS THE BUILDER, STAFF INCLUDED.
+ *
+ * This used to be `editable = !ctx.isStaff`, on the reasoning that staff keep
+ * their own /profile for identity and have nothing to change here. Two things
+ * outgrew that. The avatar had nowhere to save to when the rule was written, so
+ * "nothing to change" was literally true; and since PR #83 staff who are also
+ * parents see the family cards, which left the studio's owner looking at his
+ * own children's dashboard as an anonymous violet tile with no way to fix it.
+ *
+ * The own-row rule works identically for both, because profiles.id IS the auth
+ * user id (FK to auth.users), so `profile_id = auth.uid()` needs no special
+ * case for a member of staff.
+ *
+ * The one difference that remains is the photograph: staff upload one on the
+ * staff profile (lib/staffPhoto.ts, a bucket readable only by is_active_staff)
+ * and clients never can. That asymmetry is deliberate and is the whole of it —
+ * everything else on this card is the same for everybody.
+ */
+const IdentityCard: React.FC<ProfileCardProps> = ({ firstName, lastName, email }) => {
   // Staff previewing the portal keep their own /profile for identity; this card
   // shows them who they are signed in as and nothing they can change here.
-  const editable = !ctx.isStaff;
   const [avatar, setAvatar] = useState<AvatarConfig>(DEFAULT_AVATAR);
   const [nickname, setNickname] = useState('');
   const [editing, setEditing] = useState(false);
@@ -81,8 +99,6 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!editable) { setLoaded(true); return; }
-
     let cancelled = false;
     loadAvatarPrefs().then(({ prefs, error: loadError }) => {
       if (cancelled) return;
@@ -96,7 +112,7 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
       else setLoaded(true);
     });
     return () => { cancelled = true; };
-  }, [editable]);
+  }, []);
 
   const done = useCallback(async () => {
     setSaving(true);
@@ -158,22 +174,20 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
           </p>
         </div>
 
-        {editable && (
-          <Button
-            variant="outline"
-            size="sm"
-            /* Disabled until the stored row has been read, so Done cannot
-               write a default over a choice this card has not seen yet. */
-            disabled={editing && (saving || !loaded)}
-            loading={editing && saving}
-            onClick={() => (editing ? done() : setEditing(true))}
-          >
-            {editing ? (saving ? 'Saving…' : 'Done') : 'Edit'}
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          size="sm"
+          /* Disabled until the stored row has been read, so Done cannot write a
+             default over a choice this card has not seen yet. */
+          disabled={editing && (saving || !loaded)}
+          loading={editing && saving}
+          onClick={() => (editing ? done() : setEditing(true))}
+        >
+          {editing ? (saving ? 'Saving…' : 'Done') : 'Edit'}
+        </Button>
       </div>
 
-      {editing && editable && (
+      {editing && (
         <div style={{
           marginTop: theme.spacing.md,
           borderTop: `1px solid ${theme.colors.bdr.primary}`,
