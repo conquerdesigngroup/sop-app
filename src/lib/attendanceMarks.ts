@@ -1,5 +1,6 @@
 import { theme } from '../theme';
 import { AttendanceRange, AttendanceSummary, SessionAttendance } from '../types/attendance';
+import { STATUS_COLORS } from './attendanceColors';
 import { clipToRange } from './attendanceSummary';
 
 /**
@@ -42,11 +43,21 @@ export const describeMark = (entry: SessionAttendance, accent: string): Mark => 
   if (entry.excludedReason === 'excused') {
     return { label: 'Excused', dot: theme.colors.status.info, muted: true, strike: false, excluded: true };
   }
+  // Not yet. Muted but NOT struck through: a strike says "this did not happen",
+  // and next Tuesday still might.
+  if (entry.excludedReason === 'upcoming') {
+    return { label: 'Not yet', dot: null, muted: true, strike: false, excluded: true };
+  }
 
   switch (entry.status) {
     case 'present': return { label: 'Present', dot: accent, muted: false, strike: false, excluded: false };
     case 'late': return { label: 'Late', dot: theme.colors.status.warning, muted: false, strike: false, excluded: false };
     case 'absent': return { label: 'Absent', dot: null, muted: false, strike: false, excluded: false };
+    // Counts against exactly as an absence does — `excluded: false` is not an
+    // oversight. The whole point of carrying it as its own status is that a
+    // parent expanding the row reads "Sick" instead of being left to assume
+    // their child skipped.
+    case 'sick': return { label: 'Sick', dot: STATUS_COLORS.sick, muted: false, strike: false, excluded: false };
     default: return { label: 'Not marked', dot: null, muted: true, strike: false, excluded: false };
   }
 };

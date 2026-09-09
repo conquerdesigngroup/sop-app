@@ -15,8 +15,22 @@
  * leaves every attendance row untouched (§3.1).
  */
 
-/** Enrollio's vocabulary, normalised. A fifth 'makeup' status may arrive later. */
-export type AttendanceStatus = 'present' | 'absent' | 'excused' | 'late';
+/**
+ * Enrollio's vocabulary, normalised, plus 'sick' (v52) for marks taken in the
+ * room rather than imported.
+ *
+ * SICK IS NOT A SOFTER EXCUSED. Studio decision, 2026-09-08: a sick day counts
+ * against the percentage exactly as an absence does — it stays in the
+ * denominator and is not attendance. What it buys is the REASON: the mark
+ * survives into portal_attendance_detail so both the teacher's screen and the
+ * parent's expand to "Sick" rather than a bare "Absent". The number is the
+ * same; the explanation is not.
+ *
+ * A sixth 'makeup' status may still arrive — see ATTENDANCE-NOTES.md item 5.
+ * Adding 'sick' does not answer that question, because a makeup has to decide
+ * which session it credits, which is a join and not a status.
+ */
+export type AttendanceStatus = 'present' | 'absent' | 'excused' | 'late' | 'sick';
 
 /**
  * Why a session does or does not count toward a denominator.
@@ -125,7 +139,19 @@ export interface ClassSession {
   /** ISO date. */
   sessionDate: string;
   status: SessionStatus;
-  source: 'import' | 'manual';
+  /**
+   * Where this date came from.
+   *
+   * 'import'   — Enrolio said the class met.
+   * 'manual'   — a person added a one-off: a makeup, a rescheduled week.
+   * 'schedule' — generated from day_of_week across the season (v52), and
+   *              nobody has confirmed anything about it yet.
+   *
+   * The distinction earns its keep at cleanup time: only 'schedule' rows are
+   * safe to delete in bulk when a class is rescheduled, because they are the
+   * only ones no human asserted.
+   */
+  source: 'import' | 'manual' | 'schedule';
   note: string | null;
 }
 
@@ -164,8 +190,15 @@ export interface SessionAttendance {
   status: AttendanceStatus | null;
   /** False when the session is cancelled/closed or falls outside the enrollment. */
   countsTowardTotal: boolean;
-  /** Why it does not count, for the detail view's marker. */
-  excludedReason: 'cancelled' | 'closed' | 'before-enrollment' | 'after-drop' | 'excused' | null;
+  /**
+   * Why it does not count, for the detail view's marker.
+   *
+   * 'upcoming' (v52) is the one that is not a subtraction so much as a
+   * not-yet: once sessions are generated for the whole season, most of a
+   * class's dates have not happened. Counting those as unattended would show
+   * every dancer about 5% in September.
+   */
+  excludedReason: 'cancelled' | 'closed' | 'before-enrollment' | 'after-drop' | 'upcoming' | 'excused' | null;
 }
 
 /** Studio-level policy (§3.6). A settings row, not a hardcoded constant. */

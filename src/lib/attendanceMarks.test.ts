@@ -152,3 +152,54 @@ describe('describeMark', () => {
     expect(describeMark(rows[0], ACCENT).dot).not.toBeNull();
   });
 });
+
+/**
+ * The two marks v52 adds, in the parent's register.
+ *
+ * describeMark is the gentler of the two vocabularies — the teacher's capture
+ * screen uses STATUS_COLORS and its own five full-strength hues. What these
+ * pin is that the softer reading never loses the *reason*, which is the whole
+ * argument for carrying sick as its own status instead of writing 'absent'.
+ */
+describe('sick and upcoming marks', () => {
+  const entry = (over: Partial<SessionAttendance>): SessionAttendance => ({
+    session: session('2026-06-16'),
+    status: null,
+    countsTowardTotal: true,
+    excludedReason: null,
+    ...over,
+  });
+
+  it('says Sick, and does not quietly exclude it', () => {
+    const mark = describeMark(entry({ status: 'sick' }), ACCENT);
+
+    expect(mark.label).toBe('Sick');
+    // It counts against. A muted or excluded rendering here would contradict
+    // the number the card shows beside it.
+    expect(mark.excluded).toBe(false);
+    expect(mark.muted).toBe(false);
+    expect(mark.strike).toBe(false);
+    expect(mark.dot).toBeTruthy();
+  });
+
+  it('gives Sick a different dot from Absent, Late and Excused', () => {
+    const dots = (['sick', 'late'] as const).map(s => describeMark(entry({ status: s }), ACCENT).dot);
+    const excused = describeMark(entry({ status: 'excused', excludedReason: 'excused' }), ACCENT).dot;
+    const absent = describeMark(entry({ status: 'absent' }), ACCENT).dot;
+
+    expect(new Set([...dots, excused]).size).toBe(3);
+    expect(absent).toBeNull();
+  });
+
+  it('reads an upcoming session as Not yet, without striking it through', () => {
+    const mark = describeMark(
+      entry({ countsTowardTotal: false, excludedReason: 'upcoming' }),
+      ACCENT,
+    );
+
+    expect(mark.label).toBe('Not yet');
+    expect(mark.excluded).toBe(true);
+    // A strike says the class did not happen. Next Tuesday still might.
+    expect(mark.strike).toBe(false);
+  });
+});

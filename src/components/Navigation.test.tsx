@@ -127,12 +127,18 @@ describe('mobile menu sheet', () => {
     expect(screen.getByRole('button', { name: /account menu/i })).toBeInTheDocument();
   });
 
-  it('gives a teacher with a class a sheet holding only the portal', () => {
+  it('gives a teacher with a class a sheet holding what the bar displaced', () => {
+    // Their bar carries Attendance in the fifth slot, so SOPs is the one thing
+    // that moved off it — the sheet holds exactly that plus the portal.
     mockCanEditPortal = true;
     renderAt();
     fireEvent.click(screen.getByRole('button', { name: /more pages/i }));
     const sheet = screen.getByRole('dialog', { name: 'More pages' });
-    expect(within(sheet).getAllByRole('link').map(a => a.textContent)).toEqual(['Portal Manager']);
+    expect(within(sheet).getAllByRole('link').map(a => a.textContent))
+      .toEqual(['SOPs', 'Portal Manager']);
+
+    // And Attendance is NOT in the sheet, because it is under their thumb.
+    expect(within(sheet).queryByText('Attendance')).not.toBeInTheDocument();
   });
 
   it('offers an admin only what the bottom bar does not, in sections', () => {
@@ -148,7 +154,7 @@ describe('mobile menu sheet', () => {
     // remembered yet), so it is opened here to read its rows.
     fireEvent.click(within(sheet).getByRole('button', { name: /management/i }));
     const labels = within(sheet).getAllByRole('link').map(a => a.textContent);
-    expect(labels).toEqual(['SOPs', 'Hours Input', 'Team', 'Task Library', 'Portal Manager']);
+    expect(labels).toEqual(['SOPs', 'Attendance', 'Hours Input', 'Team', 'Task Library', 'Portal Manager']);
 
     // Nothing in the sheet duplicates the admin bar, which carries Job Tasks.
     within(sheet).getAllByRole('link').forEach(a => {

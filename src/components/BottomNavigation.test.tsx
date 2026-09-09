@@ -19,6 +19,7 @@ import { studioToday, shiftIsoDays } from '../lib/studioDate';
  */
 
 const mockAuth = { isAdmin: false, currentUser: { id: 'me' } };
+const mockPortal = { canEdit: false };
 const mockTasks: { jobTasks: Partial<JobTask>[] } = { jobTasks: [] };
 const mockRoute = { pathname: '/dashboard' };
 const mockNavigate = jest.fn();
@@ -32,6 +33,12 @@ jest.mock('react-router-dom', () => ({
 
 jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => mockAuth,
+}));
+
+// can_edit_portal(): admin, or holds at least one class. Decides whether the
+// fifth tab is Attendance or SOPs.
+jest.mock('../contexts/PortalAdminContext', () => ({
+  usePortalAdmin: () => mockPortal,
 }));
 
 jest.mock('../contexts/TaskContext', () => ({
@@ -86,6 +93,7 @@ const tabLabels = () =>
 
 beforeEach(() => {
   mockAuth.isAdmin = false;
+  mockPortal.canEdit = false;
   mockTasks.jobTasks = [];
   mockNavigate.mockClear();
 });
@@ -98,6 +106,30 @@ describe('BottomNavigation', () => {
 
   it('gives management Job Tasks and More instead of Hours and SOPs', () => {
     mockAuth.isAdmin = true;
+    renderBar();
+    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Job Tasks', 'Calendar', 'More']);
+  });
+
+  it('gives a teacher with a class Attendance in place of SOPs', () => {
+    // Attendance happens at the top of every lesson; SOPs is looked up now and
+    // then. The teacher's fifth slot goes to the one they touch daily, and SOPs
+    // moves into the sheet they already have for Portal Manager.
+    mockPortal.canEdit = true;
+    renderBar();
+    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'Attendance']);
+  });
+
+  it('leaves the bar alone for a team member who holds no class', () => {
+    // The important half of the rule. Someone with no classes has no
+    // attendance to take, so the tab would be a permanent dead end — and
+    // adding it would also hand them a hamburger they have never needed.
+    renderBar();
+    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'SOPs']);
+  });
+
+  it('keeps Attendance off the admin bar, where More already reaches it', () => {
+    mockAuth.isAdmin = true;
+    mockPortal.canEdit = true;
     renderBar();
     expect(tabLabels()).toEqual(['Home', 'Tasks', 'Job Tasks', 'Calendar', 'More']);
   });

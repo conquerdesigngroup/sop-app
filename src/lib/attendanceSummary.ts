@@ -1,3 +1,4 @@
+import { studioDate } from './studioDate';
 import {
   AttendanceRange,
   AttendanceRecord,
@@ -39,6 +40,23 @@ import {
  * returns.
  */
 
+/**
+ * A Date as the 'YYYY-MM-DD' a session_date is stored as, in the STUDIO's zone.
+ *
+ * Not the device's, and not toISOString() (UTC, which rolls over during a
+ * 5:20pm Pacific class — the exact hour this matters most). A session_date is a
+ * bare date chosen in the studio's calendar, so the "today" it is compared
+ * against has to resolve there too. studioDate() is the same rule the job-task
+ * badges and the push digest already use, and it is the exact twin of v52's
+ * SQL studio_today().
+ *
+ * Getting this wrong is not cosmetic: staff_mark_attendance refuses a session
+ * dated after studio_today(), so a client an hour ahead of the server would
+ * tell a teacher "that class has not happened yet" while they are standing in
+ * it.
+ */
+export const isoDay = (d: Date): string => studioDate(d);
+
 const inRange = (date: string, from: string | null, to: string | null): boolean => {
   if (from && date < from) return false;
   if (to && date > to) return false;
@@ -57,7 +75,10 @@ export const sessionBreakdown = (
   attendance: AttendanceRecord[],
   enrollment: Enrollment,
   settings: AttendanceSettings = DEFAULT_ATTENDANCE_SETTINGS,
+  today: Date = new Date(),
 ): SessionAttendance[] => {
+  const todayIso = isoDay(today);
+
   const bySession = new Map(attendance.map(a => [a.sessionId, a]));
 
   return sessions
@@ -86,7 +107,16 @@ export const sessionBreakdown = (
         return { session, status, countsTowardTotal: false, excludedReason: 'after-drop' as const };
       }
 
-      // Studio policy, not arithmetic.
+      // Has not happened yet. Ordered AFTER the enrollment window to match
+      // portal_attendance_detail: for a dancer who has left, every remaining
+      // date is 'after-drop', which says more than 'upcoming' does.
+      if (session.sessionDate > todayIso) {
+        return { session, status, countsTowardTotal: false, excludedReason: 'upcoming' as const };
+      }
+
+      // Studio policy, not arithmetic. Note 'sick' is deliberately absent from
+      // this branch: it counts against, and only its label differs from a
+      // plain absence.
       if (status === 'excused' && !settings.excusedCountsAgainst) {
         return { session, status, countsTowardTotal: false, excludedReason: 'excused' as const };
       }
@@ -146,8 +176,9 @@ export const summariseEnrollment = (
   sessions: ClassSession[],
   attendance: AttendanceRecord[],
   settings: AttendanceSettings = DEFAULT_ATTENDANCE_SETTINGS,
+  today: Date = new Date(),
 ): AttendanceSummary => {
-  const breakdown = sessionBreakdown(sessions, attendance, enrollment, settings);
+  const breakdown = sessionBreakdown(sessions, attendance, enrollment, settings, today);
   const { attended, counted, percent } = summarise(breakdown);
 
   return {

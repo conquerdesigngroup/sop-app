@@ -177,6 +177,11 @@ const AUTH_ROUTES = [
   '/dashboard', '/sop', '/job-tasks', '/task-library', '/my-tasks',
   '/calendar', '/hours-input', '/hours', '/alerts', '/archive',
   '/team', '/settings', '/profile', '/activity-log', '/portal-admin',
+  // Attendance. The list view only — the roster is a state inside the same
+  // route, so a run measures the day list and NOT the screen a teacher spends
+  // the class on. That one has the widest row in the feature (five status
+  // pills) and has to be checked by hand on a phone until it has a URL.
+  '/attendance',
   // Admin-only client roster page. /portal/account is signed-in-CLIENT-only,
   // which the audit's staff session cannot reach (staff get redirected), so
   // it has no row here — check it by hand on a phone with a client login.

@@ -93,6 +93,12 @@ const icons = {
       <line x1="16" y1="6" x2="22" y2="6" />
     </svg>
   ),
+  attendance: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
   portal: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
@@ -339,6 +345,9 @@ const Navigation: React.FC = () => {
 
     elements.push(collapseGroup(tasksGroup));
     elements.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
+    // Only for someone who actually holds a class. A team member with no
+    // classes would get an empty screen and no way to fix it themselves.
+    if (canEditPortal) elements.push({ path: '/attendance', label: 'Attendance', icon: icons.attendance });
     elements.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
     // Hours Input stays open to everyone — it is where you log your OWN time.
     elements.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
@@ -397,6 +406,7 @@ const Navigation: React.FC = () => {
       work.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks, badge: allOverdue });
     }
     work.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
+    if (canEditPortal) work.push({ path: '/attendance', label: 'Attendance', icon: icons.attendance });
     work.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
     work.push({ path: '/hours-input', label: 'Hours Input', icon: icons.hoursInput });
 
@@ -432,7 +442,7 @@ const Navigation: React.FC = () => {
   // by role, so what is left over is too. For a team member without a class
   // that is nothing, and the hamburger is not drawn at all: it used to open
   // a list of the same five pages already under their thumb.
-  const barPaths = bottomNavPathsFor(isAdmin);
+  const barPaths = bottomNavPathsFor(isAdmin, canEditPortal);
   const mobileSections = getMobileSections()
     .map(section => ({ ...section, items: section.items.filter(item => !barPaths.includes(item.path)) }))
     .filter(section => section.items.length > 0);
