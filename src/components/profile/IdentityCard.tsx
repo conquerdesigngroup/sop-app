@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { theme } from '../../theme';
 import { Button, Card, Input } from '../ui';
 import {
@@ -18,6 +18,7 @@ import {
 } from '../../lib/avatarPalette';
 import { ProfileCardProps } from '../../lib/profileCards';
 import ProfileAvatar from './ProfileAvatar';
+import { AvatarPrefs, loadAvatarPrefs, saveAvatarPrefs } from '../../lib/avatarPrefs';
 
 /**
  * Who this profile belongs to, and the avatar builder (§5.2, §5.3).
@@ -68,6 +69,48 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
   const [nickname, setNickname] = useState('');
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  /**
+   * Whether the stored row has been read yet.
+   *
+   * Save is refused until it has, and that is the whole reason this exists. A
+   * read that fails leaves the builder showing a DEFAULT avatar — which looks
+   * identical to a family who has not chosen one — so pressing Done before the
+   * read lands would quietly overwrite a real choice with violet initials.
+   */
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!editable) { setLoaded(true); return; }
+
+    let cancelled = false;
+    loadAvatarPrefs().then(({ prefs, error: loadError }) => {
+      if (cancelled) return;
+      if (prefs) {
+        setAvatar(prefs.avatar);
+        setNickname(prefs.displayName);
+      }
+      if (loadError) setError(loadError);
+      // Not in the error branch: a failed read must leave `loaded` false, so
+      // the editor cannot save over what it could not see.
+      else setLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [editable]);
+
+  const done = useCallback(async () => {
+    setSaving(true);
+    try {
+      const prefs: AvatarPrefs = { avatar, displayName: nickname };
+      await saveAvatarPrefs(prefs);
+      setError('');
+      setEditing(false);
+    } catch (e: any) {
+      setError(e?.message ?? 'That did not save. Check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
+  }, [avatar, nickname]);
 
   const fallback = initialsFrom(firstName, lastName);
   const shown = nickname.trim() || `${firstName} ${lastName}`.trim() || email;
@@ -116,8 +159,16 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
         </div>
 
         {editable && (
-          <Button variant="outline" size="sm" onClick={() => setEditing(v => !v)}>
-            {editing ? 'Done' : 'Edit'}
+          <Button
+            variant="outline"
+            size="sm"
+            /* Disabled until the stored row has been read, so Done cannot
+               write a default over a choice this card has not seen yet. */
+            disabled={editing && (saving || !loaded)}
+            loading={editing && saving}
+            onClick={() => (editing ? done() : setEditing(true))}
+          >
+            {editing ? (saving ? 'Saving…' : 'Done') : 'Edit'}
           </Button>
         )}
       </div>

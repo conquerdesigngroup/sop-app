@@ -174,7 +174,7 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     try {
       const { data, error: err } = await supabase
         .from('portal_instructor_looks')
-        .select('name_key, display_name, mode, initials, icon_key, palette_key');
+        .select('name_key, display_name, mode, initials, icon_key, palette_key, shape, pattern, ring');
 
       if (!err && data) {
         const byKey: Record<string, InstructorLook> = {};

@@ -1170,7 +1170,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
   const fetchInstructorLooks = useCallback(async (): Promise<InstructorLook[]> => {
     const { data, error } = await supabase
       .from('portal_instructor_looks')
-      .select('name_key, display_name, mode, initials, icon_key, palette_key')
+      .select('name_key, display_name, mode, initials, icon_key, palette_key, shape, pattern, ring')
       .order('display_name');
     if (error) throw error;
     return (data ?? []).map(mapInstructorLook);
@@ -1196,6 +1196,9 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       initials: checked.value.initials,
       icon_key: checked.value.iconKey,
       palette_key: checked.value.paletteKey,
+      shape: checked.value.shape,
+      pattern: checked.value.pattern,
+      ring: checked.value.ring,
       updated_by: authorId,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'name_key' });
