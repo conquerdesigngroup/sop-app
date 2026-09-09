@@ -10,6 +10,7 @@ import { shiftIsoDays, studioToday } from '../lib/studioDate';
 import {
   AttendanceGap,
   ClassDay,
+  Scope,
   loadDay,
   loadGaps,
   loadMyClassIds,
@@ -56,6 +57,18 @@ const AttendancePage: React.FC = () => {
   // today's classes and so has no entry in `days`.
   const [fixing, setFixing] = useState<ClassDay | null>(null);
   const [tab, setTab] = useState<'take' | 'records'>('take');
+  /*
+   * Whose classes the day shows.
+   *
+   * Defaults to 'mine' for everyone, including admins, because the owner and
+   * the studio manager each hold sixteen classes as well as the admin role —
+   * answering "what am I teaching now" with all twenty classes running that
+   * afternoon is the wrong answer for the person standing in a studio. An
+   * admin who teaches nothing is switched to 'all' below, since 'mine' would
+   * be an empty screen with no way out.
+   */
+  const [scope, setScope] = useState<Scope>('mine');
+  const [myClassCount, setMyClassCount] = useState(0);
 
   const profileId = currentUser?.id ?? '';
 
@@ -63,19 +76,27 @@ const AttendancePage: React.FC = () => {
     if (!profileId) return;
     if (!silent) setLoading(true);
 
-    const { days: fetched, error: dayError } = await loadDay(date, profileId, isAdmin);
+    // What this person actually holds, regardless of their role. Decides both
+    // whether the toggle is worth drawing and what 'mine' means.
+    const { ids: myIds } = await loadMyClassIds(profileId, isAdmin, 'mine');
+    const holds = (myIds ?? []).length;
+    setMyClassCount(holds);
 
-    // The backlog is scoped to the same classes the day list is, so a teacher
-    // is never nagged about a class that is not theirs.
-    const { ids } = await loadMyClassIds(profileId, isAdmin);
-    const { rows: gapRows } = await loadGaps(ids ?? undefined);
+    const effective: Scope = isAdmin && holds === 0 ? 'all' : scope;
+
+    const { days: fetched, error: dayError } = await loadDay(date, profileId, isAdmin, effective);
+
+    // The backlog is scoped to the same classes the day list is, so nobody is
+    // nagged about a class that is not theirs — and an admin looking at the
+    // whole studio sees the whole studio's backlog.
+    const { rows: gapRows } = await loadGaps(effective === 'mine' ? (myIds ?? []) : undefined);
 
     setDays(fetched);
     setGaps(gapRows);
     setError(dayError);
     setLoading(false);
     if (dayError) throw new Error(dayError);
-  }, [date, profileId, isAdmin]);
+  }, [date, profileId, isAdmin, scope]);
 
   useEffect(() => { load().catch(() => {}); }, [load]);
 
@@ -106,7 +127,13 @@ const AttendancePage: React.FC = () => {
     }}>
       <PageHeader
         title="Attendance"
-        subtitle={isAdmin ? 'Every class in the studio' : 'Your classes'}
+        subtitle={
+          !isAdmin || myClassCount === 0
+            ? (isAdmin ? 'Every class in the studio' : 'Your classes')
+            : scope === 'mine'
+              ? `Your ${myClassCount} classes`
+              : 'Every class in the studio'
+        }
       />
 
       {/*
@@ -199,6 +226,28 @@ const AttendancePage: React.FC = () => {
               <Button variant="ghost" size="sm" onClick={() => setDate(today)}>Today</Button>
             )}
           </div>
+
+          {/*
+            Only drawn for an admin who also teaches. For everyone else there
+            is one answer and a toggle between it and itself is noise.
+          */}
+          {isAdmin && myClassCount > 0 && (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: theme.spacing.xs,
+              marginBottom: theme.spacing.md,
+            }}>
+              {(['mine', 'all'] as const).map(key => (
+                <Button
+                  key={key}
+                  variant={scope === key ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => setScope(key)}
+                >
+                  {key === 'mine' ? `My classes (${myClassCount})` : 'All classes'}
+                </Button>
+              ))}
+            </div>
+          )}
 
           <MissedBanner gaps={gaps} onJump={setDate} today={today} />
 

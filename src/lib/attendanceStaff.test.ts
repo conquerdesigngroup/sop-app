@@ -144,3 +144,38 @@ describe('sorters', () => {
     expect([r('Zoe', 'Lee'), r('Ann', 'Lee')].sort(byName).map(x => x.firstName)).toEqual(['Ann', 'Zoe']);
   });
 });
+
+/**
+ * Scope: holding the admin role and holding a class are different facts.
+ *
+ * These pin the rule rather than the query, because the failure is not an
+ * error — it is a screen that answers a different question from the one asked,
+ * and it lands on exactly the two busiest people in the studio.
+ */
+describe('whose classes to show', () => {
+  const scopeFor = (isAdmin: boolean, scope: 'mine' | 'all', holds: number): 'filtered' | 'everything' =>
+    (isAdmin && scope === 'all') ? 'everything'
+      : (isAdmin && holds === 0) ? 'everything'
+      : 'filtered';
+
+  it('gives a plain teacher their own classes whichever scope is asked for', () => {
+    expect(scopeFor(false, 'mine', 16)).toBe('filtered');
+    expect(scopeFor(false, 'all', 16)).toBe('filtered');
+  });
+
+  it('gives an admin who teaches their own classes by default', () => {
+    // The owner and the studio manager hold sixteen classes each AND the admin
+    // role. Answering "what am I teaching now" with the whole studio's
+    // timetable is the wrong answer for someone standing in a studio.
+    expect(scopeFor(true, 'mine', 16)).toBe('filtered');
+  });
+
+  it('still lets that admin ask for the whole studio', () => {
+    expect(scopeFor(true, 'all', 16)).toBe('everything');
+  });
+
+  it('never strands an admin who teaches nothing on an empty screen', () => {
+    // 'mine' would be empty with no way out, so it is overridden.
+    expect(scopeFor(true, 'mine', 0)).toBe('everything');
+  });
+});

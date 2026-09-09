@@ -185,18 +185,33 @@ export const buildRoster = (
 
 // -------------------------------------------------------------------- queries
 
+/** Whose classes a screen is asking about. */
+export type Scope = 'mine' | 'all';
+
 /**
- * The class IDs this person may take attendance for. Null means "all of them".
+ * The class IDs to show. Null means "no filter — every class".
  *
- * Null is not a permission grant — it is the absence of a filter, and RLS still
- * decides. An admin genuinely may see every class, so narrowing the query would
- * only cost a round trip.
+ * Null is not a permission grant; it is the absence of a WHERE, and RLS still
+ * decides what comes back. Only an admin ever gets it.
+ *
+ * WHY 'mine' IS NOT THE SAME QUESTION AS "ARE YOU AN ADMIN"
+ *
+ * The first version returned null for any admin, on the reasoning that an admin
+ * may see everything. That is true and it made the screen useless for the two
+ * busiest teachers in the studio: the owner and the studio manager each hold
+ * sixteen classes AND the admin role, so "what am I teaching now" answered with
+ * all twenty classes running that afternoon.
+ *
+ * Holding the role and holding the class are different facts. An admin who
+ * teaches asks both questions on different days, so the screen offers both and
+ * defaults to the one they are standing in a studio to ask.
  */
 export const loadMyClassIds = async (
   profileId: string,
   isAdmin: boolean,
+  scope: Scope = 'all',
 ): Promise<{ ids: string[] | null; error: LoadError }> => {
-  if (isAdmin) return { ids: null, error: null };
+  if (isAdmin && scope === 'all') return { ids: null, error: null };
 
   const { data, error } = await supabase
     .from('portal_class_instructors')
@@ -219,8 +234,9 @@ export const loadDay = async (
   date: string,
   profileId: string,
   isAdmin: boolean,
+  scope: Scope = 'all',
 ): Promise<{ days: ClassDay[]; error: LoadError }> => {
-  const { ids, error: idsError } = await loadMyClassIds(profileId, isAdmin);
+  const { ids, error: idsError } = await loadMyClassIds(profileId, isAdmin, scope);
   if (idsError) return { days: [], error: idsError };
   if (ids && ids.length === 0) return { days: [], error: null };
 
