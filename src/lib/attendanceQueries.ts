@@ -147,7 +147,7 @@ const buildProgress = (
       a => a.studentId === enrollment.studentId && a.classId === klass.id,
     );
 
-    const breakdown = sessionBreakdown(sessions, attendance, enrollment, settings);
+    const breakdown = sessionBreakdown(sessions, attendance, enrollment, settings, today);
     const { attended, counted, percent } = summarise(breakdown);
 
     return [{
@@ -177,6 +177,9 @@ const loadFixtureDetail = (
     FIXTURE_ATTENDANCE.filter(a => a.studentId === studentId && a.classId === classId),
     enrollment,
     settings,
+    // The fixture's own today, not the machine's — the seed season is pinned
+    // to a date, so real `new Date()` would drift it out of shape over time.
+    FIXTURE_TODAY,
   );
 };
 

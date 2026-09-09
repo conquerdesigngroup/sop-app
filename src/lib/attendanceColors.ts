@@ -1,4 +1,47 @@
-import { AttendanceClass } from '../types/attendance';
+import { AttendanceClass, AttendanceStatus } from '../types/attendance';
+
+/**
+ * One colour per attendance status, for the STAFF capture screen.
+ *
+ * WHY THIS IS A SEPARATE PALETTE FROM describeMark's
+ *
+ * The two screens are doing opposite jobs and a shared palette would serve
+ * neither. A teacher is scanning thirty rows at 5:20pm looking for the ones
+ * they have not touched yet, so the statuses have to be tellable apart at a
+ * glance and across the room — full-strength, five distinct hues.
+ *
+ * A parent is looking at one child. §6.1 rules out a pass-fail scale there, and
+ * the existing vocabulary in attendanceMarks.ts keeps to it: absence is a
+ * hollow ring rather than a red dot, because a seven-year-old who had a cold
+ * should not open the app to a wall of red. That register is deliberate and
+ * this palette does not overrule it — describeMark borrows only `sick` from
+ * here, so the two screens agree on the one colour they both draw.
+ *
+ * Literal hex, not theme tokens, for the same two reasons as STYLE_COLORS: a
+ * status does not change identity with the OS setting, and these values are
+ * used as SVG attributes and with alpha suffixes, neither of which a CSS
+ * variable survives. Electric pink (#E2144F) is deliberately not here — it is
+ * the brand accent, capped at ~5% of a view, and a roster of thirty absences
+ * would spend the whole budget in one screen.
+ */
+export const STATUS_COLORS: Record<AttendanceStatus, string> = {
+  present: '#10B981',
+  late:    '#F59E0B',
+  excused: '#3B82F6',
+  sick:    '#A78BFA',
+  absent:  '#EF4444',
+};
+
+/** Short labels, in the order the teacher's picker shows them. */
+export const STATUS_ORDER: AttendanceStatus[] = ['present', 'absent', 'late', 'excused', 'sick'];
+
+export const STATUS_LABELS: Record<AttendanceStatus, string> = {
+  present: 'Present',
+  absent:  'Absent',
+  late:    'Late',
+  excused: 'Excused',
+  sick:    'Sick',
+};
 
 /**
  * One colour per dance style, for the progress bars.
