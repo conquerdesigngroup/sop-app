@@ -10,6 +10,7 @@ import UpdatesCard from '../components/profile/UpdatesCard';
 import DocumentsCard from '../components/profile/DocumentsCard';
 import ClassCalendarCard from '../components/profile/ClassCalendarCard';
 import TeachersCard from '../components/profile/TeachersCard';
+import ClosuresCard from '../components/profile/ClosuresCard';
 import NotificationsCard from '../components/profile/NotificationsCard';
 import AccountCard from '../components/profile/AccountCard';
 
@@ -215,6 +216,27 @@ export const PROFILE_CARDS: ProfileCard[] = [
     surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 16,
+  },
+  {
+    // Below the roster and attendance, above the files. A closure is not what a
+    // parent opened the app for on a normal Tuesday — it is what they need to
+    // see BEFORE the week it lands in, which is what the countdown on a row is
+    // for. Putting it above "up next" would make every visit start with a
+    // holiday six weeks away.
+    id: 'closures',
+    title: 'Closures & season',
+    component: ClosuresCard,
+    surface: 'dashboard',
+    // showsAFamily, like every other card here, and NOT `() => true`.
+    //
+    // The closures are the studio's rather than the family's, so "true for
+    // anyone signed in" was tempting and is wrong: this dashboard is the
+    // FAMILY's page, and the rule that a member of staff with no children at
+    // the studio sees their account and nothing else is deliberate — they have
+    // the staff calendar for the studio's own dates. The season line inside
+    // needs a family regardless.
+    visible: showsAFamily,
+    defaultOrder: 30,
   },
   {
     id: 'documents',
