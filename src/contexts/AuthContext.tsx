@@ -85,6 +85,9 @@ const mapProfileToUser = (profile: any, authUser?: SupabaseUser): User => {
     isActive: profile.is_active,
     invitedBy: profile.invited_by,
     avatar: profile.avatar_url,
+    // The storage KEY for the staff photo, not a URL — it is signed on read.
+    // See lib/staffPhoto.ts for why a stored signed URL would rot.
+    avatarPath: profile.avatar_path ?? null,
     notificationPreferences: profile.notification_preferences || {
       pushEnabled: true,
       emailEnabled: true,
@@ -714,6 +717,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (userData.department !== undefined) updateData.department = userData.department;
       if (userData.isActive !== undefined) updateData.is_active = userData.isActive;
       if (userData.avatar !== undefined) updateData.avatar_url = userData.avatar;
+      if (userData.avatarPath !== undefined) updateData.avatar_path = userData.avatarPath;
       if (userData.notificationPreferences !== undefined) {
         updateData.notification_preferences = userData.notificationPreferences;
       }

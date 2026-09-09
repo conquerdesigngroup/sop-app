@@ -51,6 +51,8 @@ export interface User {
   role: UserRole;
   department: string;
   avatar?: string;
+  /** Storage key for the staff photo (staff-photos bucket), signed on read. */
+  avatarPath?: string | null;
   notificationPreferences?: NotificationPreferences;
   createdAt: string;
   isActive: boolean;

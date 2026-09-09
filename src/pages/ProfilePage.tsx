@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 import { isManagementRole, roleLabel } from '../lib/roles';
 import { useResponsive } from '../hooks/useResponsive';
 import { FormInput, FormButton, FormGroup } from '../components/FormComponents';
+import {
+  STAFF_PHOTO_MIME,
+  describePhotoProblem,
+  removeStaffPhoto,
+  signStaffPhoto,
+  uploadStaffPhoto,
+} from '../lib/staffPhoto';
 
 const ProfilePage: React.FC = () => {
   const { currentUser, updateUser, changePassword } = useAuth();
@@ -24,6 +31,89 @@ const ProfilePage: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  /**
+   * The staff photo.
+   *
+   * `photoUrl` is signed and therefore temporary; `avatarPath` on the profile
+   * is the durable thing. Re-signed whenever the stored key changes rather than
+   * on a timer — an hour outlasts a session on this page.
+   */
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoStatus, setPhotoStatus] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
+  /**
+   * Guards the SECOND tap.
+   *
+   * `disabled` on the button is not enough on its own: a second tap can land
+   * between the first one and the re-render that disables it, and this handler
+   * starts an upload. CLAUDE.md's slow-tap rule asks for both, and this is the
+   * ref half.
+   */
+  const busyRef = useRef(false);
+
+  const avatarPath = currentUser?.avatarPath ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    signStaffPhoto(avatarPath).then(url => { if (!cancelled) setPhotoUrl(url); });
+    return () => { cancelled = true; };
+  }, [avatarPath]);
+
+  const onPickPhoto = useCallback(async (file: File | undefined) => {
+    if (!file || !currentUser || busyRef.current) return;
+
+    // Both checks before the upload, not after. The bucket refuses a bad type
+    // and an oversized file too, but its refusal arrives as an opaque failure
+    // that nobody can act on.
+    const problem = describePhotoProblem(file);
+    if (problem) { setPhotoStatus(problem); return; }
+
+    busyRef.current = true;
+    setPhotoBusy(true);
+    setPhotoStatus('Uploading your photo — keep this page open.');
+
+    const previous = avatarPath;
+    try {
+      const path = await uploadStaffPhoto(currentUser.id, file);
+      // The row first, the cleanup second. In this order a failure part-way
+      // leaves an unreferenced file in the bucket; the other order leaves a
+      // profile pointing at a photo that has been deleted.
+      await updateUser(currentUser.id, { avatarPath: path });
+      await removeStaffPhoto(previous);
+      setPhotoStatus('Saved. This is only shown inside the staff app.');
+      showToast('Profile photo updated', 'success');
+    } catch (e: any) {
+      setPhotoStatus(
+        e?.message === 'new row violates row-level security policy'
+          ? 'That upload was refused. You can only change your own photo.'
+          : 'That did not upload. Check your connection and tap Choose photo again.',
+      );
+    } finally {
+      busyRef.current = false;
+      setPhotoBusy(false);
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  }, [avatarPath, currentUser, updateUser, showToast]);
+
+  const onRemovePhoto = useCallback(async () => {
+    if (!currentUser || busyRef.current) return;
+    busyRef.current = true;
+    setPhotoBusy(true);
+    setPhotoStatus('Removing your photo…');
+    try {
+      await updateUser(currentUser.id, { avatarPath: null });
+      await removeStaffPhoto(avatarPath);
+      setPhotoUrl(null);
+      setPhotoStatus('Removed. Your initials are shown instead.');
+    } catch {
+      setPhotoStatus('That did not remove. Check your connection and try again.');
+    } finally {
+      busyRef.current = false;
+      setPhotoBusy(false);
+    }
+  }, [avatarPath, currentUser, updateUser]);
 
   const handleSaveProfile = async () => {
     if (!currentUser) return;
@@ -112,8 +202,12 @@ const ProfilePage: React.FC = () => {
         {/* Avatar Section */}
         <div style={styles.avatarSection}>
           <div style={styles.avatarLarge}>
-            {currentUser.avatar ? (
-              <img src={currentUser.avatar} alt="Avatar" style={styles.avatarImage} />
+            {photoUrl ? (
+              <img
+                src={photoUrl}
+                alt={`${currentUser.firstName} ${currentUser.lastName}`}
+                style={styles.avatarImage}
+              />
             ) : (
               <span style={styles.avatarInitials}>
                 {currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}
@@ -134,6 +228,64 @@ const ProfilePage: React.FC = () => {
             }}>
               {roleLabel(currentUser.role)}
             </span>
+
+            {/* The photo controls.
+
+                A row that can wrap, because two buttons plus a hidden input at
+                320px is wider than the column the avatar leaves beside it —
+                and a centring row that cannot wrap throws content off BOTH
+                edges, where the left half is unreachable (CLAUDE.md). */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+              <input
+                ref={fileInput}
+                type="file"
+                accept={STAFF_PHOTO_MIME.join(',')}
+                style={{ display: 'none' }}
+                onChange={e => onPickPhoto(e.target.files?.[0])}
+              />
+              <FormButton
+                variant="secondary"
+                disabled={photoBusy}
+                onClick={() => fileInput.current?.click()}
+              >
+                {photoUrl ? 'Replace photo' : 'Choose photo'}
+              </FormButton>
+              {photoUrl && (
+                <FormButton variant="secondary" disabled={photoBusy} onClick={onRemovePhoto}>
+                  Remove
+                </FormButton>
+              )}
+            </div>
+
+            {/* Indeterminate, because the storage client reports no progress
+                for an upload — so the bar's job is only to say WORKING, and
+                the words underneath carry the meaning. index.css freezes the
+                stripes under prefers-reduced-motion, which is why the status
+                line has to stand on its own. */}
+            {photoBusy && (
+              <div
+                role="progressbar"
+                aria-label="Uploading photo"
+                className="progress-striped"
+                style={{
+                  height: '4px',
+                  width: '100%',
+                  borderRadius: theme.borderRadius.full,
+                  backgroundColor: theme.colors.bg.tertiary,
+                }}
+              />
+            )}
+
+            {photoStatus && (
+              <p role="status" aria-live="polite" style={{
+                margin: 0,
+                fontSize: '12px',
+                color: theme.colors.txt.tertiary,
+                maxWidth: '42ch',
+              }}>
+                {photoStatus}
+              </p>
+            )}
           </div>
         </div>
 
