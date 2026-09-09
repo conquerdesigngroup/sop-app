@@ -4,6 +4,7 @@ import {
   clockTime,
   nextOccurrences,
   googleSeriesUrl,
+  nextDateLabel,
   nextPerClass,
   relativeDay,
 } from './upcomingClasses';
@@ -177,6 +178,73 @@ describe('nextPerClass', () => {
     );
     expect(result).toHaveLength(2);
     expect(result.map(r => r.klass.id)).toEqual(['tue', 'sat']);
+  });
+
+  // The roster promises chronological order and the row now prints the date it
+  // is sorted by, so a stale date is visible as well as wrong: today's finished
+  // class sat above everything else with a date already in the past.
+  it('moves past a class that has already finished today', () => {
+    // Tuesday 8:18pm. The class ran 4:30–5:30.
+    const tuesdayEvening = new Date(2026, 8, 1, 20, 18, 0);
+
+    const [row] = nextPerClass(
+      [{ student, klass: klass(), enrollment: enrollment(), sessions: [] }],
+      tuesdayEvening,
+    );
+
+    expect(row.date).toBe('2026-09-08');
+  });
+
+  it('keeps a class that is running right now, for the pickup time', () => {
+    // Tuesday 4:45pm, twenty minutes before the 5:30 finish.
+    const midClass = new Date(2026, 8, 1, 16, 45, 0);
+
+    const [row] = nextPerClass(
+      [{ student, klass: klass(), enrollment: enrollment(), sessions: [] }],
+      midClass,
+    );
+
+    expect(row.date).toBe('2026-09-01');
+  });
+
+  it('sorts a finished class behind one still to come', () => {
+    const tuesdayEvening = new Date(2026, 8, 1, 20, 18, 0);
+
+    const result = nextPerClass(
+      [
+        // Met at 4:30 this afternoon — next Tuesday now.
+        { student, klass: klass({ id: 'tue' }), enrollment: enrollment({ classId: 'tue' }), sessions: [] },
+        // Still four days away.
+        { student, klass: klass({ id: 'sat', dayOfWeek: 6 }), enrollment: enrollment({ classId: 'sat' }), sessions: [] },
+      ],
+      tuesdayEvening,
+    );
+
+    expect(result.map(r => r.klass.id)).toEqual(['sat', 'tue']);
+  });
+
+  // A class whose only remaining occurrence today has already finished, with
+  // the season ending before next week, has genuinely nothing left.
+  it('drops a class whose season ends before the next occurrence', () => {
+    const tuesdayEvening = new Date(2026, 8, 1, 20, 18, 0);
+
+    const result = nextPerClass(
+      [{ student, klass: klass({ seasonEnd: '2026-09-01' }), enrollment: enrollment(), sessions: [] }],
+      tuesdayEvening,
+    );
+
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe('nextDateLabel', () => {
+  it('always carries the calendar date, however far out', () => {
+    // Sunday 30 Aug 2026, midday.
+    expect(nextDateLabel(new Date(2026, 7, 30, 16, 0), SUNDAY)).toBe('today, Sun 30 Aug');
+    expect(nextDateLabel(new Date(2026, 7, 31, 16, 0), SUNDAY)).toBe('tomorrow, Mon 31 Aug');
+    // Where relativeDay would say a bare "Tuesday" and leave a parent counting.
+    expect(nextDateLabel(new Date(2026, 8, 1, 16, 0), SUNDAY)).toBe('Tue 1 Sep');
+    expect(nextDateLabel(new Date(2026, 8, 7, 16, 0), SUNDAY)).toBe('Mon 7 Sep');
   });
 });
 

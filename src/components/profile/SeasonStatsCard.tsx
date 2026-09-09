@@ -82,14 +82,21 @@ const SeasonStatsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   const enrollments: ClassProgress[] = data.perStudent.flatMap(p => p.current);
   if (enrollments.length === 0) return null;
 
-  // Next seven days INCLUDING today. `series` holds the next occurrence of
-  // every active class, one row each and uncapped — `upcoming` is capped at
-  // four, so counting that instead would tell a family of six classes they had
-  // four. One class is one weekly slot in this model, so this is a count of
-  // classes, not of occurrences.
+  // A week ahead of today, inclusive at both ends. `series` holds the next
+  // occurrence of every active class, one row each and uncapped — `upcoming`
+  // is capped at four, so counting that instead would tell a family of six
+  // classes they had four. One class is one weekly slot in this model, so this
+  // is a count of classes, not of occurrences.
+  //
+  // Eight days rather than seven, because `series` skips an occurrence that has
+  // already finished: a Tuesday class read on Tuesday evening projects forward
+  // to next Tuesday, exactly seven days out. Stopping at six would have dropped
+  // it from the count for the rest of the day — the class did not stop being
+  // one of this family's weekly classes when it finished. Each class still
+  // contributes at most one row, so the wider window cannot double-count.
   const from = localIso(now);
   const horizon = new Date(now);
-  horizon.setDate(horizon.getDate() + 6);
+  horizon.setDate(horizon.getDate() + 7);
   const to = localIso(horizon);
   const thisWeek = data.series.filter(s => s.date >= from && s.date <= to).length;
 

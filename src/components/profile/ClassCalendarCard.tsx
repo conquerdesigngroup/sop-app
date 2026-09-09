@@ -5,14 +5,16 @@ import { Button, Card, Spinner } from '../ui';
 import { useToast } from '../../contexts/ToastContext';
 import { classAccent } from '../../lib/attendanceColors';
 import { studentLabel } from '../../lib/attendanceQueries';
-import { portalRoutes, programSlugForCategory } from '../../lib/portal';
+import { dayName, portalRoutes, programSlugForCategory } from '../../lib/portal';
 import {
   UpcomingClass,
   buildSeriesIcs,
   clockTime,
   downloadIcs,
   googleSeriesUrl,
+  nextDateLabel,
 } from '../../lib/upcomingClasses';
+import { FIXTURE_TODAY } from '../../lib/attendanceFixture';
 import { ProfileCardProps } from '../../lib/profileCards';
 import { useHousehold } from './useHousehold';
 import CollapsibleCard from './CollapsibleCard';
@@ -78,50 +80,91 @@ const ChevronGlyph: React.FC = () => (
  * nowhere honest to send the tap, and a link that lands on "class not found"
  * is worse than a line of text.
  */
-const ClassLine: React.FC<{ item: UpcomingClass; showWho: boolean; linked: boolean }> = ({
-  item, showWho, linked,
-}) => (
-  <>
-    <span
-      aria-hidden="true"
-      style={{
-        width: '8px',
-        height: '8px',
-        borderRadius: theme.borderRadius.full,
-        background: classAccent(item.klass),
-        flexShrink: 0,
-      }}
-    />
-    <span style={{ minWidth: 0, flex: 1, overflowWrap: 'anywhere' }}>
-      <span style={{
-        ...theme.typography.bodySmall,
-        fontFamily: theme.fonts.primary,
-        fontWeight: 600,
-        color: theme.colors.txt.primary,
-      }}>
-        {item.klass.name}
+const ClassLine: React.FC<{
+  item: UpcomingClass;
+  showWho: boolean;
+  linked: boolean;
+  now: Date;
+}> = ({ item, showWho, linked, now }) => {
+  const day = dayName(item.klass.dayOfWeek);
+  // "Mondays, 4:00 PM". `dayOfWeek` is never null on a row that got this far —
+  // nextPerClass cannot project an occurrence without one — but the type allows
+  // it, and "weekly" is the honest fallback rather than a blank.
+  const recurrence = `${day ? `${day}s` : 'weekly'}, ${clockTime(item.startsAt)}`;
+
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        style={{
+          width: '8px',
+          height: '8px',
+          borderRadius: theme.borderRadius.full,
+          background: classAccent(item.klass),
+          flexShrink: 0,
+          // The dot used to centre against a two-line row and now sits beside a
+          // three-line one, where centred reads as floating. Aligned to the name
+          // it labels instead; 6px is the cap height of bodySmall.
+          alignSelf: 'flex-start',
+          marginTop: '6px',
+        }}
+      />
+      <span style={{ minWidth: 0, flex: 1, overflowWrap: 'anywhere' }}>
+        <span style={{
+          ...theme.typography.bodySmall,
+          fontFamily: theme.fonts.primary,
+          fontWeight: 600,
+          color: theme.colors.txt.primary,
+        }}>
+          {item.klass.name}
+        </span>
+
+        {/* The recurrence. "weekly" on its own was true and useless — a parent
+            who cannot see WHICH day cannot check the row against their week, so
+            five classes at four different times read as an unsorted list. */}
+        <span style={{
+          ...theme.typography.captionSmall,
+          fontFamily: theme.fonts.primary,
+          color: theme.colors.txt.tertiary,
+          display: 'block',
+        }}>
+          {showWho ? `${studentLabel(item.student)} · ` : ''}{recurrence}
+        </span>
+
+        {/* And the date it actually lands on next, which is what the class page
+            was being opened for. It is the projection the row is sorted by, so
+            the order is legible from the rows themselves — and it already has
+            the studio's known closures subtracted, which a parent counting
+            Mondays forward on their own calendar does not. */}
+        <span style={{
+          ...theme.typography.captionSmall,
+          fontFamily: theme.fonts.mono,
+          color: theme.colors.txt.secondary,
+          display: 'block',
+          marginTop: '2px',
+        }}>
+          Next {nextDateLabel(item.startsAt, now)}
+        </span>
       </span>
-      <span style={{
-        ...theme.typography.captionSmall,
-        fontFamily: theme.fonts.primary,
-        color: theme.colors.txt.tertiary,
-        display: 'block',
-      }}>
-        {showWho ? `${studentLabel(item.student)} · ` : ''}
-        weekly, {clockTime(item.startsAt)}
-      </span>
-    </span>
-    {linked && (
-      <span aria-hidden="true" style={{ color: theme.colors.txt.tertiary, display: 'flex' }}>
-        <ChevronGlyph />
-      </span>
-    )}
-  </>
-);
+      {linked && (
+        <span aria-hidden="true" style={{
+          color: theme.colors.txt.tertiary,
+          display: 'flex',
+          alignSelf: 'center',
+        }}>
+          <ChevronGlyph />
+        </span>
+      )}
+    </>
+  );
+};
 
 const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   const toast = useToast();
   const { data, loading } = useHousehold(ctx.source);
+  // The fixture's dates are seeded around FIXTURE_TODAY, so a demo read against
+  // the wall clock would date every row months out. Same pairing as UpNextCard.
+  const now = ctx.source.source === 'fixture' ? FIXTURE_TODAY : new Date();
 
   if (loading) {
     return (
@@ -205,7 +248,7 @@ const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
                   minWidth: 0,
                 }}
               >
-                <ClassLine item={item} showWho={showWho} linked />
+                <ClassLine item={item} showWho={showWho} linked now={now} />
               </Link>
             ) : (
               <div style={{
@@ -215,7 +258,7 @@ const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
                 marginBottom: theme.spacing.xs,
                 minWidth: 0,
               }}>
-                <ClassLine item={item} showWho={showWho} linked={false} />
+                <ClassLine item={item} showWho={showWho} linked={false} now={now} />
               </div>
             )}
 
