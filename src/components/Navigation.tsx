@@ -6,6 +6,7 @@ import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { theme, BRAND_MARK } from '../theme';
 import RefreshButton from './RefreshButton';
+import StaffAvatar from './StaffAvatar';
 import GlobalSearch from './GlobalSearch';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { roleLabel } from '../lib/roles';
@@ -773,7 +774,15 @@ const Navigation: React.FC = () => {
                   setShowUserMenu(!showUserMenu);
                 }}
               >
-                {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
+                <StaffAvatar
+                  firstName={currentUser?.firstName}
+                  lastName={currentUser?.lastName}
+                  avatarPath={currentUser?.avatarPath}
+                  size={32}
+                  /* Transparent: the button already paints the brand circle,
+                     and a second one inside it reads as a ring. */
+                  style={{ backgroundColor: 'transparent' }}
+                />
               </button>
             </div>
 
@@ -929,9 +938,12 @@ const Navigation: React.FC = () => {
                   setShowUserMenu(!showUserMenu);
                 }}
               >
-                <div style={styles.userAvatar}>
-                  {currentUser?.firstName.charAt(0)}{currentUser?.lastName.charAt(0)}
-                </div>
+                <StaffAvatar
+                  firstName={currentUser?.firstName}
+                  lastName={currentUser?.lastName}
+                  avatarPath={currentUser?.avatarPath}
+                  size={32}
+                />
                 <div style={styles.userInfo}>
                   <div style={{...styles.userName, color: colors.txt.primary}}>
                     {currentUser?.firstName} {currentUser?.lastName}

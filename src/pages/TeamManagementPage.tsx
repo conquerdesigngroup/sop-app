@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { theme } from '../theme';
+import StaffAvatar from '../components/StaffAvatar';
 import { User, UserRole } from '../types';
 import { DEFAULT_DEPARTMENTS, SUCCESS_MESSAGES, ERROR_MESSAGES } from '../constants';
 import { isManagementRole, isSuperAdminRole, roleLabel } from '../lib/roles';
@@ -469,9 +470,12 @@ const TeamManagementPage: React.FC = () => {
               <div key={user.id} style={styles.userCard}>
                 <div style={styles.userCardHeader}>
                   <div style={styles.userInfo}>
-                    <div style={styles.avatar}>
-                      {user.firstName[0]}{user.lastName[0]}
-                    </div>
+                    <StaffAvatar
+                      firstName={user.firstName}
+                      lastName={user.lastName}
+                      avatarPath={user.avatarPath}
+                      size={40}
+                    />
                     <div>
                       <div style={styles.userName}>
                         {user.firstName} {user.lastName}
@@ -619,9 +623,12 @@ const TeamManagementPage: React.FC = () => {
                   <tr key={user.id} style={styles.tableRow}>
                     <td style={styles.td}>
                       <div style={styles.userInfo}>
-                        <div style={styles.avatar}>
-                          {user.firstName[0]}{user.lastName[0]}
-                        </div>
+                        <StaffAvatar
+                          firstName={user.firstName}
+                          lastName={user.lastName}
+                          avatarPath={user.avatarPath}
+                          size={40}
+                        />
                         <div>
                           <div style={styles.userName}>
                             {user.firstName} {user.lastName}

@@ -75,19 +75,82 @@ export const describePhotoProblem = (file: File): string | null => {
   return null;
 };
 
-/** A viewable URL for a stored key, or null. Never throws — a broken picture
- *  must not take down the profile page it sits on. */
+/**
+ * Signing, cached and batched.
+ *
+ * WHY THIS IS NOT ONE REQUEST PER AVATAR
+ *
+ * The photo shows on the team list, the assignee pickers and the header, so a
+ * screen can easily ask for forty at once. One createSignedUrl each is forty
+ * round trips to render one list, on a page that already had its data.
+ *
+ * So a miss joins a queue that is flushed on the next tick through
+ * createSignedUrls — every avatar mounted in the same render batches into a
+ * single request — and the answer is cached by path. Paths are immutable
+ * (uploadStaffPhoto mints a new key every time) so a cached URL can never be
+ * stale for the wrong picture; it only expires, which the TTL outlives for any
+ * realistic session.
+ *
+ * A failure caches `null` rather than retrying forever: a broken picture must
+ * fall back to initials, not spin.
+ */
+const cache = new Map<string, string | null>();
+let queue = new Set<string>();
+let flushing: Promise<void> | null = null;
+const waiters = new Set<() => void>();
+
+const flush = async (): Promise<void> => {
+  const paths = Array.from(queue);
+  queue = new Set();
+  if (paths.length) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(STAFF_PHOTO_BUCKET)
+        .createSignedUrls(paths, STAFF_PHOTO_TTL_SECONDS);
+      if (error || !data) {
+        paths.forEach(p => cache.set(p, null));
+      } else {
+        // The response is per-path and each entry carries its own error, so a
+        // single missing object cannot blank out everybody else's picture.
+        data.forEach((row: any) => {
+          if (row?.path) cache.set(row.path, row.error ? null : row.signedUrl ?? null);
+        });
+        paths.forEach(p => { if (!cache.has(p)) cache.set(p, null); });
+      }
+    } catch {
+      paths.forEach(p => cache.set(p, null));
+    }
+  }
+  flushing = null;
+  const listeners = Array.from(waiters);
+  waiters.clear();
+  listeners.forEach(fn => fn());
+};
+
+const request = (path: string): Promise<void> => {
+  queue.add(path);
+  if (!flushing) flushing = new Promise<void>(resolve => {
+    setTimeout(() => { void flush().then(resolve); }, 0);
+  });
+  return flushing;
+};
+
+/**
+ * A viewable URL for a stored key, or null.
+ *
+ * Never throws — a broken picture must not take down the page it sits on.
+ */
 export const signStaffPhoto = async (path: string | null | undefined): Promise<string | null> => {
   if (!path) return null;
-  try {
-    const { data, error } = await supabase.storage
-      .from(STAFF_PHOTO_BUCKET)
-      .createSignedUrl(path, STAFF_PHOTO_TTL_SECONDS);
-    return error ? null : data?.signedUrl ?? null;
-  } catch {
-    return null;
-  }
+  if (cache.has(path)) return cache.get(path) ?? null;
+
+  await new Promise<void>(resolve => { waiters.add(resolve); void request(path); });
+  return cache.get(path) ?? null;
 };
+
+/** Synchronous peek, for a first paint that already has the answer. */
+export const cachedStaffPhoto = (path: string | null | undefined): string | null | undefined =>
+  path ? cache.get(path) : null;
 
 export const uploadStaffPhoto = async (uid: string, file: File): Promise<string> => {
   const path = buildStaffPhotoPath(uid, file);

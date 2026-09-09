@@ -7,6 +7,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import TemplateSelector from './TemplateSelector';
 import { CustomCheckbox } from './CustomCheckbox';
 import { studioToday } from '../lib/studioDate';
+import StaffAvatar from './StaffAvatar';
 
 interface ChecklistItem {
   id: string;
@@ -556,9 +557,13 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                             label=""
                           />
                         </div>
-                        <div style={styles.userCardAvatar}>
-                          {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                        </div>
+                        <StaffAvatar
+                          firstName={user.firstName}
+                          lastName={user.lastName}
+                          avatarPath={user.avatarPath}
+                          size={36}
+                          style={styles.userCardAvatar}
+                        />
                         <div style={styles.userCardInfo}>
                           <span style={styles.userCardName}>
                             {user.firstName} {user.lastName}

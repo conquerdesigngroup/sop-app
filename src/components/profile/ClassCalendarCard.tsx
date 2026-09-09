@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Button, Card, Spinner } from '../ui';
 import { useToast } from '../../contexts/ToastContext';
@@ -160,6 +160,10 @@ const ClassLine: React.FC<{
 };
 
 const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
+  // Recorded on each class link so the class page's back arrow returns to the
+  // dashboard. Without it the page fell back to /portal/<slug>/classes — a
+  // program page a parent who tapped a class here had never opened.
+  const { pathname } = useLocation();
   const toast = useToast();
   const { data, loading } = useHousehold(ctx.source);
   // The fixture's dates are seeded around FIXTURE_TODAY, so a demo read against
@@ -235,6 +239,7 @@ const ClassCalendarCard: React.FC<ProfileCardProps> = ({ ctx }) => {
             {slug ? (
               <Link
                 to={portalRoutes.classDetail(slug, item.klass.id)}
+                state={{ backTo: pathname }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

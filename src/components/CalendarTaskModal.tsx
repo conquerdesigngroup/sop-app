@@ -5,6 +5,7 @@ import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
+import StaffAvatar from './StaffAvatar';
 import {
   generateGoogleCalendarUrlForTask,
   generateICSForTask,
@@ -352,9 +353,13 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
             <div style={styles.assignedUsers}>
               {assignedUsers.map(user => (
                 <div key={user.id} style={styles.userChip}>
-                  <div style={styles.userAvatar}>
-                    {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                  </div>
+                  <StaffAvatar
+                    firstName={user.firstName}
+                    lastName={user.lastName}
+                    avatarPath={user.avatarPath}
+                    size={28}
+                    style={styles.userAvatar}
+                  />
                   <span style={styles.userName}>{user.firstName} {user.lastName}</span>
                 </div>
               ))}
@@ -525,17 +530,22 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 {/* Add Comment Input */}
                 {currentUser && (
                   <div style={styles.addCommentContainer}>
-                    <div
+                    <StaffAvatar
+                      firstName={currentUser.firstName}
+                      lastName={currentUser.lastName}
+                      avatarPath={currentUser.avatarPath}
+                      size={32}
+                      /* Keeps this row's per-person colour rather than the
+                         brand default: the comment thread identifies who said
+                         what by colour, and flattening every author to crimson
+                         would take that away. A photo covers it either way. */
                       style={{
                         ...styles.commentAvatar,
                         backgroundColor: getAvatarColor(currentUser.id),
                         width: '32px',
                         height: '32px',
-                        fontSize: '11px',
                       }}
-                    >
-                      {currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}
-                    </div>
+                    />
                     <div style={styles.commentInputWrapper}>
                       <input
                         type="text"

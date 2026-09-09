@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Badge, CalendarPlusIcon, EmptyState } from '../ui';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -68,6 +68,9 @@ export const ClassCard: React.FC<CardProps> = ({
   klass: c, slug, showCategory, showDay = false, compact = false, onAddToCalendar,
 }) => {
   const [active, setActive] = useState(false);
+  // Recorded on the link so the class page's back arrow returns here rather
+  // than to a fixed parent the reader may never have visited.
+  const { pathname } = useLocation();
   // Read from the provider rather than threaded through as a prop: this card is
   // rendered by four different views and every one of them would have to carry
   // the map through purely to hand it here.
@@ -119,6 +122,7 @@ export const ClassCard: React.FC<CardProps> = ({
     >
       <Link
         to={portalRoutes.classDetail(slug, c.id)}
+        state={{ backTo: pathname }}
         onFocus={() => setActive(true)}
         onBlur={() => setActive(false)}
         style={{

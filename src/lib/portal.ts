@@ -121,6 +121,31 @@ export const portalRoutes = {
   calendar: (slug: ProgramSlug) => `/portal/${slug}/calendar`,
 } as const;
 
+/**
+ * Where a class page's back chevron should return to.
+ *
+ * A class detail can be opened from three places — the program's class list,
+ * the schedule views, and the dashboard's "Your classes" card — and only the
+ * first two sit under /portal/<slug>/classes. The page used to hard-code that
+ * list as its parent, so a parent who tapped a class on the DASHBOARD was sent
+ * on to a program page they had never opened. The back arrow was not going
+ * back; it was going up, in a tree the reader was not standing in.
+ *
+ * Callers pass the path they are on. The fallback covers a direct hit on a
+ * class URL, a refresh, or a restored tab, where there is no history and no
+ * router state to read.
+ *
+ * VALIDATED, BECAUSE ROUTER STATE IS AN INPUT
+ *
+ * It only ever comes from our own <Link>s today, but it ends up in a `to=` and
+ * an absolute URL there would navigate off the site. Anything that is not a
+ * portal path is discarded rather than trusted.
+ */
+export const classBackTo = (from: unknown, slug: ProgramSlug): string =>
+  (typeof from === 'string' && from.startsWith('/') && isPortalPath(from))
+    ? from
+    : portalRoutes.classes(slug);
+
 /** True for any path rendered inside the portal shell (i.e. no staff chrome). */
 export const isPortalPath = (pathname: string): boolean =>
   pathname === '/' || pathname === '/portal' || pathname.startsWith('/portal/');
