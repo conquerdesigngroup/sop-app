@@ -146,6 +146,19 @@ export const buildUpcoming = (
  * a schedule needs and exactly wrong for the calendar card: a class that meets
  * on Saturday must still be addable on a Tuesday. This keeps one row per
  * enrollment, uncapped.
+ *
+ * TWO CANDIDATES, NOT ONE
+ *
+ * `nextOccurrences` walks from the START of `from`'s day, because a class at
+ * 4pm is still "today" to someone reading at 9am. Taking the first date it
+ * offers therefore hands back this afternoon's class all evening — a date in
+ * the past, sorted to the top of a list whose whole promise is chronological
+ * order. A parent looking at the roster after pickup saw today's four o'clock
+ * above Saturday's ten o'clock and no reason for it, because the row named a
+ * time and not a day.
+ *
+ * So take two. The class is weekly, so if the first candidate has already
+ * finished the second is seven days out and cannot also be past.
  */
 export const nextPerClass = (
   entries: { student: Student; klass: AttendanceClass; enrollment: Enrollment; sessions: ClassSession[] }[],
@@ -155,18 +168,25 @@ export const nextPerClass = (
 
   entries.forEach(({ student, klass, enrollment, sessions }) => {
     if (enrollment.status !== 'active') return;
-    const [date] = nextOccurrences(klass, enrollment, blockedDates(sessions), from, 1);
-    if (!date) return;
 
-    const day = parseIso(date);
-    out.push({
-      student,
-      klass,
-      enrollment,
-      date,
-      startsAt: withTime(day, klass.startTime),
-      endsAt: klass.endTime ? withTime(day, klass.endTime) : null,
-    });
+    const occurrence = nextOccurrences(klass, enrollment, blockedDates(sessions), from, 2)
+      .map(date => {
+        const day = parseIso(date);
+        return {
+          student,
+          klass,
+          enrollment,
+          date,
+          startsAt: withTime(day, klass.startTime),
+          endsAt: klass.endTime ? withTime(day, klass.endTime) : null,
+        };
+      })
+      // The same rule buildUpcoming uses: a class still running counts as next,
+      // because a parent checking mid-class is checking the pickup time. One
+      // that has finished does not.
+      .find(o => (o.endsAt ?? o.startsAt) >= from);
+
+    if (occurrence) out.push(occurrence);
   });
 
   return out.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
@@ -190,6 +210,29 @@ export const relativeDay = (date: Date, now: Date): string => {
   if (days === 1) return 'Tomorrow';
   if (days < 7) return DAYS[date.getDay()];
   return `${DAYS[date.getDay()].slice(0, 3)} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
+};
+
+/**
+ * "today, Tue 9 Sep" — the next date, always with the calendar date on it.
+ *
+ * WHY NOT relativeDay
+ *
+ * "Thursday" is the right answer on a card that is only ever about the next
+ * few days, and the wrong one on a roster of every class a family is in: half
+ * those rows are further out than a week, and a parent reading "Thursday"
+ * still has to work out which Thursday against a calendar they do not have
+ * open. The date is the thing they were opening the class page to find.
+ *
+ * Today and tomorrow keep their word AS WELL AS the date, because that is the
+ * one a parent is deciding on right now and "9 Sep" alone makes them count.
+ */
+export const nextDateLabel = (date: Date, now: Date): string => {
+  const days = Math.round((startOfDay(date).getTime() - startOfDay(now).getTime()) / 86400000);
+  const stamp = `${DAYS[date.getDay()].slice(0, 3)} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
+
+  if (days === 0) return `today, ${stamp}`;
+  if (days === 1) return `tomorrow, ${stamp}`;
+  return stamp;
 };
 
 export const clockTime = (d: Date): string => {
