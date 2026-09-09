@@ -6,6 +6,7 @@ import { stripSessions } from '../../lib/attendanceMarks';
 import { FIXTURE_TODAY } from '../../lib/attendanceFixture';
 import { dayName, formatTime } from '../../lib/portal';
 import {
+  ATTENDANCE_LIVE,
   AttendanceSource,
   ClassProgress,
   LoadError,
@@ -21,6 +22,7 @@ import CollapsibleCard from './CollapsibleCard';
 import CardError from './CardError';
 import SegmentedControl from './SegmentedControl';
 import { useHousehold } from './useHousehold';
+import { Badge } from '../ui';
 
 /**
  * The attendance summary card (§6.1).
@@ -83,6 +85,93 @@ const EmptyNote: React.FC<{ title: string; body: string }> = ({ title, body }) =
     }}>
       {body}
     </p>
+  </div>
+);
+
+/**
+ * The section, behind a scrim, while attendance is not switched on.
+ *
+ * WHY THE CONTENT STAYS UNDERNEATH RATHER THAN BEING REPLACED
+ *
+ * Families are being shown this dashboard before anyone is taking the register
+ * in class. A section they can see the shape of but are told not to trust is
+ * honest; a section that is simply missing invites the question every week
+ * until it appears. So the real body still renders and the notice sits on it.
+ *
+ * It is `aria-hidden` and `pointer-events: none` because a preview is not a
+ * record. Nothing underneath may be read out as fact, and no row may be tapped
+ * through to a detail sheet of sessions nobody has entered.
+ *
+ * TIED TO ATTENDANCE_LIVE, NOT TO A FLAG OF ITS OWN
+ *
+ * That flag already means exactly this — the real tables are in service — so
+ * setting REACT_APP_ATTENDANCE_LIVE=true both switches the feature on and takes
+ * this notice down. A second switch is a second thing to forget, and the
+ * failure it invites is a card that says "not activated yet" over live numbers.
+ */
+const NotActivated: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ position: 'relative' }}>
+    {/* minHeight so the notice has somewhere to sit even when what is behind
+        it is a single line of empty state. */}
+    <div aria-hidden="true" style={{ opacity: 0.22, pointerEvents: 'none', minHeight: '136px' }}>
+      {children}
+    </div>
+
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      display: 'flex',
+      // One child today, but the rule is about the row being ABLE to wrap:
+      // centring without it splits any overflow both ways, and there is no
+      // scrolling left.
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: theme.spacing.sm,
+        minWidth: 0,
+        maxWidth: '42ch',
+        boxSizing: 'border-box',
+        padding: theme.spacing.md,
+        borderRadius: theme.borderRadius.lg,
+        background: theme.colors.bg.tertiary,
+        border: `1px solid ${theme.colors.bdr.secondary}`,
+      }}>
+        {/* style, not a presentation attribute: the status colours are literal
+            hex and would resolve either way, but stroke={} is the trap next
+            door and copying it is how it spreads. */}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <path
+            d="M12 3.5l9 15.5H3l9-15.5z M12 10v4 M12 17.2v.01"
+            style={{ stroke: theme.colors.status.warning }}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+
+        {/* The whole notice, and deliberately not a sentence more.
+
+            It said what would happen once the register was being taken, which
+            is a promise about a date nobody has set — and a parent who reads a
+            promise starts checking for it, which is the opposite of what this
+            panel is for. The only job here is to stop them looking. */}
+        <p style={{
+          ...theme.typography.body,
+          fontFamily: theme.fonts.primary,
+          fontWeight: 600,
+          color: theme.colors.txt.primary,
+          margin: 0,
+          minWidth: 0,
+          overflowWrap: 'anywhere',
+        }}>
+          Not activated yet
+        </p>
+      </div>
+    </div>
   </div>
 );
 
@@ -360,19 +449,13 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
    * which is asked about once a month, while the cards above it answer "where
    * do they need to be?", which is asked three times a week.
    */
-  return (
-    <CollapsibleCard
-      id="attendance"
-      title="Attendance"
-      headerRight={
-        <SegmentedControl
-          options={RANGE_LABELS}
-          value={range}
-          onChange={setRange}
-          ariaLabel="Attendance period"
-        />
-      }
-    >
+  /**
+   * The dancer switcher and the rows are one unit, so that switching the two
+   * of them off is one decision rather than two: a live-looking control over a
+   * section that is not in service is a control that appears to do nothing.
+   */
+  const section = (
+    <>
       {showSwitcher && (
         <div style={{ marginBottom: theme.spacing.md }}>
           <SegmentedControl
@@ -385,6 +468,28 @@ const AttendanceCard: React.FC<AttendanceCardProps> = ({ source }) => {
       )}
 
       {body()}
+    </>
+  );
+
+  return (
+    <CollapsibleCard
+      id="attendance"
+      title="Attendance"
+      // The period picker goes with the numbers it filters — see `section`.
+      headerRight={ATTENDANCE_LIVE ? (
+        <SegmentedControl
+          options={RANGE_LABELS}
+          value={range}
+          onChange={setRange}
+          ariaLabel="Attendance period"
+        />
+      ) : undefined}
+      // On the header rather than only inside, because the card is shut by
+      // default: a parent who never expands it still needs to know the numbers
+      // it would show are not in service.
+      badge={ATTENDANCE_LIVE ? undefined : <Badge variant="warning" size="sm">Not activated</Badge>}
+    >
+      {ATTENDANCE_LIVE ? section : <NotActivated>{section}</NotActivated>}
 
       {open && selected && (
         <AttendanceDetail
