@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { theme } from '../../theme';
 import { ProgramSlug, dayName, formatTime, portalRoutes } from '../../lib/portal';
 import {
@@ -45,6 +45,9 @@ const BAND_LABEL: Record<TimeBand, string> =
 // ------------------------------------------------------------------ row
 
 const Row: React.FC<{ klass: PortalClass; slug: ProgramSlug }> = ({ klass: c, slug }) => {
+  // Recorded on the link so the class page's back arrow returns here rather
+  // than to a fixed parent the reader may never have visited.
+  const { pathname } = useLocation();
   const [pressed, setPressed] = useState(false);
   const { instructorLooks } = usePortal();
 
@@ -55,6 +58,7 @@ const Row: React.FC<{ klass: PortalClass; slug: ProgramSlug }> = ({ klass: c, sl
   return (
     <Link
       to={portalRoutes.classDetail(slug, c.id)}
+      state={{ backTo: pathname }}
       onTouchStart={() => setPressed(true)}
       onTouchEnd={() => setPressed(false)}
       onTouchCancel={() => setPressed(false)}

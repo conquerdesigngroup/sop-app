@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Badge, Button, CalendarPlusIcon, Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
@@ -7,7 +7,7 @@ import AddToCalendarSheet from '../../components/portal/AddToCalendarSheet';
 import { usePortal } from '../../contexts/PortalContext';
 import { useRefreshable } from '../../contexts/RefreshContext';
 import { useResponsive } from '../../hooks/useResponsive';
-import { portalRoutes, formatClassSchedule, CLASS_CATEGORY_LABEL } from '../../lib/portal';
+import { classBackTo, portalRoutes, formatClassSchedule, CLASS_CATEGORY_LABEL } from '../../lib/portal';
 import { ageRangeLabel, durationLabel } from '../../lib/portalClasses';
 import { canAddClassToCalendar, classTarget } from '../../lib/classCalendar';
 import { useProgramPage } from './useProgramPage';
@@ -46,6 +46,9 @@ import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
 const ClassDetail: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const { slug, program } = useProgramPage();
+  // Set by whichever link opened this page. Absent on a direct hit or a
+  // refresh, which is what classBackTo's fallback is for.
+  const backFrom = (useLocation().state as { backTo?: string } | null)?.backTo;
   const { fetchClasses, fetchUpdates, fetchDocuments, instructorLooks } = usePortal();
   const { isMobileOrTablet } = useResponsive();
   // Every open is logged, by anybody. This used to be gated on isClient, which
@@ -186,7 +189,7 @@ const ClassDetail: React.FC = () => {
     <PortalLayout
       title={klass?.name ?? 'Loading…'}
       subtitle={program?.name}
-      backTo={portalRoutes.classes(slug)}
+      backTo={classBackTo(backFrom, slug)}
       slug={slug}
     >
       <div style={{ maxWidth: '720px', display: 'flex', flexDirection: 'column', gap: '24px' }}>

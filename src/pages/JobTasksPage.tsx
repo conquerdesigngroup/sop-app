@@ -15,6 +15,7 @@ import TaskLibraryImport from '../components/TaskLibraryImport';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
 import { Modal, Button, Input } from '../components/ui';
+import StaffAvatar from '../components/StaffAvatar';
 
 // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight. Bare
 // `new Date('YYYY-MM-DD')` parses as UTC midnight, which renders as the
@@ -1021,9 +1022,13 @@ const JobTaskCard: React.FC<JobTaskCardProps> = memo(({ task, users, isMobile, i
           <div style={styles.assignedUsers}>
             {assignedUsers.map(user => (
               <div key={user.id} style={styles.assignedUser}>
-                <div style={styles.assignedUserAvatar}>
-                  {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                </div>
+                <StaffAvatar
+                  firstName={user.firstName}
+                  lastName={user.lastName}
+                  avatarPath={user.avatarPath}
+                  size={28}
+                  style={styles.assignedUserAvatar}
+                />
                 <span style={styles.assignedUserName}>
                   {user.firstName} {user.lastName}
                 </span>
@@ -1285,9 +1290,13 @@ const CreateJobTaskModal: React.FC<CreateJobTaskModalProps> = ({
                       style={styles.checkbox}
                     />
                     <div style={styles.userInfo}>
-                      <div style={styles.userAvatar}>
-                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                      </div>
+                      <StaffAvatar
+                        firstName={user.firstName}
+                        lastName={user.lastName}
+                        avatarPath={user.avatarPath}
+                        size={36}
+                        style={styles.userAvatar}
+                      />
                       <div style={styles.userDetails}>
                         <span style={styles.userFullName}>
                           {user.firstName} {user.lastName}
@@ -1673,9 +1682,13 @@ const JobTaskDetailModal: React.FC<JobTaskDetailModalProps> = ({ task, users, so
               <div style={styles.assignedUsers}>
                 {assignedUsers.map(user => (
                   <div key={user.id} style={styles.assignedUser}>
-                    <div style={styles.assignedUserAvatar}>
-                      {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-                    </div>
+                    <StaffAvatar
+                      firstName={user.firstName}
+                      lastName={user.lastName}
+                      avatarPath={user.avatarPath}
+                      size={28}
+                      style={styles.assignedUserAvatar}
+                    />
                     <span style={styles.assignedUserName}>
                       {user.firstName} {user.lastName}
                     </span>
