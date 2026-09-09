@@ -209,3 +209,63 @@ export const downloadCSV = (filename: string, csv: string): void => {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+export type DeliveryResult = 'shared' | 'downloaded' | 'cancelled';
+
+/** Hand the browser a blob to save, under a name we choose. */
+export const downloadBlob = (filename: string, blob: Blob): void => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+/**
+ * Get the file to the person, by whichever route their device actually has.
+ *
+ * A blob download is the desktop answer and a poor phone one: on iOS Safari
+ * it lands in Files with no confirmation, which on a button whose whole job
+ * is "produce a file" reads as a button that did nothing. Where the OS share
+ * sheet can take a file, use it — the file goes straight to Mail, Messages or
+ * Drive and the OS confirms it happened.
+ *
+ * Returns which route was taken so the caller can say the right thing.
+ * 'cancelled' means the person dismissed the share sheet: that is a decision,
+ * not a failure, and must NOT fall through to a download they did not ask
+ * for. Any other share failure does fall through, because then they have
+ * nothing at all.
+ *
+ * Must be called from a user gesture — navigator.share refuses otherwise.
+ */
+export const shareOrDownloadFile = async (
+  filename: string,
+  blob: Blob,
+  mimeType: string
+): Promise<DeliveryResult> => {
+  // canShare({ files }) is the only honest test. Plenty of browsers define
+  // navigator.share and still reject a file payload.
+  if (typeof File !== 'undefined' && navigator.canShare && navigator.share) {
+    const file = new File([blob], filename, { type: mimeType });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        return 'shared';
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return 'cancelled';
+        // Anything else — share unavailable, permission denied — falls
+        // through to the download so they still get the file.
+      }
+    }
+  }
+
+  downloadBlob(filename, blob);
+  return 'downloaded';
+};
+
+export const shareOrDownloadCSV = (filename: string, csv: string): Promise<DeliveryResult> =>
+  // Same BOM as downloadCSV, for the same reason: Excel reads UTF-8.
+  shareOrDownloadFile(filename, new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }), 'text/csv');

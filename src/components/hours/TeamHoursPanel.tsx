@@ -21,10 +21,10 @@ import {
   countDays,
   formatHours,
   formatDateShort,
-  downloadCSV,
   todayISO,
 } from './hoursUtils';
-import { buildPayrollCSV, EmployeeRollup } from './payrollExport';
+import { EmployeeRollup, PayrollLookups } from './payrollExport';
+import ExportHoursModal from './ExportHoursModal';
 
 const PRESETS: PeriodPreset[] = ['this-week', 'last-week', 'this-month', 'last-month', 'all'];
 
@@ -169,6 +169,31 @@ const TeamHoursPanel: React.FC = () => {
   const employeeName = (id: string) =>
     rollups.find(r => r.employeeId === id)?.name || 'Unknown';
 
+  // ---------------------------------------------------------------- exports
+
+  const lookups = useMemo<PayrollLookups>(() => ({
+    getCategoryName: getWorkCategoryName,
+    getFrozenPay: getPayForEntry,
+    getRate: getEmployeePayRate,
+  }), [getWorkCategoryName, getPayForEntry, getEmployeePayRate]);
+
+  const generatedBy = currentUser
+    ? `${currentUser.firstName} ${currentUser.lastName}`.trim() || currentUser.email
+    : undefined;
+
+  /**
+   * Every file leaves through one dialog — payroll report, plain table or
+   * PDF timesheets, for the whole team or for one person. Opening it from
+   * someone's card starts with only them ticked.
+   */
+  const [exportFor, setExportFor] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const openExport = (employeeId: string | null) => {
+    setExportFor(employeeId);
+    setExporting(true);
+  };
+
   // ---------------------------------------------------------------- actions
 
   /**
@@ -268,38 +293,6 @@ const TeamHoursPanel: React.FC = () => {
     } finally {
       setBusy(false);
     }
-  };
-
-  /**
-   * Hand the accountant a payroll file, not a transaction log.
-   *
-   * The whole build lives in payrollExport so it can be tested; this only
-   * supplies what the panel already has on screen and reports the result.
-   */
-  const handleExport = () => {
-    const { csv, filename, entryCount, employeeCount } = buildPayrollCSV({
-      rollups,
-      range,
-      lookups: {
-        getCategoryName: getWorkCategoryName,
-        getFrozenPay: getPayForEntry,
-        getRate: getEmployeePayRate,
-      },
-      generatedBy: currentUser
-        ? `${currentUser.firstName} ${currentUser.lastName}`.trim() || currentUser.email
-        : undefined,
-    });
-
-    if (entryCount === 0) {
-      showToast('Nothing to export for this period', 'warning');
-      return;
-    }
-
-    downloadCSV(filename, csv);
-    showToast(
-      `Exported ${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} for ${employeeCount} ${employeeCount === 1 ? 'person' : 'people'}`,
-      'success'
-    );
   };
 
   // ---------------------------------------------------------------- render
@@ -428,7 +421,7 @@ const TeamHoursPanel: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-          <Button variant="primary" onClick={handleExport}>Export payroll CSV</Button>
+          <Button variant="primary" onClick={() => openExport(null)}>Export…</Button>
           {hasV7Schema && (
             <>
               <Button variant="outline" onClick={() => setShowRates(true)}>Pay rates</Button>
@@ -560,6 +553,18 @@ const TeamHoursPanel: React.FC = () => {
 
               {expanded && (
                 <div style={{ padding: `0 ${theme.spacing.md} ${theme.spacing.md}` }}>
+                  {r.entries.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      gap: theme.spacing.sm,
+                      flexWrap: 'wrap',
+                      marginBottom: theme.spacing.md,
+                    }}>
+                      <Button size="sm" variant="outline" onClick={() => openExport(r.employeeId)}>
+                        Export {r.name.split(' ')[0]}’s hours…
+                      </Button>
+                    </div>
+                  )}
                   <HoursHistoryList
                     entries={r.entries}
                     getCategoryName={getWorkCategoryName}
@@ -665,6 +670,17 @@ const TeamHoursPanel: React.FC = () => {
           They will see this on the entry and can edit it, which puts it back in your pending list.
         </p>
       </Modal>
+
+      <ExportHoursModal
+        isOpen={exporting}
+        onClose={() => setExporting(false)}
+        rollups={rollups}
+        range={range}
+        lookups={lookups}
+        generatedBy={generatedBy}
+        initialEmployeeId={exportFor}
+        onDone={(message, tone) => showToast(message, tone)}
+      />
 
       <WorkCategoryManager isOpen={showCategories} onClose={() => setShowCategories(false)} />
       <PayRatesManager isOpen={showRates} onClose={() => setShowRates(false)} />

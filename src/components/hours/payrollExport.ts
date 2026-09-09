@@ -100,7 +100,7 @@ const ALL_TIME_START = '0000-01-01';
 const ALL_TIME_END = '9999-12-31';
 
 /** One entry priced the way it will be paid, with the reasoning spelled out. */
-interface PricedEntry {
+export interface PricedEntry {
   entry: WorkHoursEntry;
   category: string;
   /** Undefined when no rate applies or none is configured. Never a misleading 0. */
@@ -116,8 +116,12 @@ interface PricedEntry {
  * Approved entries are priced from the frozen snapshot, never today's rate —
  * that is the entire point of freezing. Everything else is an estimate and
  * is labelled as one.
+ *
+ * Exported because timesheetExport prices the same entries for the flat CSV
+ * and the printable timesheet. Three files each deciding for themselves what
+ * an approved hour is worth is three chances to disagree about money.
  */
-const priceEntry = (
+export const priceEntry = (
   entry: WorkHoursEntry,
   employeeId: string,
   lookups: PayrollLookups
