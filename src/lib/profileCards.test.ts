@@ -49,7 +49,7 @@ const idsFor = (c: ProfileContext, surface?: PortalSurface) =>
  * same set of enrolments — the glance, the classes, the attendance — then run
  * together rather than with the class list stranded at the bottom.
  */
-const FAMILY_CARDS = ['up-next', 'updates', 'household', 'season-stats', 'calendar', 'attendance', 'documents'];
+const FAMILY_CARDS = ['up-next', 'updates', 'household', 'season-stats', 'calendar', 'teachers', 'attendance', 'documents'];
 
 describe('who sees the family cards', () => {
   it('shows them to a client immediately, without waiting for the household read', () => {

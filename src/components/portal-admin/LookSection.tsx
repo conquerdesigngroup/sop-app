@@ -8,7 +8,8 @@ import { usePortalAdmin, describeWriteError } from '../../contexts/PortalAdminCo
 import SegmentedControl from '../profile/SegmentedControl';
 import ProfileAvatar from '../profile/ProfileAvatar';
 import {
-  AVATAR_PALETTE, AVATAR_ICONS, AvatarIconKey, AvatarMode, paletteEntry,
+  AVATAR_PALETTE, AVATAR_ICONS, AvatarConfig, AvatarIconKey, AvatarMode, DEFAULT_AVATAR,
+  paletteEntry,
 } from '../../lib/avatarPalette';
 import {
   InstructorLook, instructorInitials, instructorKey, lookFor,
@@ -228,14 +229,18 @@ const HeroPanel: React.FC<{ program: PortalProgram }> = ({ program }) => {
 
 // ---------------------------------------------------------------- teachers
 
-interface Draft {
+/**
+ * The editor's working copy.
+ *
+ * `AvatarConfig & {who}` rather than a hand-listed twin of it: this used to
+ * restate every avatar field, so each field added to the config had to be added
+ * here too or the editor silently dropped it on save. Extending the config
+ * means a new option is offered the moment it exists.
+ */
+type Draft = AvatarConfig & {
   nameKey: string;
   displayName: string;
-  mode: AvatarMode;
-  initials: string;
-  iconKey: AvatarIconKey;
-  paletteKey: string;
-}
+};
 
 const Swatches: React.FC<{
   value: string;
@@ -303,7 +308,7 @@ const IconChoices: React.FC<{
         }}
       >
         <ProfileAvatar
-          config={{ mode: 'icon', initials: '', iconKey: key, paletteKey }}
+          config={{ ...DEFAULT_AVATAR, mode: 'icon', iconKey: key, paletteKey }}
           fallbackInitials=""
           size={30}
         />
@@ -373,10 +378,8 @@ const TeacherEditor: React.FC<{
       <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md, marginBottom: theme.spacing.lg }}>
         <ProfileAvatar
           config={{
-            mode: draft.mode,
+            ...draft,
             initials: draft.initials || instructorInitials(draft.displayName),
-            iconKey: draft.iconKey,
-            paletteKey: draft.paletteKey,
           }}
           fallbackInitials="·"
           size={56}
@@ -542,13 +545,11 @@ const LookSection: React.FC<{ program: PortalProgram }> = ({ program }) => {
     return {
       nameKey,
       displayName,
-      mode: config.mode,
+      ...config,
       // The stored value, not the resolved one: an empty field means "use the
       // name", and pre-filling it with the computed letters would silently turn
       // that into a stored copy the next time somebody pressed Save.
       initials: looks[nameKey]?.initials ?? '',
-      iconKey: config.iconKey,
-      paletteKey: config.paletteKey,
     };
   };
 

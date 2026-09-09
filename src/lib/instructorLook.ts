@@ -1,5 +1,6 @@
 import {
-  AVATAR_PALETTE, AvatarConfig, AvatarIconKey, AVATAR_ICONS, DEFAULT_PALETTE_KEY,
+  AVATAR_PALETTE, AvatarConfig, AvatarIconKey, AVATAR_ICONS, DEFAULT_AVATAR,
+  DEFAULT_PALETTE_KEY, validateAvatar,
 } from './avatarPalette';
 import { normalizeName } from './instructorMatch';
 
@@ -101,10 +102,14 @@ export const lookFor = (
       initials: stored.initials || instructorInitials(instructorName),
       iconKey: stored.iconKey,
       paletteKey: stored.paletteKey,
+      shape: stored.shape,
+      pattern: stored.pattern,
+      ring: stored.ring,
     };
   }
 
   return {
+    ...DEFAULT_AVATAR,
     mode: 'initials',
     initials: instructorInitials(instructorName),
     iconKey: 'star',
@@ -128,4 +133,23 @@ export const mapInstructorLook = (row: any): InstructorLook => ({
   // reloaded. paletteEntry() already falls back for an unknown key, so it is
   // passed through rather than rejected here.
   paletteKey: row.palette_key,
+  // Coerced, not read straight through, because these three columns arrived
+  // after the table did: every row written before v53 has NULL in all of them,
+  // and so does every row read by a bundle that selected them before the
+  // migration ran. validateAvatar turns each of those into the value that
+  // reproduces the original flat rounded tile.
+  ...avatarExtras(row),
 });
+
+/** shape/pattern/ring off a row, defaulted the same way everywhere. */
+const avatarExtras = (row: any): Pick<AvatarConfig, 'shape' | 'pattern' | 'ring'> => {
+  const checked = validateAvatar({
+    paletteKey: DEFAULT_PALETTE_KEY,
+    shape: row.shape,
+    pattern: row.pattern,
+    ring: row.ring,
+  });
+  return checked.ok
+    ? { shape: checked.value.shape, pattern: checked.value.pattern, ring: checked.value.ring }
+    : { shape: DEFAULT_AVATAR.shape, pattern: DEFAULT_AVATAR.pattern, ring: DEFAULT_AVATAR.ring };
+};

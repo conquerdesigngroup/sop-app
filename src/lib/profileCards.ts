@@ -9,6 +9,7 @@ import AttendanceCardHost from '../components/profile/AttendanceCardHost';
 import UpdatesCard from '../components/profile/UpdatesCard';
 import DocumentsCard from '../components/profile/DocumentsCard';
 import ClassCalendarCard from '../components/profile/ClassCalendarCard';
+import TeachersCard from '../components/profile/TeachersCard';
 import NotificationsCard from '../components/profile/NotificationsCard';
 import AccountCard from '../components/profile/AccountCard';
 
@@ -175,6 +176,21 @@ export const PROFILE_CARDS: ProfileCard[] = [
     surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 20,
+  },
+  {
+    // Between the class roster and attendance, because it answers the question
+    // a parent asks WHILE looking at the roster — "who has Maya got for hip
+    // hop?" — and it reads from the same enrolments the card above it lists.
+    // Above attendance because attendance is a record and this is a who's-who.
+    id: 'teachers',
+    title: 'Your teachers',
+    component: TeachersCard,
+    surface: 'dashboard',
+    // Renders nothing when the family's classes carry no instructor name; the
+    // card makes that call, because the registry cannot know without querying
+    // and `visible` must stay synchronous and free.
+    visible: showsAFamily,
+    defaultOrder: 21,
   },
   {
     id: 'attendance',

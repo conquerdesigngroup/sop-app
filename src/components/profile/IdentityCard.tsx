@@ -1,17 +1,24 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { theme } from '../../theme';
 import { Button, Card, Input } from '../ui';
 import {
-  AVATAR_ICONS,
+  AVATAR_ICON_GROUPS,
+  AVATAR_ICON_META,
   AVATAR_PALETTE,
+  AVATAR_PATTERNS,
+  AVATAR_PATTERN_LABELS,
+  AVATAR_SHAPES,
+  AVATAR_SHAPE_LABELS,
   AvatarConfig,
   AvatarIconKey,
   DEFAULT_AVATAR,
   initialsFrom,
+  iconsInGroup,
   validateAvatar,
 } from '../../lib/avatarPalette';
 import { ProfileCardProps } from '../../lib/profileCards';
 import ProfileAvatar from './ProfileAvatar';
+import { AvatarPrefs, loadAvatarPrefs, saveAvatarPrefs } from '../../lib/avatarPrefs';
 
 /**
  * Who this profile belongs to, and the avatar builder (§5.2, §5.3).
@@ -62,6 +69,48 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
   const [nickname, setNickname] = useState('');
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  /**
+   * Whether the stored row has been read yet.
+   *
+   * Save is refused until it has, and that is the whole reason this exists. A
+   * read that fails leaves the builder showing a DEFAULT avatar — which looks
+   * identical to a family who has not chosen one — so pressing Done before the
+   * read lands would quietly overwrite a real choice with violet initials.
+   */
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!editable) { setLoaded(true); return; }
+
+    let cancelled = false;
+    loadAvatarPrefs().then(({ prefs, error: loadError }) => {
+      if (cancelled) return;
+      if (prefs) {
+        setAvatar(prefs.avatar);
+        setNickname(prefs.displayName);
+      }
+      if (loadError) setError(loadError);
+      // Not in the error branch: a failed read must leave `loaded` false, so
+      // the editor cannot save over what it could not see.
+      else setLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [editable]);
+
+  const done = useCallback(async () => {
+    setSaving(true);
+    try {
+      const prefs: AvatarPrefs = { avatar, displayName: nickname };
+      await saveAvatarPrefs(prefs);
+      setError('');
+      setEditing(false);
+    } catch (e: any) {
+      setError(e?.message ?? 'That did not save. Check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
+  }, [avatar, nickname]);
 
   const fallback = initialsFrom(firstName, lastName);
   const shown = nickname.trim() || `${firstName} ${lastName}`.trim() || email;
@@ -110,8 +159,16 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
         </div>
 
         {editable && (
-          <Button variant="outline" size="sm" onClick={() => setEditing(v => !v)}>
-            {editing ? 'Done' : 'Edit'}
+          <Button
+            variant="outline"
+            size="sm"
+            /* Disabled until the stored row has been read, so Done cannot
+               write a default over a choice this card has not seen yet. */
+            disabled={editing && (saving || !loaded)}
+            loading={editing && saving}
+            onClick={() => (editing ? done() : setEditing(true))}
+          >
+            {editing ? (saving ? 'Saving…' : 'Done') : 'Edit'}
           </Button>
         )}
       </div>
@@ -165,34 +222,44 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
 
           {avatar.mode === 'icon' ? (
             <>
-              <SectionLabel>Icon</SectionLabel>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-                {AVATAR_ICONS.map(key => (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-label={key}
-                    aria-pressed={avatar.iconKey === key}
-                    onClick={() => update({ iconKey: key as AvatarIconKey })}
-                    style={{
-                      padding: '2px',
-                      borderRadius: theme.borderRadius.md,
-                      background: 'transparent',
-                      cursor: 'pointer',
-                      lineHeight: 0,
-                      border: avatar.iconKey === key
-                        ? `2px solid ${theme.colors.primary}`
-                        : `2px solid ${theme.colors.bdr.primary}`,
-                    }}
-                  >
-                    <ProfileAvatar
-                      config={{ ...avatar, mode: 'icon', iconKey: key as AvatarIconKey }}
-                      fallbackInitials={fallback}
-                      size={36}
-                    />
-                  </button>
-                ))}
-              </div>
+              {/* Grouped, not one grid of thirty.
+
+                  Six icons were a row you took in at a glance. Thirty is a wall,
+                  and the thing a dancer is actually looking for — "the ballet
+                  one" — is findable in it only by reading every tile. The
+                  headings ARE the search. */}
+              {AVATAR_ICON_GROUPS.map(group => (
+                <div key={group}>
+                  <SectionLabel>{group}</SectionLabel>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+                    {iconsInGroup(group).map(key => (
+                      <button
+                        key={key}
+                        type="button"
+                        aria-label={AVATAR_ICON_META[key].label}
+                        aria-pressed={avatar.iconKey === key}
+                        onClick={() => update({ iconKey: key as AvatarIconKey })}
+                        style={{
+                          padding: '2px',
+                          borderRadius: theme.borderRadius.md,
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          lineHeight: 0,
+                          border: avatar.iconKey === key
+                            ? `2px solid ${theme.colors.primary}`
+                            : `2px solid ${theme.colors.bdr.primary}`,
+                        }}
+                      >
+                        <ProfileAvatar
+                          config={{ ...avatar, mode: 'icon', iconKey: key as AvatarIconKey }}
+                          fallbackInitials={fallback}
+                          size={36}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </>
           ) : (
             <div style={{ maxWidth: '160px', marginTop: theme.spacing.sm }}>
@@ -205,6 +272,72 @@ const IdentityCard: React.FC<ProfileCardProps> = ({ ctx, firstName, lastName, em
               />
             </div>
           )}
+
+          <SectionLabel>Shape</SectionLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+            {AVATAR_SHAPES.map(shape => (
+              <button
+                key={shape}
+                type="button"
+                aria-label={AVATAR_SHAPE_LABELS[shape]}
+                aria-pressed={avatar.shape === shape}
+                onClick={() => update({ shape })}
+                style={{
+                  padding: '2px',
+                  borderRadius: theme.borderRadius.md,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  lineHeight: 0,
+                  border: avatar.shape === shape
+                    ? `2px solid ${theme.colors.primary}`
+                    : `2px solid ${theme.colors.bdr.primary}`,
+                }}
+              >
+                <ProfileAvatar config={{ ...avatar, shape }} fallbackInitials={fallback} size={36} />
+              </button>
+            ))}
+          </div>
+
+          {/* Every swatch below is the avatar you are actually building, not a
+              generic sample — same colour, same glyph, same shape, one texture
+              changed. A picker that previews the option out of context makes
+              you choose twice. */}
+          <SectionLabel>Texture</SectionLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+            {AVATAR_PATTERNS.map(pattern => (
+              <button
+                key={pattern}
+                type="button"
+                aria-label={AVATAR_PATTERN_LABELS[pattern]}
+                aria-pressed={avatar.pattern === pattern}
+                onClick={() => update({ pattern })}
+                style={{
+                  padding: '2px',
+                  borderRadius: theme.borderRadius.md,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  lineHeight: 0,
+                  border: avatar.pattern === pattern
+                    ? `2px solid ${theme.colors.primary}`
+                    : `2px solid ${theme.colors.bdr.primary}`,
+                }}
+              >
+                <ProfileAvatar config={{ ...avatar, pattern }} fallbackInitials={fallback} size={36} />
+              </button>
+            ))}
+          </div>
+
+          <SectionLabel>Outline</SectionLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm, alignItems: 'center' }}>
+            <Button
+              variant={avatar.ring ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => update({ ring: !avatar.ring })}
+            >
+              {avatar.ring ? 'Outline on' : 'Outline off'}
+            </Button>
+            <ProfileAvatar config={{ ...avatar, ring: !avatar.ring }} fallbackInitials={fallback} size={32} />
+          </div>
 
           <div style={{ maxWidth: '260px', marginTop: theme.spacing.sm }}>
             <Input
