@@ -67,6 +67,20 @@ interface CollapsibleCardProps {
    * period picker over a closed section controls nothing visible.
    */
   headerRight?: React.ReactNode;
+  /**
+   * A status marker for the SECTION, rendered whether the card is open or shut.
+   *
+   * That is the whole reason it is not just more `headerRight`. `headerRight`
+   * holds controls for the body, so it is right that it leaves with the body.
+   * A badge saying the section is not yet in service is the one thing a reader
+   * needs to see WITHOUT opening it — these cards default to shut, so a notice
+   * that only appears once you expand is a notice most people never get.
+   *
+   * A direct child of the wrapping header row, not nested beside the control,
+   * so on a 320px phone it drops to its own line instead of squeezing the
+   * heading into "Attendanc / e".
+   */
+  badge?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -75,6 +89,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   title,
   defaultOpen = false,
   headerRight,
+  badge,
   children,
 }) => {
   const [open, setOpen] = useState(defaultOpen);
@@ -170,6 +185,8 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
             {title}
           </h3>
         </button>
+
+        {badge}
 
         {open && headerRight}
       </div>
