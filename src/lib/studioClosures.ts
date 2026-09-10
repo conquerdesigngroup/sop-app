@@ -41,6 +41,12 @@ import { dateKey, eventDayKey, eventLastDayKey } from './portal';
  * title plus span.
  */
 
+/** A date key -> Date, in the LOCAL frame. `new Date('2026-11-24')` is UTC. */
+const fromKey = (key: string): Date => {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
 export interface StudioClosure {
   title: string;
   /** 'YYYY-MM-DD', inclusive. */
@@ -117,14 +123,37 @@ export const loadStudioClosures = async (
   return { closures, error: null };
 };
 
+/**
+ * Every calendar day a set of closures covers, as date keys.
+ *
+ * Stepped a day at a time in the LOCAL frame rather than by dividing a
+ * millisecond span: across a DST boundary a "day" is 23 or 25 hours and the
+ * division silently loses or repeats a date — the same trap eventDayKeys
+ * documents in lib/portal.
+ *
+ * This is what turns "the studio is shut for Christmas" into something the
+ * class projection can subtract, since it blocks dates and knows nothing about
+ * events.
+ */
+export const closureDayKeys = (closures: StudioClosure[]): string[] => {
+  const keys: string[] = [];
+
+  closures.forEach(closure => {
+    const cursor = fromKey(closure.firstDay);
+    // A closure longer than a season is a bad calendar entry, not a closure.
+    for (let i = 0; i < 400; i += 1) {
+      const key = dateKey(cursor);
+      keys.push(key);
+      if (key >= closure.lastDay) break;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  });
+
+  return keys.filter((k, i) => keys.indexOf(k) === i);
+};
+
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** A date key -> Date, in the LOCAL frame. `new Date('2026-11-24')` is UTC. */
-const fromKey = (key: string): Date => {
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
 
 /**
  * "Mon 31 May", "Tue 24 – Fri 27 Nov", "Mon 21 Dec – Sun 3 Jan".
