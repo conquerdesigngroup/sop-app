@@ -56,6 +56,38 @@ export interface StudioClosure {
 }
 
 /**
+ * A competition on the calendar.
+ *
+ * Carries its program, which a closure does not need to: the studio shuts for
+ * everybody, but a competition belongs to ONE program. Measured on 2026-09-10
+ * every competition on the calendar is an All-Star event — Countdown, Act One,
+ * Showbiz, Driven, Nationals — and telling an Academy family about six weekends
+ * their child is not going to would be the "a Ballet parent reads Hip Hop
+ * announcements and learns to skim past all of it" failure that loadMyUpdates
+ * exists to prevent.
+ */
+export interface StudioCompetition extends StudioClosure {
+  /** portal_programs.slug, or null for an event with no program. */
+  programSlug: string | null;
+}
+
+/**
+ * A competition, by title, with the same caveats as the closure matcher.
+ *
+ * 'competition' alone catches all six on the calendar today, Nationals
+ * included, since it is titled "Nationals Competition". 'nationals' is matched
+ * as well so a future one that drops the word still counts.
+ *
+ * A tentative competition counts. A parent planning around a weekend wants to
+ * know it might be taken either way, and a date that later moves is a changed
+ * date rather than a wrong one.
+ */
+const COMPETITION_TITLE = /\bcompetitions?\b|\bnationals\b/i;
+
+export const isCompetitionTitle = (title: string | null | undefined): boolean =>
+  !!title && COMPETITION_TITLE.test(title);
+
+/**
  * Narrow by design. See the header: a missed closure costs nothing that is not
  * already true today, and a false one tells a family to stay home from a class
  * that is running.
@@ -87,10 +119,18 @@ export const isUpcoming = (closure: StudioClosure, now: Date = new Date()): bool
  * Reports failure rather than throwing: this is one card on a dashboard, and a
  * portal that cannot reach the events table should still show everything else.
  */
+export interface StudioCalendar {
+  closures: StudioClosure[];
+  competitions: StudioCompetition[];
+  error: string | null;
+}
+
+const EMPTY_CALENDAR: StudioCalendar = { closures: [], competitions: [], error: null };
+
 export const loadStudioClosures = async (
   now: Date = new Date(),
-): Promise<{ closures: StudioClosure[]; error: string | null }> => {
-  if (!isSupabaseConfigured()) return { closures: [], error: null };
+): Promise<StudioCalendar> => {
+  if (!isSupabaseConfigured()) return { ...EMPTY_CALENDAR };
 
   const from = new Date(now);
   from.setDate(from.getDate() - LOOKBACK_DAYS);
@@ -114,40 +154,64 @@ export const loadStudioClosures = async (
      * happen is HIDING a class that is running because the events table
      * blinked.
      */
-    return { closures: [], error: 'We could not load the studio closures.' };
+    return { ...EMPTY_CALENDAR, error: 'We could not load the studio calendar.' };
   }
 };
 
 const readClosures = async (
   from: Date,
   now: Date,
-): Promise<{ closures: StudioClosure[]; error: string | null }> => {
+): Promise<StudioCalendar> => {
   const { data, error } = await supabase
     .from('portal_events')
-    .select('title, starts_at, ends_at, is_all_day')
+    // The program comes back embedded rather than as a second query: a
+    // competition belongs to one program and has to be filtered by it, and a
+    // separate round trip for four slugs would be a round trip for four slugs.
+    .select('title, starts_at, ends_at, is_all_day, portal_programs ( slug )')
     .eq('is_published', true)
     .gte('starts_at', from.toISOString())
     .order('starts_at');
 
-  if (error) return { closures: [], error: 'We could not load the studio closures.' };
+  if (error) return { ...EMPTY_CALENDAR, error: 'We could not load the studio calendar.' };
 
-  const seen = new Set<string>();
+  const seenClosure = new Set<string>();
+  const seenComp = new Set<string>();
   const closures: StudioClosure[] = [];
+  const competitions: StudioCompetition[] = [];
 
   (data ?? []).forEach((row: any) => {
-    if (!isClosureTitle(row.title)) return;
+    const closure = isClosureTitle(row.title);
+    const competition = isCompetitionTitle(row.title);
+    if (!closure && !competition) return;
 
     const firstDay = eventDayKey(row.starts_at, row.is_all_day);
     const lastDay = eventLastDayKey(row.starts_at, row.ends_at, row.is_all_day);
+    const title = row.title.trim();
 
-    const id = `${row.title}|${firstDay}|${lastDay}`;
-    if (seen.has(id)) return;
-    seen.add(id);
+    if (closure) {
+      // Deduped WITHOUT the program: the same shutdown syncs once per program
+      // and the studio is shut for everyone, so two rows are one closure.
+      const id = `${title}|${firstDay}|${lastDay}`;
+      if (!seenClosure.has(id)) {
+        seenClosure.add(id);
+        closures.push({ title, firstDay, lastDay });
+      }
+    }
 
-    closures.push({ title: row.title.trim(), firstDay, lastDay });
+    if (competition) {
+      // Deduped WITH the program, because the same competition reaching two
+      // programs is genuinely two audiences, and collapsing them would drop
+      // one of them from the count for the family it belongs to.
+      const programSlug = row.portal_programs?.slug ?? null;
+      const id = `${title}|${firstDay}|${lastDay}|${programSlug ?? ''}`;
+      if (!seenComp.has(id)) {
+        seenComp.add(id);
+        competitions.push({ title, firstDay, lastDay, programSlug });
+      }
+    }
   });
 
-  return { closures, error: null };
+  return { closures, competitions, error: null };
 };
 
 /**
@@ -162,7 +226,7 @@ const readClosures = async (
  * class projection can subtract, since it blocks dates and knows nothing about
  * events.
  */
-export const closureDayKeys = (closures: StudioClosure[]): string[] => {
+export const closureDayKeys = (closures: { firstDay: string; lastDay: string }[]): string[] => {
   const keys: string[] = [];
 
   closures.forEach(closure => {

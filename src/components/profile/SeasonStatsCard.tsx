@@ -1,7 +1,6 @@
 import React from 'react';
 import { theme } from '../../theme';
 import { Card } from '../ui';
-import { AttendanceClass } from '../../types/attendance';
 import { ClassProgress } from '../../lib/attendanceQueries';
 import { localIso } from '../../lib/upcomingClasses';
 import { FIXTURE_TODAY } from '../../lib/attendanceFixture';
@@ -19,8 +18,12 @@ import { useHousehold } from './useHousehold';
  * A tile reading "87%" in 32px type would undo all of that in one line, which
  * is why there is no percentage here. What is here is effort and logistics:
  * how many times you are driving this week, how many classes have actually
- * been danced, roughly how many hours that adds up to. All three are counts a
- * parent can check, none of them is a mark out of ten.
+ * been danced, and how many competition days are still to come. All three are
+ * counts a parent can check, none of them is a mark out of ten.
+ *
+ * Hours in the studio used to be the third and was dropped: "about 22, so far"
+ * is trivia, and it was the one number here that answered no question anybody
+ * asks. A competition day is a weekend that has to be kept free.
  *
  * WHERE THE NUMBERS COME FROM
  *
@@ -40,30 +43,11 @@ import { useHousehold } from './useHousehold';
  * ZERO IS A CLAIM; UNKNOWN IS NOT
  *
  * Before the first import every one of these would read 0 — "your child has
- * attended no classes and spent no hours in the studio", stated in the largest
+ * attended no classes", stated in the largest
  * type on the page, about a family whose data simply has not arrived. So a
  * household with no enrolments renders no card, and classes that have not met
  * render an em dash with "No sessions yet" rather than a zero.
  */
-
-/** Minutes between two 'HH:MM:SS' columns. Null when the catalogue lacks either. */
-const classMinutes = (klass: AttendanceClass): number | null => {
-  if (!klass.startTime || !klass.endTime) return null;
-
-  const toMinutes = (t: string): number | null => {
-    const [h, m] = t.split(':').map(Number);
-    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
-  };
-
-  const start = toMinutes(klass.startTime);
-  const end = toMinutes(klass.endTime);
-  if (start === null || end === null) return null;
-
-  // A class that ends before it starts is bad catalogue data, not a class
-  // running past midnight. Counting it as negative hours would quietly drag the
-  // total down and look like arithmetic.
-  return end > start ? end - start : null;
-};
 
 const SeasonStatsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   const { data, loading } = useHousehold(ctx.source);
@@ -109,11 +93,20 @@ const SeasonStatsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   // input is a number the studio published, so it is checkable rather than
   // invented. Classes with no times on the catalogue contribute nothing and
   // are not guessed at.
-  const minutes = enrollments.reduce((total, p) => {
-    const per = classMinutes(p.klass);
-    return per === null ? total : total + per * p.summary.attended;
-  }, 0);
-  const hours = Math.round(minutes / 60);
+
+  /**
+   * Competition days replaced hours in the studio.
+   *
+   * Hours was a derived number nobody plans around — "about 22, so far" is
+   * trivia, and it was the one tile here that answered no question. Competition
+   * days is a weekend a parent has to keep free, scoped in the household read
+   * to the programs this family is actually in, so an Academy family is not
+   * shown six All-Star weekends they are not going to.
+   *
+   * The minutes-to-hours maths and classMinutes went with it rather than being
+   * left behind unused — nothing else on this card reads a class's length.
+   */
+  const compDays = data.competitionDaysAhead;
 
   const stats: Stat[] = [
     {
@@ -128,10 +121,13 @@ const SeasonStatsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
       note: started ? `of ${counted} so far` : undefined,
     },
     {
-      key: 'hours',
-      value: started && hours > 0 ? String(hours) : '—',
-      label: 'hours in the studio',
-      note: started && hours > 0 ? 'about, so far' : 'once classes start',
+      key: 'comp-days',
+      // Zero is a real answer here, unlike the two tiles beside it: an Academy
+      // family genuinely has no competition days, and "0" says that plainly
+      // where an em dash would imply the studio had not told us yet.
+      value: String(compDays),
+      label: compDays === 1 ? 'comp day' : 'comp days',
+      note: compDays > 0 ? 'still to come' : 'none on the calendar',
     },
   ];
 
