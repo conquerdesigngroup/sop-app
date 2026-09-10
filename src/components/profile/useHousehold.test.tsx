@@ -37,7 +37,6 @@ const summary = (name: string, error: string | null = null): HouseholdSummary =>
   upcoming: [],
   series: [],
   cancelledByClass: {},
-  competitionDaysAhead: 0,
   enrolledClassIds: [],
   error,
 });

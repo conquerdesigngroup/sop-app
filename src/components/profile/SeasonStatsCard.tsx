@@ -18,12 +18,15 @@ import { useHousehold } from './useHousehold';
  * A tile reading "87%" in 32px type would undo all of that in one line, which
  * is why there is no percentage here. What is here is effort and logistics:
  * how many times you are driving this week, how many classes have actually
- * been danced, and how many competition days are still to come. All three are
- * counts a parent can check, none of them is a mark out of ten.
+ * been danced. Both are counts a parent can check, neither is a mark out of
+ * ten.
  *
- * Hours in the studio used to be the third and was dropped: "about 22, so far"
- * is trivia, and it was the one number here that answered no question anybody
- * asks. A competition day is a weekend that has to be kept free.
+ * TWO NUMBERS, NOT THREE
+ *
+ * The third tile was hours in the studio, which was dropped as trivia — "about
+ * 22, so far" answers no question anybody asks — and then briefly competition
+ * days, which was dropped on the owner's call. The card reads better short
+ * than padded, so nothing was found to replace it with.
  *
  * WHERE THE NUMBERS COME FROM
  *
@@ -94,20 +97,6 @@ const SeasonStatsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   // invented. Classes with no times on the catalogue contribute nothing and
   // are not guessed at.
 
-  /**
-   * Competition days replaced hours in the studio.
-   *
-   * Hours was a derived number nobody plans around — "about 22, so far" is
-   * trivia, and it was the one tile here that answered no question. Competition
-   * days is a weekend a parent has to keep free, scoped in the household read
-   * to the programs this family is actually in, so an Academy family is not
-   * shown six All-Star weekends they are not going to.
-   *
-   * The minutes-to-hours maths and classMinutes went with it rather than being
-   * left behind unused — nothing else on this card reads a class's length.
-   */
-  const compDays = data.competitionDaysAhead;
-
   const stats: Stat[] = [
     {
       key: 'week',
@@ -119,15 +108,6 @@ const SeasonStatsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
       value: started ? String(attended) : '—',
       label: started ? 'classes danced' : 'no sessions yet',
       note: started ? `of ${counted} so far` : undefined,
-    },
-    {
-      key: 'comp-days',
-      // Zero is a real answer here, unlike the two tiles beside it: an Academy
-      // family genuinely has no competition days, and "0" says that plainly
-      // where an em dash would imply the studio had not told us yet.
-      value: String(compDays),
-      label: compDays === 1 ? 'comp day' : 'comp days',
-      note: compDays > 0 ? 'still to come' : 'none on the calendar',
     },
   ];
 

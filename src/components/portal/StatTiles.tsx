@@ -14,6 +14,14 @@ import { theme } from '../../theme';
  * overflow: the basis is a suggestion, not a minimum, and `minWidth: 0` lets a
  * long label break rather than push.
  *
+ * ITS ONLY CALLER NOW PASSES TWO
+ *
+ * The sizing below was worked out against three tiles, which is what
+ * SeasonStatsCard held until the third was dropped. Two of them simply grow to
+ * share the row, so nothing here needed changing — but the reasoning about a
+ * stranded third tile is describing a case that does not currently arise, and
+ * is kept because it is the argument for flex over a grid, which still stands.
+ *
  * THE BASIS IS 120 BECAUSE 96 LANDED EXACTLY ON THE BOUNDARY
  *
  * A card on a 375px phone leaves about 300px inside its padding, and three

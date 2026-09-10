@@ -14,7 +14,6 @@ import { clipToRange, sessionBreakdown, summarise } from './attendanceSummary';
 import { UpcomingClass, buildUpcoming, nextPerClass } from './upcomingClasses';
 import { PortalDocument, PortalUpdate } from '../types';
 import { closureDayKeys, loadStudioClosures } from './studioClosures';
-import { dateKey, programSlugForCategory } from './portal';
 import {
   FIXTURE_ATTENDANCE,
   FIXTURE_CLASSES,
@@ -517,15 +516,6 @@ export interface HouseholdSummary {
   series: UpcomingClass[];
   /** Dates a class is known not to meet, for calendar EXDATEs. */
   cancelledByClass: Record<string, string[]>;
-  /**
-   * Competition days still ahead, for the programs this family is actually in.
-   *
-   * Scoped, because every competition on the calendar is an All-Star event and
-   * an Academy family is not going to any of them. Counted in DAYS rather than
-   * events: a competition is a weekend a parent has to keep free, and "3" is
-   * the number they are planning around, not "1".
-   */
-  competitionDaysAhead: number;
   error: LoadError;
   /** Which classes this household is in — the filter for updates and files. */
   enrolledClassIds: string[];
@@ -538,7 +528,6 @@ const EMPTY_HOUSEHOLD: HouseholdSummary = {
   upcoming: [],
   series: [],
   cancelledByClass: {},
-  competitionDaysAhead: 0,
   enrolledClassIds: [],
   error: null,
 };
@@ -590,10 +579,7 @@ const loadFixtureHousehold = (
     upcoming: buildUpcoming(entries, FIXTURE_TODAY),
     series: nextPerClass(entries, FIXTURE_TODAY),
     cancelledByClass,
-    // The fixture has no calendar, so no competitions. Zero is the honest
-    // answer for a demo season, not a missing one.
-    competitionDaysAhead: 0,
-    error: null,
+      error: null,
     enrolledClassIds: unique(perStudent.flatMap(p => p.current.map(c => c.klass.id))),
   };
 };
@@ -753,31 +739,8 @@ export const loadHouseholdSummary = async (
    * exactly as it behaved before this: no worse, and never a class hidden
    * because the events table was briefly unreachable.
    */
-  const { closures, competitions } = await closuresPromise;
+  const { closures } = await closuresPromise;
   const closedDays = closureDayKeys(closures);
-
-  /**
-   * Competition days ahead, for this family's programs only.
-   *
-   * Free: the calendar read above is already in flight for the closures, so
-   * this is a second reading of rows we have. That is what lets SeasonStatsCard
-   * keep its "no query of its own" property while showing a number that comes
-   * from the events table.
-   *
-   * The slugs come from the classes the household is enrolled in, so an
-   * Academy-only family counts nothing and an All-Star family counts the six
-   * competitions that are actually theirs.
-   */
-  const mySlugs = new Set(
-    progress
-      .filter(p => p.enrollment.status === 'active')
-      .map(p => programSlugForCategory(p.klass.category))
-      .filter((slug): slug is NonNullable<typeof slug> => !!slug),
-  );
-  const today = dateKey(new Date());
-  const competitionDaysAhead = closureDayKeys(
-    competitions.filter(c => c.programSlug !== null && mySlugs.has(c.programSlug as any)),
-  ).filter(day => day >= today).length;
 
   const cancelledByClass: Record<string, string[]> = {};
   const entries = rows.flatMap((row, i) => {
@@ -814,7 +777,6 @@ export const loadHouseholdSummary = async (
     upcoming: buildUpcoming(entries, now),
     series: nextPerClass(entries, now),
     cancelledByClass,
-    competitionDaysAhead,
     enrolledClassIds: unique(perStudent.flatMap(p => p.current.map(c => c.klass.id))),
     error: null,
   };
