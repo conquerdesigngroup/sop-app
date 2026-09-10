@@ -7,6 +7,7 @@ import {
   nextDateLabel,
   nextPerClass,
   relativeDay,
+  liveProgress,
 } from './upcomingClasses';
 import { AttendanceClass, ClassSession, Enrollment, Student } from '../types/attendance';
 
@@ -343,5 +344,47 @@ describe('buildSeriesIcs', () => {
     // whatToBring joins with ", " — an unescaped comma would end DESCRIPTION.
     expect(ics).toContain('Bring: Pink ballet shoes');
     expect(ics).not.toMatch(/DESCRIPTION:[^\r\n]*[^\\],/);
+  });
+});
+
+/**
+ * "On now" is a claim a parent reads while deciding whether to set off for
+ * pickup, so every boundary here is one somebody acts on.
+ */
+describe('liveProgress', () => {
+  const at = (h: number, m = 0) => new Date(2026, 8, 10, h, m, 0);
+  const item = (startsAt: Date, endsAt: Date | null) => ({ startsAt, endsAt });
+
+  it('is null before the class starts', () => {
+    expect(liveProgress(item(at(16, 30), at(17, 30)), at(16, 29))).toBeNull();
+  });
+
+  it('is 0 at the very start', () => {
+    expect(liveProgress(item(at(16, 30), at(17, 30)), at(16, 30))).toBe(0);
+  });
+
+  it('is a half at the half-way point', () => {
+    expect(liveProgress(item(at(16, 30), at(17, 30)), at(17, 0))).toBe(0.5);
+  });
+
+  it('is 1 at the very end, so the bar fills rather than resetting', () => {
+    expect(liveProgress(item(at(16, 30), at(17, 30)), at(17, 30))).toBe(1);
+  });
+
+  it('is null a minute after it finishes', () => {
+    expect(liveProgress(item(at(16, 30), at(17, 30)), at(17, 31))).toBeNull();
+  });
+
+  /**
+   * The card keeps a running class on screen, so a started class with no end
+   * time tells us it BEGAN, not that it is still going. Saying "On now" there
+   * would be a claim the catalogue cannot support.
+   */
+  it('is null with no end time, even well after the start', () => {
+    expect(liveProgress(item(at(16, 30), null), at(16, 45))).toBeNull();
+  });
+
+  it('is null when the catalogue has the class ending before it begins', () => {
+    expect(liveProgress(item(at(17, 30), at(16, 30)), at(17, 0))).toBeNull();
   });
 });

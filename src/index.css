@@ -472,6 +472,28 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
 }
 
 /* ============================================
+   Live Dot — a class that is happening right now
+   ============================================ */
+/* Opacity AND scale, not the `pulse` above.
+
+   `pulse` moves by 5%, which on a 6px dot is a third of a pixel — invisible,
+   and a pulse nobody can see is an infinite animation costing paint for
+   nothing. Fading is what reads as "live" at this size.
+
+   The reduced-motion block at the foot of this file near-zeroes the duration
+   and pins iteration-count to 1, so this lands on its 100% frame: a solid,
+   fully opaque dot. That is the correct still image, and it is why the card
+   also writes the words "On now" — the dot is never the only signal. */
+@keyframes live-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.78); }
+}
+
+.live-dot {
+  animation: live-dot 2.4s ease-in-out infinite;
+}
+
+/* ============================================
    Shake Animation for Errors
    ============================================ */
 @keyframes shake {
