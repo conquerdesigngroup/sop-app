@@ -95,6 +95,33 @@ export const loadStudioClosures = async (
   const from = new Date(now);
   from.setDate(from.getDate() - LOOKBACK_DAYS);
 
+  try {
+    return await readClosures(from, now);
+  } catch {
+    /**
+     * THIS FUNCTION MUST NOT THROW, and the try/catch is what makes that a
+     * guarantee rather than a likelihood.
+     *
+     * Since loadHouseholdSummary awaits it to build the schedule's blocked
+     * dates, a rejection here would take down up next, the class roster and
+     * the calendar export together — for every family, over a decoration.
+     * PostgREST reports query failures in `error` rather than throwing, so
+     * this is not the expected path; it is the one that catches a malformed
+     * date on a synced event, or anything else nobody predicted.
+     *
+     * Empty is the safe answer: it leaves the schedule behaving exactly as it
+     * did before closures were wired into it. The direction that must never
+     * happen is HIDING a class that is running because the events table
+     * blinked.
+     */
+    return { closures: [], error: 'We could not load the studio closures.' };
+  }
+};
+
+const readClosures = async (
+  from: Date,
+  now: Date,
+): Promise<{ closures: StudioClosure[]; error: string | null }> => {
   const { data, error } = await supabase
     .from('portal_events')
     .select('title, starts_at, ends_at, is_all_day')

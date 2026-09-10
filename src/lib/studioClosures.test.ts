@@ -1,3 +1,4 @@
+import { loadStudioClosures } from './studioClosures';
 import {
   closureDateLabel,
   closureDayKeys,
@@ -140,5 +141,48 @@ describe('expanding a closure into the days it covers', () => {
 
   it('is empty for no closures, which leaves the schedule exactly as it was', () => {
     expect(closureDayKeys([])).toEqual([]);
+  });
+});
+
+/**
+ * The contract loadHouseholdSummary depends on. It awaits this to build the
+ * schedule's blocked dates, so a rejection here would take down up next, the
+ * class roster and the calendar export together — for every family, over a
+ * decoration.
+ */
+describe('the loader never throws', () => {
+  it('returns empty rather than rejecting when the query blows up', async () => {
+    jest.resetModules();
+    jest.doMock('./supabase', () => ({
+      isSupabaseConfigured: () => true,
+      supabase: {
+        from: () => { throw new Error('network went away mid-flight'); },
+      },
+    }));
+
+    /**
+     * try/finally, not a trailing cleanup.
+     *
+     * A failing expect would otherwise skip the unmock and leave the module
+     * registry holding a throwing supabase for every test after this one — a
+     * single real failure becomes a cascade, in a different file, with a
+     * message that points nowhere near the cause.
+     */
+    try {
+      // Re-required so it binds to the mocked client.
+      const { loadStudioClosures: loader } = require('./studioClosures');
+      await expect(loader(new Date(2026, 8, 10))).resolves.toEqual({
+        closures: [],
+        error: 'We could not load the studio closures.',
+      });
+    } finally {
+      jest.dontMock('./supabase');
+      jest.resetModules();
+    }
+  });
+
+  it('is a no-op without a configured backend', async () => {
+    await expect(loadStudioClosures(new Date(2026, 8, 10)))
+      .resolves.toEqual({ closures: [], error: null });
   });
 });
