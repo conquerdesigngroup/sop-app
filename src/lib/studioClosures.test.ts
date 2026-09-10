@@ -1,7 +1,6 @@
 import { loadStudioClosures } from './studioClosures';
 import {
   closureDateLabel,
-  isCompetitionTitle,
   closureDayKeys,
   daysUntil,
   isClosureTitle,
@@ -174,7 +173,6 @@ describe('the loader never throws', () => {
       const { loadStudioClosures: loader } = require('./studioClosures');
       await expect(loader(new Date(2026, 8, 10))).resolves.toEqual({
         closures: [],
-        competitions: [],
         error: 'We could not load the studio calendar.',
       });
     } finally {
@@ -185,50 +183,6 @@ describe('the loader never throws', () => {
 
   it('is a no-op without a configured backend', async () => {
     await expect(loadStudioClosures(new Date(2026, 8, 10)))
-      .resolves.toEqual({ closures: [], competitions: [], error: null });
-  });
-});
-
-/**
- * Every title below is real, off the studio's own calendar. The matcher decides
- * a number a parent plans a weekend around, so a miss and a false positive are
- * both expensive — and the two matchers must not overlap, or a closure would be
- * counted as a competition day.
- */
-describe('spotting a competition by its title', () => {
-  it.each([
-    'Allstar Competition (Optional - "Revolution" - Riverside)',
-    'Allstar Competition (Mandatory-Countdown)',
-    'Allstar Competition (Mandatory-Act One)',
-    'All-Star Competition (Mandatory - Showbiz)',
-    'All-Star Competition (Mandatory - Driven)',
-    'Nationals Competition (Mandatory - Countdown)',
-  ])('counts %s', title => {
-    expect(isCompetitionTitle(title)).toBe(true);
-  });
-
-  it.each([
-    // A showcase is a performance, not a competition — and this one is
-    // tentative besides.
-    'Tentative All-Star Showcase',
-    'JBJ Dress Rehearsal in class',
-    'Halloween Week',
-    'Winter Session Begins',
-    'Picture day',
-  ])('leaves %s alone', title => {
-    expect(isCompetitionTitle(title)).toBe(false);
-  });
-
-  it('never counts a closure as a competition, or the reverse', () => {
-    const closures = ['Closed for Christmas Break', 'Memorial Day – CLOSED', 'Studios Closed'];
-    closures.forEach(t => expect(isCompetitionTitle(t)).toBe(false));
-
-    const comps = ['Nationals Competition (Mandatory - Countdown)', 'All-Star Competition (Mandatory - Driven)'];
-    comps.forEach(t => expect(isClosureTitle(t)).toBe(false));
-  });
-
-  it('says no to nothing at all', () => {
-    expect(isCompetitionTitle(null)).toBe(false);
-    expect(isCompetitionTitle('')).toBe(false);
+      .resolves.toEqual({ closures: [], error: null });
   });
 });
