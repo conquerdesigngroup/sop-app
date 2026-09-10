@@ -6,9 +6,11 @@ import {
   StudioClosure,
   closureDateLabel,
   daysUntil,
+  isUpcoming,
   loadStudioClosures,
   seasonEndLabel,
 } from '../../lib/studioClosures';
+import SeasonRibbon from './SeasonRibbon';
 import { useHousehold } from './useHousehold';
 
 /**
@@ -126,15 +128,24 @@ const ClosuresCard: React.FC<ProfileCardProps> = ({ ctx }) => {
 
   // The family's own last day, not the studio's: a household whose classes all
   // finish in March should not be told the building is open until June.
-  const seasonEnd = useMemo(() => {
-    const ends = (data?.perStudent ?? [])
-      .flatMap(p => p.current)
-      .map(row => row.klass.seasonEnd)
-      .filter((v): v is string => !!v);
-    return ends.length ? ends.reduce((a, b) => (a > b ? a : b)) : null;
+  const season = useMemo(() => {
+    const rows = (data?.perStudent ?? []).flatMap(p => p.current);
+    const ends = rows.map(r => r.klass.seasonEnd).filter((v): v is string => !!v);
+    const starts = rows.map(r => r.klass.seasonStart).filter((v): v is string => !!v);
+    return {
+      // The family's own last day, not the studio's: a household whose classes
+      // all finish in March should not be told the building is open until June.
+      end: ends.length ? ends.reduce((a, b) => (a > b ? a : b)) : null,
+      start: starts.length ? starts.reduce((a, b) => (a < b ? a : b)) : null,
+    };
   }, [data]);
 
-  const shown = (closures ?? []).slice(0, MAX_SHOWN);
+  const seasonEnd = season.end;
+
+  // The list is what is still ahead; the ribbon is the whole season, including
+  // closures already behind us — a Christmas notch has to stay on the bar in
+  // March or the picture loses its shape as the year goes on.
+  const shown = (closures ?? []).filter(c => isUpcoming(c, now)).slice(0, MAX_SHOWN);
 
   // Nothing to say, so nothing is said. A card headed "Closures" with "none
   // scheduled" under it is a card that makes a promise about a calendar the
@@ -167,6 +178,17 @@ const ClosuresCard: React.FC<ProfileCardProps> = ({ ctx }) => {
         }}>
           Your classes run to <strong style={{ color: theme.colors.txt.secondary }}>{seasonEndLabel(seasonEnd)}</strong>.
         </p>
+      )}
+
+      {/* Needs both ends and is silent without them, rather than inventing a
+          start date and drawing a bar that means nothing. */}
+      {season.start && season.end && (
+        <SeasonRibbon
+          seasonStart={season.start}
+          seasonEnd={season.end}
+          closures={closures ?? []}
+          now={now}
+        />
       )}
     </Card>
   );

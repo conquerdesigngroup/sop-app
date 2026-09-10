@@ -59,11 +59,24 @@ const CLOSURE_TITLE = /(^|\W)(closed|closing)(\W|$)|\bno\s+class(es)?\b/i;
 export const isClosureTitle = (title: string | null | undefined): boolean =>
   !!title && CLOSURE_TITLE.test(title);
 
-/** How far back to look, so a closure ALREADY UNDER WAY is still found. */
-const LOOKBACK_DAYS = 30;
+/**
+ * How far back to look.
+ *
+ * Thirty days was enough while the only consumer was a list of what is still
+ * ahead. The season ribbon needs the WHOLE year's closures — a Christmas notch
+ * has to stay on the bar in March, or the picture quietly loses its shape as
+ * the season goes on — and a season is at most a year plus change. So the
+ * loader returns what is on the calendar and the CALLER decides what is still
+ * relevant; see isUpcoming.
+ */
+const LOOKBACK_DAYS = 400;
+
+/** Still ahead, or under way right now. The list's filter, not the loader's. */
+export const isUpcoming = (closure: StudioClosure, now: Date = new Date()): boolean =>
+  closure.lastDay >= dateKey(now);
 
 /**
- * Upcoming closures, soonest first, including one running right now.
+ * Every closure on the calendar within the lookback, soonest first.
  *
  * Reports failure rather than throwing: this is one card on a dashboard, and a
  * portal that cannot reach the events table should still show everything else.
@@ -85,7 +98,6 @@ export const loadStudioClosures = async (
 
   if (error) return { closures: [], error: 'We could not load the studio closures.' };
 
-  const today = dateKey(now);
   const seen = new Set<string>();
   const closures: StudioClosure[] = [];
 
@@ -94,9 +106,6 @@ export const loadStudioClosures = async (
 
     const firstDay = eventDayKey(row.starts_at, row.is_all_day);
     const lastDay = eventLastDayKey(row.starts_at, row.ends_at, row.is_all_day);
-
-    // Keys are zero-padded, so string comparison orders dates correctly.
-    if (lastDay < today) return;
 
     const id = `${row.title}|${firstDay}|${lastDay}`;
     if (seen.has(id)) return;
