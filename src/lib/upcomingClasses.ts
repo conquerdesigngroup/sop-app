@@ -203,6 +203,35 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  * Relative words only inside the window where they are unambiguous. Past a
  * week, "Thursday" could be either of two Thursdays, so it becomes a date.
  */
+/**
+ * How far through a class we are right now, or null if it is not running.
+ *
+ * Requires an end time rather than assuming a default length. buildUpcoming
+ * deliberately keeps a running class on the card — "a parent checking
+ * mid-class is checking the pickup time" — so without an end time we know it
+ * STARTED and not that it is still going, and "On now" would be a claim the
+ * data cannot support.
+ *
+ * Returns a fraction rather than a boolean because the caller draws a bar with
+ * it; a caller that only wants the state can test for null.
+ */
+export const liveProgress = (
+  item: { startsAt: Date; endsAt: Date | null },
+  now: Date,
+): number | null => {
+  if (!item.endsAt) return null;
+
+  const start = item.startsAt.getTime();
+  const end = item.endsAt.getTime();
+  const at = now.getTime();
+
+  // end <= start is a catalogue error — a class ending before it begins — and
+  // would divide by zero or go negative. Not running is the honest answer.
+  if (end <= start || at < start || at > end) return null;
+
+  return (at - start) / (end - start);
+};
+
 export const relativeDay = (date: Date, now: Date): string => {
   const days = Math.round((startOfDay(date).getTime() - startOfDay(now).getTime()) / 86400000);
 
