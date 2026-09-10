@@ -13,6 +13,7 @@ import {
 import { clipToRange, sessionBreakdown, summarise } from './attendanceSummary';
 import { UpcomingClass, buildUpcoming, nextPerClass } from './upcomingClasses';
 import { PortalDocument, PortalUpdate } from '../types';
+import { closureDayKeys, loadStudioClosures } from './studioClosures';
 import {
   FIXTURE_ATTENDANCE,
   FIXTURE_CLASSES,
@@ -684,6 +685,15 @@ export const loadHouseholdSummary = async (
   const students: Student[] = (studentRows ?? []).map(mapStudent);
   if (!students.length) return { ...EMPTY_HOUSEHOLD, memberType };
 
+  /**
+   * The studio's closures, fetched ALONGSIDE the enrolments rather than after.
+   *
+   * The two do not depend on each other and awaiting them in turn would add a
+   * round trip to the page a parent opens in a car. Started here and awaited
+   * below, which is the same shape as the students/membership pair above.
+   */
+  const closuresPromise = loadStudioClosures();
+
   // 'all' because the schedule is not a function of the range filter — a
   // Saturday class must be addable to a calendar on a Tuesday, and "up next"
   // must not vanish because the user is looking at "This month".
@@ -708,12 +718,37 @@ export const loadHouseholdSummary = async (
   // The projection needs the same shape the fixture path builds: a student, a
   // class, an enrollment, and the sessions that are known NOT to be held. The
   // view carries those dates as an array so this costs no extra round trip.
+  /**
+   * Days the STUDIO is shut, added to every class's blocked dates.
+   *
+   * upcomingClasses subtracts closures by reading session rows whose status is
+   * not 'held' — "the manual closures an admin enters ahead of a holiday".
+   * There are none. The studio marks its closures in Google Calendar, which
+   * syncs to portal_events, so the projection was reading an empty table while
+   * the answer sat in a full one: measured on 2026-09-09 there were twenty
+   * class sessions on Thanksgiving and none marked closed, against a calendar
+   * entry reading "Closed for Thanksgiving Holiday".
+   *
+   * That is why the fix goes HERE rather than in each card. Every screen that
+   * projects a date — up next, the class roster, the .ics export — derives it
+   * from these entries, so blocking the day once blocks it everywhere. Adding
+   * them to cancelledByClass carries them into the calendar EXDATEs as well,
+   * which is what stops a phone reminding a family about a class on Boxing Day.
+   *
+   * A failed closures read yields an empty list, which leaves the projection
+   * exactly as it behaved before this: no worse, and never a class hidden
+   * because the events table was briefly unreachable.
+   */
+  const { closures } = await closuresPromise;
+  const closedDays = closureDayKeys(closures);
+
   const cancelledByClass: Record<string, string[]> = {};
   const entries = rows.flatMap((row, i) => {
     const student = byId.get(row.student_id);
     const p = progress[i];
     if (!student || p.enrollment.status !== 'active') return [];
-    const dates: string[] = row.cancelled_dates ?? [];
+    const own: string[] = row.cancelled_dates ?? [];
+    const dates = own.concat(closedDays.filter(d => own.indexOf(d) < 0));
     cancelledByClass[p.klass.id] = dates;
     return [{
       student,

@@ -1,4 +1,10 @@
-import { closureDateLabel, daysUntil, isClosureTitle, seasonEndLabel } from './studioClosures';
+import {
+  closureDateLabel,
+  closureDayKeys,
+  daysUntil,
+  isClosureTitle,
+  seasonEndLabel,
+} from './studioClosures';
 
 /**
  * The title match is a heuristic standing in for a column portal_events does
@@ -83,5 +89,56 @@ describe('how far away it is', () => {
 describe('the season end', () => {
   it('carries the year, on a date most of a year out', () => {
     expect(seasonEndLabel('2027-06-20')).toBe('Sun 20 Jun 2027');
+  });
+});
+
+/**
+ * These keys are what the class projection subtracts, so a wrong one is a
+ * class that silently stops being announced — or one announced on a day the
+ * building is locked. Both are invisible on screen.
+ */
+describe('expanding a closure into the days it covers', () => {
+  const closure = (firstDay: string, lastDay: string) => ({ title: 'Closed', firstDay, lastDay });
+
+  it('gives one day for a one-day closure', () => {
+    expect(closureDayKeys([closure('2027-05-31', '2027-05-31')])).toEqual(['2027-05-31']);
+  });
+
+  it('covers a multi-day closure inclusively at both ends', () => {
+    expect(closureDayKeys([closure('2026-11-24', '2026-11-27')])).toEqual([
+      '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27',
+    ]);
+  });
+
+  it('crosses a year boundary — the Christmas break is a fortnight, not two days', () => {
+    const keys = closureDayKeys([closure('2026-12-21', '2027-01-03')]);
+    expect(keys).toHaveLength(14);
+    expect(keys[0]).toBe('2026-12-21');
+    expect(keys[13]).toBe('2027-01-03');
+    expect(keys).toContain('2026-12-31');
+    expect(keys).toContain('2027-01-01');
+  });
+
+  /**
+   * US DST ends on 1 November 2026. Stepping by adding 86,400,000ms across it
+   * repeats 1 November and loses 2 November — the exact failure eventDayKeys
+   * in lib/portal documents. setDate is calendar-aware and does not.
+   */
+  it('steps correctly across a daylight-saving boundary', () => {
+    expect(closureDayKeys([closure('2026-10-31', '2026-11-02')])).toEqual([
+      '2026-10-31', '2026-11-01', '2026-11-02',
+    ]);
+  });
+
+  it('merges overlapping closures instead of blocking a day twice', () => {
+    const keys = closureDayKeys([
+      closure('2026-11-24', '2026-11-26'),
+      closure('2026-11-25', '2026-11-27'),
+    ]);
+    expect(keys).toEqual(['2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27']);
+  });
+
+  it('is empty for no closures, which leaves the schedule exactly as it was', () => {
+    expect(closureDayKeys([])).toEqual([]);
   });
 });
