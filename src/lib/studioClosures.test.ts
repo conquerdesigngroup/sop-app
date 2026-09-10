@@ -160,15 +160,25 @@ describe('the loader never throws', () => {
       },
     }));
 
-    // Re-imported so it binds to the mocked client.
-    const { loadStudioClosures: loader } = require('./studioClosures');
-    await expect(loader(new Date(2026, 8, 10))).resolves.toEqual({
-      closures: [],
-      error: 'We could not load the studio closures.',
-    });
-
-    jest.dontMock('./supabase');
-    jest.resetModules();
+    /**
+     * try/finally, not a trailing cleanup.
+     *
+     * A failing expect would otherwise skip the unmock and leave the module
+     * registry holding a throwing supabase for every test after this one — a
+     * single real failure becomes a cascade, in a different file, with a
+     * message that points nowhere near the cause.
+     */
+    try {
+      // Re-required so it binds to the mocked client.
+      const { loadStudioClosures: loader } = require('./studioClosures');
+      await expect(loader(new Date(2026, 8, 10))).resolves.toEqual({
+        closures: [],
+        error: 'We could not load the studio closures.',
+      });
+    } finally {
+      jest.dontMock('./supabase');
+      jest.resetModules();
+    }
   });
 
   it('is a no-op without a configured backend', async () => {
