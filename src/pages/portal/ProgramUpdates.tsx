@@ -4,6 +4,7 @@ import { Badge, Card, EmptyState } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import EmptyArt from '../../components/portal/EmptyArt';
+import UpdateLink from '../../components/portal/UpdateLink';
 import { usePortal } from '../../contexts/PortalContext';
 import { portalRoutes } from '../../lib/portal';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
@@ -109,6 +110,7 @@ const ProgramUpdates: React.FC = () => {
                 </h2>
 
                 <UpdateBody body={u.body} />
+                <UpdateLink url={u.linkUrl} label={u.linkLabel} />
               </Card>
             ))}
           </div>

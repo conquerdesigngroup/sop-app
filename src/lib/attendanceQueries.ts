@@ -820,6 +820,8 @@ export const loadMyUpdates = async (
     householdId: row.household_id ?? null,
     title: row.title,
     body: row.body,
+    linkUrl: row.link_url ?? null,
+    linkLabel: row.link_label ?? null,
     isPinned: row.is_pinned,
     isPublished: row.is_published,
     publishedAt: row.published_at,

@@ -15,6 +15,7 @@ import { formatUpdateDate, UpdateBody } from './ProgramUpdates';
 import { DocumentList } from '../../components/portal/DocumentList';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import EmptyArt from '../../components/portal/EmptyArt';
+import UpdateLink from '../../components/portal/UpdateLink';
 import TeacherAvatar from '../../components/portal/TeacherAvatar';
 import { logDownload } from '../../lib/portalDownloads';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
@@ -381,6 +382,7 @@ const ClassDetail: React.FC = () => {
                         {u.title}
                       </h3>
                       <UpdateBody body={u.body} />
+                      <UpdateLink url={u.linkUrl} label={u.linkLabel} />
                     </Card>
                   ))}
                 </div>

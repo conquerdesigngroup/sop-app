@@ -501,6 +501,15 @@ export interface PortalUpdate {
   householdId: string | null;
   title: string;
   body: string;
+  /**
+   * One optional link, rendered as a button under the post — tickets, a form,
+   * a schedule. http(s) only: it goes into an href, and it is checked in the
+   * editor, again in saveUpdate, again on the way out and once more by a CHECK
+   * (v54). See src/lib/portalLink.ts.
+   */
+  linkUrl: string | null;
+  /** What that button says. Null falls back to the link's host. */
+  linkLabel: string | null;
   isPinned: boolean;
   isPublished: boolean;
   publishedAt: string | null;

@@ -9,7 +9,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePortalAdmin, describeWriteError, UpdateInput } from '../../contexts/PortalAdminContext';
 import { PortalClass, PortalProgram, PortalUpdate } from '../../types';
 import { useAdminList } from './useAdminList';
-import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audienceLabel, useAutoFocus } from './shared';
+import {
+  ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audienceLabel, useAutoFocus, FieldPair,
+} from './shared';
+import { LINK_URL_ERROR, isSafeLinkUrl, linkHost, normalizeLinkUrl } from '../../lib/portalLink';
 
 /**
  * Announcements. What a parent sees under /portal/:program/updates.
@@ -19,6 +22,12 @@ import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audience
  * putting staff-authored text through dangerouslySetInnerHTML would make this
  * editor stored XSS against every family. If rich text is ever wanted, it needs
  * a sanitiser on the way out, not a change here.
+ *
+ * Which is why the link is its own pair of fields (v54) rather than a URL typed
+ * into the body. A URL in the body is not clickable — the placeholder says so —
+ * so a parent has to retype it into a phone browser, and most will not. Kept
+ * apart from the prose, the value can be checked whole before it ever reaches
+ * an href. src/lib/portalLink.ts is where that checking lives.
  */
 
 const emptyDraft = (programId: string, classId: string | null): UpdateInput => ({
@@ -26,6 +35,8 @@ const emptyDraft = (programId: string, classId: string | null): UpdateInput => (
   classId,
   title: '',
   body: '',
+  linkUrl: '',
+  linkLabel: '',
   isPinned: false,
   isPublished: false,
   publishedAt: null,
@@ -37,6 +48,9 @@ const toDraft = (u: PortalUpdate): UpdateInput => ({
   classId: u.classId,
   title: u.title,
   body: u.body,
+  // The row is nullable, the form fields are not — see UpdateInput.
+  linkUrl: u.linkUrl ?? '',
+  linkLabel: u.linkLabel ?? '',
   isPinned: u.isPinned,
   isPublished: u.isPublished,
   publishedAt: u.publishedAt,
@@ -99,6 +113,13 @@ const UpdatesSection: React.FC<{
     }
     if (!canEditClass(draft.classId)) {
       setFormError('Pick one of your own classes. Studio-wide posts are admin-only.');
+      return;
+    }
+    // saveUpdate refuses this too, and so does the v54 CHECK. Refusing it here
+    // is what turns a thrown error into a sentence next to the field.
+    const linkUrl = normalizeLinkUrl(draft.linkUrl);
+    if (linkUrl !== null && !isSafeLinkUrl(linkUrl)) {
+      setFormError(LINK_URL_ERROR);
       return;
     }
 
@@ -179,6 +200,9 @@ const UpdatesSection: React.FC<{
                     // "· 8/21/2026" with nothing in front of the dot.
                     <span>{scope ? '' : '· '}{new Date(u.publishedAt).toLocaleDateString()}</span>
                   )}
+                  {/* Only where it is real: a link that would not render for a
+                      parent must not read as one here either. */}
+                  {isSafeLinkUrl(u.linkUrl) && <span>↗ {linkHost(u.linkUrl)}</span>}
                 </RowMeta>
               </div>
 
@@ -226,10 +250,40 @@ const UpdatesSection: React.FC<{
             <Textarea
               label="Message"
               value={draft.body}
-              placeholder={'Leave a blank line between paragraphs.\n\nPlain text only — links are not clickable and formatting is not applied.'}
+              placeholder={'Leave a blank line between paragraphs.\n\nPlain text only — put any link in the field below, where it becomes a button parents can tap.'}
               style={{ minHeight: '180px' }}
               onChange={e => setDraft({ ...draft, body: e.target.value })}
             />
+
+            {/* The tappable half of a post: tickets, a form, a schedule. Empty
+                is the normal case, so it says optional and sits under the
+                message rather than competing with it. */}
+            <FieldPair stack={isMobileOrTablet}>
+              <Input
+                label="Link (optional)"
+                type="url"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={draft.linkUrl}
+                placeholder="didc.app/tickets"
+                helperText="Parents get a button under the post. https:// is added if you leave it off."
+                onChange={e => setDraft({ ...draft, linkUrl: e.target.value })}
+              />
+              <Input
+                label="Button text"
+                value={draft.linkLabel}
+                placeholder="Buy recital tickets"
+                helperText={
+                  linkHost(normalizeLinkUrl(draft.linkUrl))
+                    ? `Blank shows ${linkHost(normalizeLinkUrl(draft.linkUrl))} instead.`
+                    : 'Blank shows the site the link goes to.'
+                }
+                disabled={draft.linkUrl.trim() === ''}
+                onChange={e => setDraft({ ...draft, linkLabel: e.target.value })}
+              />
+            </FieldPair>
 
             {/* Scoped: the audience is fixed by where this was opened from, so
                 offering a picker would let someone move a post out of the list
