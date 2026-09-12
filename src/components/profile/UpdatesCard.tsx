@@ -4,6 +4,7 @@ import { Button, Card, Spinner } from '../ui';
 import { PortalUpdate } from '../../types';
 import { LoadError, loadMyUpdates } from '../../lib/attendanceQueries';
 import CardError from './CardError';
+import UpdateLink from '../portal/UpdateLink';
 import { ProfileCardProps } from '../../lib/profileCards';
 import { useHousehold } from './useHousehold';
 
@@ -227,16 +228,22 @@ const UpdatesCard: React.FC<ProfileCardProps> = ({ ctx }) => {
                 </button>
 
                 {open && (
-                  <p style={{
-                    ...theme.typography.bodySmall,
-                    fontFamily: theme.fonts.primary,
-                    color: theme.colors.txt.secondary,
-                    margin: `${theme.spacing.xs} 0 0`,
-                    whiteSpace: 'pre-wrap',
-                    overflowWrap: 'anywhere',
-                  }}>
-                    {update.body}
-                  </p>
+                  <>
+                    <p style={{
+                      ...theme.typography.bodySmall,
+                      fontFamily: theme.fonts.primary,
+                      color: theme.colors.txt.secondary,
+                      margin: `${theme.spacing.xs} 0 0`,
+                      whiteSpace: 'pre-wrap',
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {update.body}
+                    </p>
+                    {/* Inside the expanded row, not next to the title: the
+                        collapsed row is a <button>, and an anchor nested in a
+                        button is neither tappable reliably nor valid. */}
+                    <UpdateLink url={update.linkUrl} label={update.linkLabel} compact />
+                  </>
                 )}
               </div>
             );

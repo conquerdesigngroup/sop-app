@@ -20,6 +20,9 @@ import {
 import type { StreamStatus } from '../lib/portalStream';
 import { signDocumentUrls, removeStorageObject } from '../lib/portalStorage';
 import { logActivity } from '../lib/activityLog';
+import {
+  LINK_URL_ERROR, isSafeLinkUrl, linkHost, normalizeLinkLabel, normalizeLinkUrl,
+} from '../lib/portalLink';
 
 /**
  * Authoring for the parent portal — the staff half of the portal_* tables.
@@ -65,6 +68,14 @@ export interface UpdateInput {
   classId: string | null;
   title: string;
   body: string;
+  /**
+   * Exactly what is in the two form fields — strings, empty when unused, not
+   * the row's nullable columns. normalizeLinkUrl / normalizeLinkLabel turn
+   * them into the row in saveUpdate, so "" and "  " both mean no link and
+   * neither reaches the table.
+   */
+  linkUrl: string;
+  linkLabel: string;
   isPinned: boolean;
   isPublished: boolean;
   /** Set the first time it is published; never cleared, so it stays stable. */
@@ -326,6 +337,9 @@ export const describeWriteError = (e: any): string => {
   if (e?.statusCode === '413' || e?.statusCode === 413 || /exceeded the maximum allowed size/i.test(msg)) {
     return `Supabase refused that file as too large. The app allows ${MAX_DOCUMENT_MB} MB; the storage limit on the Supabase side is lower and needs raising to match.`;
   }
+  // Named before the generic check-constraint line below, which would send
+  // someone off to look at dates for a problem with a link.
+  if (/portal_updates_link/i.test(msg)) return LINK_URL_ERROR;
   if (/violates check constraint/i.test(msg)) return 'Something in that form is out of range — check the dates and times.';
   return msg || 'That did not save. Please try again.';
 };
@@ -501,11 +515,20 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
   // ---------------------------------------------------------------- updates
 
   const saveUpdate = useCallback(async (input: UpdateInput) => {
+    // Checked here as well as in the form, because this is the only door to
+    // the table and the form is not the only thing that can knock on it.
+    const linkUrl = normalizeLinkUrl(input.linkUrl);
+    if (linkUrl !== null && !isSafeLinkUrl(linkUrl)) throw new Error(LINK_URL_ERROR);
+
     const row = {
       program_id: input.programId,
       class_id: input.classId,
       title: input.title.trim(),
       body: input.body,
+      link_url: linkUrl,
+      // A label with no link is dead weight nothing would render, and the v54
+      // CHECK refuses it outright.
+      link_label: linkUrl === null ? null : normalizeLinkLabel(input.linkLabel),
       is_pinned: input.isPinned,
       is_published: input.isPublished,
       // Stamped on first publish and kept afterwards, because the parent feed
@@ -522,6 +545,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
         classId: input.classId,
         isPublished: input.isPublished,
         isPinned: input.isPinned,
+        // The host, never the URL: an unlisted form or a pre-signed share is a
+        // secret, and the log's details are an allowlist for that reason. Same
+        // rule as addLink in eventAttachments.
+        linkHost: linkHost(linkUrl),
       },
     };
 

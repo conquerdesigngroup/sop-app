@@ -414,6 +414,7 @@ const update = (
   body: string,
   publishedAt: string,
   isPinned = false,
+  link: { url: string; label?: string } | null = null,
 ): PortalUpdate => ({
   id,
   programId,
@@ -422,6 +423,8 @@ const update = (
   householdId: null,
   title,
   body,
+  linkUrl: link?.url ?? null,
+  linkLabel: link?.label ?? null,
   isPinned,
   isPublished: true,
   publishedAt,
@@ -439,6 +442,9 @@ export const FIXTURE_UPDATES: PortalUpdate[] = [
     'Tickets for the December showcase are available now through the studio office. Each family is allocated four before general release.',
     '2026-08-28T09:00:00Z',
     true,
+    // The one fixture post carrying a link, so the demo and the tour capture
+    // show what a post with one looks like.
+    { url: 'https://www.didc.app/tickets', label: 'Buy recital tickets' },
   ),
   update(
     'upd-ballet-shoes',
