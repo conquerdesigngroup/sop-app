@@ -4,6 +4,7 @@ import { AttendanceStatus } from '../../types/attendance';
 import { ClassDay, RosterEntry, loadRoster, markAttendance } from '../../lib/attendanceStaff';
 import { useRefreshable } from '../../contexts/RefreshContext';
 import { Button, Spinner } from '../ui';
+import { STATUS_LABELS } from '../../lib/attendanceColors';
 import { StatusChip, StatusPills } from './StatusControl';
 
 /**
@@ -29,6 +30,22 @@ import { StatusChip, StatusPills } from './StatusControl';
  * again. The marks are never disabled while a save is in flight: they are local
  * state, they are correct on screen, and freezing the list mid-class to wait
  * for studio wifi would be the worst possible moment to do it.
+ *
+ * UNDO, AND WHY IT IS ONE STEP RATHER THAN A STACK
+ *
+ * Saving without a Save button removes the moment where a mistake could be
+ * caught, so the mistake has to be catchable afterwards instead. The one that
+ * needed it most is "Mark the remaining 25 present": one tap, twenty-five rows,
+ * trivially hit on the wrong class when the classes are a list and they all
+ * look alike — and before v55 there was no way back at all, because those
+ * dancers had been unmarked and nothing in the app could return them to
+ * unmarked. Twenty-five wrong Presents then sit in twenty-five families'
+ * percentages, looking exactly like a finished register.
+ *
+ * One step, not a stack, because the undo a teacher reaches for is always the
+ * thing they just did — and a deeper history invites walking backwards past
+ * marks that were right. Anything older is fixed the same way it was made: open
+ * the row and pick, including picking "Not marked".
  */
 
 const SAVE_DELAY_MS = 700;
@@ -48,16 +65,29 @@ type SaveState =
   | { kind: 'saved'; at: number }
   | { kind: 'error'; message: string };
 
+/**
+ * What the last action changed, and what it changed FROM.
+ *
+ * `marks` is the previous value of every row the action touched, so applying it
+ * is the undo — including the nulls, which is the half that needed v55.
+ */
+interface UndoStep {
+  /** Said out loud next to the button: "Marked 25 present." */
+  description: string;
+  marks: { studentId: string; status: AttendanceStatus | null }[];
+}
+
 const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) => {
   const [rows, setRows] = useState<RosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
+  const [undo, setUndo] = useState<UndoStep | null>(null);
 
   // Changes made but not yet written. Kept in a ref so the debounced flush
   // always sees the latest set without being re-created on every keystroke.
-  const pending = useRef<Map<string, AttendanceStatus>>(new Map());
+  const pending = useRef<Map<string, AttendanceStatus | null>>(new Map());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
 
@@ -110,16 +140,50 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
     timer.current = setTimeout(() => { flush().catch(() => {}); }, SAVE_DELAY_MS);
   }, [flush]);
 
-  const pick = useCallback((studentId: string, status: AttendanceStatus) => {
-    setRows(prev => {
-      const next = prev.map(r => (r.studentId === studentId ? { ...r, status } : r));
-      onCountChange(next.filter(r => r.status !== null).length);
-      return next;
-    });
-    pending.current.set(studentId, status);
-    setOpenId(null);
+  /**
+   * Every change goes through here, so every change is undoable.
+   *
+   * `undoDescription` null means the change IS an undo — there is nothing to
+   * offer afterwards but the row is still saved the same way. Rows that already
+   * hold the value being set are dropped before anything else: they would make
+   * the undo claim to restore something it never changed, and the RPC counts
+   * them as unchanged anyway.
+   */
+  const apply = useCallback((
+    changes: { studentId: string; status: AttendanceStatus | null }[],
+    undoDescription: string | null,
+  ) => {
+    const current = new Map(rows.map(r => [r.studentId, r.status]));
+    const real = changes.filter(c =>
+      current.has(c.studentId) && current.get(c.studentId) !== c.status);
+    if (real.length === 0) return;
+
+    const before = real.map(c => ({
+      studentId: c.studentId,
+      status: current.get(c.studentId) ?? null,
+    }));
+
+    const next = new Map(real.map(c => [c.studentId, c.status]));
+    const updated = rows.map(r =>
+      (next.has(r.studentId) ? { ...r, status: next.get(r.studentId) ?? null } : r));
+
+    setRows(updated);
+    onCountChange(updated.filter(r => r.status !== null).length);
+    real.forEach(c => pending.current.set(c.studentId, c.status));
+    setUndo(undoDescription ? { description: undoDescription, marks: before } : null);
     schedule();
-  }, [onCountChange, schedule]);
+  }, [rows, onCountChange, schedule]);
+
+  const pick = useCallback((studentId: string, status: AttendanceStatus | null) => {
+    const who = rows.find(r => r.studentId === studentId);
+    const name = who ? `${who.firstName} ${who.lastName}`.trim() : 'that dancer';
+
+    apply(
+      [{ studentId, status }],
+      status === null ? `Cleared ${name}.` : `Marked ${name} ${STATUS_LABELS[status].toLowerCase()}.`,
+    );
+    setOpenId(null);
+  }, [rows, apply]);
 
   /**
    * The bulk action that makes this usable.
@@ -131,17 +195,24 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
    * made on purpose.
    */
   const markRemainingPresent = useCallback(() => {
-    setRows(prev => {
-      const next = prev.map(r => {
-        if (r.status !== null) return r;
-        pending.current.set(r.studentId, 'present');
-        return { ...r, status: 'present' as AttendanceStatus };
-      });
-      onCountChange(next.filter(r => r.status !== null).length);
-      return next;
-    });
-    schedule();
-  }, [onCountChange, schedule]);
+    const blanks = rows.filter(r => r.status === null);
+    apply(
+      blanks.map(r => ({ studentId: r.studentId, status: 'present' as AttendanceStatus })),
+      `Marked ${blanks.length} present.`,
+    );
+  }, [rows, apply]);
+
+  /**
+   * Put the roster back the way it was before the last action.
+   *
+   * Passing null as the description means this does not itself become
+   * undoable. Tapping Undo twice undoing an undo is a toggle nobody asked for,
+   * and the button vanishing is the honest signal that the step has been spent.
+   */
+  const applyUndo = useCallback(() => {
+    if (!undo) return;
+    apply(undo.marks, null);
+  }, [undo, apply]);
 
   const unmarked = rows.filter(r => r.status === null).length;
   const marked = rows.length - unmarked;
@@ -213,6 +284,13 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
         role="status"
         aria-live="polite"
         style={{
+          display: 'flex',
+          // A row holding a variable-length message and up to two buttons, so
+          // it has to be able to wrap (CLAUDE.md) — an error message is a whole
+          // sentence and there is nowhere for Undo to go on a 320px phone.
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: theme.spacing.xs,
           minHeight: 22,
           fontSize: '0.85rem',
           fontWeight: 600,
@@ -221,16 +299,42 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
           overflowWrap: 'anywhere',
         }}
       >
-        {line.text}
+        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{line.text}</span>
         {save.kind === 'error' && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => { flush().catch(() => {}); }}
-            style={{ marginLeft: theme.spacing.sm }}
           >
             Try again
           </Button>
+        )}
+
+        {/*
+          Inside the live region on purpose: "Marked 25 present." is the
+          sentence that tells a teacher they hit the wrong class, and it is
+          worth nothing if it is only drawn. The button sits next to the words
+          that say what it will undo, rather than being a bare "Undo" that
+          asks them to remember.
+        */}
+        {!readOnly && undo && (
+          <>
+            <span style={{
+              color: theme.colors.txt.tertiary,
+              minWidth: 0,
+              overflowWrap: 'anywhere',
+            }}>
+              {undo.description}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={applyUndo}
+              aria-label={`Undo — ${undo.description}`}
+            >
+              Undo
+            </Button>
+          </>
         )}
       </div>
 
@@ -287,7 +391,11 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
               </button>
 
               {open && !readOnly && (
-                <StatusPills value={row.status} onPick={s => pick(row.studentId, s)} />
+                <StatusPills
+                  value={row.status}
+                  onPick={s => pick(row.studentId, s)}
+                  studentName={`${row.firstName} ${row.lastName}`.trim()}
+                />
               )}
             </div>
           );

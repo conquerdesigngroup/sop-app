@@ -346,15 +346,30 @@ export const loadGaps = async (
 export interface MarkResult {
   written: number;
   unchanged: number;
+  /** Marks removed — dancers put back to not marked (v55). */
+  cleared: number;
 }
 
 /**
- * Save marks for one session.
+ * Save marks for one session. A null status REMOVES the mark.
  *
  * Batched on purpose: a teacher marks a whole class, and thirty round trips on
  * studio wifi at 5:20pm is the difference between a tool and a nuisance. The
  * RPC applies them in one transaction and writes the history rows with them, so
  * a dropped connection either saves everything or nothing.
+ *
+ * WHY NULL RATHER THAN A SEPARATE clearAttendance()
+ *
+ * Undo is a batch and has to be atomic. Undoing "mark the remaining 25 present"
+ * clears 25 rows; undoing one tap on a dancer who was already absent puts
+ * 'absent' back. A general undo is a MIX of the two, and splitting it across
+ * two requests means a dropped connection can land half of it — leaving the
+ * register in a state the teacher never chose. See v55 §2.
+ *
+ * The key is always sent, so `status: null` arrives as an explicit null rather
+ * than a missing field; the RPC treats a missing one as a caller bug and
+ * raises, which is the safety net against a serialisation slip wiping a
+ * register.
  *
  * The error is returned rather than thrown so a caller can put it beside the
  * control that failed. The messages the RPC raises are written to be shown to a
@@ -362,9 +377,11 @@ export interface MarkResult {
  */
 export const markAttendance = async (
   sessionId: string,
-  marks: { studentId: string; status: AttendanceStatus }[],
+  marks: { studentId: string; status: AttendanceStatus | null }[],
 ): Promise<{ result: MarkResult | null; error: LoadError }> => {
-  if (marks.length === 0) return { result: { written: 0, unchanged: 0 }, error: null };
+  if (marks.length === 0) {
+    return { result: { written: 0, unchanged: 0, cleared: 0 }, error: null };
+  }
 
   const { data, error } = await supabase.rpc('staff_mark_attendance', {
     p_session_id: sessionId,
@@ -372,7 +389,14 @@ export const markAttendance = async (
   });
 
   if (error) return { result: null, error: error.message || LOAD_FAILED };
-  return { result: { written: data?.written ?? 0, unchanged: data?.unchanged ?? 0 }, error: null };
+  return {
+    result: {
+      written: data?.written ?? 0,
+      unchanged: data?.unchanged ?? 0,
+      cleared: data?.cleared ?? 0,
+    },
+    error: null,
+  };
 };
 
 /**
