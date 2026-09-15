@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { theme } from '../../theme';
 import { Card, Spinner } from '../ui';
 import { PortalDocument } from '../../types';
-import { formatFileSize } from '../../lib/portal';
 import { withDownload } from '../../lib/portalMedia';
 import { signDocumentUrls } from '../../lib/portalStorage';
 import { LoadError, loadMyDocuments } from '../../lib/attendanceQueries';
@@ -132,9 +131,14 @@ const DocumentsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
       ) : (
         docs.map((docRow, index) => {
           const signed = docRow.storagePath ? urls[docRow.storagePath] : undefined;
+          // No file size. This is a list of things a family has been given, and
+          // a column of megabytes next to them read as a storage report of the
+          // whole app rather than their own shelf — enough that the studio asked
+          // what the number was counting. The size still shows where it changes
+          // a decision: on the class page's own list, and live in the download
+          // progress line (see DocumentList, and CLAUDE.md on slow taps).
           const meta = [
             docRow.category,
-            formatFileSize(docRow.sizeBytes),
             isDemo ? 'demo file' : null,
           ].filter(Boolean).join(' · ');
 
