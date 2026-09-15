@@ -1,4 +1,5 @@
 import { PortalDocument, PortalUpdate } from '../types';
+import { ProgramSlug } from './portal';
 import {
   AttendanceClass,
   AttendanceRecord,
@@ -405,6 +406,18 @@ export const FIXTURE_SCENARIOS: { value: FixtureScenario; label: string; hint: s
 
 const PROGRAM_ACADEMY = 'prog-academy';
 const PROGRAM_ALLSTARS = 'prog-allstars';
+
+/**
+ * Fixture program id -> the slug the live table carries.
+ *
+ * Spelled out rather than parsed off the id, so the fixture ids stay opaque
+ * strings: the live path reads the slug from portal_programs, and a loader that
+ * split 'prog-academy' on a hyphen would be reading a naming accident.
+ */
+export const FIXTURE_PROGRAM_SLUGS: Record<string, ProgramSlug> = {
+  [PROGRAM_ACADEMY]: 'academy',
+  [PROGRAM_ALLSTARS]: 'allstars',
+};
 
 const update = (
   id: string,

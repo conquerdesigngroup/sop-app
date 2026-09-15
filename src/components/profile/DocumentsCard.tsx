@@ -47,13 +47,14 @@ const DocumentsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   const [attempt, setAttempt] = useState(0);
 
   const classIds = data?.enrolledClassIds;
+  const programs = data?.enrolledPrograms;
   const isDemo = ctx.source.source === 'fixture';
 
   useEffect(() => {
     if (!classIds) return;
     let cancelled = false;
 
-    loadMyDocuments(ctx.source, classIds).then(async result => {
+    loadMyDocuments(ctx.source, classIds, programs ?? []).then(async result => {
       if (cancelled) return;
       setDocs(result.rows);
       setError(result.error);
@@ -71,7 +72,7 @@ const DocumentsCard: React.FC<ProfileCardProps> = ({ ctx }) => {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classIds?.join(','), ctx.source.source, attempt]);
+  }, [classIds?.join(','), programs?.join(','), ctx.source.source, attempt]);
 
   if (error) {
     return (

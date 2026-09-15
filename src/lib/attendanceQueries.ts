@@ -14,10 +14,12 @@ import { clipToRange, sessionBreakdown, summarise } from './attendanceSummary';
 import { UpcomingClass, buildUpcoming, nextPerClass } from './upcomingClasses';
 import { PortalDocument, PortalUpdate } from '../types';
 import { closureDayKeys, loadStudioClosures } from './studioClosures';
+import { ProgramSlug, programSlugForCategory } from './portal';
 import {
   FIXTURE_ATTENDANCE,
   FIXTURE_CLASSES,
   FIXTURE_DOCUMENTS,
+  FIXTURE_PROGRAM_SLUGS,
   FIXTURE_UPDATES,
   FIXTURE_ENROLLMENTS,
   FIXTURE_MEMBERS,
@@ -499,6 +501,14 @@ export type { AttendanceSummary };
 /** ES5 target: spreading a Set is not available, and this reads fine anyway. */
 const unique = (values: string[]): string[] => values.filter((v, i) => values.indexOf(v) === i);
 
+/** The programmes a household's classes sit in, de-duplicated. */
+const programsOf = (perStudent: { current: ClassProgress[] }[]): ProgramSlug[] => {
+  const slugs = perStudent
+    .flatMap(p => p.current.map(c => programSlugForCategory(c.klass.category)))
+    .filter((x): x is ProgramSlug => x !== null);
+  return slugs.filter((v, i) => slugs.indexOf(v) === i);
+};
+
 export interface HouseholdSummary {
   students: Student[];
   memberType: MemberType;
@@ -519,6 +529,15 @@ export interface HouseholdSummary {
   error: LoadError;
   /** Which classes this household is in — the filter for updates and files. */
   enrolledClassIds: string[];
+  /**
+   * Which programmes those classes belong to — the filter for studio-wide files.
+   *
+   * Derived from the classes' categories rather than stored, because the
+   * enrolment view carries a category and no program id (see ClassCalendarCard).
+   * 'tnt' and 'academy' both resolve to the academy programme, which is what the
+   * studio means by "Academy / TNT".
+   */
+  enrolledPrograms: ProgramSlug[];
 }
 
 const EMPTY_HOUSEHOLD: HouseholdSummary = {
@@ -529,6 +548,7 @@ const EMPTY_HOUSEHOLD: HouseholdSummary = {
   series: [],
   cancelledByClass: {},
   enrolledClassIds: [],
+  enrolledPrograms: [],
   error: null,
 };
 
@@ -579,8 +599,9 @@ const loadFixtureHousehold = (
     upcoming: buildUpcoming(entries, FIXTURE_TODAY),
     series: nextPerClass(entries, FIXTURE_TODAY),
     cancelledByClass,
-      error: null,
+    error: null,
     enrolledClassIds: unique(perStudent.flatMap(p => p.current.map(c => c.klass.id))),
+    enrolledPrograms: programsOf(perStudent),
   };
 };
 
@@ -778,6 +799,7 @@ export const loadHouseholdSummary = async (
     series: nextPerClass(entries, now),
     cancelledByClass,
     enrolledClassIds: unique(perStudent.flatMap(p => p.current.map(c => c.klass.id))),
+    enrolledPrograms: programsOf(perStudent),
     error: null,
   };
 };
@@ -831,25 +853,73 @@ export const loadMyUpdates = async (
   }))), error: null };
 };
 
-/** Same filter, applied to files. */
+/**
+ * Files for the classes this household is in, plus studio-wide files for their
+ * own programmes.
+ *
+ * NOT THE SAME FILTER AS UPDATES, AND DELIBERATELY SO
+ *
+ * It used to be: a null classId was studio-wide and reached everyone, whatever
+ * programme it was posted to. With files that is the wrong default. A class
+ * file is small and specific; a studio-wide file is the recital pack, the
+ * waiver, the 240MB video — and an All-Star family scrolling a list that also
+ * holds every Academy and TNT file is reading a directory of the whole app
+ * rather than a list of their own things.
+ *
+ * So a studio-wide file now has to belong to a programme the household is
+ * actually in. 'tnt' and 'academy' classes both resolve to the academy
+ * programme, which is what the studio means when it says "Academy / TNT".
+ *
+ * A file whose programme cannot be resolved is left OUT rather than shown to
+ * everybody: the failure mode of guessing wrong is a family reading another
+ * programme's paperwork, and absent is the safer of the two.
+ */
 export const loadMyDocuments = async (
   src: AttendanceSource,
   enrolledClassIds: string[],
+  /**
+   * The programmes this household is in. A studio-wide file has to belong to
+   * one of them to be theirs — see the note above.
+   */
+  enrolledPrograms: ProgramSlug[],
 ): Promise<{ rows: PortalDocument[]; error: LoadError }> => {
-  const mine = (rows: PortalDocument[]) => rows
+  const mine = (
+    rows: PortalDocument[],
+    slugOf: (programId: string) => ProgramSlug | null,
+  ) => rows
     .filter(d => d.isPublished)
-    .filter(d => d.classId === null || enrolledClassIds.includes(d.classId))
+    .filter(d => {
+      // Attached to a class: theirs if they are in that class. Unchanged.
+      if (d.classId !== null) return enrolledClassIds.includes(d.classId);
+      // Studio-wide: theirs only if it was posted to a programme they are in.
+      const slug = slugOf(d.programId);
+      return slug !== null && enrolledPrograms.includes(slug);
+    })
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  if (src.source === 'fixture') return { rows: mine(FIXTURE_DOCUMENTS), error: null };
+  if (src.source === 'fixture') {
+    return {
+      rows: mine(FIXTURE_DOCUMENTS, id => FIXTURE_PROGRAM_SLUGS[id] ?? null),
+      error: null,
+    };
+  }
 
+  // The slug comes back on the row rather than from a second query: it is the
+  // only thing this filter needs from portal_programs, and a separate fetch
+  // would be a second round trip on a card a parent is already waiting for.
   const { data, error } = await supabase
     .from('portal_documents')
-    .select('*')
+    .select('*, program:portal_programs(slug)')
     .eq('is_published', true)
     .order('sort_order');
 
   if (error) return { rows: [], error: GENERIC_LOAD_ERROR };
+
+  const slugById = new Map<string, ProgramSlug>();
+  (data ?? []).forEach((row: any) => {
+    const slug = row.program?.slug;
+    if (slug) slugById.set(row.program_id, slug as ProgramSlug);
+  });
 
   return { rows: mine((data ?? []).map((row: any) => ({
     id: row.id,
@@ -865,7 +935,7 @@ export const loadMyDocuments = async (
     sortOrder: row.sort_order,
     isPublished: row.is_published,
     createdAt: row.created_at,
-  }))), error: null };
+  })), id => slugById.get(id) ?? null), error: null };
 };
 
 /** Overall attendance for one child across every active class. */

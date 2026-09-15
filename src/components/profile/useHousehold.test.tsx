@@ -38,6 +38,7 @@ const summary = (name: string, error: string | null = null): HouseholdSummary =>
   series: [],
   cancelledByClass: {},
   enrolledClassIds: [],
+  enrolledPrograms: [],
   error,
 });
 
