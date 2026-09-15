@@ -71,12 +71,13 @@ const UpdatesCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   const [seenAt] = useState(readSeenAt);
 
   const classIds = data?.enrolledClassIds;
+  const programs = data?.enrolledPrograms;
 
   useEffect(() => {
     if (!classIds) return;
     let cancelled = false;
 
-    loadMyUpdates(ctx.source, classIds).then(result => {
+    loadMyUpdates(ctx.source, classIds, programs ?? []).then(result => {
       if (cancelled) return;
       setUpdates(result.rows);
       setError(result.error);
@@ -90,7 +91,7 @@ const UpdatesCard: React.FC<ProfileCardProps> = ({ ctx }) => {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classIds?.join(','), ctx.source.source, attempt]);
+  }, [classIds?.join(','), programs?.join(','), ctx.source.source, attempt]);
 
   if (error) {
     return (

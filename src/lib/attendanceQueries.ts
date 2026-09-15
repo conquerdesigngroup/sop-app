@@ -501,6 +501,22 @@ export type { AttendanceSummary };
 /** ES5 target: spreading a Set is not available, and this reads fine anyway. */
 const unique = (values: string[]): string[] => values.filter((v, i) => values.indexOf(v) === i);
 
+/**
+ * Is a studio-wide row (one with no class) this household's, by programme?
+ *
+ * Shared by files and notices so the two cannot drift. A row whose programme
+ * cannot be resolved is NOT theirs: an unresolvable programme means an inactive
+ * one, and showing another programme's post to everybody is the worse failure.
+ */
+const programMatches = (
+  programId: string,
+  enrolledPrograms: ProgramSlug[],
+  slugOf: (programId: string) => ProgramSlug | null,
+): boolean => {
+  const slug = slugOf(programId);
+  return slug !== null && enrolledPrograms.includes(slug);
+};
+
 /** The programmes a household's classes sit in, de-duplicated. */
 const programsOf = (perStudent: { current: ClassProgress[] }[]): ProgramSlug[] => {
   const slugs = perStudent
@@ -805,33 +821,64 @@ export const loadHouseholdSummary = async (
 };
 
 /**
- * Studio-wide notices plus the ones for classes this household is actually in.
+ * Notices for the classes this household is in, plus studio-wide ones for their
+ * own programmes, plus anything written to them directly.
  *
- * A null `classId` is studio-wide and reaches everyone. A set one reaches only
- * the enrolled. Today a Ballet parent reads Hip Hop announcements and learns to
- * skim past all of it, which is how the genuinely important notice gets missed.
+ * A set `classId` reaches only the enrolled — a Ballet parent reading Hip Hop
+ * announcements learns to skim past all of it, which is how the genuinely
+ * important notice gets missed. A null one used to reach EVERYONE, whatever
+ * programme it was posted to, and now has to match one the household is in.
+ * Same rule as files, and shared with them through programMatches.
+ *
+ * A NOTE ADDRESSED TO ONE HOUSEHOLD IS ALWAYS THEIRS
+ *
+ * Checked first and never filtered further. `householdId` is set by the office
+ * writing to one family, and RLS has already decided the row may be seen by
+ * this login — the client re-deciding it is how a family stops seeing a note
+ * written for them. These rows carry no class, so under the programme rule
+ * alone a personal note on a programme the family had just left would vanish
+ * exactly when it mattered most.
  */
 export const loadMyUpdates = async (
   src: AttendanceSource,
   enrolledClassIds: string[],
+  enrolledPrograms: ProgramSlug[],
 ): Promise<{ rows: PortalUpdate[]; error: LoadError }> => {
-  const mine = (rows: PortalUpdate[]) => rows
+  const mine = (
+    rows: PortalUpdate[],
+    slugOf: (programId: string) => ProgramSlug | null,
+  ) => rows
     .filter(u => u.isPublished)
-    .filter(u => u.classId === null || enrolledClassIds.includes(u.classId))
+    .filter(u => {
+      if (u.householdId !== null) return true;
+      if (u.classId !== null) return enrolledClassIds.includes(u.classId);
+      return programMatches(u.programId, enrolledPrograms, slugOf);
+    })
     .sort((a, b) => {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt);
     });
 
-  if (src.source === 'fixture') return { rows: mine(FIXTURE_UPDATES), error: null };
+  if (src.source === 'fixture') {
+    return {
+      rows: mine(FIXTURE_UPDATES, id => FIXTURE_PROGRAM_SLUGS[id] ?? null),
+      error: null,
+    };
+  }
 
   const { data, error } = await supabase
     .from('portal_updates')
-    .select('*')
+    .select('*, program:portal_programs(slug)')
     .eq('is_published', true)
     .order('published_at', { ascending: false });
 
   if (error) return { rows: [], error: GENERIC_LOAD_ERROR };
+
+  const slugById = new Map<string, ProgramSlug>();
+  (data ?? []).forEach((row: any) => {
+    const slug = row.program?.slug;
+    if (slug) slugById.set(row.program_id, slug as ProgramSlug);
+  });
 
   return { rows: mine((data ?? []).map((row: any) => ({
     id: row.id,
@@ -850,7 +897,7 @@ export const loadMyUpdates = async (
     authorId: row.author_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }))), error: null };
+  })), id => slugById.get(id) ?? null), error: null };
 };
 
 /**
@@ -892,8 +939,7 @@ export const loadMyDocuments = async (
       // Attached to a class: theirs if they are in that class. Unchanged.
       if (d.classId !== null) return enrolledClassIds.includes(d.classId);
       // Studio-wide: theirs only if it was posted to a programme they are in.
-      const slug = slugOf(d.programId);
-      return slug !== null && enrolledPrograms.includes(slug);
+      return programMatches(d.programId, enrolledPrograms, slugOf);
     })
     .sort((a, b) => a.sortOrder - b.sortOrder);
 

@@ -17,7 +17,7 @@ import { FIXTURE_DOCUMENTS } from './attendanceFixture';
  * both shapes — attached to a class, and studio-wide on each programme.
  */
 
-const fixture = { source: 'fixture', scenario: 'two-dancers' } as const;
+const fixture = { source: 'fixture', scenario: 'guardian' } as const;
 
 const titles = (rows: { title: string }[]) => rows.map(r => r.title).sort();
 
