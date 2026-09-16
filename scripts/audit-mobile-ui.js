@@ -33,6 +33,8 @@
  * In a real browser, per route per device size:
  *   - horizontal overflow, ignoring anything inside a deliberate x-scroller
  *   - elements clipped above the top of the viewport
+ *   - text wider than the box it sits in: clipped, or spilling into the next
+ *     label, without anything leaving the viewport
  *   - content sitting in the status-bar band on a page that applies no
  *     safe-area padding — the closest honest proxy for the notch, because
  *     Chromium reports env(safe-area-inset-*) as 0 and there is no API to
@@ -342,6 +344,59 @@ const collect = (statusBar) => {
       });
     }
   });
+
+  // Text wider than the box that holds it.
+  //
+  // Nothing above can see this, because nothing leaves the viewport. On the
+  // dashboard at 320px "All overdue" was cut to "All overdu" by a button's
+  // overflow:hidden, and "COMPLETED" ran into "OVERDUE" in the stats row —
+  // at 360px too, which is every small Android — on sweeps that said CLEAN.
+  //
+  // Each text node is measured against the boxes it sits in, nearest first,
+  // and reported at the first one it does not fit. The nearest box alone is
+  // not enough: a label in a centring flex column grows its own box to fit
+  // and pushes THAT out of the column, so the label measured against itself
+  // always passes. The climb stops, without reporting:
+  //   - at text truncated with an ellipsis, which somebody chose;
+  //   - at a scroller, which may hold more than it shows;
+  //   - past an absolutely placed box, such as a count badge on an icon's
+  //     corner, which overhangs its anchor on purpose;
+  //   - past any box that does not overflow visibly, since it contains the
+  //     text and nothing further out can be affected by it.
+  const range = document.createRange();
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent.trim()) continue;
+    const host = node.parentElement;
+    if (!host || host.closest('script, style, svg, select, option, textarea')) continue;
+    range.selectNodeContents(node);
+    const t = range.getBoundingClientRect();
+    if (t.width === 0 || t.height === 0) continue;
+
+    for (let el = host, depth = 0; el && el !== document.body && depth < 8; el = el.parentElement, depth++) {
+      const s = getComputedStyle(el);
+      if (s.display === 'none' || s.visibility === 'hidden' || s.textOverflow === 'ellipsis') break;
+      if (s.overflowX === 'auto' || s.overflowX === 'scroll') break;
+      // An inline box has no width of its own to measure against.
+      if (s.display === 'inline' || s.display === 'contents') continue;
+      const b = el.getBoundingClientRect();
+      // A 1px box is text hidden for screen readers, not a layout.
+      if (b.width <= 1) break;
+      const left = b.left + el.clientLeft;
+      const right = left + el.clientWidth;
+      if (t.right > right + 1 || t.left < left - 1) {
+        problems.push({
+          kind: 'text-overflows-box',
+          detail: `"${node.textContent.trim().slice(0, 40)}" is ${Math.round(t.width)}px wide in a `
+            + `${Math.round(el.clientWidth)}px ${el.tagName.toLowerCase()}, `
+            + `${s.overflowX === 'visible' ? 'spilling over its neighbours' : 'clipped'}`
+            + `\n         in ${chainOf(el)}`,
+        });
+        break;
+      }
+      if (s.overflowX !== 'visible' || s.position === 'absolute' || s.position === 'fixed') break;
+    }
+  }
 
   return {
     problems,
