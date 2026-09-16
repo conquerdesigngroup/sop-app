@@ -35,8 +35,8 @@ jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => mockAuth,
 }));
 
-// can_edit_portal(): admin, or holds at least one class. Decides whether the
-// fifth tab is Attendance or SOPs.
+// can_edit_portal(): admin, or holds at least one class. Decides whether a
+// team member's bar carries Attendance and Portal.
 jest.mock('../contexts/PortalAdminContext', () => ({
   usePortalAdmin: () => mockPortal,
 }));
@@ -104,34 +104,54 @@ describe('BottomNavigation', () => {
     expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'SOPs']);
   });
 
-  it('gives management Job Tasks and More instead of Hours and SOPs', () => {
+  it('gives management Attendance and Portal in the middle, with Job Tasks and More', () => {
     mockAuth.isAdmin = true;
-    renderBar();
-    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Job Tasks', 'Calendar', 'More']);
-  });
-
-  it('gives a teacher with a class Attendance in place of SOPs', () => {
-    // Attendance happens at the top of every lesson; SOPs is looked up now and
-    // then. The teacher's fifth slot goes to the one they touch daily, and SOPs
-    // moves into the sheet they already have for Portal Manager.
     mockPortal.canEdit = true;
     renderBar();
-    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'Attendance']);
+    expect(tabLabels()).toEqual(['Home', 'Job Tasks', 'Attendance', 'Portal', 'More']);
+  });
+
+  it('does not wait for the portal check before drawing the admin bar', () => {
+    // can_edit_portal() is true for every admin. Keying the admin bar on the
+    // async answer would draw one bar at load and a different one a beat later.
+    mockAuth.isAdmin = true;
+    mockPortal.canEdit = false;
+    renderBar();
+    expect(tabLabels()).toEqual(['Home', 'Job Tasks', 'Attendance', 'Portal', 'More']);
+  });
+
+  it('gives a teacher with a class Attendance and Portal in place of Calendar and SOPs', () => {
+    // The register happens at the top of every lesson and the class's families
+    // hear from Portal after it; Calendar and SOPs are looked up now and then,
+    // and move into the sheet. Hours stays: logging time is a phone job.
+    mockPortal.canEdit = true;
+    renderBar();
+    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Attendance', 'Portal', 'Hours']);
   });
 
   it('leaves the bar alone for a team member who holds no class', () => {
     // The important half of the rule. Someone with no classes has no
-    // attendance to take, so the tab would be a permanent dead end — and
-    // adding it would also hand them a hamburger they have never needed.
+    // attendance to take and no class to post to, so both tabs would be
+    // permanent dead ends — and adding them would also hand them a hamburger
+    // they have never needed.
     renderBar();
     expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'SOPs']);
   });
 
-  it('keeps Attendance off the admin bar, where More already reaches it', () => {
+  it('keeps Portal lit on its sub-pages', () => {
     mockAuth.isAdmin = true;
+    renderBar('/portal-admin/clients');
+    expect(screen.getByRole('button', { name: 'Portal' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('a class tab navigates to its page', () => {
     mockPortal.canEdit = true;
     renderBar();
-    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Job Tasks', 'Calendar', 'More']);
+    fireEvent.click(screen.getByRole('button', { name: 'Attendance' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/attendance');
+    fireEvent.click(screen.getByRole('button', { name: 'Portal' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/portal-admin');
   });
 
   it('More opens the shared menu sheet rather than navigating', () => {
@@ -166,7 +186,9 @@ describe('BottomNavigation', () => {
     expect(badges[0]).toHaveTextContent('2');
   });
 
-  it('shows management everyone\'s overdue on Job Tasks and their own on Tasks', () => {
+  it('shows management everyone\'s overdue on Job Tasks, their own included', () => {
+    // My Tasks moved into the sheet, where its own count still shows. The one
+    // badge on the bar already counts the admin's overdue alongside everyone's.
     mockAuth.isAdmin = true;
     mockTasks.jobTasks = [
       task({ assignedTo: ['me'], scheduledDate: yesterday() }),
@@ -175,9 +197,9 @@ describe('BottomNavigation', () => {
       task({ assignedTo: ['c'], scheduledDate: yesterday(), status: 'archived' }),
     ];
     renderBar();
-    const tasks = screen.getByRole('button', { name: 'Tasks' });
+    const badges = screen.getAllByTestId('count-badge');
+    expect(badges).toHaveLength(1);
     const jobTasks = screen.getByRole('button', { name: 'Job Tasks' });
-    expect(tasks.querySelector('[data-testid="count-badge"]')).toHaveTextContent('1');
     expect(jobTasks.querySelector('[data-testid="count-badge"]')).toHaveTextContent('3');
   });
 

@@ -128,17 +128,18 @@ describe('mobile menu sheet', () => {
   });
 
   it('gives a teacher with a class a sheet holding what the bar displaced', () => {
-    // Their bar carries Attendance in the fifth slot, so SOPs is the one thing
-    // that moved off it — the sheet holds exactly that plus the portal.
+    // Their bar carries Attendance and Portal, so SOPs and Calendar are the
+    // two things that moved off it — the sheet holds exactly those.
     mockCanEditPortal = true;
     renderAt();
     fireEvent.click(screen.getByRole('button', { name: /more pages/i }));
     const sheet = screen.getByRole('dialog', { name: 'More pages' });
     expect(within(sheet).getAllByRole('link').map(a => a.textContent))
-      .toEqual(['SOPs', 'Portal Manager']);
+      .toEqual(['SOPs', 'Calendar']);
 
-    // And Attendance is NOT in the sheet, because it is under their thumb.
+    // And neither class page is in the sheet, because both are under their thumb.
     expect(within(sheet).queryByText('Attendance')).not.toBeInTheDocument();
+    expect(within(sheet).queryByText('Portal Manager')).not.toBeInTheDocument();
   });
 
   it('offers an admin only what the bottom bar does not, in sections', () => {
@@ -154,9 +155,10 @@ describe('mobile menu sheet', () => {
     // remembered yet), so it is opened here to read its rows.
     fireEvent.click(within(sheet).getByRole('button', { name: /management/i }));
     const labels = within(sheet).getAllByRole('link').map(a => a.textContent);
-    expect(labels).toEqual(['SOPs', 'Attendance', 'Hours Input', 'Team', 'Task Library', 'Portal Manager']);
+    expect(labels).toEqual(['My Tasks', 'SOPs', 'Calendar', 'Hours Input', 'Team', 'Task Library']);
 
-    // Nothing in the sheet duplicates the admin bar, which carries Job Tasks.
+    // Nothing in the sheet duplicates the admin bar, which carries Job Tasks,
+    // Attendance and Portal.
     within(sheet).getAllByRole('link').forEach(a => {
       expect(bottomNavPathsFor(true)).not.toContain(a.getAttribute('href'));
     });

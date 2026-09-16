@@ -12,6 +12,8 @@ import { DashboardSkeleton } from '../components/Skeleton';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 import EventDetailModal from '../components/EventDetailModal';
 import AdminAttention from '../components/dashboard/AdminAttention';
+import ClassesToday from '../components/dashboard/ClassesToday';
+import Shortcuts from '../components/dashboard/Shortcuts';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 
 // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight — bare new Date()
@@ -353,6 +355,11 @@ const TeamMemberDashboard: React.FC<{
         )}
       </div>
 
+      {/* A teacher's classes first — draws nothing for someone who holds
+          none — then the pages they came here for, one tap each. */}
+      <ClassesToday navigate={navigate} />
+      <Shortcuts navigate={navigate} />
+
       {/* Task Lists */}
       <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
         {/* Today's Tasks */}
@@ -683,6 +690,11 @@ const AdminDashboard: React.FC<{
 
       {/* What needs a manager today */}
       <AdminAttention navigate={navigate} />
+
+      {/* Below the manager's three cards, which stay above the fold. The
+          classes card draws nothing for an admin who teaches none. */}
+      <ClassesToday navigate={navigate} />
+      <Shortcuts navigate={navigate} />
 
       {/* Departments - Compact pills */}
       {departmentStats.length > 0 && (

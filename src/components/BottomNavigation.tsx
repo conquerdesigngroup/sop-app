@@ -81,6 +81,14 @@ const icons = {
       <path d="M8 13l2.5 2.5L16 10" />
     </svg>
   ),
+  // A megaphone, not the house the header uses for Portal: on this bar it
+  // shares a row with Home's house, and two houses would read as one page.
+  portal: (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
+      <path d="M3 11l18-5v12L3 14v-3z" />
+      <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+    </svg>
+  ),
   more: (
     <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
       <circle cx="5" cy="12" r="1.5" />
@@ -94,42 +102,64 @@ const icons = {
  * Five slots, chosen by role.
  *
  * A team member's day on a phone is: what am I doing, when, log my hours,
- * look something up. Management's day is that plus everyone else's tasks —
- * and Job Tasks used to be two taps away behind the hamburger while SOPs,
- * which an admin opens far less often, had a permanent tab. The admin bar
- * trades Hours and SOPs for Job Tasks and More; both remain one tap away
- * in the sheet, and the quick-add button logs hours from anywhere.
+ * look something up. Someone who holds a class adds two things to that, and
+ * both happen in the studio with a phone in one hand: the register at the top
+ * of every lesson, and posting to that class's families afterwards. Management
+ * does all of it too — the owner and the studio manager each carry a full
+ * teaching load — plus everyone else's tasks.
  *
- * `teaches` is the third case, and it is deliberately not "is a team member".
- * It mirrors can_edit_portal() — does this person hold ANY class — because a
- * team member with no classes has no attendance to take and putting the tab in
- * front of them would be a permanent dead end. Someone who does hold a class
- * gets Attendance in place of SOPs: reference material is looked up now and
- * then, attendance happens at the top of every single lesson.
+ * Five is as many as a phone holds. "Attendance" at 11px is 65px wide in the
+ * iPhone system font (68px bold, as the current tab). A fifth of a 375pt
+ * iPhone leaves 71px under the icon; a sixth leaves 58px, and the label is
+ * cut off on most iPhones. So Attendance and Portal are traded in, not added
+ * on:
  *
- * SOPs is not lost; it moves into the sheet, which a teacher with a class
- * already has for Portal Manager. A team member WITHOUT a class keeps exactly
- * the bar they had, and still has no sheet at all.
+ *   management   Home · Job Tasks · Attendance · Portal · More
+ *   teaches      Home · Tasks     · Attendance · Portal · Hours
+ *   neither      Home · Tasks     · Calendar   · Hours  · SOPs
+ *
+ * Management keeps Job Tasks, whose badge counts everyone's overdue including
+ * their own, and More; My Tasks and Calendar move into the sheet. A teacher
+ * keeps Hours — logging time is the thing an employee does on a phone — and
+ * Calendar and SOPs move into the sheet they already had. Every page pushed
+ * off a bar is also a tile in the dashboard's shortcuts, so it stays one tap
+ * from Home. Attendance takes the middle slot on both, under the thumb.
+ *
+ * `teaches` mirrors can_edit_portal() — does this person hold ANY class — and
+ * is deliberately not "is a team member". A team member with no classes has no
+ * register to take and no class to post to, so both tabs would be permanent
+ * dead ends: they keep exactly the bar they had, and still have no sheet.
+ * Management does not wait for it. can_edit_portal() is true for every admin,
+ * and reading the async answer would redraw the admin bar a beat after load.
  */
-const tabsFor = (isAdmin: boolean, teaches: boolean, counts: TaskCounts, onMore: () => void): NavTab[] => [
-  { key: 'home', path: '/dashboard', label: 'Home', icon: icons.home },
-  { key: 'my-tasks', path: '/my-tasks', label: 'Tasks', icon: icons.tasks, badge: counts.myOverdue },
-  ...(isAdmin
-    ? [
-        { key: 'job-tasks', path: '/job-tasks', label: 'Job Tasks', icon: icons.jobTasks, badge: counts.allOverdue },
-        { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
-        { key: 'more', label: 'More', icon: icons.more, onPress: onMore },
-      ]
-    : [
-        { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
-        // Hours Input, not the /hours schedule: logging time is the thing an
-        // employee does on a phone.
-        { key: 'hours', path: '/hours-input', label: 'Hours', icon: icons.hours },
-        teaches
-          ? { key: 'attendance', path: '/attendance', label: 'Attendance', icon: icons.attendance }
-          : { key: 'sop', path: '/sop', label: 'SOPs', icon: icons.sop },
-      ]),
-];
+const tabsFor = (isAdmin: boolean, teaches: boolean, counts: TaskCounts, onMore: () => void): NavTab[] => {
+  const home: NavTab = { key: 'home', path: '/dashboard', label: 'Home', icon: icons.home };
+  const myTasks: NavTab = { key: 'my-tasks', path: '/my-tasks', label: 'Tasks', icon: icons.tasks, badge: counts.myOverdue };
+  const attendance: NavTab = { key: 'attendance', path: '/attendance', label: 'Attendance', icon: icons.attendance };
+  // "Portal", not "Portal Manager": a fifth of a 375px bar fits the one word.
+  const portal: NavTab = { key: 'portal', path: '/portal-admin', label: 'Portal', icon: icons.portal };
+  // Hours Input, not the /hours schedule: logging time is the thing an
+  // employee does on a phone.
+  const hours: NavTab = { key: 'hours', path: '/hours-input', label: 'Hours', icon: icons.hours };
+
+  if (isAdmin) {
+    return [
+      home,
+      { key: 'job-tasks', path: '/job-tasks', label: 'Job Tasks', icon: icons.jobTasks, badge: counts.allOverdue },
+      attendance,
+      portal,
+      { key: 'more', label: 'More', icon: icons.more, onPress: onMore },
+    ];
+  }
+  if (teaches) return [home, myTasks, attendance, portal, hours];
+  return [
+    home,
+    myTasks,
+    { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
+    hours,
+    { key: 'sop', path: '/sop', label: 'SOPs', icon: icons.sop },
+  ];
+};
 
 const NO_COUNTS: TaskCounts = { myOverdue: 0, allOverdue: 0 };
 const noop = () => {};

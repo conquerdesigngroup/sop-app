@@ -1,4 +1,4 @@
-import { studioDate, studioToday, shiftIsoDays, daysBetweenIso } from './studioDate';
+import { studioDate, studioToday, studioClock, shiftIsoDays, daysBetweenIso } from './studioDate';
 
 /**
  * These assert exact dates at exact instants, with no reference to the
@@ -31,6 +31,22 @@ describe('studioDate', () => {
 
   it('formats as a sortable YYYY-MM-DD', () => {
     expect(studioToday()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('studioClock', () => {
+  it('reads the studio\'s wall clock, not the runner\'s', () => {
+    // 23:30Z in September is 16:30 PDT.
+    expect(studioClock(new Date('2026-09-16T23:30:00Z'))).toBe('16:30');
+  });
+
+  it('follows the DST offset', () => {
+    // 01:05Z in January is 17:05 PST the evening before.
+    expect(studioClock(new Date('2026-01-15T01:05:00Z'))).toBe('17:05');
+  });
+
+  it('writes midnight as 00, never 24', () => {
+    expect(studioClock(new Date('2026-09-16T07:05:00Z'))).toBe('00:05');
   });
 });
 
