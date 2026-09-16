@@ -49,6 +49,10 @@ const linkBtn: React.CSSProperties = {
   cursor: 'pointer',
   padding: '4px 0',
   whiteSpace: 'nowrap',
+  // index.css gives every button overflow: hidden, which lets a flex item
+  // shrink below its own text. Beside a title wrapping on a 320px phone this
+  // read "All overdu".
+  flexShrink: 0,
 };
 
 const row: React.CSSProperties = {

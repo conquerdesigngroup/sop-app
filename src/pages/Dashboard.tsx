@@ -545,6 +545,7 @@ const ScheduleSnapshot: React.FC<{
               key={day.date}
               style={{
                 ...styles.scheduleDayCard,
+                ...(isMobileOrTablet ? styles.scheduleDayCardMobile : {}),
                 ...(day.isToday ? styles.scheduleDayToday : {}),
               }}
             >
@@ -1058,11 +1059,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     lineHeight: 1,
   },
   statLabel: {
-    fontSize: '13px',
+    // Shrinks with a narrow phone, between 10px and 13px. On a phone the four
+    // labels share columns (100vw - 72px) / 4 wide, and "COMPLETED" at 13px is
+    // 76px: below 376px it spilled into "OVERDUE" (every 360px Android), and at
+    // 320px "PROGRESS" ran into it from the other side. The letter-spacing is
+    // in em so it shrinks with the letters. Laptops and tablets hit the cap.
+    fontSize: 'clamp(10px, calc((100vw - 80px) / 23.4), 13px)',
     fontWeight: 600,
     color: theme.colors.textSecondary,
     textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
+    letterSpacing: '0.04em',
     marginTop: '2px',
   },
   statDivider: {
@@ -1576,6 +1582,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     minHeight: '100px',
     display: 'flex',
     flexDirection: 'column' as const,
+  },
+  // Seven cards across a phone leave each one about 38px at 320px, and 8px of
+  // padding a side left "WED" 18px to sit in. The pills already truncate.
+  scheduleDayCardMobile: {
+    padding: '8px 2px',
   },
   scheduleDayToday: {
     borderColor: theme.colors.primary,
