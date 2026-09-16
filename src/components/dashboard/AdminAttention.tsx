@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTask } from '../../contexts/TaskContext';
 import { useWorkHours } from '../../contexts/WorkHoursContext';
 import { useActivityLog, ActivityLog } from '../../contexts/ActivityLogContext';
+import { useDashboardSettings } from '../../contexts/DashboardSettingsContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { isTaskOverdue } from '../../hooks/useTaskCounts';
 import { theme } from '../../theme';
@@ -109,16 +110,23 @@ const AdminAttention: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) 
   const { workHours } = useWorkHours();
   const { fetchPage } = useActivityLog();
   const { isMobileOrTablet } = useResponsive();
+  const { isWidgetEnabled } = useDashboardSettings();
   const [recent, setRecent] = useState<ActivityLog[] | null>(null);
 
+  // Each card is its own switch in Customize Dashboard.
+  const showOverdue = isWidgetEnabled('overdueByPerson');
+  const showHours = isSuperAdmin && isWidgetEnabled('hoursReview');
+  const showActivity = isSuperAdmin && isWidgetEnabled('latestActivity');
+
+  // Not fetched while the card is switched off: nothing would show it.
   useEffect(() => {
-    if (!isSuperAdmin) return;
+    if (!showActivity) return;
     let cancelled = false;
     fetchPage({}, null, 6)
       .then(rows => { if (!cancelled) setRecent(rows); })
       .catch(() => { if (!cancelled) setRecent([]); });
     return () => { cancelled = true; };
-  }, [isSuperAdmin, fetchPage]);
+  }, [showActivity, fetchPage]);
 
   // Overdue, grouped by who holds it. A task with two people counts for
   // both — each of them is behind on it.
@@ -157,6 +165,9 @@ const AdminAttention: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) 
 
   const totalPendingHours = pendingHours.reduce((n, r) => n + r.count, 0);
 
+  // All three switched off: no empty grid holding a gap open on the page.
+  if (!showOverdue && !showHours && !showActivity) return null;
+
   return (
     <div style={{
       display: 'grid',
@@ -164,32 +175,34 @@ const AdminAttention: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) 
       gap: theme.spacing.md,
       marginBottom: theme.spacing.lg,
     }}>
-      <section style={card} aria-label="Overdue by person">
-        <div style={header}>
-          <h3 style={title}>Overdue by person</h3>
-          <button style={linkBtn} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>All overdue</button>
-        </div>
-        {overdueByPerson.rows.length === 0 && overdueByPerson.unassigned === 0 ? (
-          <p style={empty}>Nothing overdue. Nice.</p>
-        ) : (
-          <div>
-            {overdueByPerson.rows.map(r => (
-              <button key={r.id} style={row} onClick={() => navigate('/job-tasks', { state: { search: r.name, filterStatus: 'overdue' } })}>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                <span style={pill(theme.colors.status.error)}>{r.count}</span>
-              </button>
-            ))}
-            {overdueByPerson.unassigned > 0 && (
-              <button style={{ ...row, color: theme.colors.txt.secondary }} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>
-                <span style={{ flex: 1 }}>Nobody assigned</span>
-                <span style={pill(theme.colors.status.warning)}>{overdueByPerson.unassigned}</span>
-              </button>
-            )}
+      {showOverdue && (
+        <section style={card} aria-label="Overdue by person">
+          <div style={header}>
+            <h3 style={title}>Overdue by person</h3>
+            <button style={linkBtn} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>All overdue</button>
           </div>
-        )}
-      </section>
+          {overdueByPerson.rows.length === 0 && overdueByPerson.unassigned === 0 ? (
+            <p style={empty}>Nothing overdue. Nice.</p>
+          ) : (
+            <div>
+              {overdueByPerson.rows.map(r => (
+                <button key={r.id} style={row} onClick={() => navigate('/job-tasks', { state: { search: r.name, filterStatus: 'overdue' } })}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                  <span style={pill(theme.colors.status.error)}>{r.count}</span>
+                </button>
+              ))}
+              {overdueByPerson.unassigned > 0 && (
+                <button style={{ ...row, color: theme.colors.txt.secondary }} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>
+                  <span style={{ flex: 1 }}>Nobody assigned</span>
+                  <span style={pill(theme.colors.status.warning)}>{overdueByPerson.unassigned}</span>
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
-      {isSuperAdmin && (
+      {showHours && (
         <section style={card} aria-label="Hours awaiting review">
           <div style={header}>
             <h3 style={title}>Hours awaiting review</h3>
@@ -213,7 +226,7 @@ const AdminAttention: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) 
         </section>
       )}
 
-      {isSuperAdmin && (
+      {showActivity && (
         <section style={card} aria-label="Latest activity">
           <div style={header}>
             <h3 style={title}>Latest activity</h3>

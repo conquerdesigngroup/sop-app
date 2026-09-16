@@ -6,14 +6,18 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { useEvent } from '../contexts/EventContext';
 import { useWorkHours } from '../contexts/WorkHoursContext';
+import { useDashboardSettings, widgetShownTo } from '../contexts/DashboardSettingsContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
+import { useDashboardViewer } from '../hooks/useDashboardViewer';
 import { DashboardSkeleton } from '../components/Skeleton';
 import CalendarTaskModal from '../components/CalendarTaskModal';
 import EventDetailModal from '../components/EventDetailModal';
+import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import AdminAttention from '../components/dashboard/AdminAttention';
 import ClassesToday from '../components/dashboard/ClassesToday';
 import Shortcuts from '../components/dashboard/Shortcuts';
+import { Button, Card } from '../components/ui';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 
 // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight — bare new Date()
@@ -76,6 +80,36 @@ const Dashboard: React.FC = () => {
       setDayActionModal={setDayActionModal}
       navigate={navigate}
     />
+  );
+};
+
+/**
+ * Whether Customize Dashboard has left anything on this person's dashboard.
+ * Only sections their own dashboard draws count: a team member who switched
+ * everything off still has Departments "on", and that draws nothing for them.
+ */
+const useAnySectionShown = (): boolean => {
+  const { widgets } = useDashboardSettings();
+  const viewer = useDashboardViewer();
+  return widgets.some(widget => widget.enabled && widgetShownTo(widget, viewer));
+};
+
+/**
+ * What the dashboard says once every section on it is switched off. A page
+ * that is only a heading reads as broken, so this says why it is empty and
+ * opens the same switches from here, rather than sending someone to Settings
+ * to find where they were.
+ */
+const AllSectionsHidden: React.FC = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Card style={{ marginBottom: theme.spacing.lg }}>
+        <p style={styles.hiddenText}>Every section of your dashboard is switched off.</p>
+        <Button variant="secondary" onClick={() => setOpen(true)}>Customize dashboard</Button>
+      </Card>
+      <DashboardSettingsModal isOpen={open} onClose={() => setOpen(false)} />
+    </>
   );
 };
 
@@ -291,6 +325,8 @@ const TeamMemberDashboard: React.FC<{
   navigate: ReturnType<typeof useNavigate>;
 }> = ({ currentUser, jobTasks, events, users, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
+  const { isWidgetEnabled } = useDashboardSettings();
+  const anySectionShown = useAnySectionShown();
   const myTasks = jobTasks.filter(task => task.assignedTo.includes(currentUser.id));
 
   const today = new Date();
@@ -328,96 +364,106 @@ const TeamMemberDashboard: React.FC<{
         <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Welcome, {currentUser.firstName}</h1>
       </div>
 
+      {!anySectionShown && <AllSectionsHidden />}
+
       {/* Stats Row - Compact */}
-      <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
-        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
-          <span style={styles.statLabel}>Pending</span>
+      {isWidgetEnabled('stats') && (
+        <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
+          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}>
+            <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
+            <span style={styles.statLabel}>Pending</span>
+          </div>
+          <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}>
+            <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
+            <span style={styles.statLabel}>In Progress</span>
+          </div>
+          <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}>
+            <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
+            <span style={styles.statLabel}>Completed</span>
+          </div>
+          {overdueTasks.length > 0 && (
+            <>
+              <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+              <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks')}>
+                <span style={{ ...styles.statNumber, color: theme.colors.status.overdue }}>{overdueTasks.length}</span>
+                <span style={styles.statLabel}>Overdue</span>
+              </div>
+            </>
+          )}
         </div>
-        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
-          <span style={styles.statLabel}>In Progress</span>
-        </div>
-        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
-          <span style={styles.statLabel}>Completed</span>
-        </div>
-        {overdueTasks.length > 0 && (
-          <>
-            <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-            <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks')}>
-              <span style={{ ...styles.statNumber, color: theme.colors.status.overdue }}>{overdueTasks.length}</span>
-              <span style={styles.statLabel}>Overdue</span>
-            </div>
-          </>
-        )}
-      </div>
+      )}
 
       {/* A teacher's classes first — draws nothing for someone who holds
           none — then the pages they came here for, one tap each. */}
-      <ClassesToday navigate={navigate} />
-      <Shortcuts navigate={navigate} />
+      {isWidgetEnabled('classesToday') && <ClassesToday navigate={navigate} />}
+      {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
 
       {/* Task Lists */}
-      <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
-        {/* Today's Tasks */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h3 style={styles.sectionTitle}>Today ({todayTasks.length})</h3>
-            <button onClick={() => navigate('/my-tasks')} style={styles.viewAllBtn}>View All</button>
-          </div>
-          {todayTasks.length === 0 ? (
-            <p style={styles.emptyText}>No tasks due today</p>
-          ) : (
-            <div style={styles.tasksList}>
-              {todayTasks.slice(0, 4).map(task => (
-                <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
-                  <div style={styles.taskCardHeader}>
-                    <span style={styles.taskCardTitle}>{task.title}</span>
-                    <span style={{ ...styles.taskCardStatus, backgroundColor: getStatusColor(task.status) }}>
-                      {task.status.replace('-', ' ')}
-                    </span>
-                  </div>
-                  <div style={styles.taskCardProgress}>
-                    <div style={styles.progressBar}>
-                      <div style={{ ...styles.progressFill, width: `${task.progressPercentage}%` }} />
+      {(isWidgetEnabled('todayTasks') || isWidgetEnabled('upcomingTasks')) && (
+        <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
+          {/* Today's Tasks */}
+          {isWidgetEnabled('todayTasks') && (
+            <div style={styles.section}>
+              <div style={styles.sectionHeader}>
+                <h3 style={styles.sectionTitle}>Today ({todayTasks.length})</h3>
+                <button onClick={() => navigate('/my-tasks')} style={styles.viewAllBtn}>View All</button>
+              </div>
+              {todayTasks.length === 0 ? (
+                <p style={styles.emptyText}>No tasks due today</p>
+              ) : (
+                <div style={styles.tasksList}>
+                  {todayTasks.slice(0, 4).map(task => (
+                    <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+                      <div style={styles.taskCardHeader}>
+                        <span style={styles.taskCardTitle}>{task.title}</span>
+                        <span style={{ ...styles.taskCardStatus, backgroundColor: getStatusColor(task.status) }}>
+                          {task.status.replace('-', ' ')}
+                        </span>
+                      </div>
+                      <div style={styles.taskCardProgress}>
+                        <div style={styles.progressBar}>
+                          <div style={{ ...styles.progressFill, width: `${task.progressPercentage}%` }} />
+                        </div>
+                        <span style={styles.progressText}>{task.progressPercentage}%</span>
+                      </div>
                     </div>
-                    <span style={styles.progressText}>{task.progressPercentage}%</span>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
 
-        {/* Upcoming Tasks */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h3 style={styles.sectionTitle}>Upcoming ({upcomingTasks.length})</h3>
-          </div>
-          {upcomingTasks.length === 0 ? (
-            <p style={styles.emptyText}>No upcoming tasks</p>
-          ) : (
-            <div style={styles.tasksList}>
-              {upcomingTasks.slice(0, 4).map(task => (
-                <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
-                  <div style={styles.taskCardHeader}>
-                    <span style={styles.taskCardTitle}>{task.title}</span>
-                    <span style={styles.taskCardDate}>
-                      {parseLocalDate(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                  </div>
+          {/* Upcoming Tasks */}
+          {isWidgetEnabled('upcomingTasks') && (
+            <div style={styles.section}>
+              <div style={styles.sectionHeader}>
+                <h3 style={styles.sectionTitle}>Upcoming ({upcomingTasks.length})</h3>
+              </div>
+              {upcomingTasks.length === 0 ? (
+                <p style={styles.emptyText}>No upcoming tasks</p>
+              ) : (
+                <div style={styles.tasksList}>
+                  {upcomingTasks.slice(0, 4).map(task => (
+                    <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+                      <div style={styles.taskCardHeader}>
+                        <span style={styles.taskCardTitle}>{task.title}</span>
+                        <span style={styles.taskCardDate}>
+                          {parseLocalDate(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {/* Overdue Tasks */}
-      {overdueTasks.length > 0 && (
+      {isWidgetEnabled('overdueTasks') && overdueTasks.length > 0 && (
         <div style={{ ...styles.section, borderColor: theme.colors.status.overdue }}>
           <div style={styles.sectionHeader}>
             <h3 style={{ ...styles.sectionTitle, color: theme.colors.status.overdue }}>Overdue ({overdueTasks.length})</h3>
@@ -438,16 +484,18 @@ const TeamMemberDashboard: React.FC<{
       )}
 
       {/* Calendar */}
-      <TaskCalendar
-        tasks={myTasks}
-        events={events}
-        users={users}
-        currentMonth={currentMonth}
-        setCurrentMonth={setCurrentMonth}
-        onTaskClick={setSelectedTask}
-        onEventClick={setSelectedEvent}
-        showAllUsers={false}
-      />
+      {isWidgetEnabled('calendar') && (
+        <TaskCalendar
+          tasks={myTasks}
+          events={events}
+          users={users}
+          currentMonth={currentMonth}
+          setCurrentMonth={setCurrentMonth}
+          onTaskClick={setSelectedTask}
+          onEventClick={setSelectedEvent}
+          showAllUsers={false}
+        />
+      )}
 
       {/* Modals */}
       <CalendarTaskModal isOpen={selectedTask !== null} onClose={() => setSelectedTask(null)} task={selectedTask} users={users} />
@@ -606,6 +654,8 @@ const AdminDashboard: React.FC<{
   navigate: ReturnType<typeof useNavigate>;
 }> = ({ sops, jobTasks, events, users, workDays, currentMonth, setCurrentMonth, selectedTask, setSelectedTask, selectedEvent, setSelectedEvent, dayActionModal, setDayActionModal, navigate }) => {
   const { isMobileOrTablet } = useResponsive();
+  const { isWidgetEnabled } = useDashboardSettings();
+  const anySectionShown = useAnySectionShown();
 
   // SOP Stats
   const publishedSOPs = sops.filter(s => s.status === 'published' && !s.isTemplate).length;
@@ -662,43 +712,47 @@ const AdminDashboard: React.FC<{
         </div>
       </div>
 
+      {!anySectionShown && <AllSectionsHidden />}
+
       {/* Task Stats Row */}
-      <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
-        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'pending' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
-          <span style={styles.statLabel}>Pending</span>
+      {isWidgetEnabled('stats') && (
+        <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
+          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'pending' } })}>
+            <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
+            <span style={styles.statLabel}>Pending</span>
+          </div>
+          <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'in-progress' } })}>
+            <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
+            <span style={styles.statLabel}>In Progress</span>
+          </div>
+          <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'completed' } })}>
+            <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
+            <span style={styles.statLabel}>Completed</span>
+          </div>
+          {overdueTasks > 0 && (
+            <>
+              <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
+              <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>
+                <span style={{ ...styles.statNumber, color: theme.colors.status.error }}>{overdueTasks}</span>
+                <span style={styles.statLabel}>Overdue</span>
+              </div>
+            </>
+          )}
         </div>
-        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'in-progress' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
-          <span style={styles.statLabel}>In Progress</span>
-        </div>
-        <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-        <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'completed' } })}>
-          <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
-          <span style={styles.statLabel}>Completed</span>
-        </div>
-        {overdueTasks > 0 && (
-          <>
-            <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-            <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>
-              <span style={{ ...styles.statNumber, color: theme.colors.status.error }}>{overdueTasks}</span>
-              <span style={styles.statLabel}>Overdue</span>
-            </div>
-          </>
-        )}
-      </div>
+      )}
 
       {/* What needs a manager today */}
       <AdminAttention navigate={navigate} />
 
       {/* Below the manager's three cards, which stay above the fold. The
           classes card draws nothing for an admin who teaches none. */}
-      <ClassesToday navigate={navigate} />
-      <Shortcuts navigate={navigate} />
+      {isWidgetEnabled('classesToday') && <ClassesToday navigate={navigate} />}
+      {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
 
       {/* Departments - Compact pills */}
-      {departmentStats.length > 0 && (
+      {isWidgetEnabled('departments') && departmentStats.length > 0 && (
         <div style={styles.section}>
           <div style={styles.sectionHeader}>
             <h3 style={styles.sectionTitle}>Departments</h3>
@@ -719,53 +773,57 @@ const AdminDashboard: React.FC<{
       )}
 
       {/* Recent SOPs */}
-      <div style={styles.section}>
-        <div style={styles.sectionHeader}>
-          <h3 style={styles.sectionTitle}>Recent SOPs</h3>
-          <button onClick={() => navigate('/sop')} style={styles.viewAllBtn}>View All</button>
-        </div>
-        {recentSOPs.length === 0 ? (
-          <p style={styles.emptyText}>No SOPs created yet</p>
-        ) : (
-          <div style={styles.recentList}>
-            {recentSOPs.map(sop => (
-              <div key={sop.id} style={styles.recentItem} onClick={() => navigate('/sop')}>
-                <div style={styles.recentItemHeader}>
-                  <span style={styles.recentItemTitle}>{sop.title}</span>
-                  <span style={styles.recentItemCategory}>{sop.category}</span>
-                </div>
-                <div style={styles.recentItemMeta}>
-                  <span>{sop.steps.length} steps</span>
-                  <span>{new Date(sop.createdAt).toLocaleDateString()}</span>
-                </div>
-              </div>
-            ))}
+      {isWidgetEnabled('recentSops') && (
+        <div style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h3 style={styles.sectionTitle}>Recent SOPs</h3>
+            <button onClick={() => navigate('/sop')} style={styles.viewAllBtn}>View All</button>
           </div>
-        )}
-      </div>
+          {recentSOPs.length === 0 ? (
+            <p style={styles.emptyText}>No SOPs created yet</p>
+          ) : (
+            <div style={styles.recentList}>
+              {recentSOPs.map(sop => (
+                <div key={sop.id} style={styles.recentItem} onClick={() => navigate('/sop')}>
+                  <div style={styles.recentItemHeader}>
+                    <span style={styles.recentItemTitle}>{sop.title}</span>
+                    <span style={styles.recentItemCategory}>{sop.category}</span>
+                  </div>
+                  <div style={styles.recentItemMeta}>
+                    <span>{sop.steps.length} steps</span>
+                    <span>{new Date(sop.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Work Schedule Snapshot */}
-      <ScheduleSnapshot workDays={workDays} users={users} navigate={navigate} />
+      {isWidgetEnabled('schedule') && <ScheduleSnapshot workDays={workDays} users={users} navigate={navigate} />}
 
       {/* Calendar */}
-      <TaskCalendar
-        tasks={activeTasks}
-        events={events}
-        users={users}
-        currentMonth={currentMonth}
-        setCurrentMonth={setCurrentMonth}
-        onTaskClick={setSelectedTask}
-        onEventClick={setSelectedEvent}
-        showAllUsers={true}
-        onDayClick={(date, e) => {
-          const rect = (e.target as HTMLElement).getBoundingClientRect();
-          setDayActionModal({
-            date,
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-          });
-        }}
-      />
+      {isWidgetEnabled('calendar') && (
+        <TaskCalendar
+          tasks={activeTasks}
+          events={events}
+          users={users}
+          currentMonth={currentMonth}
+          setCurrentMonth={setCurrentMonth}
+          onTaskClick={setSelectedTask}
+          onEventClick={setSelectedEvent}
+          showAllUsers={true}
+          onDayClick={(date, e) => {
+            const rect = (e.target as HTMLElement).getBoundingClientRect();
+            setDayActionModal({
+              date,
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            });
+          }}
+        />
+      )}
 
       {/* Day Action Modal */}
       {dayActionModal && (
@@ -1111,6 +1169,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: theme.colors.textMuted,
     textAlign: 'center' as const,
     padding: '20px',
+  },
+  hiddenText: {
+    fontSize: '15px',
+    color: theme.colors.txt.secondary,
+    margin: `0 0 ${theme.spacing.md}`,
   },
 
   // Content Grid
