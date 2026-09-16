@@ -11,6 +11,16 @@
       "autoPort": true
     },
     {
+      "name": "sop-app-halloween",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "BROWSER=none REACT_APP_HOLIDAY=halloween npm start"
+      ],
+      "port": 3003,
+      "autoPort": true
+    },
+    {
       "name": "sop-app-build",
       "runtimeExecutable": "npx",
       "runtimeArgs": [
