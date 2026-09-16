@@ -232,9 +232,13 @@ const GlobalSearch: React.FC<Props> = ({ open, onClose }) => {
                 paddingBottom: 'env(safe-area-inset-bottom)',
               }
             : {
-                top: '10vh', left: '50%', transform: 'translateX(-50%)',
+                // dvh, not vh. This branch is every screen from 768px up,
+                // which includes an iPad, where vh is the height with Safari's
+                // toolbars collapsed and the bottom of the results can sit
+                // under them.
+                top: '10dvh', left: '50%', transform: 'translateX(-50%)',
                 width: 'min(640px, calc(100vw - 32px))',
-                maxHeight: '75vh',
+                maxHeight: '75dvh',
                 borderRadius: theme.borderRadius.lg,
                 boxShadow: theme.shadows.lg,
               }),
