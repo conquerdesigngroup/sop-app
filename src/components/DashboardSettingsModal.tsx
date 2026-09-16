@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { useDashboardSettings, DashboardWidget } from '../contexts/DashboardSettingsContext';
+import React from 'react';
+import { useDashboardSettings, DashboardWidget, widgetShownTo } from '../contexts/DashboardSettingsContext';
 import { useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
-import { Modal, Button } from './ui';
+import { useDashboardViewer } from '../hooks/useDashboardViewer';
+import { Modal, Button, Toggle } from './ui';
 
 interface DashboardSettingsModalProps {
   isOpen: boolean;
@@ -14,9 +15,15 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({ isOpen,
   const { widgets, toggleWidget, resetToDefaults } = useDashboardSettings();
   const colors = useThemeColors();
   const { isMobileOrTablet } = useResponsive();
+  const viewer = useDashboardViewer();
 
-  // Sort widgets by order
-  const sortedWidgets = [...widgets].sort((a, b) => a.order - b.order);
+  // Only the sections this person's dashboard draws. The list used to offer
+  // everyone all eight — a team member switching off Departments or Work
+  // Schedule, which only exist on the manager's dashboard, changed nothing
+  // they could see.
+  const sortedWidgets = widgets
+    .filter(widget => widgetShownTo(widget, viewer))
+    .sort((a, b) => a.order - b.order);
 
   return (
     <Modal
@@ -37,7 +44,10 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({ isOpen,
     >
       <div style={styles.content}>
         <p style={{ ...styles.description, color: colors.txt.secondary }}>
-          Choose which sections to show on your dashboard.
+          {/* Saved in this browser's storage, not on the account, so a phone
+              and a laptop are set up separately. Said here rather than
+              discovered. */}
+          Choose which sections to show on your dashboard. Saved on this device.
         </p>
 
         <div style={styles.widgetList}>
@@ -62,6 +72,8 @@ interface WidgetToggleItemProps {
 }
 
 const WidgetToggleItem: React.FC<WidgetToggleItemProps> = ({ widget, onToggle, colors }) => {
+  const labelId = `dashboard-widget-${widget.id}-label`;
+  const descId = `dashboard-widget-${widget.id}-desc`;
   return (
     <div
       style={{
@@ -69,34 +81,27 @@ const WidgetToggleItem: React.FC<WidgetToggleItemProps> = ({ widget, onToggle, c
         backgroundColor: colors.bg.tertiary,
         borderColor: widget.enabled ? theme.colors.primary : colors.bdr.primary,
       }}
-      onClick={onToggle}
+      // The whole row is the tap target on a phone. A tap that lands on the
+      // switch is the switch's own, so it is not handled a second time here —
+      // two flips would leave the section where it started.
+      onClick={e => {
+        if ((e.target as HTMLElement).closest('[role="switch"]')) return;
+        onToggle();
+      }}
     >
       <div style={styles.widgetInfo}>
-        <span style={{ ...styles.widgetName, color: colors.txt.primary }}>
+        <span id={labelId} style={{ ...styles.widgetName, color: colors.txt.primary }}>
           {widget.name}
         </span>
-        <span style={{ ...styles.widgetDescription, color: colors.txt.tertiary }}>
+        <span id={descId} style={{ ...styles.widgetDescription, color: colors.txt.tertiary }}>
           {widget.description}
         </span>
       </div>
 
-      <button
-        style={{
-          ...styles.toggleButton,
-          backgroundColor: widget.enabled ? theme.colors.primary : colors.bg.secondary,
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-      >
-        <span
-          style={{
-            ...styles.toggleKnob,
-            left: widget.enabled ? '24px' : '4px',
-          }}
-        />
-      </button>
+      {/* The shared switch, as on the Settings page: a real role="switch"
+          named by the row's own label. The hand-drawn one here had neither,
+          so a screen reader announced an unnamed button. */}
+      <Toggle checked={widget.enabled} onChange={onToggle} labelledBy={labelId} describedBy={descId} />
     </div>
   );
 };
@@ -131,34 +136,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     gap: '4px',
     flex: 1,
+    minWidth: 0,
+    marginRight: '16px',
   },
   widgetName: {
     fontSize: '15px',
     fontWeight: 600,
+    overflowWrap: 'anywhere',
   },
   widgetDescription: {
     fontSize: '13px',
-  },
-  toggleButton: {
-    width: '48px',
-    height: '28px',
-    borderRadius: '14px',
-    border: 'none',
-    position: 'relative',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s ease',
-    flexShrink: 0,
-    marginLeft: '16px',
-  },
-  toggleKnob: {
-    position: 'absolute',
-    top: '4px',
-    width: '20px',
-    height: '20px',
-    borderRadius: '50%',
-    backgroundColor: '#FFFFFF',
-    transition: 'left 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+    overflowWrap: 'anywhere',
   },
 };
 
