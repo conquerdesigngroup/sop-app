@@ -53,6 +53,26 @@ export const studioDate = (when: Date = new Date()): string => {
 /** Today at the studio, YYYY-MM-DD. */
 export const studioToday = (): string => studioDate();
 
+// hourCycle rather than hour12: false, which some engines answer with "24:05"
+// for five past midnight.
+const studioClockFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: STUDIO_TZ,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * An instant as HH:MM on the studio's 24-hour clock — the frame a class's
+ * start_time is written in. "Is this class on now" compares against this and
+ * not the device's clock, for the same reason the date above is pinned.
+ */
+export const studioClock = (when: Date = new Date()): string => {
+  const parts = studioClockFormat.formatToParts(when);
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? '';
+  return `${get('hour')}:${get('minute')}`;
+};
+
 /**
  * Shift a YYYY-MM-DD by whole days. Pure calendar arithmetic on the string —
  * anchored at UTC so no zone, and no DST hour, can leak into the answer.

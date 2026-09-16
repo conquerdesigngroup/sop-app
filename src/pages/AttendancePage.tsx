@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useRefreshable } from '../contexts/RefreshContext';
@@ -43,6 +44,8 @@ const dayLabel = (iso: string, today: string): string => {
 const AttendancePage: React.FC = () => {
   const { currentUser, isAdmin } = useAuth();
   const { isMobileOrTablet } = useResponsive();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // The studio's today, not the device's — the same clock the server's
   // studio_today() uses, so the two cannot disagree about which day it is.
@@ -52,7 +55,11 @@ const AttendancePage: React.FC = () => {
   const [gaps, setGaps] = useState<AttendanceGap[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openClassId, setOpenClassId] = useState<string | null>(null);
+  // A class tapped on the dashboard's "Your classes today" card arrives already
+  // open: that tap was for its register, not for the list around it.
+  const [openClassId, setOpenClassId] = useState<string | null>(
+    () => (location.state as { openClassId?: string } | null)?.openClassId ?? null
+  );
   // A session opened from the records tab, which is not necessarily one of
   // today's classes and so has no entry in `days`.
   const [fixing, setFixing] = useState<ClassDay | null>(null);
@@ -102,6 +109,23 @@ const AttendancePage: React.FC = () => {
 
   const reload = useCallback(() => load(true), [load]);
   useRefreshable(reload, Boolean(profileId));
+
+  // Spend the dashboard's hand-off once. Left in history, a reload would
+  // reopen the register after the teacher had already gone back to the list.
+  useEffect(() => {
+    if ((location.state as { openClassId?: string } | null)?.openClassId) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, navigate]);
+
+  // A handed-off class that is not on the day's list — a card left open past
+  // midnight, a grant removed since — is dropped, rather than kept waiting to
+  // spring open on whichever other date it does meet.
+  useEffect(() => {
+    if (!loading && openClassId && !days.some(d => d.klass.id === openClassId)) {
+      setOpenClassId(null);
+    }
+  }, [loading, days, openClassId]);
 
   const gapsByClass = useMemo(() => {
     const m = new Map<string, AttendanceGap[]>();
