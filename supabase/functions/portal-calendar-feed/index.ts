@@ -27,18 +27,23 @@
 //
 // WHAT IT MAY EXPOSE — read this before adding anything to portal_events
 //
-// The function reads with the ANON KEY, not the service role, so RLS answers it
-// exactly as it answers a parent's browser: published rows of an active
-// programme and nothing else. It is not possible for this endpoint to serve
-// something the portal page would not already show to an anonymous visitor,
-// which is the property that makes an unauthenticated URL defensible.
+// A link is /portal-calendar-feed/<token>/<section>.ics, where the token
+// belongs to one account (v56). That account is who is asking, and
+// portal_calendar_feed() — run with the ANON key, never the service role —
+// serves exactly what the portal pages would show it: published events of an
+// active section, and the All-Star calendar only to an All-Star family or
+// staff (v55). The token is the whole credential, because a calendar app can
+// present nothing else, so whoever holds a link sees that account's calendar.
 //
-// The access code does not gate it, and could not: the code is a convenience
-// flag on the device (see lib/portal.ts), portal content is anon-readable by
-// design, and a calendar client cannot present a code anyway. So the standing
-// rule the portal already has applies here with more force — KEEP PRIVATE
-// INFORMATION OUT OF PORTAL CONTENT. If that ever has to change, the mechanism
-// is a per-account token in the path, not a secret in the query string.
+// THE OLD LINK, `?program=<section>`, SERVES A NOTICE AND NOTHING ELSE
+//
+// Until v56 the link named only a section, and read with the anon key. v30
+// closed anon reads, so from 2026-09-07 every subscriber got a valid, empty
+// calendar and no one was told. It cannot simply be reopened: since v55 the
+// All-Star calendar is private, and `?program=allstars` is a URL anyone could
+// guess. So the old link now answers with one all-day event asking the family
+// to subscribe again from the portal, which is the only way to reach the
+// phones still polling it.
 //
 // verify_jwt MUST be false. Apple Calendar, Google and Outlook fetch this URL
 // with no Authorization header and no apikey, and there is no way to give them
@@ -85,6 +90,42 @@ const MONTHS_AHEAD = 18;
  * here without redeploying this function.
  */
 const SLUG_RE = /^[a-z0-9-]{1,40}$/;
+
+/** A link token: 32 random bytes, hex. portal_calendar_token() makes them. */
+const TOKEN_RE = /^[0-9a-f]{64}$/;
+
+/**
+ * The account's link, `/portal-calendar-feed/<token>/<section>.ics`, or the old
+ * one, `?program=<section>`, which carries no token.
+ *
+ * The path is read from the end rather than by position, so the function does
+ * not care whether the gateway hands it `/functions/v1/portal-calendar-feed/…`
+ * or `/portal-calendar-feed/…`.
+ */
+const parseLink = (req: Request): { token: string | null; slug: string } => {
+  const url = new URL(req.url);
+  const parts = url.pathname.split('/').filter(Boolean);
+  const at = parts.lastIndexOf('portal-calendar-feed');
+  const rest = at >= 0 ? parts.slice(at + 1) : [];
+
+  if (rest.length === 2) {
+    let section = '';
+    try {
+      section = decodeURIComponent(rest[1]);
+    } catch {
+      // A malformed escape is an unknown calendar, not a crash.
+    }
+    return {
+      token: rest[0].toLowerCase(),
+      slug: section.replace(/\.ics$/i, '').trim().toLowerCase(),
+    };
+  }
+
+  return {
+    token: null,
+    slug: url.searchParams.get('program')?.trim().toLowerCase() ?? '',
+  };
+};
 
 const text = (status: number, body: string) =>
   new Response(body, {
@@ -280,7 +321,81 @@ const buildFeed = (name: string, description: string, rows: EventRow[]): string 
   return lines.map(fold).join('\r\n') + '\r\n';
 };
 
+// ------------------------------------------------------------------ notice
+
+/**
+ * How long the notice stays on a phone's calendar, counted from each fetch.
+ * Two weeks is long enough to be seen by someone who only opens their calendar
+ * on class days.
+ */
+const NOTICE_DAYS = 14;
+
+/**
+ * Fixed, not "now": a LAST-MODIFIED that moved on every fetch would tell each
+ * client the notice had changed every time it asked.
+ */
+const NOTICE_WRITTEN = '20260917T180000Z';
+
+/**
+ * What the old link serves: one all-day event, starting today, asking the
+ * family to subscribe again. No alarm — it is information, not a reminder —
+ * and TRANSPARENT, so it never shows anyone as busy.
+ */
+const noticeFeed = (name: string, slug: string): string => {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//DIDC//Parent Portal//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escapeText(name)}`,
+    `NAME:${escapeText(name)}`,
+    'REFRESH-INTERVAL;VALUE=DURATION:PT12H',
+    'X-PUBLISHED-TTL:PT12H',
+    'BEGIN:VEVENT',
+    // One UID per section, so the notice is updated in place, never repeated.
+    `UID:resubscribe-${slug}@didc.app`,
+    `DTSTAMP:${utcStamp(new Date())}`,
+    `DTSTART;VALUE=DATE:${dateStamp(today)}`,
+    `DTEND;VALUE=DATE:${dateStamp(addDaysUtc(today, NOTICE_DAYS))}`,
+    `SUMMARY:${escapeText('DIDC calendar: subscribe again to see studio dates')}`,
+    `DESCRIPTION:${escapeText(
+      'The studio calendar now has a personal link for each family, so this old one no longer shows any dates. ' +
+      'Open the DIDC parent portal at didc.app/portal, open your section, tap Calendar, then Subscribe. ' +
+      'After that you can delete this old calendar.'
+    )}`,
+    'URL:https://www.didc.app/portal',
+    `LAST-MODIFIED:${NOTICE_WRITTEN}`,
+    'TRANSP:TRANSPARENT',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ];
+
+  return lines.map(fold).join('\r\n') + '\r\n';
+};
+
 // ----------------------------------------------------------------- handler
+
+const calendarResponse = (
+  req: Request,
+  slug: string,
+  body: string,
+  cacheControl: string,
+): Response =>
+  new Response(req.method === 'HEAD' ? null : body, {
+    status: 200,
+    headers: {
+      ...cors,
+      'Content-Type': 'text/calendar; charset=utf-8',
+      // inline, not attachment: a phone that fetched this by subscribing
+      // should read it, and the browser download path sets its own filename.
+      'Content-Disposition': `inline; filename="didc-${slug}.ics"`,
+      'Cache-Control': cacheControl,
+    },
+  });
 
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -289,64 +404,63 @@ Deno.serve(async req => {
     return text(405, 'Method not allowed');
   }
 
-  const slug = new URL(req.url).searchParams.get('program')?.trim().toLowerCase() ?? '';
+  const { token, slug } = parseLink(req);
   if (!SLUG_RE.test(slug)) return text(400, 'Unknown calendar.');
+  if (token !== null && !TOKEN_RE.test(token)) return text(404, 'Unknown calendar.');
 
   const url = Deno.env.get('SUPABASE_URL');
-  // The ANON key, deliberately — see the header. The service role would read
-  // unpublished drafts and inactive programmes straight onto a public URL.
+  // The ANON key, deliberately — see the header. What a link may read is
+  // decided inside portal_calendar_feed(), not by this function's privileges.
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   if (!url || !anonKey) return text(500, 'Calendar is not available right now.');
 
   const supabase = createClient(url, anonKey);
 
   try {
-    const { data: program, error: programError } = await supabase
-      .from('portal_programs')
-      .select('id, name, blurb')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle();
+    // ------------------------------------------------------ the old link
+    if (token === null) {
+      // Section names are readable before sign-in (portal_programs_read_anon),
+      // which is all the notice needs.
+      const { data: program, error: programError } = await supabase
+        .from('portal_programs')
+        .select('name')
+        .eq('slug', slug)
+        .eq('is_active', true)
+        .maybeSingle();
 
-    if (programError) throw programError;
-    if (!program) return text(404, 'Unknown calendar.');
+      if (programError) throw programError;
+      if (!program) return text(404, 'Unknown calendar.');
 
+      // Public: it names a section and says nothing else.
+      return calendarResponse(req, slug, noticeFeed(`DIDC — ${program.name}`, slug), 'public, max-age=3600');
+    }
+
+    // ------------------------------------------------- an account's link
     const from = new Date();
     from.setMonth(from.getMonth() - MONTHS_BACK);
     const to = new Date();
     to.setMonth(to.getMonth() + MONTHS_AHEAD);
 
-    const { data: rows, error: eventsError } = await supabase
-      .from('portal_events')
-      .select('id, title, description, starts_at, ends_at, is_all_day, location, updated_at')
-      .eq('program_id', program.id)
-      .eq('is_published', true)
-      .gte('starts_at', from.toISOString())
-      .lte('starts_at', to.toISOString())
-      .order('starts_at', { ascending: true });
+    const { data: feed, error: feedError } = await supabase.rpc('portal_calendar_feed', {
+      p_token: token,
+      p_slug: slug,
+      p_from: from.toISOString(),
+      p_to: to.toISOString(),
+    });
 
-    if (eventsError) throw eventsError;
+    if (feedError) throw feedError;
+    if (!feed?.ok) return text(404, 'Unknown calendar.');
 
     const body = buildFeed(
-      `DIDC — ${program.name}`,
-      program.blurb ?? '',
-      (rows ?? []) as EventRow[]
+      `DIDC — ${feed.name}`,
+      feed.blurb ?? '',
+      (feed.events ?? []) as EventRow[]
     );
 
-    return new Response(req.method === 'HEAD' ? null : body, {
-      status: 200,
-      headers: {
-        ...cors,
-        'Content-Type': 'text/calendar; charset=utf-8',
-        // inline, not attachment: a phone that fetched this by subscribing
-        // should read it, and the browser download path sets its own filename.
-        'Content-Disposition': `inline; filename="didc-${slug}.ics"`,
-        // Short and public. A calendar client refetches on its own schedule
-        // anyway, and this only decides how stale two clients a minute apart
-        // may be from each other.
-        'Cache-Control': 'public, max-age=900',
-      },
-    });
+    // Private: this answer belongs to one account, and must not be kept by any
+    // cache between the function and the calendar app. A calendar client
+    // refetches on its own schedule anyway.
+    return calendarResponse(req, slug, body, 'private, max-age=900');
   } catch (err) {
     console.error('portal-calendar-feed failed:', err);
     // Deliberately not the database's words. This response is read by parents

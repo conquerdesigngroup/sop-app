@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
 import PortalSheet from './PortalSheet';
+import { Button } from '../ui';
 import { useToast } from '../../contexts/ToastContext';
+import { useRefreshable } from '../../contexts/RefreshContext';
+import { supabase } from '../../lib/supabase';
 import { ProgramSlug } from '../../lib/portal';
 import {
   downloadFeed,
+  feedAvailable,
   feedUrl,
   googleSubscribeUrl,
   outlookSubscribeUrl,
@@ -40,7 +44,21 @@ import { copyCalendarLink } from '../../utils/calendarExport';
  * The download sits last and says "snapshot" out loud, because it is the one
  * row here that does NOT keep working — and a parent who picks it thinking
  * otherwise would find out months later, silently, which is the worst way.
+ *
+ * THE LINK IS THE ACCOUNT'S, AND IT IS FETCHED WHEN THE SHEET OPENS  (v56)
+ *
+ * Every link carries the signed-in account's token — see lib/portalFeed. It is
+ * asked for as the sheet opens, not when a row is tapped: the Apple row hands
+ * webcal:// to the OS and the others open a window, and both must happen inside
+ * the tap itself. An await in between is what gets a window blocked on iOS.
+ * So the rows wait, disabled, with a sentence saying why, and a failure says
+ * what to do instead of leaving buttons that do nothing.
  */
+
+type Link =
+  | { state: 'loading' }
+  | { state: 'ready'; token: string }
+  | { state: 'failed' };
 
 interface Props {
   isOpen: boolean;
@@ -122,10 +140,12 @@ const Row: React.FC<{
   label: string;
   hint: string;
   onClick: () => void;
-}> = ({ icon, label, hint, onClick }) => (
+  disabled?: boolean;
+}> = ({ icon, label, hint, onClick, disabled = false }) => (
   <button
     type="button"
     onClick={onClick}
+    disabled={disabled}
     style={{
       display: 'flex',
       alignItems: 'center',
@@ -138,7 +158,8 @@ const Row: React.FC<{
       border: `1px solid ${theme.colors.bdr.primary}`,
       borderRadius: theme.borderRadius.lg,
       color: theme.colors.txt.primary,
-      cursor: 'pointer',
+      cursor: disabled ? 'default' : 'pointer',
+      opacity: disabled ? 0.5 : 1,
     }}
   >
     <span style={{
@@ -186,15 +207,63 @@ const Row: React.FC<{
 const SubscribeSheet: React.FC<Props> = ({ isOpen, onClose, slug, programName }) => {
   const toast = useToast();
 
-  const configured = !!feedUrl(slug);
+  const configured = feedAvailable();
+
+  const [link, setLink] = useState<Link>({ state: 'loading' });
+
+  // Every ask bumps this; an answer whose number is no longer current is
+  // dropped rather than overwriting the one that replaced it.
+  const request = useRef(0);
+
+  /**
+   * `silent` is the app-wide refresh: the rows stay usable while it runs, and a
+   * failure is thrown to the refresh button rather than taking away a link the
+   * parent can already see.
+   */
+  const loadLink = useCallback(async (silent: boolean) => {
+    const id = ++request.current;
+    if (!silent) setLink({ state: 'loading' });
+
+    let token: unknown = null;
+    try {
+      const { data, error } = await supabase.rpc('portal_calendar_token');
+      if (!error) token = data;
+    } catch {
+      /* the same as no token, below */
+    }
+
+    if (id !== request.current) return;
+
+    if (typeof token !== 'string' || !token) {
+      if (silent) throw new Error('Could not refresh your calendar link.');
+      setLink({ state: 'failed' });
+      return;
+    }
+    setLink({ state: 'ready', token });
+  }, []);
+
+  // Asked for on opening. A link already in hand is kept — it never changes for
+  // an account — and a failed one is tried again the next time the sheet opens.
+  useEffect(() => {
+    if (!isOpen || !configured || link.state === 'ready') return;
+    void loadLink(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, configured]);
+
+  const refreshLink = useCallback(() => loadLink(true), [loadLink]);
+  useRefreshable(refreshLink, isOpen && link.state === 'ready');
+
+  const token = link.state === 'ready' ? link.token : '';
+  const ready = token !== '';
 
   const run = (action: () => void) => () => {
+    if (!ready) return;
     action();
     onClose();
   };
 
   const copy = async () => {
-    const ok = await copyCalendarLink(feedUrl(slug));
+    const ok = await copyCalendarLink(feedUrl(slug, token));
     if (ok) toast.success('Calendar link copied.');
     else toast.error('Could not copy the link.');
   };
@@ -227,43 +296,95 @@ const SubscribeSheet: React.FC<Props> = ({ isOpen, onClose, slug, programName })
           <strong>Add</strong> on any event below.
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <Row
-            icon={<AppleMark />}
-            label="iPhone, iPad or Mac"
-            hint="Opens Calendar — press Subscribe"
-            onClick={run(() => {
-              // Not openCalendarUrl: window.open on a custom scheme is blocked
-              // by some in-app browsers and leaves a blank tab behind on iOS.
-              // Navigating the page hands webcal:// straight to the OS.
-              window.location.href = webcalUrl(slug);
-            })}
-          />
-          <Row
-            icon={<GoogleMark />}
-            label="Google Calendar"
-            hint="Adds it to your Google account"
-            onClick={run(() => openCalendarUrl(googleSubscribeUrl(slug)))}
-          />
-          <Row
-            icon={<OutlookMark />}
-            label="Outlook"
-            hint="Adds it to your Outlook account"
-            onClick={run(() => openCalendarUrl(outlookSubscribeUrl(slug, `DIDC — ${programName}`)))}
-          />
-          <Row
-            icon={<CopyIcon />}
-            label="Copy the link"
-            hint="For any other calendar app"
-            onClick={run(copy)}
-          />
-          <Row
-            icon={<DownloadIcon />}
-            label="Download this season"
-            hint="A snapshot — it won't update later"
-            onClick={run(() => downloadFeed(slug))}
-          />
-        </div>
+        <>
+          {link.state === 'loading' && (
+            <p role="status" aria-live="polite" style={{
+              ...theme.typography.bodySmall,
+              fontFamily: theme.fonts.primary,
+              color: theme.colors.txt.tertiary,
+              margin: 0,
+            }}>
+              Getting your calendar link…
+            </p>
+          )}
+
+          {link.state === 'failed' && (
+            <div role="status" aria-live="polite" style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: '10px',
+            }}>
+              <p style={{
+                ...theme.typography.bodySmall,
+                fontFamily: theme.fonts.primary,
+                color: theme.colors.txt.secondary,
+                margin: 0,
+                flex: '1 1 200px',
+                minWidth: 0,
+              }}>
+                Couldn't get your calendar link. Check your connection, then try again.
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => { void loadLink(false); }}>
+                Try again
+              </Button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <Row
+              icon={<AppleMark />}
+              label="iPhone, iPad or Mac"
+              hint="Opens Calendar — press Subscribe"
+              disabled={!ready}
+              onClick={run(() => {
+                // Not openCalendarUrl: window.open on a custom scheme is blocked
+                // by some in-app browsers and leaves a blank tab behind on iOS.
+                // Navigating the page hands webcal:// straight to the OS.
+                window.location.href = webcalUrl(slug, token);
+              })}
+            />
+            <Row
+              icon={<GoogleMark />}
+              label="Google Calendar"
+              hint="Adds it to your Google account"
+              disabled={!ready}
+              onClick={run(() => openCalendarUrl(googleSubscribeUrl(slug, token)))}
+            />
+            <Row
+              icon={<OutlookMark />}
+              label="Outlook"
+              hint="Adds it to your Outlook account"
+              disabled={!ready}
+              onClick={run(() => openCalendarUrl(outlookSubscribeUrl(slug, token, `DIDC — ${programName}`)))}
+            />
+            <Row
+              icon={<CopyIcon />}
+              label="Copy the link"
+              hint="For any other calendar app"
+              disabled={!ready}
+              onClick={run(copy)}
+            />
+            <Row
+              icon={<DownloadIcon />}
+              label="Download this season"
+              hint="A snapshot — it won't update later"
+              disabled={!ready}
+              onClick={run(() => downloadFeed(slug, token))}
+            />
+          </div>
+
+          {/* Said once, plainly. The link is a key to this account's calendar,
+              and "Copy the link" is right there inviting it to be passed on. */}
+          <p style={{
+            ...theme.typography.captionSmall,
+            fontFamily: theme.fonts.primary,
+            color: theme.colors.txt.tertiary,
+            margin: 0,
+          }}>
+            This link is personal to your account. Anyone you share it with can see this calendar.
+          </p>
+        </>
       )}
     </PortalSheet>
   );

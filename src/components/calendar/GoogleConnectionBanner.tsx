@@ -9,19 +9,30 @@ import { useToast } from '../../contexts/ToastContext';
  *
  * WHY THIS IS VISIBLE RATHER THAN A SETTING BURIED SOMEWHERE
  *
- * Reading Google needs no credential at all — the sync pulls public iCal
- * feeds. Writing needs the studio's OAuth grant, and that grant can go away on
- * its own: revoking the app under Google Account → Security kills it, and so
- * does changing that account's password.
+ * Since v21 both the every-minute sync and every save go through the studio's
+ * OAuth grant, and that grant can go away on its own: revoking the app under
+ * Google Account → Security kills it, and so does changing that account's
+ * password.
  *
- * When it does, every save fails. Without something on the page saying so, the
- * failure looks like the app being broken rather than a connection needing
- * five seconds of attention, and the calendar is exactly the kind of thing
- * somebody quietly stops trusting instead of reporting.
+ * When it does, the calendars stop updating and every save fails. Without
+ * something on the page saying so, that looks like the app being broken rather
+ * than a connection needing five seconds of attention, and the calendar is
+ * exactly the kind of thing somebody quietly stops trusting instead of
+ * reporting.
  *
  * So it renders when it has something to say and gets out of the way when it
  * does not: a healthy connection shows one muted line, not a banner.
+ *
+ * A WARNING KEEPS CHECKING ITSELF
+ *
+ * The status was read once, when the page opened, so a warning stayed on screen
+ * until a reload even after the connection was fine again. While one is
+ * showing it is re-read every minute — the sync's own cadence, which is what
+ * clears a stale record on the server — and it goes away by itself.
  */
+
+/** How often a showing warning re-checks. Matches the calendar-sync cron. */
+const RECHECK_MS = 60 * 1000;
 
 const GoogleConnectionBanner: React.FC = () => {
   const { googleConnection, refreshGoogleStatus, beginGoogleConnect } = useEvent();
@@ -29,6 +40,17 @@ const GoogleConnectionBanner: React.FC = () => {
   const [starting, setStarting] = useState(false);
 
   useEffect(() => { refreshGoogleStatus(); }, [refreshGoogleStatus]);
+
+  // Healthy, still loading, or not this person's business: nothing to re-check.
+  const needsAttention = googleConnection.state === 'failed'
+    || (googleConnection.state === 'ready'
+      && (!googleConnection.status.connected || Boolean(googleConnection.status.lastError)));
+
+  useEffect(() => {
+    if (!needsAttention) return undefined;
+    const timer = setInterval(() => { refreshGoogleStatus(); }, RECHECK_MS);
+    return () => clearInterval(timer);
+  }, [needsAttention, refreshGoogleStatus]);
 
   const handleConnect = async () => {
     setStarting(true);
@@ -149,7 +171,7 @@ const GoogleConnectionBanner: React.FC = () => {
           color: theme.colors.txt.secondary,
         }}>
           {revoked
-            ? 'The studio’s connection was revoked or expired, so saving an event will fail until it is reconnected. Reading the calendar is unaffected.'
+            ? 'The studio’s connection was revoked or expired, so the calendars stop updating from Google and saving an event fails until it is reconnected.'
             : 'The calendar can be read without this. Adding, editing and deleting events needs the studio Google account connected once.'}
         </div>
       </div>

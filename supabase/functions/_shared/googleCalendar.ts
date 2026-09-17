@@ -49,11 +49,33 @@ export interface TokenFailed {
 }
 
 /**
+ * The one refusal that means the stored connection is dead.
+ *
+ * invalid_grant is Google saying the refresh token will never work again: the
+ * app was revoked, the account's password changed, or the grant expired.
+ * Reconnecting is the only cure, so it is recorded on google_credentials and
+ * the Calendar page's banner says so.
+ *
+ * EVERYTHING ELSE IS A RUN THAT FAILED, NOT A CONNECTION THAT DID
+ *
+ * This used to record ANY failure — a 500 from Google, a timeout, a moment of
+ * rate limiting — and only a reconnect or a staff calendar save ever cleared
+ * it. The sync asks Google for a token every minute, 1,440 times a day, so a
+ * single hiccup left the banner reading "revoked or expired" until somebody
+ * reconnected, while every sync after it succeeded. On 2026-09-17 the owner
+ * reconnected a connection that had synced without a failure all morning, and
+ * asked for it to stop disconnecting.
+ */
+const CONNECTION_IS_DEAD = new Set(['invalid_grant']);
+
+/**
  * Trade the stored refresh token for an access token.
  *
- * A failure is recorded on google_credentials rather than only returned, so
- * the Calendar page's banner can say "reconnect" instead of every sync from
- * now on failing with the same opaque message and nobody knowing why.
+ * A dead connection is recorded on google_credentials rather than only
+ * returned, so the Calendar page's banner can say "reconnect" instead of every
+ * sync from now on failing with the same opaque message and nobody knowing why.
+ * A good answer clears that record, so a warning left by an earlier run cannot
+ * outlive the connection working again.
  */
 export const getAccessToken = async (
   admin: any,
@@ -62,7 +84,7 @@ export const getAccessToken = async (
 ): Promise<TokenOk | TokenFailed> => {
   const { data: cred } = await admin
     .from('google_credentials')
-    .select('refresh_token')
+    .select('refresh_token, last_error')
     .eq('id', 'calendar')
     .maybeSingle();
 
@@ -73,33 +95,54 @@ export const getAccessToken = async (
     };
   }
 
-  const res = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'refresh_token',
-      refresh_token: cred.refresh_token,
-    }).toString(),
-  });
+  let res: Response;
+  try {
+    res = await fetch(GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: cred.refresh_token,
+      }).toString(),
+    });
+  } catch (e) {
+    // Google was not reached at all, which says nothing about the connection.
+    return {
+      error: `Could not reach Google this run (${e instanceof Error ? e.message : String(e)}). The next run tries again.`,
+      reason: 'unreachable',
+    };
+  }
   const payload = await res.json().catch(() => null);
 
   if (!res.ok || !payload?.access_token) {
-    // invalid_grant means the studio revoked the app or changed that account's
-    // password. Anything else is worth showing verbatim.
-    const reason = payload?.error ?? 'token_refresh_failed';
+    const reason = payload?.error ?? `http_${res.status}`;
+
+    if (!CONNECTION_IS_DEAD.has(reason)) {
+      return {
+        error: `Google did not issue a token this run (${reason}). The next run tries again.`,
+        reason,
+      };
+    }
+
     await admin
       .from('google_credentials')
       .update({ last_error: reason, updated_at: new Date().toISOString() })
       .eq('id', 'calendar');
     return {
-      error:
-        reason === 'invalid_grant'
-          ? 'The Google connection was revoked. Reconnect the studio account on the Calendar page.'
-          : `Google refused the stored connection: ${reason}`,
+      error: 'The Google connection was revoked. Reconnect the studio account on the Calendar page.',
       reason,
     };
+  }
+
+  // Proof the connection works. Written only when there is something to clear,
+  // or a sync that runs every minute would rewrite this row every minute.
+  if (cred.last_error) {
+    await admin
+      .from('google_credentials')
+      .update({ last_error: null, updated_at: new Date().toISOString() })
+      .eq('id', 'calendar');
   }
 
   return { token: payload.access_token as string };
