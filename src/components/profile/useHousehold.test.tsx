@@ -23,6 +23,7 @@ import { resetHouseholdCache, revalidateHousehold, useHousehold } from './useHou
  */
 
 const summary = (name: string, error: string | null = null): HouseholdSummary => ({
+  householdId: 'hh',
   students: [{
     id: `s-${name}`,
     householdId: 'hh',

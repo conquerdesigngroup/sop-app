@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { theme } from '../../theme';
-import { Button, Card, Input, Modal, Textarea, Badge, PlusIcon } from '../ui';
+import { Button, Card, Input, Modal, Select, Textarea, Badge, PlusIcon } from '../ui';
 import { CustomCheckbox } from '../CustomCheckbox';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -42,6 +42,24 @@ const emptyDraft = (programId: string, classId: string | null): UpdateInput => (
   publishedAt: null,
 });
 
+/**
+ * The picker's value for a post that goes to both sections — programId null.
+ *
+ * Since v55 the All-Star section is closed to families without a dancer on a
+ * team, so "which section" is also "which families". A post for every family
+ * used to have to be filed under one section and so reached only that
+ * section's list; a null program is listed in both and readable by all.
+ */
+const BOTH = 'both';
+
+/** Who a post reaches, in a sentence, for the line under the picker. */
+const reachNote = (programId: string | null, sections: PortalProgram[]): string => {
+  if (programId === null) return 'Every family sees it, in both sections.';
+  const section = sections.find(p => p.id === programId);
+  if (section?.slug === 'allstars') return 'Only All-Star families see it.';
+  return `Families in ${section?.name ?? 'this section'} see it, and All-Star families do too, because they see both sections.`;
+};
+
 const toDraft = (u: PortalUpdate): UpdateInput => ({
   id: u.id,
   programId: u.programId,
@@ -72,7 +90,7 @@ const UpdatesSection: React.FC<{
   classes: PortalClass[];
   scope?: { classId: string | null };
 }> = ({ program, classes, scope }) => {
-  const { fetchUpdates, saveUpdate, deleteUpdate, canEditClass, editableClassIds } = usePortalAdmin();
+  const { fetchUpdates, saveUpdate, deleteUpdate, canEditClass, editableClassIds, programs } = usePortalAdmin();
   const { isAdmin } = useAuth();
   const { success, error: toastError } = useToast();
   const { confirm, confirmDialog } = useConfirm();
@@ -86,6 +104,11 @@ const UpdatesSection: React.FC<{
   // class. The list is small, and the Updates tab and every class workspace then
   // share one cache instead of issuing a request each time you switch.
   const rows = scope ? updates.filter(u => u.classId === scope.classId) : updates;
+
+  // What the audience picker offers. The section in view stands in while the
+  // list is still loading, so the picker is never blank; an inactive section
+  // is offered only to a post already filed there.
+  const sections = programs?.length ? programs : [program];
 
   const [draft, setDraft] = useState<UpdateInput | null>(null);
   const [saving, setSaving] = useState(false);
@@ -179,6 +202,9 @@ const UpdatesSection: React.FC<{
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
                   <PublishedBadge published={u.isPublished} />
                   {u.isPinned && <Badge variant="primary" size="sm">Pinned</Badge>}
+                  {/* Listed under both section tabs, so it says so: editing
+                      it here edits it there. */}
+                  {u.programId === null && <Badge variant="info" size="sm">Both sections</Badge>}
                 </div>
 
                 <h3 style={{
@@ -239,6 +265,38 @@ const UpdatesSection: React.FC<{
       >
         {draft && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Which families (v55), first — like the To line of an email,
+                because it decides who reads everything under it. Only for a
+                post with no class: a class's post already has its audience,
+                and the database refuses a both-sections post tied to one.
+                Admin-only, like every post with no class. */}
+            {isAdmin && draft.classId === null && (
+              <div>
+                <Select
+                  label="Who sees this"
+                  value={draft.programId ?? BOTH}
+                  options={[
+                    ...sections
+                      .filter(p => p.isActive || p.id === draft.programId)
+                      .map(p => ({ value: p.id, label: p.name })),
+                    { value: BOTH, label: 'Both sections' },
+                  ]}
+                  onChange={e => setDraft({
+                    ...draft,
+                    programId: e.target.value === BOTH ? null : e.target.value,
+                  })}
+                />
+                <p style={{
+                  ...theme.typography.caption,
+                  fontFamily: theme.fonts.primary,
+                  color: theme.colors.txt.tertiary,
+                  margin: '6px 0 0',
+                }}>
+                  {reachNote(draft.programId, sections)}
+                </p>
+              </div>
+            )}
+
             <Input
               ref={focusRef}
               label="Title"

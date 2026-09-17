@@ -490,7 +490,12 @@ export interface PortalClass {
 
 export interface PortalUpdate {
   id: string;
-  programId: string;
+  /**
+   * The section it belongs to. Null means EVERYONE (v55): one post for
+   * All-Star and Academy/TNT families alike, listed in both sections. Only a
+   * studio-wide post can be one — never a class's or a family's.
+   */
+  programId: string | null;
   /** Null means program-wide rather than tied to one class. */
   classId: string | null;
   /**

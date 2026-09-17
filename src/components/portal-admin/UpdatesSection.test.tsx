@@ -35,6 +35,18 @@ const PROGRAM: PortalProgram = {
   heroAlt: '',
 };
 
+const ALL_STARS: PortalProgram = {
+  ...PROGRAM,
+  id: 'prog-allstars',
+  slug: 'allstars',
+  name: 'All-Star Dancers',
+  requiresCode: false,
+  sortOrder: 1,
+};
+
+// What the picker offers, in the order the editor's section tabs show them.
+const mockPrograms: PortalProgram[] = [ALL_STARS, PROGRAM];
+
 const post = (over: Partial<PortalUpdate> = {}): PortalUpdate => ({
   id: 'upd-1',
   programId: 'prog-academy',
@@ -67,6 +79,7 @@ jest.mock('../../contexts/PortalAdminContext', () => ({
     deleteUpdate: jest.fn(),
     canEditClass: () => true,
     editableClassIds: [],
+    programs: mockPrograms,
   }),
   describeWriteError: (e: any) => String(e?.message ?? e),
 }));
@@ -192,5 +205,68 @@ describe('a link that must never reach an href', () => {
     // The whole point: the form stops it, so saveUpdate and the CHECK
     // constraint behind it are never the thing a person finds out from.
     expect(mockSaveUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// --------------------------------------------------------------- audience
+
+/**
+ * Who a post goes to (v55).
+ *
+ * Since the All-Star section closed to families without a dancer on a team,
+ * the section a post is filed under decides which families can read it. The
+ * welcome note meant for everyone had been filed under All-Stars, and the owner
+ * asked for the choice to be explicit: All-Stars, Academy/TNT, or both.
+ */
+describe('who a post goes to', () => {
+  it('starts on the section in view, and can be sent to both', async () => {
+    renderSection();
+    const dialog = await openNew();
+
+    const picker = within(dialog).getByLabelText('Who sees this');
+    expect(picker).toHaveValue('prog-academy');
+
+    fireEvent.change(picker, { target: { value: 'both' } });
+    expect(within(dialog).getByText('Every family sees it, in both sections.')).toBeInTheDocument();
+
+    setValue(dialog, 'Title', 'Welcome to the new app');
+    save(dialog);
+
+    await waitFor(() => expect(mockSaveUpdate).toHaveBeenCalledTimes(1));
+    // Both sections is no section at all: a NULL program, listed in each.
+    expect(mockSaveUpdate.mock.calls[0][0]).toMatchObject({ programId: null, classId: null });
+  });
+
+  it('says plainly when only All-Star families will see it', async () => {
+    renderSection();
+    const dialog = await openNew();
+    fireEvent.change(within(dialog).getByLabelText('Who sees this'), { target: { value: 'prog-allstars' } });
+
+    expect(within(dialog).getByText('Only All-Star families see it.')).toBeInTheDocument();
+
+    setValue(dialog, 'Title', 'Competition schedule');
+    save(dialog);
+
+    await waitFor(() => expect(mockSaveUpdate).toHaveBeenCalledTimes(1));
+    expect(mockSaveUpdate.mock.calls[0][0]).toMatchObject({ programId: 'prog-allstars' });
+  });
+
+  it('marks a post that goes to both sections, and reopens it that way', async () => {
+    // Listed under every section tab, so editing it in one edits it in all —
+    // which is what the badge is there to say.
+    mockFetchUpdates.mockResolvedValue([post({ programId: null, title: 'APP INFO' })]);
+    renderSection();
+
+    expect(await screen.findByText('Both sections')).toBeInTheDocument();
+    const dialog = await openEditor('APP INFO');
+    expect(within(dialog).getByLabelText('Who sees this')).toHaveValue('both');
+  });
+
+  it('offers no choice inside a class, whose families are already decided', async () => {
+    mockFetchUpdates.mockResolvedValue([]);
+    render(<UpdatesSection program={PROGRAM} classes={CLASSES} scope={{ classId: 'cls-1' }} />);
+
+    const dialog = await openNew();
+    expect(within(dialog).queryByLabelText('Who sees this')).not.toBeInTheDocument();
   });
 });

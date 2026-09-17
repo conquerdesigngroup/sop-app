@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { signDocumentUrls } from '../lib/portalStorage';
 import { InstructorLook, mapInstructorLook } from '../lib/instructorLook';
@@ -80,10 +80,11 @@ import {
  * file, PortalAdminProvider and the gate all reading the same public table —
  * harmless, but it is where to start if someone wants 7 to be 5.
  *
- * Every read here goes through the `anon` role. The portal_* tables are the only
- * ones that permit it, and only for published rows — so nothing in this file
- * filters for access-control reasons. The filtering that IS here is for
- * ordering and grouping.
+ * Every read here goes through the signed-in account — v30 closed the anon door
+ * — and since v55 the answer depends on which account: the All-Star section,
+ * its classes, posts, events and files come back only for an All-Star family or
+ * staff. So nothing in this file filters for access-control reasons; the
+ * policies do. The filtering that IS here is for ordering and grouping.
  */
 
 interface PortalContextValue {
@@ -205,12 +206,20 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, []);
 
+  // Bumped by every programs read. An answer whose number is no longer current
+  // was asked for by whoever was signed in before, and is dropped rather than
+  // painted over the list for whoever is signed in now.
+  const programsRequest = useRef(0);
+
   const loadPrograms = useCallback(async () => {
     if (!isSupabaseConfigured() || !supabase) {
       setError('The portal is not available right now.');
       setLoading(false);
       return;
     }
+
+    const requestId = ++programsRequest.current;
+    const stale = () => requestId !== programsRequest.current;
 
     try {
       const { data, error: err } = await supabase
@@ -219,6 +228,7 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
 
+      if (stale()) return;
       if (err) throw err;
 
       const mapped = (data ?? []).map(mapProgram);
@@ -240,10 +250,11 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       // live in this provider for as long as the portal is open.
       void loadLook(mapped);
     } catch (e: any) {
+      if (stale()) return;
       console.error('Failed to load portal programs:', e);
       setError('Could not load the portal. Please try again.');
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
     // loadLook is itself stable, so naming it here keeps loadPrograms stable
     // too — which matters, because useRefreshable below is keyed on its
@@ -252,6 +263,49 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   useEffect(() => {
     loadPrograms();
+  }, [loadPrograms]);
+
+  /**
+   * WHICH SECTIONS THERE ARE DEPENDS ON WHO IS SIGNED IN.
+   *
+   * Since v55 portal_programs returns the All-Star section only to an All-Star
+   * family or to staff, so this list is an answer about one account. The
+   * provider outlives a sign-in — /portal/login is a page inside it, and
+   * signing in navigates rather than reloads — so without this, the list read
+   * on the login screen, as nobody, is the list a signed-in Academy family is
+   * handed: an All-Star tile, and a gate that lets them through it to a section
+   * the database then shows nothing of.
+   *
+   * Only a change of ACCOUNT reloads. TOKEN_REFRESHED fires this listener every
+   * hour and changes nothing about what the account may read. The list is
+   * cleared while the new one loads, so the tiles and the gate show their
+   * loading state rather than the previous account's sections.
+   *
+   * Dispatched with setTimeout for the rule PortalAuthContext documents: never
+   * call supabase inside the callback itself, or the auth lock is still held.
+   */
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    // undefined until the first event says who is signed in at mount.
+    let account: string | null | undefined;
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
+      const next: string | null = session?.user?.id ?? null;
+      if (account === undefined || next === account) {
+        account = next;
+        return;
+      }
+      account = next;
+      setTimeout(() => {
+        setPrograms([]);
+        setHeroUrls({});
+        setLoading(true);
+        void loadPrograms();
+      }, 0);
+    });
+
+    return () => sub?.subscription?.unsubscribe?.();
   }, [loadPrograms]);
 
   // The portal has no realtime channel, on purpose (see useProgramQuery). The
@@ -354,7 +408,9 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       let query = supabase
         .from('portal_updates')
         .select('*')
-        .eq('program_id', programId)
+        // This section's posts, and the ones sent to everyone (v55), which
+        // belong to no one section and so are listed in both.
+        .or(`program_id.eq.${programId},program_id.is.null`)
         .eq('is_published', true)
         // Broadcasts only. A note addressed to one household (v36) is already
         // unreadable by anon and by other families, but its own family WOULD
