@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import ProgramPolicies from './ProgramPolicies';
-import { STUDIO_POLICIES, policyRuns } from '../../lib/studioPolicies';
+import { STUDIO_DRESS_CODE, STUDIO_POLICIES, policyRuns } from '../../lib/studioPolicies';
 
 /**
  * The studio contract, rendered as app content.
@@ -18,14 +18,30 @@ import { STUDIO_POLICIES, policyRuns } from '../../lib/studioPolicies';
  */
 
 /** Set by each test: the :program segment the route matched, if any. */
-const route: { param?: string } = { param: 'allstars' };
+const route: { param?: string; search: string } = { param: 'allstars', search: '' };
 
 /** What PortalLayout was handed — the two props that differ by door. */
 const shell: { backTo?: string; slug?: string; subtitle?: string } = {};
 
+/**
+ * A working useSearchParams, not a stub: the dress-code group is URL state, so
+ * a mock that swallowed the write would leave every group test asserting
+ * against the default and passing for the wrong reason.
+ */
 jest.mock('react-router-dom', () => ({
   Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
   useParams: () => ({ program: route.param }),
+  useSearchParams: () => {
+    const [search, setSearch] = (jest.requireActual('react') as typeof import('react'))
+      .useState(route.search);
+    return [
+      new URLSearchParams(search),
+      (next: URLSearchParams) => {
+        route.search = next.toString();
+        setSearch(route.search);
+      },
+    ];
+  },
 }), { virtual: true });
 
 jest.mock('../../contexts/PortalContext', () => ({
@@ -53,15 +69,32 @@ jest.mock('../../components/portal/PortalLayout', () => ({
 
 beforeEach(() => {
   route.param = 'allstars';
+  route.search = '';
 });
 
 const allItems = STUDIO_POLICIES.sections.flatMap(s => s.items);
+
+/**
+ * How many <dt>s a dress-code group contributes: one per labelled rule, plus
+ * its what-not-to-bring items. Computed rather than written down, so adding a
+ * rule to the packet does not fail a test for the wrong reason.
+ */
+const dressTermsIn = (id: string) => {
+  const group = STUDIO_DRESS_CODE.groups.find(g => g.id === id)!;
+  return group.blocks.flatMap(b => b.rules).filter(r => r.label).length
+    + (group.avoid?.items.length ?? 0);
+};
+
+/** The group the page opens on — the packet's own first section. */
+const DEFAULT_GROUP = STUDIO_DRESS_CODE.groups[0];
+const pick = (label: string) => fireEvent.click(screen.getByRole('button', { name: label }));
 
 describe('ProgramPolicies', () => {
   it('renders every policy in the contract', () => {
     render(<ProgramPolicies />);
 
-    expect(screen.getAllByRole('term')).toHaveLength(allItems.length);
+    expect(screen.getAllByRole('term'))
+      .toHaveLength(allItems.length + dressTermsIn(DEFAULT_GROUP.id));
     allItems.forEach(item => {
       expect(screen.getByText(item.term)).toBeInTheDocument();
     });
@@ -126,7 +159,8 @@ describe('the two doors', () => {
     route.param = undefined;
     render(<ProgramPolicies />);
 
-    expect(screen.getAllByRole('term')).toHaveLength(allItems.length);
+    expect(screen.getAllByRole('term'))
+      .toHaveLength(allItems.length + dressTermsIn(DEFAULT_GROUP.id));
   });
 
   it('refuses a :program segment that is not a real section', () => {
@@ -138,6 +172,66 @@ describe('the two doors', () => {
 
     expect(shell.slug).toBeUndefined();
     expect(shell.backTo).toBe('/portal');
+  });
+});
+
+describe('the dress code', () => {
+  it('opens on the packet\'s first group and says who it covers', () => {
+    render(<ProgramPolicies />);
+
+    expect(screen.getByRole('button', { name: DEFAULT_GROUP.label })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(DEFAULT_GROUP.who)).toBeInTheDocument();
+    DEFAULT_GROUP.blocks.forEach(block => {
+      expect(screen.getByRole('heading', { name: block.heading })).toBeInTheDocument();
+    });
+  });
+
+  it('swaps the rules when the group changes, including the ones that differ by a word', () => {
+    render(<ProgramPolicies />);
+
+    // The reason the group is a control and not three stacked headings. Ballet
+    // attire is "pink tights" for the little ones and "black leotard and pink
+    // tights" for juniors — a difference a reader skims straight past when both
+    // are on the page at once.
+    expect(screen.getByText('Solid colored leotard. Skirt/Tutu is optional. Pink tights.')).toBeInTheDocument();
+    expect(screen.queryByText('Black leotard and pink tights.')).not.toBeInTheDocument();
+
+    pick('Junior & Teen');
+
+    expect(screen.getByText('Black leotard and pink tights.')).toBeInTheDocument();
+    expect(screen.queryByText('Solid colored leotard. Skirt/Tutu is optional. Pink tights.')).not.toBeInTheDocument();
+    expect(screen.getByText('7 to 18 year olds')).toBeInTheDocument();
+  });
+
+  it('opens the group named in the URL, so a link can point at one', () => {
+    route.search = 'group=male';
+    render(<ProgramPolicies />);
+
+    expect(screen.getByRole('button', { name: 'Male students' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Black ballet shoes.')).toBeInTheDocument();
+  });
+
+  it('falls back to the first group when the URL names one that does not exist', () => {
+    // Typed, or an old link after the packet is reorganised. It must not render
+    // an empty dress code.
+    route.search = 'group=nonsense';
+    render(<ProgramPolicies />);
+
+    expect(screen.getByRole('button', { name: DEFAULT_GROUP.label })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('invents no tips for the section the packet prints none for', () => {
+    render(<ProgramPolicies />);
+    expect(screen.getByRole('heading', { name: 'Tips for parents' })).toBeInTheDocument();
+
+    pick('Male students');
+
+    // The packet has no tips page and no what-not-to-wear page for male
+    // students. Neither may appear, and nothing may be borrowed from the
+    // sections that do have them.
+    expect(screen.queryByRole('heading', { name: 'Tips for parents' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /what not to/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Black ballet shoes.')).toBeInTheDocument();
   });
 });
 

@@ -139,6 +139,13 @@ const PUBLIC_ROUTES = [
   // that sits beneath it.
   '/portal/allstars/policies',
   '/portal/policies',
+  // All three dress-code groups, because they are three different layouts
+  // behind one path and the audit cannot click. The default group is the only
+  // one the bare route measures, and it is not the widest: "Tap / Acro / Jazz /
+  // Contemporary" is on the male students page and is the longest style label
+  // in the packet. Same reasoning as the viewer's ?view= rows below.
+  '/portal/policies?group=junior',
+  '/portal/policies?group=male',
   // The account page — identity, notifications, password. Short by design
   // since the family cards moved to the dashboard on /portal.
   //

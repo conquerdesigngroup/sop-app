@@ -150,3 +150,206 @@ export const STUDIO_POLICIES: StudioPolicyDocument = {
     },
   ],
 };
+
+// ============================================================================
+// DRESS CODE
+// ============================================================================
+
+/**
+ * The studio's dress code packet, as app content.
+ *
+ * Same reasoning as the contract above — see this file's header — and the same
+ * source discipline: the wording is the packet's, the grouping is the packet's,
+ * and the five printed sections map one-to-one onto the three groups below
+ * (each of TNT and Junior & Teen carries its own "what not to bring" and tips
+ * page; Male Students has neither, and none is invented for it).
+ *
+ * WHY THIS IS SHAPED DIFFERENTLY FROM THE CONTRACT
+ *
+ * The contract is a flat list of terms and paragraphs. The dress code is not:
+ * it is a grid, and the question a parent actually arrives with — "what does my
+ * eight-year-old wear to ballet on Tuesday?" — needs three coordinates to
+ * answer. Age group, then what part of the outfit, then which style. Flattening
+ * that into term-and-paragraph would make the reader hold two of the three in
+ * their head while scanning for the third.
+ *
+ * So the group is a control rather than a heading. A family has dancers in one
+ * band, and showing all three at once is not merely long: the rules differ per
+ * band, in small ways (pink tights at TNT, black leotard and pink tights at
+ * Junior), which is exactly the kind of difference a reader skims past and gets
+ * wrong.
+ */
+
+export interface DressCodeRule {
+  /** The style this applies to — "Ballet", "Hip Hop". Null if it applies to all. */
+  label: string | null;
+  text: string;
+}
+
+export interface DressCodeBlock {
+  /** "Hair", "Attire", "Shoes". */
+  heading: string;
+  rules: DressCodeRule[];
+}
+
+export interface DressCodeGroup {
+  id: string;
+  /** Short, for the selector. */
+  label: string;
+  /** Who it covers, printed under the selector. */
+  who: string;
+  blocks: DressCodeBlock[];
+  /** The packet's "what not to bring" / "what not to wear" page. */
+  avoid?: { heading: string; items: PolicyItem[] };
+  /** The packet's tips for parents. Absent where the packet prints none. */
+  tips?: string[];
+}
+
+/** Repeated verbatim on both tips pages in the packet. */
+const SHARED_TIPS = [
+  'Label your dancer’s belongings and keep them safe and clean in a dance bag!',
+  'Arrive 5–10 minutes early to allow time for a pre-class bathroom visit and to put dance shoes on. Rushing to class = a stressed dancer!',
+];
+
+const ATTENDANCE_TIP =
+  'We all have to miss class once in a while (we get it!), but your dancer’s attendance will provide the consistency dance requires for progress to take place.';
+
+const FUN_TIP =
+  'Fun is important for growth! We encourage you to talk about dance class with your little one when you are at home to keep the joy going all week long!';
+
+const JEWELRY =
+  'Necklaces, bracelets, and rings can scratch other students or catch on clothing during dance class and become a hazard.';
+
+export const STUDIO_DRESS_CODE: {
+  title: string;
+  intro: string;
+  groups: DressCodeGroup[];
+} = {
+  title: 'Dress Code',
+  intro:
+    'Every dancer wears the dress code for their class. Pick the group your dancer is in — the rules differ between them.',
+  groups: [
+    {
+      id: 'tnt',
+      label: 'Tiny & Talented',
+      who: 'TNT · 2 to 6 year olds',
+      blocks: [
+        {
+          heading: 'Hair',
+          rules: [
+            { label: null, text: 'Hair must be pulled back into a bun or ponytail for class. Bobby pins and hairspray are very helpful!' },
+          ],
+        },
+        {
+          heading: 'Attire',
+          rules: [
+            { label: 'Ballet & Tap', text: 'Solid colored leotard. Skirt/Tutu is optional. Pink tights.' },
+            { label: 'Hip Hop', text: 'Leggings/sweats and a t-shirt/tank.' },
+            { label: 'Acro / Acro Jazz', text: 'Leotard/tank and leggings/shorts.' },
+          ],
+        },
+        {
+          heading: 'Shoes',
+          rules: [
+            { label: 'Ballet', text: 'Pink ballet shoes.' },
+            { label: 'Tap', text: 'Black tap shoes. With or without laces are acceptable.' },
+            { label: 'Jazz', text: 'Black or Tan jazz shoes.' },
+            { label: 'Hip Hop', text: 'Clean sneakers.' },
+            { label: 'Acro', text: 'Students will go barefoot.' },
+          ],
+        },
+      ],
+      avoid: {
+        heading: 'What not to bring',
+        items: [
+          { term: 'Jewelry', body: JEWELRY },
+          { term: 'Toys', body: 'Toys are best kept safe with mom or dad; they are a distraction in dance class. Our instructors have fun props to use!' },
+        ],
+      },
+      tips: [
+        ...SHARED_TIPS,
+        'Create a “go-have-fun” ritual with your little one! Consistency is key when creating a loving yet firm separation expectation. A hug & kiss, a silly face, or a special handshake can do the trick!',
+        ATTENDANCE_TIP,
+        FUN_TIP,
+      ],
+    },
+    {
+      id: 'junior',
+      label: 'Junior & Teen',
+      who: '7 to 18 year olds',
+      blocks: [
+        {
+          heading: 'Hair',
+          rules: [
+            { label: null, text: 'Hair must be pulled back into a bun or ponytail for class. Buns for Ballet. Bobby pins and hairspray are very helpful!' },
+          ],
+        },
+        {
+          heading: 'Attire',
+          rules: [
+            { label: 'Ballet', text: 'Black leotard and pink tights.' },
+            { label: 'Tap', text: 'Solid color leotard/tank and leggings/shorts.' },
+            { label: 'Acro / Jazz / Contemporary', text: 'Solid color leotard/tank and leggings/shorts.' },
+            { label: 'Hip Hop', text: 'T-shirt/tank and sweats/leggings.' },
+          ],
+        },
+        {
+          heading: 'Shoes',
+          rules: [
+            { label: 'Ballet', text: 'Pink split-sole ballet shoes.' },
+            { label: 'Tap', text: 'Black tap shoes, with or without laces are acceptable.' },
+            { label: 'Jazz & Contemporary', text: 'Tan/Black jazz shoes and or half soles.' },
+            { label: 'Hip Hop', text: 'Clean sneakers.' },
+            { label: 'Acro', text: 'Students will go barefoot.' },
+          ],
+        },
+      ],
+      avoid: {
+        heading: 'What not to wear',
+        items: [
+          { term: 'Jewelry', body: `${JEWELRY} Anything lost or stolen will not be our responsibility.` },
+          { term: 'Valuables', body: 'Please do not bring valuables such as iPads, tablets, laptops, etc.' },
+        ],
+      },
+      tips: [
+        ...SHARED_TIPS,
+        'School can be tiring at this age and homework can be demanding. We encourage dancers to be as dedicated to their academic studies as they are to their dance training! Creating a homework schedule and study plan with your dancer will hold them accountable and will reduce stress about balancing school and dance.',
+        ATTENDANCE_TIP,
+        FUN_TIP,
+      ],
+    },
+    {
+      id: 'male',
+      label: 'Male students',
+      who: 'All ages',
+      blocks: [
+        {
+          heading: 'Hair',
+          rules: [
+            { label: null, text: 'Hair should be neat for class. If hair is long, please secure away from face. Hats are allowed (Hip Hop only).' },
+          ],
+        },
+        {
+          heading: 'Attire',
+          rules: [
+            { label: 'Ballet', text: 'White/black form fitting t-shirt and black shorts or leggings.' },
+            { label: 'Tap / Acro / Jazz / Contemporary', text: 'Black pants/shorts and t-shirt.' },
+            { label: 'Hip Hop', text: 'Sweats/shorts and t-shirt.' },
+          ],
+        },
+        {
+          heading: 'Shoes',
+          rules: [
+            { label: 'Ballet', text: 'Black ballet shoes.' },
+            { label: 'Tap', text: 'Black tap shoes, with or without laces are acceptable.' },
+            { label: 'Jazz & Contemporary', text: 'Black jazz shoes and or half soles.' },
+            { label: 'Hip Hop', text: 'Clean sneakers.' },
+            { label: 'Acro', text: 'Students will go barefoot.' },
+          ],
+        },
+      ],
+      // No avoid block and no tips: the packet prints neither for this section,
+      // and inventing them would put words in the studio's mouth.
+    },
+  ],
+};
