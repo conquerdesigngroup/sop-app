@@ -5,7 +5,8 @@ so a parent taps **Subscribe** once and every date the studio adds after that
 arrives on its own.
 
 Deploy to project `sgppeenmvskwztaszkgn` with **`verify_jwt: false`**.
-No migration needed — it reads tables that have existed since v9.
+Needs v56, which adds the per-account link tokens and the function that decides
+what a link may serve.
 
 ```bash
 supabase functions deploy portal-calendar-feed --no-verify-jwt
@@ -24,27 +25,44 @@ anywhere else.
 
 ## What it can expose
 
-It queries with the **anon key**, not the service role, so RLS answers it
-exactly as it answers a parent's browser: published events belonging to an
-active programme, and nothing else. This endpoint cannot serve anything the
-portal page would not already show an anonymous visitor.
+Everything is decided by `portal_calendar_feed()` (v56), which the function
+calls with the **anon key** — never the service role. That function resolves the
+link's token to an account and serves what the portal pages would serve it:
+published events of an active section, and the All-Star calendar only to an
+All-Star family or staff (v55).
 
-The access code does not gate it and could not — the code is a per-device
-convenience flag (`lib/portal.ts`), portal content is anon-readable by design,
-and a calendar client has no way to present a code. So the portal's standing
-rule applies with more force here: **keep private information out of portal
-content.** If the studio ever needs the feed locked down, the mechanism is a
-per-account token in the path, not a secret in the query string.
+**The token is the whole credential.** A calendar app cannot sign in, so anyone
+holding a link sees that account's calendar; the subscribe sheet says so. A
+link to a section the account may not see returns an EMPTY calendar rather than
+an error, because a phone keeps the last good copy of a feed that fails and the
+point is for those dates to leave the phone.
+
+The old pre-v56 link named only a section, which is why it could not simply be
+made to work again: `?program=allstars` is guessable, and that calendar is
+private. It now serves a re-subscribe notice — see below.
 
 ## Request
+
+```
+GET /functions/v1/portal-calendar-feed/<token>/<section>.ics
+```
+
+`<token>` is 64 hex characters from `portal_calendar_token()`; `<section>` is a
+portal programme slug. An unknown token, or anything that is not an active
+programme, gets a 404, so a programme added in the database works without
+redeploying. `HEAD` is answered too — some clients probe before subscribing.
+
+### The old link
 
 ```
 GET /functions/v1/portal-calendar-feed?program=allstars
 ```
 
-`program` is a portal programme slug. Anything that is not an active programme
-gets a 404, so a programme added in the database works without redeploying.
-`HEAD` is answered too — some clients probe before subscribing.
+Answers 200 with ONE all-day event, rolling 14 days from today, telling the
+family to subscribe again in the portal (`UID: resubscribe-<section>@didc.app`,
+so it updates in place rather than piling up). Every subscription made before
+2026-09-17 is on this link, and a notice in the calendar they already have is
+the only way to reach those phones. Do not repurpose it to serve events.
 
 | window | |
 |---|---|
@@ -84,18 +102,20 @@ event. Sending it costs nothing and some clients keep it.
 ## When it looks broken
 
 ```bash
-# Should answer 200 text/calendar, with no auth header at all.
-curl -sI "https://sgppeenmvskwztaszkgn.supabase.co/functions/v1/portal-calendar-feed?program=allstars"
+# A link, with no auth header at all. Take a token from a test account:
+#   select token from portal_calendar_tokens where profile_id = '<id>';
+curl -sI "https://sgppeenmvskwztaszkgn.supabase.co/functions/v1/portal-calendar-feed/$TOKEN/allstars.ics"
 
 # Eyeball the file.
-curl -s "https://sgppeenmvskwztaszkgn.supabase.co/functions/v1/portal-calendar-feed?program=allstars" | head -30
+curl -s "https://sgppeenmvskwztaszkgn.supabase.co/functions/v1/portal-calendar-feed/$TOKEN/allstars.ics" | head -30
 ```
 
 | symptom | cause |
 |---|---|
 | 401 | deployed without `--no-verify-jwt` |
-| 404 | slug is not an active programme |
-| 200 with no `VEVENT`s | nothing published in the window — check `is_published` |
+| 404 | unknown token, or the slug is not an active programme |
+| 200 with only the re-subscribe event | the old `?program=` link — subscribe again from the portal |
+| 200 with no `VEVENT`s | that account may not see this section (v55), or nothing is published in the window |
 | a date is a day early on the phone | the exclusive-`DTEND` rule above |
 
 A subscription that quietly stops updating looks exactly like a quiet term,
