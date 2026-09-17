@@ -366,6 +366,10 @@ const TeamMemberDashboard: React.FC<{
 
       {!anySectionShown && <AllSectionsHidden />}
 
+      {/* First, straight under the heading: the pages people open the app
+          for, one tap each, before anything to read. */}
+      {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
+
       {/* Stats Row - Compact */}
       {isWidgetEnabled('stats') && (
         <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
@@ -395,10 +399,8 @@ const TeamMemberDashboard: React.FC<{
         </div>
       )}
 
-      {/* A teacher's classes first — draws nothing for someone who holds
-          none — then the pages they came here for, one tap each. */}
+      {/* A teacher's classes. Draws nothing for someone who holds none. */}
       {isWidgetEnabled('classesToday') && <ClassesToday navigate={navigate} />}
-      {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
 
       {/* Task Lists */}
       {(isWidgetEnabled('todayTasks') || isWidgetEnabled('upcomingTasks')) && (
@@ -699,20 +701,16 @@ const AdminDashboard: React.FC<{
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
-      {/* Header */}
-      <div style={styles.headerRow}>
+      {/* Header. No New Task or New SOP here any more, by the owner's choice:
+          both are on the + button on a phone, and on their own pages. */}
+      <div style={styles.header}>
         <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>Dashboard</h1>
-        <div style={styles.headerButtons}>
-          <button onClick={() => navigate('/job-tasks', { state: { openCreateModal: true } })} style={styles.createBtnSecondary}>
-            + New Task
-          </button>
-          <button onClick={() => navigate('/sop', { state: { openForm: true } })} style={styles.createBtn}>
-            + New SOP
-          </button>
-        </div>
       </div>
 
       {!anySectionShown && <AllSectionsHidden />}
+
+      {/* First, straight under the heading, as on the team dashboard. */}
+      {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
 
       {/* Task Stats Row */}
       {isWidgetEnabled('stats') && (
@@ -746,10 +744,8 @@ const AdminDashboard: React.FC<{
       {/* What needs a manager today */}
       <AdminAttention navigate={navigate} />
 
-      {/* Below the manager's three cards, which stay above the fold. The
-          classes card draws nothing for an admin who teaches none. */}
+      {/* Draws nothing for an admin who teaches no class. */}
       {isWidgetEnabled('classesToday') && <ClassesToday navigate={navigate} />}
-      {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
 
       {/* Departments - Compact pills */}
       {isWidgetEnabled('departments') && departmentStats.length > 0 && (
@@ -1010,16 +1006,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   header: {
     marginBottom: theme.spacing.lg,
   },
-  headerRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-    gap: theme.spacing.md,
-    // Without this the title and the action buttons sit on one unbreakable
-    // line and push the whole document wider than the screen.
-    flexWrap: 'wrap' as const,
-  },
   title: {
     ...theme.typography.h1,
     color: theme.colors.textPrimary,
@@ -1029,33 +1015,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     ...theme.typography.h1Mobile,
     color: theme.colors.textPrimary,
     margin: 0,
-  },
-  headerButtons: {
-    display: 'flex',
-    gap: '10px',
-    flexWrap: 'wrap' as const,
-  },
-  createBtn: {
-    padding: '10px 20px',
-    fontSize: '14px',
-    fontWeight: 700,
-    backgroundColor: theme.colors.primary,
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap' as const,
-  },
-  createBtnSecondary: {
-    padding: '10px 20px',
-    fontSize: '14px',
-    fontWeight: 700,
-    backgroundColor: theme.colors.bg.tertiary,
-    color: theme.colors.textPrimary,
-    border: `2px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap' as const,
   },
 
   // Stats Row - Compact inline
