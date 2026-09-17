@@ -168,3 +168,25 @@ describe('with everything switched off', () => {
     expect(screen.queryByText('Every section of your dashboard is switched off.')).not.toBeInTheDocument();
   });
 });
+
+describe('the top of the page', () => {
+  // The owner's call: the shortcuts come first, straight under the heading,
+  // and the manager's header no longer carries + New Task and + New SOP.
+  const sectionAfterHeading = () => screen.getByRole('heading', { level: 1 }).parentElement!.nextElementSibling;
+
+  it("opens a team member's dashboard on the shortcuts", () => {
+    draw();
+    expect(sectionAfterHeading()).toBe(screen.getByRole('region', { name: 'Shortcuts' }));
+  });
+
+  it("opens the manager's dashboard on the shortcuts, with no create buttons above them", async () => {
+    mockAuth.isAdmin = true;
+    mockAuth.isSuperAdmin = true;
+    draw();
+    expect(sectionAfterHeading()).toBe(screen.getByRole('region', { name: 'Shortcuts' }));
+    expect(screen.queryByRole('button', { name: /new task/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /new sop/i })).not.toBeInTheDocument();
+    // Latest Activity loads after the first paint; wait for it inside act.
+    expect(await screen.findByText('Nothing logged yet.')).toBeInTheDocument();
+  });
+});

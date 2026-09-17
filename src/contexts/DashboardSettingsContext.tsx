@@ -58,17 +58,17 @@ const STORAGE_KEY = 'sop_app_dashboard_settings';
  * modal was saved and then ignored: the setting existed and did nothing.
  *
  * One list serves both pages because, filtered by audience, it comes out in
- * each page's own order — a team member's runs stats, classes, shortcuts, their
- * tasks, calendar; a manager's runs stats, the three manager cards, classes,
- * shortcuts, departments, SOPs, schedule, calendar.
+ * each page's own order — a team member's runs shortcuts, stats, classes, their
+ * tasks, calendar; a manager's runs shortcuts, stats, the three manager cards,
+ * classes, departments, SOPs, schedule, calendar.
  */
 const defaultWidgets: DashboardWidget[] = ([
+  { id: 'shortcuts', name: 'Shortcuts', description: 'Big buttons for the pages you use most', audience: 'everyone' },
   { id: 'stats', name: 'Task Stats', description: 'Overview of pending, in-progress, and completed tasks', audience: 'everyone' },
   { id: 'overdueByPerson', name: 'Overdue by Person', description: 'Who is behind, and on how many tasks', audience: 'admin' },
   { id: 'hoursReview', name: 'Hours Awaiting Review', description: 'Logged hours waiting for your approval', audience: 'superAdmin' },
   { id: 'latestActivity', name: 'Latest Activity', description: 'The last few things that happened in the app', audience: 'superAdmin' },
   { id: 'classesToday', name: 'Your Classes Today', description: 'The classes you teach today, and where each register stands', audience: 'classHolder' },
-  { id: 'shortcuts', name: 'Shortcuts', description: 'Big buttons for the pages you use most', audience: 'everyone' },
   { id: 'todayTasks', name: "Today's Tasks", description: 'Tasks due today', audience: 'team' },
   { id: 'upcomingTasks', name: 'Upcoming Tasks', description: 'Tasks coming up this week', audience: 'team' },
   { id: 'overdueTasks', name: 'Overdue Tasks', description: 'Tasks past their due date', audience: 'team' },

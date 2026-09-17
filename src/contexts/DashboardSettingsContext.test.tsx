@@ -38,7 +38,7 @@ describe('the section list', () => {
   it('holds every section either dashboard draws, in the order they are drawn, all on', () => {
     mount();
     expect(api.widgets.map(w => w.id)).toEqual([
-      'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday', 'shortcuts',
+      'shortcuts', 'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday',
       'todayTasks', 'upcomingTasks', 'overdueTasks', 'departments', 'recentSops', 'schedule', 'calendar',
     ]);
     expect(api.widgets.every(w => w.enabled)).toBe(true);
@@ -57,7 +57,7 @@ describe('the section list', () => {
     expect(api.isWidgetEnabled('departments')).toBe(false);
     // A section added since is on, not missing.
     expect(api.isWidgetEnabled('shortcuts')).toBe(true);
-    expect(api.widgets[0].id).toBe('stats');
+    expect(api.widgets[0].id).toBe('shortcuts');
     expect(api.widgets.find(w => w.id === 'calendar')!.name).toBe('Tasks & Events');
   });
 
