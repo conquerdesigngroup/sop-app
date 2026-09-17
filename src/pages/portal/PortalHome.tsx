@@ -120,6 +120,12 @@ const PortalHome: React.FC = () => {
 
   const greeting = identity.firstName ? `Hi, ${identity.firstName}` : 'Parent Portal';
 
+  // One column per tile. Billing and Academy/TNT are every family's, but the
+  // All-Star section is only an All-Star family's (v55), and a fixed three
+  // columns left everyone else a blank slot where it used to be. The loading
+  // skeletons count as the two sections an All-Star family will get.
+  const tileColumns = 1 + (programsLoading ? 2 : error ? 0 : programs.length);
+
   return (
     <PortalLayout
       title={greeting}
@@ -165,13 +171,13 @@ const PortalHome: React.FC = () => {
           </div>
         )}
 
-        {/* The three destinations, side by side, above everything.
-            
+        {/* The destinations, side by side, above everything.
+
             They were a vertical list at the FOOT of the page, which put the
             studio's own sections below a dashboard that can run to seven cards
             — so the one thing on this page that is pure navigation was the one
-            thing you had to scroll to reach. Three across is the whole set in
-            a single glance and about 100px of height instead of 400.
+            thing you had to scroll to reach. One row is the whole set in a
+            single glance and about 100px of height instead of 400.
 
             A grid rather than a flex row, and `minmax(0, 1fr)` rather than
             `1fr`: a grid track's floor is min-content, so plain `1fr` refuses
@@ -194,7 +200,7 @@ const PortalHome: React.FC = () => {
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gridTemplateColumns: `repeat(${tileColumns}, minmax(0, 1fr))`,
             gap: theme.spacing.sm,
             alignItems: 'stretch',
           }}>
@@ -209,7 +215,8 @@ const PortalHome: React.FC = () => {
 
             {/* Two tiles, not three: the Billing tile above is already
                 rendered — it does not wait on the program fetch — so the
-                skeleton stands in for exactly what is missing. */}
+                skeleton stands in for the sections still to come. A family
+                outside All-Stars gets one, and the grid narrows to fit. */}
             {programsLoading && <TileSkeleton count={2} withIcon={false} />}
 
             {!programsLoading && !error && programs.map(program => (

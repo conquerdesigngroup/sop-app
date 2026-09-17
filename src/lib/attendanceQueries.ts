@@ -500,6 +500,14 @@ export type { AttendanceSummary };
 const unique = (values: string[]): string[] => values.filter((v, i) => values.indexOf(v) === i);
 
 export interface HouseholdSummary {
+  /**
+   * The household this login belongs to, or null when it belongs to none.
+   *
+   * Named so the reads that hang off it can ask for this family's rows rather
+   * than trust RLS to trim them — which it does for a parent and does not for
+   * an admin, who reads every household's notes. See loadMyUpdates.
+   */
+  householdId: string | null;
   students: Student[];
   memberType: MemberType;
   /** Active enrollments per child, in the order the switcher shows them. */
@@ -522,6 +530,7 @@ export interface HouseholdSummary {
 }
 
 const EMPTY_HOUSEHOLD: HouseholdSummary = {
+  householdId: null,
   students: [],
   memberType: 'guardian',
   perStudent: [],
@@ -542,6 +551,7 @@ const loadFixtureHousehold = (
   if (scenario === 'no-enrollments' || scenario === 'fresh-studio') {
     return {
       ...EMPTY_HOUSEHOLD,
+      householdId: students[0].householdId,
       students,
       memberType,
       perStudent: students.map(student => ({ student, current: [] })),
@@ -573,6 +583,7 @@ const loadFixtureHousehold = (
   });
 
   return {
+    householdId: students[0].householdId,
     students,
     memberType,
     perStudent,
@@ -663,6 +674,7 @@ export const loadHouseholdSummary = async (
   if (!membership) return { ...EMPTY_HOUSEHOLD };
 
   const memberType = (membership.member_type as MemberType) ?? 'guardian';
+  const householdId: string = membership.household_id;
 
   let studentQuery = supabase
     .from('portal_students')
@@ -680,10 +692,12 @@ export const loadHouseholdSummary = async (
   }
 
   const { data: studentRows, error: studentErr } = await studentQuery;
-  if (studentErr) return { ...EMPTY_HOUSEHOLD, memberType, error: GENERIC_LOAD_ERROR };
+  if (studentErr) return { ...EMPTY_HOUSEHOLD, householdId, memberType, error: GENERIC_LOAD_ERROR };
 
   const students: Student[] = (studentRows ?? []).map(mapStudent);
-  if (!students.length) return { ...EMPTY_HOUSEHOLD, memberType };
+  // A family with no active dancer still has a household, and a note the studio
+  // sends to it still belongs to them.
+  if (!students.length) return { ...EMPTY_HOUSEHOLD, householdId, memberType };
 
   /**
    * The studio's closures, fetched ALONGSIDE the enrolments rather than after.
@@ -703,7 +717,7 @@ export const loadHouseholdSummary = async (
     .eq('range', 'all')
     .in('student_id', students.map(s => s.id));
 
-  if (error) return { ...EMPTY_HOUSEHOLD, students, memberType, error: GENERIC_LOAD_ERROR };
+  if (error) return { ...EMPTY_HOUSEHOLD, householdId, students, memberType, error: GENERIC_LOAD_ERROR };
 
   const rows: any[] = data ?? [];
   const byId = new Map(students.map(s => [s.id, s]));
@@ -771,6 +785,7 @@ export const loadHouseholdSummary = async (
   const now = new Date();
 
   return {
+    householdId,
     students,
     memberType,
     perStudent,
@@ -788,13 +803,26 @@ export const loadHouseholdSummary = async (
  * A null `classId` is studio-wide and reaches everyone. A set one reaches only
  * the enrolled. Today a Ballet parent reads Hip Hop announcements and learns to
  * skim past all of it, which is how the genuinely important notice gets missed.
+ *
+ * Which SECTION a post belongs to is not filtered here, and must not need to
+ * be: since v55 the database returns an All-Star post only to an All-Star
+ * family or to staff.
+ *
+ * A note to ONE family (v36) is filtered here, by the household it was sent
+ * to. RLS already limits a parent to their own; it does not limit an admin,
+ * whose read policy returns every family's — so a member of staff who is also
+ * a parent was shown other families' notes on their own dashboard, each one
+ * marked FOR YOUR FAMILY. Two such notes on 2026-09-17. Named here for the
+ * same reason loadHouseholdSummary names the household.
  */
 export const loadMyUpdates = async (
   src: AttendanceSource,
   enrolledClassIds: string[],
+  householdId: string | null = null,
 ): Promise<{ rows: PortalUpdate[]; error: LoadError }> => {
   const mine = (rows: PortalUpdate[]) => rows
     .filter(u => u.isPublished)
+    .filter(u => u.householdId === null || u.householdId === householdId)
     .filter(u => u.classId === null || enrolledClassIds.includes(u.classId))
     .sort((a, b) => {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;

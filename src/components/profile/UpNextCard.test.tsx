@@ -44,7 +44,7 @@ let mockUpcoming: ReturnType<typeof item>[] = [];
 
 jest.mock('./useHousehold', () => ({
   useHousehold: () => ({
-    data: { students: [mockStudent], upcoming: mockUpcoming, perStudent: [], series: [], cancelledByClass: {}, enrolledClassIds: [], memberType: 'guardian', error: null },
+    data: { householdId: 'hh', students: [mockStudent], upcoming: mockUpcoming, perStudent: [], series: [], cancelledByClass: {}, enrolledClassIds: [], memberType: 'guardian', error: null },
     loading: false,
     error: null,
     reload: jest.fn(),

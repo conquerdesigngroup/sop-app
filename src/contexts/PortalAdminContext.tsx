@@ -64,7 +64,12 @@ import {
 
 export interface UpdateInput {
   id?: string;
-  programId: string;
+  /**
+   * Null sends it to everyone — All-Star and Academy/TNT families alike (v55).
+   * Only ever a studio-wide post: the CHECK refuses one on a class or a
+   * household, and with no class it is admin-only, like every studio-wide post.
+   */
+  programId: string | null;
   classId: string | null;
   title: string;
   body: string;
@@ -479,7 +484,10 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       // they are written and read in the Portal Viewer, one household at a
       // time, and mixing them in here would turn "Info" into a mailbox.
       .is('household_id', null)
-      .eq('program_id', programId)
+      // Posts sent to everyone (v55) have no section, so every section's list
+      // shows them — marked, so nobody edits one thinking it is this
+      // section's alone.
+      .or(`program_id.eq.${programId},program_id.is.null`)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
     if (error) throw error;

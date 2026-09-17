@@ -88,14 +88,18 @@ const ProgramGate: React.FC = () => {
   const program = getProgramBySlug(slug);
 
   // The slug is valid but the database has no active row for it — deactivated,
-  // or renamed without updating PROGRAM_SLUGS.
+  // renamed without updating PROGRAM_SLUGS, or, since v55, the All-Star section
+  // opened by a family that is not on a team. The database does not list it for
+  // them, and this is what sends them home from a link, a bookmark or a typed
+  // URL.
   if (programs.length > 0 && !program) {
     return <Navigate to={portalRoutes.home} replace />;
   }
 
   // FULL LAUNCH (REQUIRED): the gate is a real login rather than a shared code.
-  // Any signed-in account passes; nobody else does; the access-code path is
-  // gone. Pairs with the v30 migration closing the anon door.
+  // Any signed-in account passes into any section the database lists for it —
+  // the check above has already turned away the rest; nobody signed out does;
+  // the access-code path is gone. Pairs with v30 closing the anon door.
   if (CLIENT_AUTH_REQUIRED) {
     if (portalAuth.loading) {
       return (
