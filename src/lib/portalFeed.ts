@@ -48,13 +48,33 @@ const functionsBase = (): string => {
   return `${url.replace(/\s+/g, '').replace(/\/+$/, '')}/functions/v1`;
 };
 
+/** Whether a link can be built at all. The sheet says so when it cannot. */
+export const feedAvailable = (): boolean => !!functionsBase();
+
 /**
- * The canonical https URL. This is the one to copy, to download, and to hand
- * to Google and Outlook.
+ * The canonical https URL for ONE ACCOUNT's subscription to one section. This
+ * is the one to copy, to download, and to hand to Google and Outlook.
+ *
+ * WHY THE LINK CARRIES A TOKEN  (v56)
+ *
+ * It used to be `?program=<section>`, which named no one. That stopped working
+ * silently when v30 closed anonymous reads — every subscriber got an empty
+ * calendar from 2026-09-07 — and it could not simply be reopened, because
+ * since v55 the All-Star calendar belongs to All-Star families and a URL that
+ * names only the section is one anybody can guess.
+ *
+ * The token is the account's own, from portal_calendar_token(), and it is the
+ * whole credential: a calendar app has no way to sign in. It goes in the PATH,
+ * as the feed function's header always said it would, which also gives the
+ * file the `.ics` name some calendar apps look for.
+ *
+ * Empty without a token or without Supabase, rather than a link that looks
+ * subscribable and fails inside somebody's calendar app.
  */
-export const feedUrl = (slug: ProgramSlug): string => {
+export const feedUrl = (slug: ProgramSlug, token: string): string => {
   const base = functionsBase();
-  return base ? `${base}/portal-calendar-feed?program=${encodeURIComponent(slug)}` : '';
+  if (!base || !token) return '';
+  return `${base}/portal-calendar-feed/${encodeURIComponent(token)}/${encodeURIComponent(slug)}.ics`;
 };
 
 /**
@@ -65,8 +85,8 @@ export const feedUrl = (slug: ProgramSlug): string => {
  * confirmation directly. Not a different endpoint — the scheme is the entire
  * difference, and the server never sees it.
  */
-export const webcalUrl = (slug: ProgramSlug): string =>
-  feedUrl(slug).replace(/^https?:/, 'webcal:');
+export const webcalUrl = (slug: ProgramSlug, token: string): string =>
+  feedUrl(slug, token).replace(/^https?:/, 'webcal:');
 
 /**
  * Google Calendar's "add by URL", prefilled.
@@ -76,8 +96,8 @@ export const webcalUrl = (slug: ProgramSlug): string =>
  * today's events) instead of a subscription, which is the exact distinction
  * this feature exists to make.
  */
-export const googleSubscribeUrl = (slug: ProgramSlug): string => {
-  const feed = webcalUrl(slug);
+export const googleSubscribeUrl = (slug: ProgramSlug, token: string): string => {
+  const feed = webcalUrl(slug, token);
   return feed
     ? `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feed)}`
     : '';
@@ -91,8 +111,8 @@ export const googleSubscribeUrl = (slug: ProgramSlug): string => {
  * `name` is sent because Outlook's dialog leaves the field blank otherwise and
  * the parent has to invent one.
  */
-export const outlookSubscribeUrl = (slug: ProgramSlug, name: string): string => {
-  const feed = feedUrl(slug);
+export const outlookSubscribeUrl = (slug: ProgramSlug, token: string, name: string): string => {
+  const feed = feedUrl(slug, token);
   if (!feed) return '';
   return 'https://outlook.live.com/calendar/0/addfromweb?' +
     `url=${encodeURIComponent(feed)}&name=${encodeURIComponent(name)}`;
@@ -109,8 +129,8 @@ export const outlookSubscribeUrl = (slug: ProgramSlug, name: string): string => 
  * Content-Type and Content-Disposition, and routing it through JavaScript would
  * add a CORS dependency to the one path that has no reason to need it.
  */
-export const downloadFeed = (slug: ProgramSlug): void => {
-  const url = feedUrl(slug);
+export const downloadFeed = (slug: ProgramSlug, token: string): void => {
+  const url = feedUrl(slug, token);
   if (!url) return;
 
   const link = document.createElement('a');

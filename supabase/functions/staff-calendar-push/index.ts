@@ -290,31 +290,47 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'refresh_token',
-      refresh_token: cred.refresh_token,
-    }).toString(),
-  });
+  let tokenRes: Response;
+  try {
+    tokenRes = await fetch(GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: cred.refresh_token,
+      }).toString(),
+    });
+  } catch {
+    return json(502, {
+      error: 'Could not reach Google.',
+      description: 'Nothing was saved. Check the connection and try again.',
+    });
+  }
   const tokenPayload = await tokenRes.json().catch(() => null);
 
   if (!tokenRes.ok || !tokenPayload?.access_token) {
-    // invalid_grant means the studio revoked the app, or changed the password
-    // on that account. Recorded so the UI can say "reconnect" rather than
-    // showing the same opaque failure on every save from now on.
-    const reason = tokenPayload?.error ?? 'token_refresh_failed';
-    await admin.from('google_credentials')
-      .update({ last_error: reason, updated_at: new Date().toISOString() })
-      .eq('id', 'calendar');
+    const reason = tokenPayload?.error ?? `http_${tokenRes.status}`;
+
+    // Only invalid_grant — the studio revoked the app, changed the password on
+    // that account, or the grant expired — is recorded, so the Calendar page
+    // says "reconnect". Any other refusal is this save failing, not the
+    // connection: recording it too is what kept the banner telling the owner to
+    // reconnect a connection that was working (see _shared/googleCalendar.ts).
+    if (reason === 'invalid_grant') {
+      await admin.from('google_credentials')
+        .update({ last_error: reason, updated_at: new Date().toISOString() })
+        .eq('id', 'calendar');
+      return json(502, {
+        error: 'Google refused the stored connection.',
+        description: 'The connection was revoked. Reconnect the studio Google account.',
+      });
+    }
+
     return json(502, {
-      error: 'Google refused the stored connection.',
-      description: reason === 'invalid_grant'
-        ? 'The connection was revoked. Reconnect the studio Google account.'
-        : reason,
+      error: 'Google did not accept the save this time.',
+      description: `Nothing was saved (${reason}). Try again in a moment.`,
     });
   }
 
