@@ -17,27 +17,43 @@ import { STUDIO_POLICIES, policyRuns } from '../../lib/studioPolicies';
  * a `main` file it does not ship, and this Jest cannot read its `exports`.
  */
 
+/** Set by each test: the :program segment the route matched, if any. */
+const route: { param?: string } = { param: 'allstars' };
+
+/** What PortalLayout was handed — the two props that differ by door. */
+const shell: { backTo?: string; slug?: string; subtitle?: string } = {};
+
 jest.mock('react-router-dom', () => ({
   Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
-  useParams: () => ({ program: 'allstars' }),
+  useParams: () => ({ program: route.param }),
 }), { virtual: true });
 
 jest.mock('../../contexts/PortalContext', () => ({
   usePortal: () => ({
-    getProgramBySlug: () => ({ id: 'prog-allstars', slug: 'allstars', name: 'All-Stars' }),
+    getProgramBySlug: (slug: string) =>
+      slug === 'allstars' ? { id: 'prog-allstars', slug, name: 'All-Stars' } : undefined,
   }),
 }));
 
 jest.mock('../../components/portal/PortalLayout', () => ({
   __esModule: true,
-  default: (p: any) => (
-    <div>
-      <h1>{p.title}</h1>
-      {p.subtitle && <p>{p.subtitle}</p>}
-      {p.children}
-    </div>
-  ),
+  default: (p: any) => {
+    shell.backTo = p.backTo;
+    shell.slug = p.slug;
+    shell.subtitle = p.subtitle;
+    return (
+      <div>
+        <h1>{p.title}</h1>
+        {p.subtitle && <p>{p.subtitle}</p>}
+        {p.children}
+      </div>
+    );
+  },
 }));
+
+beforeEach(() => {
+  route.param = 'allstars';
+});
 
 const allItems = STUDIO_POLICIES.sections.flatMap(s => s.items);
 
@@ -82,6 +98,46 @@ describe('ProgramPolicies', () => {
 
     // And the body text really is on screen, not just the headings.
     expect(screen.getByText(/automatic withdrawal from a credit card/)).toBeInTheDocument();
+  });
+});
+
+describe('the two doors', () => {
+  it('keeps the section, and its back chevron, when entered from one', () => {
+    render(<ProgramPolicies />);
+
+    expect(shell.slug).toBe('allstars');
+    expect(shell.backTo).toBe('/portal/allstars');
+    expect(shell.subtitle).toBe('All-Stars');
+  });
+
+  it('sends the dashboard copy back to the dashboard, with no section tab bar', () => {
+    route.param = undefined;
+    render(<ProgramPolicies />);
+
+    // The bug this pins: a slug asserted rather than checked would build
+    // "/portal/undefined" here and show a tab bar for a section the reader
+    // never opened.
+    expect(shell.slug).toBeUndefined();
+    expect(shell.backTo).toBe('/portal');
+    expect(shell.subtitle).toBe('Dancing Images Dance Center');
+  });
+
+  it('shows the same policies through either door', () => {
+    route.param = undefined;
+    render(<ProgramPolicies />);
+
+    expect(screen.getAllByRole('term')).toHaveLength(allItems.length);
+  });
+
+  it('refuses a :program segment that is not a real section', () => {
+    // Reachable by typing a URL. It must not become a slug — the same rule
+    // ProgramGate applies, held here because this page is also mounted where
+    // that gate is not.
+    route.param = 'not-a-section';
+    render(<ProgramPolicies />);
+
+    expect(shell.slug).toBeUndefined();
+    expect(shell.backTo).toBe('/portal');
   });
 });
 

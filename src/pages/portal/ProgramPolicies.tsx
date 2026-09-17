@@ -1,10 +1,11 @@
 import React from 'react';
+import { useParams } from 'react-router-dom';
 import { theme } from '../../theme';
 import { Card } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
-import { portalRoutes } from '../../lib/portal';
+import { isProgramSlug, portalRoutes } from '../../lib/portal';
 import { PolicyItem, STUDIO_POLICIES, policyRuns } from '../../lib/studioPolicies';
-import { useProgramPage } from './useProgramPage';
+import { usePortal } from '../../contexts/PortalContext';
 
 /**
  * The studio's rules and policies, read inside the app.
@@ -12,6 +13,20 @@ import { useProgramPage } from './useProgramPage';
  * The contract exists as a PDF and this page deliberately is not a link to it.
  * See the header of lib/studioPolicies.ts for why: a PDF on a phone leaves the
  * app, leaves the back button, and arrives zoomed for paper.
+ *
+ * TWO DOORS, ONE PAGE
+ *
+ * /portal/policies is the family dashboard's, and /portal/:program/policies is
+ * the one inside a section. The words are identical — both sections sign the
+ * same contract — so the difference is only where the reader came from, and
+ * the page follows them back: from a section it keeps that section's tab bar
+ * and its back chevron returns to the section overview; from the dashboard
+ * there is no section to keep, and back means the dashboard.
+ *
+ * Which is why the slug is read here rather than through useProgramPage. That
+ * hook asserts the slug is valid because ProgramGate has already checked it,
+ * and on the dashboard route there is no slug at all — the assertion would be
+ * a lie and `portalRoutes.program(undefined)` a link to "/portal/undefined".
  *
  * Nothing here is fetched. The words ship with the build, so this page has no
  * loading state, no error state and nothing to register with RefreshContext —
@@ -71,13 +86,23 @@ const Policy: React.FC<{ item: PolicyItem; first: boolean }> = ({ item, first })
 );
 
 const ProgramPolicies: React.FC = () => {
-  const { slug, program } = useProgramPage();
+  const { program: param } = useParams<{ program: string }>();
+  const { getProgramBySlug } = usePortal();
+
+  // Undefined on /portal/policies, which is the dashboard's route and has no
+  // :program segment at all. Validated rather than trusted even where the gate
+  // has already done it, because an unchecked value would reach a route builder.
+  const slug = isProgramSlug(param) ? param : undefined;
+  const program = slug ? getProgramBySlug(slug) : undefined;
 
   return (
     <PortalLayout
       title="Rules & Policies"
-      subtitle={program?.name}
-      backTo={portalRoutes.program(slug)}
+      // Named so the reader can tell which of the two doors they came through,
+      // and — on the dashboard's copy — that these rules are the whole studio's
+      // rather than one section's.
+      subtitle={program?.name ?? 'Dancing Images Dance Center'}
+      backTo={slug ? portalRoutes.program(slug) : portalRoutes.home}
       slug={slug}
     >
       <div

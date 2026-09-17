@@ -226,6 +226,15 @@ const AppContent: React.FC = () => {
                 real behind them. */}
             <Route path="/portal/profile" element={<PortalProfile />} />
 
+            {/* The studio contract, reached from the button at the foot of the
+                family dashboard. Outside /portal/:program because every family
+                gets that button whether or not they have opened a section —
+                and because the rules are the studio's, not a section's. A
+                static segment, so it wins over the :program matcher and
+                "policies" is never read as a slug. The same page is also
+                registered inside a section below, where it keeps the tab bar. */}
+            <Route path="/portal/policies" element={<ProgramPolicies />} />
+
             {/* The client login build. Static segments, so they win over the
                 /portal/:program matcher regardless of order — but they are
                 only registered at all when the flag is on. */}

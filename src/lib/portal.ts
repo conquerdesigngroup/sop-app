@@ -120,12 +120,19 @@ export const portalRoutes = {
   documents: (slug: ProgramSlug) => `/portal/${slug}/documents`,
   calendar: (slug: ProgramSlug) => `/portal/${slug}/calendar`,
   /**
-   * The studio's rules and policies. Per section rather than one shared page:
-   * both sections show the same text today (see lib/studioPolicies.ts), but the
-   * page lives behind the same gate and under the same tab bar as everything
-   * else a parent reaches from a section overview, and a /portal/policies would
-   * have sat outside both.
+   * The studio's rules and policies, reachable two ways on purpose.
+   *
+   * `policiesHome` is the family dashboard's copy: every family gets the button
+   * whether or not they have opened a section, so the page cannot require one.
+   * `policies(slug)` is the same page entered from inside a section, where it
+   * keeps that section's tab bar and sends its back chevron to the section
+   * overview rather than dropping the reader at the top of the portal.
+   *
+   * One page, one set of words (lib/studioPolicies.ts) — both sections sign the
+   * same contract. The static segment wins over the /portal/:program matcher,
+   * the same way /portal/login does, so "policies" is never read as a slug.
    */
+  policiesHome: '/portal/policies',
   policies: (slug: ProgramSlug) => `/portal/${slug}/policies`,
 } as const;
 

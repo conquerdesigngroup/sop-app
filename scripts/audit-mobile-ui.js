@@ -121,7 +121,13 @@ const PUBLIC_ROUTES = [
   // The studio contract. Static text, but the longest unbroken prose in the
   // portal and the only page with a full-width bordered callout, so it is the
   // page most likely to overflow if a token or a padding changes under it.
+  //
+  // Both doors, because they are not the same render: the section's copy has a
+  // tab bar under it and the dashboard's does not, which is 60px of bottom
+  // padding and the difference between a last card that clears the bar and one
+  // that sits beneath it.
   '/portal/allstars/policies',
+  '/portal/policies',
   // The account page — identity, notifications, password. Short by design
   // since the family cards moved to the dashboard on /portal.
   //

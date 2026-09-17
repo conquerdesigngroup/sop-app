@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import PortalHome from './PortalHome';
 import { PortalProgram } from '../../types';
 
@@ -18,9 +18,12 @@ import { PortalProgram } from '../../types';
 
 const mockPortal: { programs: PortalProgram[]; loading: boolean } = { programs: [], loading: false };
 
+const navigated: string[] = [];
+
 jest.mock('react-router-dom', () => ({
   Navigate: () => null,
   Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
+  useNavigate: () => (to: string) => { navigated.push(to); },
 }), { virtual: true });
 
 jest.mock('../../lib/clientAuth', () => ({
@@ -87,6 +90,7 @@ const tileRow = (): HTMLElement => {
 
 beforeEach(() => {
   mockPortal.loading = false;
+  navigated.length = 0;
 });
 
 it('gives a family outside All-Stars no All-Star tile, and no gap where it was', () => {
@@ -108,4 +112,29 @@ it('gives an All-Star family both sections, three across', () => {
   expect(within(nav).getByText('All-Star Dancers')).toBeInTheDocument();
   expect(within(nav).getByText('Academy / TNT Dancers')).toBeInTheDocument();
   expect(tileRow().style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
+});
+
+it('offers the studio rules to every family, section or no section', () => {
+  // Outside the "Studio sections" nav on purpose: the rules are the studio's,
+  // not a section's, and a family who has never opened one still needs them.
+  // Before this the button existed only on the two section overviews, which
+  // put the contract behind a section a reader might not have.
+  mockPortal.programs = [ACADEMY];
+  renderHome();
+
+  const button = screen.getByRole('button', { name: /studio rules & policies/i });
+  const nav = screen.getByRole('navigation', { name: 'Studio sections' });
+  expect(nav).not.toContainElement(button);
+
+  fireEvent.click(button);
+  expect(navigated).toEqual(['/portal/policies']);
+});
+
+it('keeps the rules reachable for a family with no dashboard cards at all', () => {
+  // A member of staff, or a family whose cards are all empty. The cards block
+  // renders nothing in that state, and the button must not go with it.
+  mockPortal.programs = [];
+  renderHome();
+
+  expect(screen.getByRole('button', { name: /studio rules & policies/i })).toBeInTheDocument();
 });

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Card } from '../../components/ui';
+import { Button, Card } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
 import { TileSkeleton } from '../../components/portal/PortalSkeleton';
@@ -73,6 +73,7 @@ const PROGRAM_ICON_FALLBACK = icon('M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z
 const PortalHome: React.FC = () => {
   const { programs, loading: programsLoading, error } = usePortal();
   const { loading: authLoading, hasSession } = usePortalAuth();
+  const navigate = useNavigate();
   const {
     cards,
     ctx,
@@ -271,6 +272,29 @@ const PortalHome: React.FC = () => {
             })}
           </div>
         )}
+
+        {/* The studio contract, at the foot of the family dashboard as well as
+            each section's.
+
+            Here rather than only in the sections because this is the page every
+            family lands on, and the two questions it answers — what a late fee
+            is, how much notice a withdrawal needs — are not section questions.
+            A parent who has never opened All-Star or Academy should not have to
+            guess which section is hiding the rules; nor should anyone outside a
+            section be able to reach them at all, which is what a
+            sections-only button meant.
+
+            Unconditional, unlike the cards above: the rules do not depend on
+            having a dancer on the roster, and staff previewing the portal are
+            the people most often asked what they say. */}
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => navigate(portalRoutes.policiesHome)}
+          leftIcon={icon('M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8')}
+        >
+          Studio Rules &amp; Policies
+        </Button>
       </div>
     </PortalLayout>
   );
