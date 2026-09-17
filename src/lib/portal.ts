@@ -119,6 +119,14 @@ export const portalRoutes = {
   updates: (slug: ProgramSlug) => `/portal/${slug}/updates`,
   documents: (slug: ProgramSlug) => `/portal/${slug}/documents`,
   calendar: (slug: ProgramSlug) => `/portal/${slug}/calendar`,
+  /**
+   * The studio's rules and policies. Per section rather than one shared page:
+   * both sections show the same text today (see lib/studioPolicies.ts), but the
+   * page lives behind the same gate and under the same tab bar as everything
+   * else a parent reaches from a section overview, and a /portal/policies would
+   * have sat outside both.
+   */
+  policies: (slug: ProgramSlug) => `/portal/${slug}/policies`,
 } as const;
 
 /**

@@ -118,6 +118,10 @@ const PUBLIC_ROUTES = [
   '/portal/allstars/updates',
   '/portal/allstars/documents',
   '/portal/allstars/calendar',
+  // The studio contract. Static text, but the longest unbroken prose in the
+  // portal and the only page with a full-width bordered callout, so it is the
+  // page most likely to overflow if a token or a padding changes under it.
+  '/portal/allstars/policies',
   // The account page — identity, notifications, password. Short by design
   // since the family cards moved to the dashboard on /portal.
   //

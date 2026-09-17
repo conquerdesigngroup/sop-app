@@ -1,6 +1,7 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { theme } from '../../theme';
-import { Card } from '../../components/ui';
+import { Button, Card } from '../../components/ui';
 import PortalLayout from '../../components/portal/PortalLayout';
 import NavTile from '../../components/portal/NavTile';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
@@ -27,6 +28,7 @@ const icon = (d: string) => (
 const ProgramHome: React.FC = () => {
   const { slug, program } = useProgramPage();
   const { fetchUpdates, fetchEvents, heroUrls } = usePortal();
+  const navigate = useNavigate();
 
   const updates = useProgramQuery<PortalUpdate[]>(program?.id, fetchUpdates, []);
   const events = useProgramQuery<PortalEvent[]>(program?.id, fetchEvents, []);
@@ -138,6 +140,26 @@ const ProgramHome: React.FC = () => {
             icon={icon('M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z M16 2v4 M8 2v4 M3 10h18')}
           />
         </div>
+
+        {/* The studio contract, at the foot of both section overviews.
+
+            Below the tiles rather than among them, because it is not a fourth
+            place to go and come back from — it is the reference a parent opens
+            once when they are wondering about a late fee or a makeup class. A
+            tile of equal weight would say it is checked as often as the
+            schedule, which it is not.
+
+            A Button rather than a NavTile, per the request, so it reads as an
+            action; the trade is the middle-click and open-in-new-tab an anchor
+            would give, which is worth little on the phone this is opened on. */}
+        <Button
+          variant="secondary"
+          fullWidth
+          onClick={() => navigate(portalRoutes.policies(slug))}
+          leftIcon={icon('M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8')}
+        >
+          Studio Rules &amp; Policies
+        </Button>
       </div>
     </PortalLayout>
   );

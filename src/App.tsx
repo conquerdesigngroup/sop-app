@@ -55,6 +55,7 @@ const ProgramClasses = lazy(() => import('./pages/portal/ProgramClasses'));
 const ClassDetail = lazy(() => import('./pages/portal/ClassDetail'));
 const ProgramUpdates = lazy(() => import('./pages/portal/ProgramUpdates'));
 const ProgramCalendar = lazy(() => import('./pages/portal/ProgramCalendar'));
+const ProgramPolicies = lazy(() => import('./pages/portal/ProgramPolicies'));
 
 // Client login build. Only registered when the flag is on, so with it off the
 // pages are not merely gated — the routes do not exist.
@@ -255,6 +256,9 @@ const AppContent: React.FC = () => {
                   Documents page bookmarked or on their home screen. */}
               <Route path="documents" element={<Navigate to="../classes" replace />} />
               <Route path="calendar" element={<ProgramCalendar />} />
+              {/* The studio contract, as app content rather than a PDF —
+                  reached from the button at the foot of the section overview. */}
+              <Route path="policies" element={<ProgramPolicies />} />
             </Route>
           </Route>
           <Route
