@@ -196,6 +196,23 @@ a filtered run proves one route, not the app.
 It needs Playwright, which is deliberately not a dependency:
 `npm install --no-save playwright && npx playwright install chromium`.
 
+### No login? Use the dev backend
+
+The warning above is not a hurdle to route around — it is telling you that the
+signed-in half of the app went unmeasured. If you do not have a staff login to
+hand, run the local fixture backend instead of skipping those routes:
+
+```bash
+npm run dev:backend    # a fake Supabase on :3099, invented data
+npm start              # with .env.local pointing at it
+AUDIT_EMAIL=dev@localhost AUDIT_PASSWORD=anything npm run audit:mobile
+```
+
+That covers the whole sweep, including the management-only and super-admin-only
+pages where every bug of the first full run was found. See
+`scripts/dev-backend/README.md` — including what it deliberately cannot prove,
+which is anything about RLS.
+
 ### The three rules it exists to enforce
 
 1. **Never `100vh`. Always `100dvh`.** On iOS `100vh` is the *large* viewport —

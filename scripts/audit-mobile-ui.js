@@ -48,6 +48,17 @@
  *
  * Without those it audits the public routes and says which ones it skipped, so
  * a clean run never quietly means "I checked almost nothing".
+ *
+ * NO LOGIN? DO NOT SKIP THEM — FAKE THE BACKEND
+ *
+ * `npm run dev:backend` serves invented data over the same REST and auth
+ * surface, and `dev@localhost` with any password is a super admin there:
+ *
+ *   AUDIT_EMAIL=dev@localhost AUDIT_PASSWORD=anything node scripts/audit-mobile-ui.js
+ *
+ * The first run that way found 13 problems on five pages that had never been
+ * measured at any width, including a Team table 908px wide in an 820px iPad
+ * with nothing to scroll it. See scripts/dev-backend/README.md.
  */
 
 const fs = require('fs');

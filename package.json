@@ -27,6 +27,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "dev:backend": "node scripts/dev-backend",
     "prebuild": "node scripts/check-public-env.js",
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "audit:mobile": "node scripts/audit-mobile-ui.js",

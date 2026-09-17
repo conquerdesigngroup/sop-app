@@ -16,6 +16,24 @@ if (typeof window !== 'undefined') {
   console.log('[SOP App] Supabase Key configured:', !!supabaseAnonKey && supabaseAnonKey.length > 20);
 }
 
+/**
+ * The local fixture backend (scripts/dev-backend) serves the same REST, auth and
+ * storage surface from localhost, so that the staff pages and the portal's
+ * section pages can be looked at — and audited on a phone — without a real
+ * project. The `supabase.co` test below would reject it, and a check nobody can
+ * satisfy locally is how the signed-in half of this app went unmeasured.
+ *
+ * Narrow on purpose, and narrow in two directions at once: a loopback host AND
+ * a build that is not production. Neither alone would do. NODE_ENV is set by
+ * react-scripts, not by .env, so `npm run build` cannot be talked into this by
+ * a stray variable — the same reasoning as DEMO_ALLOWED in usePortalCards,
+ * where the rule is that an env var is not a safety mechanism and a production
+ * build is.
+ */
+const isLoopbackBackend = (url: string) =>
+  process.env.NODE_ENV !== 'production' &&
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);
+
 // Helper function to check if Supabase is configured
 export const isSupabaseConfigured = () => {
   const configured = (
@@ -23,7 +41,7 @@ export const isSupabaseConfigured = () => {
     supabaseAnonKey &&
     supabaseUrl !== 'YOUR_SUPABASE_URL' &&
     supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' &&
-    supabaseUrl.includes('supabase.co')
+    (supabaseUrl.includes('supabase.co') || isLoopbackBackend(supabaseUrl))
   );
 
   if (typeof window !== 'undefined') {
