@@ -449,7 +449,12 @@ Deno.serve(async (req: Request) => {
         // sides — PostgREST .in() is not. Bounded so a future 10k roster
         // degrades to a partial answer rather than a timeout.
         const [profRes, hhRes, memRes, stuRes] = await Promise.all([
-          admin.from('profiles').select('id, email, role, is_active').limit(5000),
+          // first_name / last_name: the person who signed up is named on their
+          // profile, and this panel used to head every row with the household's
+          // display_name — a bare surname on 341 of 349 families. "Kettenbrink
+          // can't get in" is a worse phone call to make than "Brittany
+          // Kettenbrink can't get in", and the name was one column away.
+          admin.from('profiles').select('id, email, role, is_active, first_name, last_name').limit(5000),
           admin.from('portal_households').select('id, primary_email, display_name, status').limit(5000),
           admin.from('portal_household_members').select('profile_id, household_id').limit(5000),
           admin.from('portal_students').select('household_id').limit(20000),
@@ -499,6 +504,13 @@ Deno.serve(async (req: Request) => {
               email,
               householdId: household?.id ?? null,
               householdName: household?.display_name ?? null,
+              // The name on the account, when there is one. Null for an address
+              // nobody has registered — which is most of the rows here, and is
+              // exactly the state the panel exists to report.
+              accountName:
+                profile
+                  ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || null
+                  : null,
               householdStatus: household?.status ?? null,
               studentCount: household ? studentsByHousehold.get(household.id) ?? 0 : 0,
               emailKnown: !!household,

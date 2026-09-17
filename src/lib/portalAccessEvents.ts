@@ -38,6 +38,14 @@ export interface AccessPerson {
   email: string;
   householdId: string | null;
   householdName: string | null;
+  /**
+   * The name on the account, when there is one. Null for an address nobody has
+   * registered — which is most of these rows, and the state this panel is for.
+   *
+   * Also null against an older deploy of the function, which is the same
+   * reading: no name to show, so the row falls back to the family's.
+   */
+  accountName?: string | null;
   householdStatus: string | null;
   studentCount: number;
   /** A household carries this address — i.e. the studio has them on file. */

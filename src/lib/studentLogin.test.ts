@@ -16,6 +16,10 @@ const dancer = (over: Partial<ViewerStudent> = {}): ViewerStudent => ({
   householdEmail: 'parent@example.com',
   enrollmentCount: 3,
   categories: ['Academy'],
+  ownLogins: 0,
+  householdLogins: 0,
+  ownLoginEmail: null,
+  householdAccountName: null,
   ...over,
 });
 

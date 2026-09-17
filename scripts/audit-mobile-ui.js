@@ -227,6 +227,18 @@ const AUTH_ROUTES = [
   '/portal-admin/viewer',
   '/portal-admin/viewer?view=dancers',
   '/portal-admin/viewer?view=classes',
+  // The two detail panels, which REPLACE the list rather than sitting under it
+  // and are therefore two more layouts behind the same path. Both carry the
+  // widest content in the feature: a full name over a family name over an
+  // email, a two-column detail grid, and a row of class times.
+  //
+  // The ids are the dev backend's (scripts/dev-backend/seed.js), so these rows
+  // only measure the real panels under `npm run dev:backend`. Against a real
+  // project they land on the "could not be found" card — which is a layout, but
+  // not this one — so re-point them with AUDIT_ROUTES and a real id if you are
+  // auditing against live data.
+  '/portal-admin/viewer?view=families&household=00000000-0000-4000-a200-000000000001',
+  '/portal-admin/viewer?view=dancers&student=00000000-0000-4000-a300-000000000001',
 ];
 
 // ---------------------------------------------------------------- static scan
@@ -465,7 +477,12 @@ const collect = (statusBar) => {
     }
   }
 
-  const browser = await chromium.launch();
+  // AUDIT_CHROMIUM points at a Chromium the machine already has, for a
+  // container that ships one and cannot download Playwright's own build. Same
+  // engine, same measurements; it only skips the download.
+  const browser = await chromium.launch(
+    process.env.AUDIT_CHROMIUM ? { executablePath: process.env.AUDIT_CHROMIUM } : {},
+  );
   const findings = [];
 
   for (const device of devices) {

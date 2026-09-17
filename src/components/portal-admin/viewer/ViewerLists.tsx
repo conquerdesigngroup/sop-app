@@ -5,17 +5,24 @@ import { ManagerList } from '../shared';
 import { CLASS_CATEGORY_LABEL, CLASS_CATEGORY_ORDER, dayName, formatClassSchedule } from '../../../lib/portal';
 import { PortalClassCategory } from '../../../types';
 import {
+  EMPTY_FILTERS,
   NO_DIVISION,
   ViewerClass,
   ViewerFilters,
   ViewerHousehold,
   ViewerStudent,
   ACCESS_BADGE,
+  STUDENT_ACCESS_BADGE,
   accessLabel,
   ageFrom,
   classPasses,
   filtersAreEmpty,
   householdPasses,
+  householdSubtitle,
+  householdTitle,
+  studentAccessIsKnown,
+  studentAccessLabel,
+  studentFamilyName,
   studentFullName,
   studentPasses,
   toggleDivision,
@@ -99,7 +106,7 @@ const ListHeader: React.FC<{
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => { setQuery(''); setFilters({ divisions: [], access: 'any', activity: 'any', dayOfWeek: null }); }}
+          onClick={() => { setQuery(''); setFilters(EMPTY_FILTERS); }}
         >
           Clear
         </Button>
@@ -171,13 +178,21 @@ export const HouseholdList: React.FC<{
       >
         {shown.map(h => {
           const access = accessLabel(h);
+          const title = householdTitle(h);
+          const sub = householdSubtitle(h);
           return (
-            <ViewerRow key={h.id} label={`Open ${h.name}`} onClick={() => onOpen(h.id)}>
-              <RowTitle>{h.name}</RowTitle>
+            <ViewerRow key={h.id} label={`Open ${title}`} onClick={() => onOpen(h.id)}>
+              {/* The PERSON's name once they have signed up — the studio has it
+                  and no staff screen used to read it. The surname underneath
+                  only when it is not already part of that name, because
+                  "Brittany Kettenbrink" over "Kettenbrink family" is noise and
+                  "Brittany Ruiz" over it is the row somebody is ringing about. */}
+              <RowTitle>{title}</RowTitle>
+              {sub && <RowSub>{sub}</RowSub>}
               {/* Enrolio does not always carry a contact name, and the mapper
                   falls back to the email — so printing the email underneath as
                   well renders the same long address twice on one row. */}
-              {h.name !== h.email && <RowSub mono>{h.email}</RowSub>}
+              {title !== h.email && <RowSub mono>{h.email}</RowSub>}
               <ChipRow>
                 <Badge variant={ACCESS_BADGE[access.state]} size="sm">{access.text}</Badge>
                 <Badge variant="default" size="sm">
@@ -201,16 +216,24 @@ export const StudentList: React.FC<{
   loading: boolean;
   error: string | null;
   today: Date;
-  onOpenHousehold: (id: string) => void;
+  onOpen: (id: string) => void;
   query: string;
   setQuery: (value: string) => void;
   filters: ViewerFilters;
   setFilters: (f: ViewerFilters) => void;
-}> = ({ students, loading, error, today, onOpenHousehold, query, setQuery, filters, setFilters }) => {
+}> = ({ students, loading, error, today, onOpen, query, setQuery, filters, setFilters }) => {
   const shown = useMemo(
     () => students.filter(s => studentPasses(s, query, filters)),
     [students, query, filters],
   );
+
+  /**
+   * Until v57 is applied the login counts are simply not in the response, and
+   * a filter over them would quietly return "0 of 395 dancers" — a control that
+   * appears broken is worse than one that is not there. Same reason the badges
+   * below are conditional: this screen does not guess.
+   */
+  const accessKnown = useMemo(() => studentAccessIsKnown(students), [students]);
 
   return (
     <>
@@ -220,6 +243,24 @@ export const StudentList: React.FC<{
         filters={filters} setFilters={setFilters}
         shown={shown.length} total={students.length} noun="dancers"
       >
+        {/* The Families tab has had this cut since v48; the dancer list never
+            did, so "which of these children can actually open the portal" was
+            a question you answered 395 records at a time. */}
+        {accessKnown && (
+          <FilterChips
+            label="Account"
+            options={[
+              { value: 'signed-up', label: 'Signed up' },
+              { value: 'own-login', label: 'Own login' },
+              { value: 'no-account', label: 'No account' },
+            ]}
+            selected={filters.dancerAccess === 'any' ? [] : [filters.dancerAccess]}
+            onToggle={v => setFilters({
+              ...filters,
+              dancerAccess: single(filters.dancerAccess, v as any, 'any'),
+            })}
+          />
+        )}
         <FilterChips
           label="Status"
           options={[
@@ -240,11 +281,16 @@ export const StudentList: React.FC<{
       >
         {shown.map(s => {
           const age = ageFrom(s.dateOfBirth, today);
+          const family = studentFamilyName(s);
+          const access = studentAccessLabel(s);
           return (
             <ViewerRow
               key={s.id}
-              label={`Open the household of ${studentFullName(s)}`}
-              onClick={() => onOpenHousehold(s.householdId)}
+              // Opens the DANCER now, not their family. Tapping a child's name
+              // and landing on a screen headed with somebody else's was the
+              // one thing this list could not do.
+              label={`Open ${studentFullName(s)}`}
+              onClick={() => onOpen(s.id)}
             >
               <RowTitle>
                 {studentFullName(s)}
@@ -254,9 +300,12 @@ export const StudentList: React.FC<{
                   <span style={{ color: theme.colors.txt.tertiary, fontWeight: 400 }}> · {age}</span>
                 )}
               </RowTitle>
-              <RowSub>{s.householdName}</RowSub>
-              {s.householdName !== s.householdEmail && <RowSub mono>{s.householdEmail}</RowSub>}
+              <RowSub>{family}</RowSub>
+              {family !== s.householdEmail && <RowSub mono>{s.householdEmail}</RowSub>}
               <ChipRow>
+                {accessKnown && (
+                  <Badge variant={STUDENT_ACCESS_BADGE[access.state]} size="sm">{access.text}</Badge>
+                )}
                 <Badge variant="default" size="sm">
                   {s.enrollmentCount === 1 ? '1 class' : `${s.enrollmentCount} classes`}
                 </Badge>

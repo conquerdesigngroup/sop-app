@@ -9,8 +9,9 @@ import { parseCsvToObjects } from '../../lib/csv';
 import { callPortalAdmin } from '../../lib/portalAdminApi';
 import { supabase } from '../../lib/supabase';
 import {
-  loadStudents, studentMatches, studentFullName, ageFrom, ViewerStudent,
+  loadStudents, studentMatches, studentFullName, ageFrom, familyLabel, ViewerStudent,
 } from '../../lib/portalViewer';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   normaliseEmail, isValidEmail, dancerBlockedReason, emailBlockedReason,
 } from '../../lib/studentLogin';
@@ -73,6 +74,14 @@ interface ClientRow {
   member_type: 'guardian' | 'student';
   student_id: string | null;
   dancer_name: string | null;
+  /**
+   * The family this roster row's address belongs to, when one exists.
+   *
+   * Absent until v57 is applied, which is why every use is guarded: without it
+   * the page simply does not offer the way through to the family's record.
+   */
+  household_id?: string | null;
+  household_name?: string | null;
   /**
    * Whether a portal_household_members row actually exists for this dancer.
    * THE MEMBERSHIP IS THE ACCESS: a student row can be deactivated while the
@@ -158,6 +167,10 @@ const ClientAccountsPage: React.FC = () => {
   const { isMobileOrTablet } = useResponsive();
   const { success, error: toastError } = useToast();
   const { confirm, confirmDialog } = useConfirm();
+  // The Portal viewer route is superAdminOnly, so the link through to a
+  // family's full record is only offered to people it will actually open for.
+  // An admin below that sees this page exactly as before.
+  const { isSuperAdmin } = useAuth();
 
   const [rows, setRows] = useState<ClientRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -512,8 +525,50 @@ const ClientAccountsPage: React.FC = () => {
           {grouped.map(family => {
             const head = family[0];
             const claimed = !!head.claimed_by;
+            /**
+             * THE NAME PROBLEM, AND WHY IT HAS TWO ANSWERS.
+             *
+             * The account holder's own first and last name are on the row for
+             * everyone who has signed up (58 of 58 client profiles carry both).
+             * For everyone who has not, the only name on file is the Enrolio
+             * guardian column — a bare surname on 394 of 406 roster rows — and
+             * nothing in this database can turn that into a first name.
+             *
+             * So: the person's full name where we have it, and "Jones family"
+             * where we do not. What the page must never do is print a lone
+             * "Jones" as though it were somebody's name, which is what it did.
+             */
             const accountName = `${head.first_name ?? ''} ${head.last_name ?? ''}`.trim();
+            // Two stored names, both usually a bare surname: the roster's
+            // guardian column and the household's display name. When one of
+            // them IS a real name — somebody typed it, or the guardian names
+            // were filled in from the enrollment system — that is the one worth
+            // printing. The household wins a tie, so this page and the Portal
+            // viewer never name the same family two different ways.
+            const rosterName = (head.guardian_name ?? '').trim();
+            const storedName = (head.household_name ?? '').trim();
+            const familySource =
+              storedName.indexOf(' ') !== -1 ? storedName
+                : rosterName.indexOf(' ') !== -1 ? rosterName
+                  : storedName || rosterName;
+            const familyName = familyLabel({ name: familySource, email: head.email });
+            // The surname the roster files them under, when it is NOT part of
+            // the name they signed up with. A parent whose surname differs from
+            // their child's is common and is worth saying out loud; repeating
+            // "Jones family" under "Sarah Jones" is not.
+            const showFamilyLine =
+              !!accountName && !!familySource &&
+              accountName.toLowerCase().indexOf(familySource.toLowerCase()) === -1;
             const rowBusy = busyRow !== null && family.some(r => r.id === busyRow || r.claimed_by === busyRow);
+            // A dancer login opens the dancer; a family login opens the family.
+            // `view` comes along so that Back out of the panel lands on the list
+            // that record belongs to rather than on 349 families.
+            const profileHref =
+              head.member_type === 'student' && head.student_id
+                ? `/portal-admin/viewer?view=dancers&student=${head.student_id}`
+                : head.household_id
+                  ? `/portal-admin/viewer?view=families&household=${head.household_id}`
+                  : null;
 
             return (
               <Card key={head.email + (head.claimed_by ?? '')} padding="md">
@@ -530,10 +585,21 @@ const ClientAccountsPage: React.FC = () => {
                     }}>
                       {head.member_type === 'student'
                         ? (head.dancer_name || head.student_name)
-                        : (accountName || head.guardian_name || head.email)}
+                        : (accountName || familyName)}
                     </span>
                     {accountBadges(head)}
                   </div>
+                  {showFamilyLine && (
+                    <span style={{
+                      ...theme.typography.bodySmall,
+                      fontFamily: theme.fonts.primary,
+                      color: theme.colors.txt.tertiary,
+                      minWidth: 0,
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {familyName} on the roster
+                    </span>
+                  )}
                   <span style={mono}>{head.email}</span>
 
                   {head.member_type === 'student' && (
@@ -630,6 +696,20 @@ const ClientAccountsPage: React.FC = () => {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {/* The way through to everything attached to this person —
+                        their dancers, every class, their divisions, the notes
+                        sent to them. This page holds the LOGIN; the Viewer
+                        holds the record, and until now there was no way from
+                        one to the other, only back.
+                        Offered to super admins only, because that is who the
+                        Viewer route opens for; needs v57 for household_id. */}
+                    {isSuperAdmin && profileHref && (
+                      <Link to={profileHref} style={{ textDecoration: 'none' }}>
+                        <Button variant="outline" size="sm">
+                          {head.member_type === 'student' ? 'Open dancer' : 'Open profile'}
+                        </Button>
+                      </Link>
+                    )}
                     {claimed ? (
                       <>
                         <Button

@@ -17,6 +17,7 @@ import {
   sortPeople,
   summarise,
 } from '../../lib/portalAccessEvents';
+import { familyLabel } from '../../lib/portalViewer';
 
 /**
  * Who has tried to get into the portal, and whether they could.
@@ -124,7 +125,15 @@ const PersonRow: React.FC<{
             overflowWrap: 'anywhere',
           }}
         >
-          {person.householdName ?? 'Unknown family'}
+          {/* The PERSON where they have an account, the family where they do
+              not, and never a bare surname — this row used to print the
+              household's display_name, which Enrolio fills with a last name.
+              "Kettenbrink can't get in" is a worse phone call to make than
+              "Brittany Kettenbrink can't get in". */}
+          {person.accountName?.trim() ||
+            (person.householdName
+              ? familyLabel({ name: person.householdName, email: person.email })
+              : 'Unknown family')}
         </span>
         {person.studentCount > 0 && (
           <span style={label}>

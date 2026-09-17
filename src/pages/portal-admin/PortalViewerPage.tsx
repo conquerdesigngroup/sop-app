@@ -11,12 +11,14 @@ import PortalAdminTabs from '../../components/portal-admin/PortalAdminTabs';
 import { ClassList, HouseholdList, StudentList } from '../../components/portal-admin/viewer/ViewerLists';
 import HouseholdPanel from '../../components/portal-admin/viewer/HouseholdPanel';
 import RosterPanel from '../../components/portal-admin/viewer/RosterPanel';
+import StudentPanel from '../../components/portal-admin/viewer/StudentPanel';
 import {
   EMPTY_FILTERS,
   ViewerClass,
   ViewerFilters,
   ViewerHousehold,
   ViewerStudent,
+  householdTitle,
   loadHouseholds,
   loadStudents,
   loadViewerClasses,
@@ -116,6 +118,7 @@ const PortalViewerPage: React.FC = () => {
 
   const openHouseholdId = params.get('household');
   const openClassId = params.get('class');
+  const openStudentId = params.get('student');
   const openClass = openClassId ? classes.find(c => c.id === openClassId) ?? null : null;
 
   /**
@@ -177,8 +180,40 @@ const PortalViewerPage: React.FC = () => {
    * built: roster to family, family back to the same roster.
    */
   const openHousehold = useCallback((id: string) => {
-    setParam({ household: id }, true);
+    // `student` IS cleared: a family record opened FROM a dancer replaces the
+    // dancer, it does not sit behind them. Leaving it set would render the
+    // dancer again (they take priority below) and the button would look broken.
+    setParam({ household: id, student: null }, true);
   }, [setParam]);
+
+  /**
+   * A dancer opens their own record now, not their family's.
+   *
+   * `class` and `household` are both kept, for the same reason opening a family
+   * keeps `class`: whichever screen they were opened from is where Back has to
+   * land, and the label below reads the parameters to say so.
+   */
+  const openStudent = useCallback((id: string) => {
+    setParam({ student: id }, true);
+  }, [setParam]);
+
+  /** Whatever is under the panel being closed — which is not always a list. */
+  const openHouseholdName = useMemo(() => {
+    const h = openHouseholdId ? households.find(x => x.id === openHouseholdId) : null;
+    return h ? householdTitle(h) : null;
+  }, [openHouseholdId, households]);
+
+  const studentBackLabel = openHouseholdName
+    ? `Back to ${openHouseholdName}`
+    : openClass
+      ? `Back to ${openClass.name}`
+      : 'All dancers';
+
+  const householdBackLabel = openClass
+    ? `Back to ${openClass.name}`
+    : view === 'dancers'
+      ? 'All dancers'
+      : 'All families';
 
   /**
    * A detail panel replaces the list, and the page keeps the scroll position
@@ -187,13 +222,22 @@ const PortalViewerPage: React.FC = () => {
    * dancers. scrollIntoView on the panel rather than window.scrollTo, because
    * which element actually scrolls depends on the layout this page is mounted
    * inside and guessing wrong is a silent no-op.
+   *
+   * ONLY WHEN THE PANEL IS ACTUALLY ABOVE THE FOLD, though. A link straight to
+   * one family — from the client accounts page, or pasted into a message —
+   * loads at the top of the page already, and scrolling "to" a panel that is
+   * right there pushed the page's own heading off the screen instead: the
+   * mobile audit caught it at 320px, where the header wraps and 38px of it
+   * went. Measuring first keeps the drill-down fix and drops the pointless
+   * scroll.
    */
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const openKey = `${openHouseholdId ?? ''}|${openClassId ?? ''}`;
+  const openKey = `${openStudentId ?? ''}|${openHouseholdId ?? ''}|${openClassId ?? ''}`;
   useEffect(() => {
-    if (!openHouseholdId && !openClassId) return;
-    panelRef.current?.scrollIntoView({ block: 'start' });
-  }, [openKey, openHouseholdId, openClassId]);
+    if (!openHouseholdId && !openClassId && !openStudentId) return;
+    const el = panelRef.current;
+    if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' });
+  }, [openKey, openHouseholdId, openClassId, openStudentId]);
 
   const subtitle = useMemo(() => {
     if (loading || error) return 'Every account, dancer and roster in the portal';
@@ -221,22 +265,34 @@ const PortalViewerPage: React.FC = () => {
       {/* A detail panel replaces the list rather than sitting under it: on a
           phone a list of 343 above a detail is a scroll nobody finishes. */}
       <div ref={panelRef}>
-      {openHouseholdId ? (
+      {/* A dancer outranks their family: the record is only ever open because
+          somebody asked for THEM, from the list, a roster, or the family. */}
+      {openStudentId ? (
+        <StudentPanel
+          studentId={openStudentId}
+          today={today}
+          backLabel={studentBackLabel}
+          onBack={() => setParam({ student: null }, true)}
+          onOpenHousehold={openHousehold}
+        />
+      ) : openHouseholdId ? (
         <HouseholdPanel
           householdId={openHouseholdId}
           programs={programs}
           canSendNotes={isSuperAdmin}
           today={today}
-          // A family can be reached from the family list OR from a class
-          // roster, and Back must name wherever it will actually land.
-          backLabel={openClass ? `Back to ${openClass.name}` : 'All families'}
+          // A family can be reached from the family list, the dancer list OR a
+          // class roster, and Back must name wherever it will actually land.
+          backLabel={householdBackLabel}
           onBack={() => setParam({ household: null }, true)}
+          onOpenStudent={openStudent}
         />
       ) : openClass ? (
         <RosterPanel
           klass={openClass}
           today={today}
           onBack={() => setParam({ class: null }, true)}
+          onOpenStudent={openStudent}
           onOpenHousehold={openHousehold}
         />
       ) : (
@@ -245,7 +301,7 @@ const PortalViewerPage: React.FC = () => {
             panelId="portal-viewer-panel"
             options={VIEWS.map(v => ({ key: v.key, label: v.label }))}
             active={view}
-            onSelect={key => setParam({ view: key, household: null, class: null })}
+            onSelect={key => setParam({ view: key, household: null, class: null, student: null })}
           />
 
           <div id="portal-viewer-panel" role="tabpanel">
@@ -267,7 +323,7 @@ const PortalViewerPage: React.FC = () => {
                 loading={loading}
                 error={error}
                 today={today}
-                onOpenHousehold={openHousehold}
+                onOpen={openStudent}
                 query={queries.dancers}
                 setQuery={setQuery('dancers')}
                 filters={filters.dancers}
@@ -279,7 +335,7 @@ const PortalViewerPage: React.FC = () => {
                 classes={classes}
                 loading={loading}
                 error={error}
-                onOpen={id => setParam({ class: id, household: null }, true)}
+                onOpen={id => setParam({ class: id, household: null, student: null }, true)}
                 query={queries.classes}
                 setQuery={setQuery('classes')}
                 filters={filters.classes}

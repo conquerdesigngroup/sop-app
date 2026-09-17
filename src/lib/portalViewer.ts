@@ -57,6 +57,19 @@ export interface ViewerHousehold {
   /** Class categories the household's children are enrolled in — All-Stars, Academy, TNT. */
   categories: string[];
   lastNoteAt: string | null;
+  /**
+   * The full name the account holder signed up with — "Brittany Kettenbrink".
+   *
+   * `name` above is the FAMILY's label and is a bare surname for 341 of the 349
+   * households, because that is what the Enrolio export puts in the guardian
+   * column. This is the person, and it is null until somebody registers.
+   *
+   * Null also when v57 has not been applied. Same reading either way: we do not
+   * know their name, so the screens fall back to the surname.
+   */
+  accountName: string | null;
+  /** The address that account signs in with, which "Change email" can move. */
+  accountEmail: string | null;
 }
 
 export interface ViewerStudent {
@@ -73,6 +86,21 @@ export interface ViewerStudent {
   enrollmentCount: number;
   /** Divisions this dancer is currently enrolled in. Empty = not enrolled. */
   categories: string[];
+  /**
+   * Logins pinned to THIS child (v51). One dancer has one today.
+   *
+   * null, not 0, when v57 has not been applied — the difference between "this
+   * child has no login" and "this screen cannot tell", and the lists refuse to badge
+   * anybody rather than tell 395 dancers they have no account on the strength
+   * of a column that is not there.
+   */
+  ownLogins: number | null;
+  /** Logins on the family as a whole. A parent's login sees every sibling. */
+  householdLogins: number | null;
+  /** The address that dancer's own login signs in with, when there is one. */
+  ownLoginEmail: string | null;
+  /** The parent's full name, when the family has signed up. */
+  householdAccountName: string | null;
 }
 
 export interface ViewerClass {
@@ -133,6 +161,14 @@ export interface ViewerHouseholdDetail {
   notes: PortalUpdate[];
 }
 
+/** One dancer's own record — the screen behind a tap on their name. */
+export interface ViewerStudentProfile {
+  student: ViewerStudent;
+  /** Null only if the household vanished between the two reads. */
+  household: ViewerHousehold | null;
+  enrollments: ViewerStudentDetail['enrollments'];
+}
+
 // ------------------------------------------------------------------ mapping
 
 const mapHousehold = (r: any): ViewerHousehold => ({
@@ -152,6 +188,11 @@ const mapHousehold = (r: any): ViewerHousehold => ({
   enrollmentCount: r.enrollment_count ?? 0,
   categories: r.categories ?? [],
   lastNoteAt: r.last_note_at ?? null,
+  // v57. Absent until the migration is applied, and null is the honest reading
+  // of that — it means "no name known", which is what every screen showed
+  // before the column existed.
+  accountName: r.account_name ?? null,
+  accountEmail: r.account_email ?? null,
 });
 
 const mapStudent = (r: any): ViewerStudent => ({
@@ -167,6 +208,12 @@ const mapStudent = (r: any): ViewerStudent => ({
   householdEmail: r.primary_email,
   enrollmentCount: r.enrollment_count ?? 0,
   categories: r.categories ?? [],
+  // v57, and deliberately NOT `?? 0`: see ViewerStudent. A missing column must
+  // not read as "this child has no login".
+  ownLogins: r.own_logins ?? null,
+  householdLogins: r.household_logins ?? null,
+  ownLoginEmail: r.own_login_email ?? null,
+  householdAccountName: r.household_account_name ?? null,
 });
 
 const mapClass = (r: any): ViewerClass => ({
@@ -191,6 +238,75 @@ const mapClass = (r: any): ViewerClass => ({
 
 export const studentFullName = (s: { firstName: string; lastName: string }): string =>
   `${s.firstName} ${s.lastName}`.trim();
+
+/**
+ * What to call a family when you mean the FAMILY and not a person.
+ *
+ * portal_households.display_name is a bare surname for 341 of the 349
+ * households — the import writes `coalesce(guardian_name, student_last_name)`
+ * and Enrolio's guardian column holds a surname. Printed raw it reads as a
+ * half-filled name field; "Kettenbrink family" reads as what it is.
+ *
+ * Left alone when it already has a space in it (somebody typed a real name, or
+ * the studio wrote "The Kettenbrinks") and when it is standing in for a missing
+ * name with the email address.
+ */
+export const familyLabel = (h: { name: string; email: string }): string => {
+  const name = h.name.trim();
+  if (!name || name.toLowerCase() === h.email.trim().toLowerCase()) return h.email;
+  return name.indexOf(' ') === -1 ? `${name} family` : name;
+};
+
+/**
+ * The heading for a family: the PERSON when we know who they are.
+ *
+ * The studio holds the full name of everyone who has signed up — it is what
+ * they typed into the sign-up form — and until v57 no staff screen read it. A
+ * family that had registered still showed as "Kettenbrink", which is why the
+ * owner could not tell two Kettenbrinks apart and why the access-events list
+ * named nobody at all.
+ *
+ * Falls back to the family label, never to half a name.
+ */
+export const householdTitle = (h: ViewerHousehold): string =>
+  h.accountName?.trim() || familyLabel(h);
+
+/**
+ * The line under that heading, or null when it would only repeat it.
+ *
+ * "Brittany Kettenbrink" over "Kettenbrink family" is noise. "Brittany Ruiz"
+ * over "Kettenbrink family" is the useful case and the reason this exists: a
+ * parent whose surname is not the one the account is filed under is exactly the
+ * family somebody is on the phone about.
+ */
+export const householdSubtitle = (h: ViewerHousehold): string | null => {
+  const account = (h.accountName ?? '').trim().toLowerCase();
+  if (!account) return null;
+  const family = h.name.trim();
+  if (!family || family.toLowerCase() === h.email.trim().toLowerCase()) return null;
+  // The surname, however the studio wrote it. "Boateng family" and "Boateng"
+  // are the same fact about Marcus Boateng, and a line repeating either under
+  // his name is the noise this function exists to suppress — so the trailing
+  // word "family" is stripped before comparing, and the last word is tried on
+  // its own for a display_name like "The Boatengs".
+  const core = family.replace(/\s*famil(y|ies)$/i, '').trim();
+  if (core && account.indexOf(core.toLowerCase()) !== -1) return null;
+  const surname = core.split(/\s+/).pop() ?? '';
+  if (surname && account.indexOf(surname.toLowerCase()) !== -1) return null;
+  return familyLabel(h);
+};
+
+/**
+ * Who a dancer belongs to, in one line: the parent by name where the family has
+ * signed up, the family label where they have not.
+ *
+ * The dancer row used to print the household's display_name, which is the
+ * child's own surname for almost every family — "Ava Kettenbrink" over
+ * "Kettenbrink", a line that told the reader nothing they had not just read.
+ */
+export const studentFamilyName = (s: ViewerStudent): string =>
+  s.householdAccountName?.trim() ||
+  familyLabel({ name: s.householdName, email: s.householdEmail });
 
 /**
  * Age in whole years, or null when there is no date of birth.
@@ -243,7 +359,12 @@ export const householdMatches = (h: ViewerHousehold, query: string): boolean => 
   if (!q) return true;
   return (
     h.name.toLowerCase().indexOf(q) !== -1 ||
+    // The name they signed up with, which is the one the row now PRINTS.
+    // Searching a screen for a word that is visible on it and being told
+    // nothing matches is the same trap divisionText was written to close.
+    (h.accountName ?? '').toLowerCase().indexOf(q) !== -1 ||
     h.email.toLowerCase().indexOf(q) !== -1 ||
+    (h.accountEmail ?? '').toLowerCase().indexOf(q) !== -1 ||
     (h.externalAccountId ?? '').toLowerCase().indexOf(q) !== -1 ||
     divisionText(h.categories).toLowerCase().indexOf(q) !== -1
   );
@@ -256,7 +377,11 @@ export const studentMatches = (s: ViewerStudent, query: string): boolean => {
     studentFullName(s).toLowerCase().indexOf(q) !== -1 ||
     (s.displayName ?? '').toLowerCase().indexOf(q) !== -1 ||
     s.householdName.toLowerCase().indexOf(q) !== -1 ||
+    // Their parent by name, and their own login by address — both printed on
+    // the row, so both searchable.
+    (s.householdAccountName ?? '').toLowerCase().indexOf(q) !== -1 ||
     s.householdEmail.toLowerCase().indexOf(q) !== -1 ||
+    (s.ownLoginEmail ?? '').toLowerCase().indexOf(q) !== -1 ||
     divisionText(s.categories).toLowerCase().indexOf(q) !== -1
   );
 };
@@ -323,6 +448,54 @@ export const accessLabel = (h: ViewerHousehold): { text: string; state: AccessSt
   }
   return { text: 'Not signed up', state: 'none' };
 };
+
+/**
+ * The same question asked about one CHILD: can they get into the portal, and
+ * whose login does it take?
+ *
+ * 'own'    — a login pinned to this dancer (v51). They see themselves and no
+ *            sibling. One dancer on this database today.
+ * 'family' — no login of their own, but somebody in the family has signed up,
+ *            so a parent can see them. 70 of 395 dancers.
+ * 'none'   — nobody can see this child in the portal at all. 324 of 395, and
+ *            the number the studio is actually trying to move.
+ *
+ * A dancer with a login of their own whose parents have also signed up reads as
+ * 'own': the badge answers "what does THIS CHILD have", and the family's own
+ * access is one tap away on their record.
+ */
+export type StudentAccessState = 'own' | 'family' | 'none';
+
+export const STUDENT_ACCESS_BADGE: Record<StudentAccessState, 'success' | 'info' | 'default'> = {
+  own: 'success',
+  family: 'info',
+  none: 'default',
+};
+
+export const studentAccessLabel = (
+  s: ViewerStudent,
+): { text: string; state: StudentAccessState } => {
+  if ((s.ownLogins ?? 0) > 0) return { text: 'Own login', state: 'own' };
+  if ((s.householdLogins ?? 0) > 0) return { text: 'Family signed up', state: 'family' };
+  return { text: 'No account', state: 'none' };
+};
+
+/**
+ * Whether the counts above are actually in the response.
+ *
+ * Until v57 is applied every dancer comes back without them, and treating that
+ * as zero would badge all 395 children "No account" — a screen confidently
+ * telling the owner something false. When this is false the lists show no
+ * access badge and no access filter at all, which is the honest version of
+ * "this deploy cannot tell you yet".
+ *
+ * Checked over the whole list rather than per row: one dancer with a login is
+ * enough to prove the column is there, and a studio where nobody has signed up
+ * reads the same as a missing column — in which case there is nothing to show
+ * either way.
+ */
+export const studentAccessIsKnown = (students: ViewerStudent[]): boolean =>
+  students.some(s => s.ownLogins !== null || s.householdLogins !== null);
 
 // ------------------------------------------------------------------ queries
 
@@ -479,6 +652,83 @@ export const loadHouseholdDetail = async (
 };
 
 /**
+ * One dancer, in full: their own record, their family, and every class.
+ *
+ * Deliberately a separate read from loadHouseholdDetail rather than a filter
+ * over it. The dancer screen is reached from three places — the dancer list, a
+ * class roster, the family record — and two of them do not have the household
+ * loaded. Fetching one child costs three small requests; fetching their whole
+ * family to show one of them costs the family's notes and every sibling's
+ * enrollments as well.
+ *
+ * The household read is allowed to fail softly: the dancer's own record is the
+ * point of the screen, and losing the family panel is better than showing an
+ * error page over a child who is right there.
+ */
+export const loadStudentDetail = async (
+  studentId: string,
+): Promise<{ detail: ViewerStudentProfile | null; error: ViewerError }> => {
+  const studentRes = await supabase
+    .from('portal_admin_student_overview')
+    .select('*')
+    .eq('id', studentId)
+    .maybeSingle();
+  if (studentRes.error || !studentRes.data) {
+    return { detail: null, error: VIEWER_LOAD_ERROR };
+  }
+  const student = mapStudent(studentRes.data);
+
+  const [enrollRes, householdRes] = await Promise.all([
+    supabase
+      .from('portal_enrollments')
+      .select(
+        'id, status, season, enrolled_on, dropped_on, student_id, class_id, ' +
+        'portal_classes!inner(id, name, category, day_of_week, start_time, program_id)',
+      )
+      .eq('student_id', studentId),
+    supabase
+      .from('portal_admin_household_overview')
+      .select('*')
+      .eq('id', student.householdId)
+      .maybeSingle(),
+  ]);
+  if (enrollRes.error) return { detail: null, error: VIEWER_LOAD_ERROR };
+
+  const enrollments: ViewerStudentProfile['enrollments'] = (enrollRes.data ?? []).map((e: any) => ({
+    id: e.id,
+    status: e.status,
+    season: e.season,
+    enrolledOn: e.enrolled_on,
+    droppedOn: e.dropped_on,
+    classId: e.class_id,
+    className: e.portal_classes?.name ?? 'Unknown class',
+    classCategory: e.portal_classes?.category ?? null,
+    dayOfWeek: e.portal_classes?.day_of_week ?? null,
+    startTime: e.portal_classes?.start_time ?? null,
+    programId: e.portal_classes?.program_id ?? '',
+  }));
+
+  // Same order as the family screen: active first, then alphabetical. A dropped
+  // class still belongs here — it explains an attendance gap — but not at the
+  // top.
+  enrollments.sort((a, b) => {
+    if ((a.status === 'active') !== (b.status === 'active')) {
+      return a.status === 'active' ? -1 : 1;
+    }
+    return a.className.localeCompare(b.className);
+  });
+
+  return {
+    detail: {
+      student,
+      household: householdRes.data ? mapHousehold(householdRes.data) : null,
+      enrollments,
+    },
+    error: null,
+  };
+};
+
+/**
  * Send one family a note nobody else can read.
  *
  * The `household_id` is what makes it private, and it is enforced by RLS
@@ -571,12 +821,26 @@ export const NO_DIVISION = 'none';
  * different job.
  */
 export type AccessFilter = 'any' | 'signed-up' | 'not-linked' | 'not-signed-up';
+
+/**
+ * The same cut over DANCERS, which the Families tab has had since v48 and the
+ * Dancers tab never had.
+ *
+ * 'signed-up' is "can this child be seen in the portal at all", by their own
+ * login or a parent's — the question the studio asks. 'own-login' is the much
+ * smaller set with a login of their own, which is a different job (they are the
+ * ones who can be told something directly). 'no-account' is the chase list.
+ */
+export type StudentAccessFilter = 'any' | 'signed-up' | 'own-login' | 'no-account';
 export type ActivityFilter = 'any' | 'active' | 'inactive';
 
 export interface ViewerFilters {
   /** Category slugs, plus possibly NO_DIVISION. Empty = no division filter. */
   divisions: string[];
   access: AccessFilter;
+  /** The dancer list's own access cut. Separate from `access` because the two
+   *  lists mean different things by the word and share this type. */
+  dancerAccess: StudentAccessFilter;
   activity: ActivityFilter;
   /** 0–6, or null for any day. */
   dayOfWeek: number | null;
@@ -585,13 +849,18 @@ export interface ViewerFilters {
 export const EMPTY_FILTERS: ViewerFilters = {
   divisions: [],
   access: 'any',
+  dancerAccess: 'any',
   activity: 'any',
   dayOfWeek: null,
 };
 
 /** True when no filter is narrowing anything — used to offer a "clear" button. */
 export const filtersAreEmpty = (f: ViewerFilters): boolean =>
-  f.divisions.length === 0 && f.access === 'any' && f.activity === 'any' && f.dayOfWeek === null;
+  f.divisions.length === 0 &&
+  f.access === 'any' &&
+  f.dancerAccess === 'any' &&
+  f.activity === 'any' &&
+  f.dayOfWeek === null;
 
 /** Add or remove one chip, since these rows are multi-select. */
 export const toggleDivision = (divisions: string[], value: string): string[] =>
@@ -627,6 +896,13 @@ export const householdPasses = (h: ViewerHousehold, query: string, f: ViewerFilt
 export const studentPasses = (s: ViewerStudent, query: string, f: ViewerFilters): boolean => {
   if (!studentMatches(s, query)) return false;
   if (!matchesDivisions(s.categories, f.divisions)) return false;
+  const own = s.ownLogins ?? 0;
+  const family = s.householdLogins ?? 0;
+  // "Signed up" means SOMEBODY can see this child — their own login or a
+  // parent's. A dancer whose parent signed up is not waiting to be chased.
+  if (f.dancerAccess === 'signed-up' && own === 0 && family === 0) return false;
+  if (f.dancerAccess === 'own-login' && own === 0) return false;
+  if (f.dancerAccess === 'no-account' && (own > 0 || family > 0)) return false;
   if (f.activity === 'active' && s.status !== 'active') return false;
   if (f.activity === 'inactive' && s.status === 'active') return false;
   return true;

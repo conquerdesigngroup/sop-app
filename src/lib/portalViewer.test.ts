@@ -2,10 +2,17 @@ import {
   ViewerHousehold,
   ViewerStudent,
   ACCESS_BADGE,
+  STUDENT_ACCESS_BADGE,
   accessLabel,
   ageFrom,
   classMatches,
+  familyLabel,
   householdMatches,
+  householdSubtitle,
+  householdTitle,
+  studentAccessIsKnown,
+  studentAccessLabel,
+  studentFamilyName,
   studentFullName,
   studentMatches,
 } from './portalViewer';
@@ -22,6 +29,8 @@ const household = (over: Partial<ViewerHousehold> = {}): ViewerHousehold => ({
   enrollmentCount: 4,
   categories: ['allstars'],
   lastNoteAt: null,
+  accountName: null,
+  accountEmail: null,
   ...over,
 });
 
@@ -38,6 +47,10 @@ const student = (over: Partial<ViewerStudent> = {}): ViewerStudent => ({
   householdEmail: 'brittknee58@yahoo.com',
   enrollmentCount: 2,
   categories: ['allstars'],
+  ownLogins: 0,
+  householdLogins: 0,
+  ownLoginEmail: null,
+  householdAccountName: null,
   ...over,
 });
 
@@ -176,6 +189,142 @@ describe('studentFullName', () => {
   });
 });
 
+// ------------------------------------------------------------------- names
+
+/**
+ * The complaint these cover: "I can only see their last name."
+ *
+ * Measured on this database 2026-09-17 — 341 of 349 households have a
+ * single-word display_name, because the import writes the Enrolio guardian
+ * column and that column holds a surname. Meanwhile all 58 client profiles
+ * carry a first AND a last name, one join away, which no staff screen read.
+ */
+describe('familyLabel', () => {
+  it('names a bare surname as a family rather than as a person', () => {
+    expect(familyLabel({ name: 'Kettenbrink', email: 'brittknee58@yahoo.com' }))
+      .toBe('Kettenbrink family');
+  });
+
+  it('leaves a name somebody actually typed alone', () => {
+    expect(familyLabel({ name: 'The Kettenbrinks', email: 'x@y.com' })).toBe('The Kettenbrinks');
+    expect(familyLabel({ name: 'Brittany Kettenbrink', email: 'x@y.com' }))
+      .toBe('Brittany Kettenbrink');
+  });
+
+  it('does not turn a stand-in email address into a family', () => {
+    // mapHousehold falls back to the email when Enrolio carries no name at
+    // all; "brittknee58@yahoo.com family" would be nonsense.
+    expect(familyLabel({ name: 'brittknee58@yahoo.com', email: 'brittknee58@yahoo.com' }))
+      .toBe('brittknee58@yahoo.com');
+    expect(familyLabel({ name: '', email: 'brittknee58@yahoo.com' }))
+      .toBe('brittknee58@yahoo.com');
+  });
+});
+
+describe('householdTitle', () => {
+  it('is the name they signed up with, once they have', () => {
+    expect(householdTitle(household({ accountName: 'Brittany Kettenbrink' })))
+      .toBe('Brittany Kettenbrink');
+  });
+
+  it('falls back to the family, never to half a name', () => {
+    expect(householdTitle(household())).toBe('Kettenbrink family');
+  });
+
+  it('is unchanged when v57 has not been applied', () => {
+    // account_name is simply absent from the response, which maps to null.
+    expect(householdTitle(household({ accountName: null }))).toBe('Kettenbrink family');
+  });
+});
+
+describe('householdSubtitle', () => {
+  it('says nothing when the surname is already in the name above it', () => {
+    expect(householdSubtitle(household({ accountName: 'Brittany Kettenbrink' }))).toBeNull();
+  });
+
+  it('names the roster surname when the parent does not share it', () => {
+    // The row somebody is on the phone about: the account is Brittany Ruiz,
+    // the children are filed under Kettenbrink.
+    expect(householdSubtitle(household({ accountName: 'Brittany Ruiz' })))
+      .toBe('Kettenbrink family');
+  });
+
+  it('says nothing at all when nobody has signed up', () => {
+    expect(householdSubtitle(household())).toBeNull();
+  });
+
+  it('sees through however the studio wrote the family name', () => {
+    // "Boateng family", "The Boatengs" and "Boateng" are one fact about
+    // Marcus Boateng, and a line repeating any of them under his name is noise.
+    expect(householdSubtitle(household({
+      name: 'Kettenbrink family', accountName: 'Brittany Kettenbrink',
+    }))).toBeNull();
+    expect(householdSubtitle(household({
+      name: 'The Kettenbrink Family', accountName: 'Brittany Kettenbrink',
+    }))).toBeNull();
+  });
+});
+
+describe('studentFamilyName', () => {
+  it('names the parent instead of repeating the child’s own surname', () => {
+    expect(studentFamilyName(student({ householdAccountName: 'Brittany Kettenbrink' })))
+      .toBe('Brittany Kettenbrink');
+  });
+
+  it('falls back to the family label', () => {
+    expect(studentFamilyName(student())).toBe('Kettenbrink family');
+  });
+});
+
+// ----------------------------------------------------------- dancer access
+
+describe('studentAccessLabel', () => {
+  it('reads as her own login when she has one, even if her parents also signed up', () => {
+    // The badge answers "what does SHE have"; the family's own access is on
+    // their record, one tap away.
+    expect(studentAccessLabel(student({ ownLogins: 1, householdLogins: 2 })))
+      .toEqual({ text: 'Own login', state: 'own' });
+  });
+
+  it('reads as the family’s when a parent signed up and she did not', () => {
+    expect(studentAccessLabel(student({ householdLogins: 1 })))
+      .toEqual({ text: 'Family signed up', state: 'family' });
+  });
+
+  it('says nobody can see her when nobody can', () => {
+    expect(studentAccessLabel(student())).toEqual({ text: 'No account', state: 'none' });
+  });
+
+  it('gives every state a badge colour', () => {
+    expect(STUDENT_ACCESS_BADGE.own).toBe('success');
+    expect(STUDENT_ACCESS_BADGE.family).toBe('info');
+    expect(STUDENT_ACCESS_BADGE.none).toBe('default');
+  });
+});
+
+describe('studentAccessIsKnown', () => {
+  /**
+   * The failure this prevents: with v57 unapplied the counts are absent, and
+   * reading absent as zero would badge all 395 dancers "No account" — a screen
+   * confidently telling the owner something false. The lists show no badge and
+   * no filter at all in that case.
+   */
+  it('is false when the columns are not in the response', () => {
+    expect(studentAccessIsKnown([
+      student({ ownLogins: null, householdLogins: null }),
+      student({ ownLogins: null, householdLogins: null }),
+    ])).toBe(false);
+  });
+
+  it('is true as soon as one row carries a count, zero included', () => {
+    expect(studentAccessIsKnown([student({ ownLogins: 0, householdLogins: 0 })])).toBe(true);
+  });
+
+  it('is false for an empty list, because nothing has been proved', () => {
+    expect(studentAccessIsKnown([])).toBe(false);
+  });
+});
+
 // --------------------------------------------------------------- filtering
 
 import {
@@ -286,6 +435,36 @@ describe('studentPasses', () => {
     expect(studentPasses(gone, '', filters({ activity: 'inactive' }))).toBe(true);
     expect(studentPasses(gone, '', filters({ activity: 'active' }))).toBe(false);
   });
+
+  /**
+   * The cut the Families tab has had since v48, asked about children. 71 of
+   * 395 dancers are visible to somebody; one has a login of her own.
+   */
+  describe('by who can see her', () => {
+    const own = student({ ownLogins: 1, householdLogins: 1 });
+    const viaParent = student({ ownLogins: 0, householdLogins: 1 });
+    const nobody = student({ ownLogins: 0, householdLogins: 0 });
+
+    it('counts a parent’s login as signed up — she is not on the chase list', () => {
+      expect(studentPasses(viaParent, '', filters({ dancerAccess: 'signed-up' }))).toBe(true);
+      expect(studentPasses(viaParent, '', filters({ dancerAccess: 'no-account' }))).toBe(false);
+    });
+
+    it('keeps "own login" to the dancers who actually have one', () => {
+      expect(studentPasses(own, '', filters({ dancerAccess: 'own-login' }))).toBe(true);
+      expect(studentPasses(viaParent, '', filters({ dancerAccess: 'own-login' }))).toBe(false);
+    });
+
+    it('finds the children nobody can see at all', () => {
+      expect(studentPasses(nobody, '', filters({ dancerAccess: 'no-account' }))).toBe(true);
+      expect(studentPasses(nobody, '', filters({ dancerAccess: 'signed-up' }))).toBe(false);
+    });
+
+    it('lets everyone through when the chip row is clear', () => {
+      expect(studentPasses(nobody, '', filters())).toBe(true);
+      expect(studentPasses(own, '', filters())).toBe(true);
+    });
+  });
 });
 
 describe('classPasses', () => {
@@ -318,6 +497,9 @@ describe('filtersAreEmpty', () => {
     expect(filtersAreEmpty(EMPTY_FILTERS)).toBe(true);
     expect(filtersAreEmpty(filters({ divisions: ['tnt'] }))).toBe(false);
     expect(filtersAreEmpty(filters({ access: 'signed-up' }))).toBe(false);
+    // The dancer list's own access cut counts too — without this the Clear
+    // button disappears while a chip is still narrowing the list.
+    expect(filtersAreEmpty(filters({ dancerAccess: 'no-account' }))).toBe(false);
     expect(filtersAreEmpty(filters({ activity: 'inactive' }))).toBe(false);
     // Sunday again: 0 is a real choice, not an absent one.
     expect(filtersAreEmpty(filters({ dayOfWeek: 0 }))).toBe(false);

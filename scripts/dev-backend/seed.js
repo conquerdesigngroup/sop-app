@@ -440,7 +440,13 @@ const portal_admin_household_overview = FAMILY_NAMES.map((last, i) => ({
   id: `00000000-0000-4000-a200-${String(i + 1).padStart(12, '0')}`,
   external_account_id: `ACC-${2000 + i}`,
   primary_email: `${last.toLowerCase()}@localhost`,
-  display_name: `${last} family`,
+  // A BARE SURNAME, because that is what production holds: the roster import
+  // writes `coalesce(guardian_name, student_last_name)` and the Enrolio export
+  // puts a surname in that column — 341 of the 349 real households have a
+  // single-word display_name. A seed that wrote "Alvarez family" here would
+  // have the app's own name-formatting code do nothing and prove nothing.
+  // One family (i === 5) carries a written-out name, to cover the other branch.
+  display_name: i === 5 ? `The ${last}s` : last,
   status: i === 7 ? 'inactive' : 'active',
   created_at: iso(-300 + i * 10),
   student_count: (i % 3) + 1,
@@ -449,15 +455,26 @@ const portal_admin_household_overview = FAMILY_NAMES.map((last, i) => ({
   categories: i % 2 === 0 ? ['academy', 'tnt'] : ['allstars', 'academy'],
   last_note_at: i % 5 === 0 ? iso(-12) : null,
   unlinked_accounts: i % 4 === 0 ? 1 : 0,
+  // v57. The name on the account, which is what the family rows and the family
+  // record now head themselves with. Null for the families nobody has signed up
+  // for, so the audit sees both branches — and one deliberate case where the
+  // parent's surname is NOT the family's, which is the only time the row
+  // prints a second line.
+  account_name: i % 4 === 0 ? null : `${['Dana', 'Marcus', 'Priya', 'Tom', 'Elin', 'Sam'][i % 6]} ${i === 3 ? 'Okafor' : last}`,
+  account_email: i % 4 === 0 ? null : `${last.toLowerCase()}@localhost`,
 }));
 
 const portal_admin_student_overview = GIVEN_NAMES.map((first, i) => {
   const household = portal_admin_household_overview[i % portal_admin_household_overview.length];
+  const surname = FAMILY_NAMES[i % FAMILY_NAMES.length];
   return {
     id: `00000000-0000-4000-a300-${String(i + 1).padStart(12, '0')}`,
     first_name: first,
-    last_name: household.display_name.replace(' family', ''),
-    display_name: `${first} ${household.display_name.replace(' family', '')}`,
+    last_name: surname,
+    // A real nickname, not the child's own name back again: what the studio
+    // records here is "Bug", and the screens print it in quotes next to the
+    // full name. Empty for most of them, which is the common case.
+    display_name: i % 4 === 1 ? ['Bug', 'Tots', 'Junior', 'Pip'][Math.floor(i / 4) % 4] : null,
     date_of_birth: dateOnly(-365 * (7 + (i % 9))),
     status: 'active',
     external_student_id: `STU-${3000 + i}`,
@@ -466,6 +483,16 @@ const portal_admin_student_overview = GIVEN_NAMES.map((first, i) => {
     primary_email: household.primary_email,
     enrollment_count: (i % 3) + 1,
     categories: i % 3 === 0 ? ['allstars', 'academy', 'tnt'] : ['academy'],
+    // v57. All three access states are represented, because the dancer list
+    // badges and filters on them and an audit of one state proves nothing
+    // about the row widths of the other two.
+    own_logins: i % 5 === 0 ? 1 : 0,
+    // A dancer's own login IS a household member row, so a child with one can
+    // never sit in a family the view counts as having none. Deriving it keeps
+    // the fixture from teaching a shape the database cannot produce.
+    household_logins: Math.max(household.linked_logins, i % 5 === 0 ? 1 : 0),
+    own_login_email: i % 5 === 0 ? `${first.toLowerCase()}@localhost` : null,
+    household_account_name: household.account_name,
   };
 });
 
@@ -486,6 +513,61 @@ const portal_admin_class_overview = portal_classes.map((c, i) => ({
   external_class_id: c.external_class_id,
   active_enrollments: 4 + (i % 12),
 }));
+
+/**
+ * The two base tables behind the overview views.
+ *
+ * The class roster reads portal_enrollments and embeds the student and their
+ * household — the real tables, not the admin views — so without these it drew a
+ * register of blank names. Derived from the views rather than written twice, so
+ * a family cannot be called one thing on one screen and something else on
+ * another.
+ */
+const portal_households = portal_admin_household_overview.map((h) => ({
+  id: h.id,
+  external_account_id: h.external_account_id,
+  primary_email: h.primary_email,
+  display_name: h.display_name,
+  status: h.status,
+  created_at: h.created_at,
+}));
+
+const portal_students = portal_admin_student_overview.map((s) => ({
+  id: s.id,
+  household_id: s.household_id,
+  first_name: s.first_name,
+  last_name: s.last_name,
+  display_name: s.display_name,
+  date_of_birth: s.date_of_birth,
+  status: s.status,
+  external_student_id: s.external_student_id,
+}));
+
+/**
+ * Who is in which class, for the two screens that list a dancer's classes —
+ * the family record and the dancer's own.
+ *
+ * Without these both screens only ever drew "Not enrolled in any class", so the
+ * row layout they exist for (class name, day and time, a Dropped badge) was
+ * never once measured by the audit. One dancer is deliberately given a dropped
+ * enrollment: those stay on the screen because they explain an attendance
+ * history, and the badge that says so is the widest thing on the row.
+ */
+const portal_enrollments = portal_admin_student_overview.flatMap((s, i) =>
+  Array.from({ length: (i % 3) + 1 }, (_, n) => {
+    const klass = portal_classes[(i * 2 + n) % portal_classes.length];
+    const dropped = i % 4 === 2 && n === 0;
+    return {
+      id: `00000000-0000-4000-a400-${String(i * 4 + n + 1).padStart(12, '0')}`,
+      student_id: s.id,
+      class_id: klass.id,
+      status: dropped ? 'dropped' : 'active',
+      season: '2026',
+      enrolled_on: dateOnly(-200),
+      dropped_on: dropped ? dateOnly(-30) : null,
+    };
+  }),
+);
 
 const portal_attendance_gaps = portal_class_sessions.slice(0, 4).map((s) => ({
   class_id: s.class_id,
@@ -525,6 +607,9 @@ const tables = {
   portal_admin_household_overview,
   portal_admin_student_overview,
   portal_admin_class_overview,
+  portal_households,
+  portal_students,
+  portal_enrollments,
   portal_attendance_gaps,
 };
 

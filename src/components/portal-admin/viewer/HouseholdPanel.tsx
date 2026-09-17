@@ -22,11 +22,15 @@ import { PortalProgram } from '../../../types';
 import {
   ViewerHouseholdDetail,
   ACCESS_BADGE,
+  STUDENT_ACCESS_BADGE,
   accessLabel,
   ageFrom,
   deleteHouseholdNote,
+  familyLabel,
+  householdTitle,
   loadHouseholdDetail,
   sendHouseholdNote,
+  studentAccessLabel,
   studentFullName,
 } from '../../../lib/portalViewer';
 import { useAutoFocus } from '../shared';
@@ -78,7 +82,9 @@ const HouseholdPanel: React.FC<{
   /** Where Back actually goes — a family can be opened from a class roster. */
   backLabel: string;
   onBack: () => void;
-}> = ({ householdId, programs, canSendNotes, today, backLabel, onBack }) => {
+  /** A dancer card opens that child's own record. */
+  onOpenStudent: (id: string) => void;
+}> = ({ householdId, programs, canSendNotes, today, backLabel, onBack, onOpenStudent }) => {
   const { isMobileOrTablet } = useResponsive();
   const toast = useToast();
   const { confirm, confirmDialog } = useConfirm();
@@ -224,9 +230,13 @@ const HouseholdPanel: React.FC<{
           margin: 0,
           overflowWrap: 'anywhere',
         }}>
-          {household.name}
+          {/* The name of the person who signed up, where the studio has it.
+              Until v57 this heading was the household's display_name, which is
+              a bare surname for 341 of the 349 families — so the record of a
+              family who had registered, whose full name is one join away in
+              their profile, was headed "Kettenbrink". */}
+          {householdTitle(household)}
         </h2>
-
         <ChipRow>
           <Badge variant={ACCESS_BADGE[access.state]} size="sm">{access.text}</Badge>
           <CategoryChips categories={household.categories} />
@@ -243,6 +253,23 @@ const HouseholdPanel: React.FC<{
           marginTop: theme.spacing.md,
         }}>
           <DetailField label="Email">{household.email}</DetailField>
+          {/* Only when it differs: "Change email" on the accounts page moves an
+              account to a new address without moving the roster row it came
+              from, and a family signing in as something other than the address
+              on file is the whole reason that button exists. */}
+          {household.accountEmail &&
+            household.accountEmail.toLowerCase() !== household.email.toLowerCase() && (
+            <DetailField label="Signs in as">{household.accountEmail}</DetailField>
+          )}
+          {/* The surname the roster files them under, when the heading above is
+              somebody's actual name. Not a second copy of the heading, and not
+              a second copy of the email either — both of which is what an
+              unconditional field would be for a family nobody has signed up
+              for, since the heading IS the family name in that case. */}
+          {familyLabel(household) !== householdTitle(household) &&
+            familyLabel(household) !== household.email && (
+            <DetailField label="Family name">{familyLabel(household)}</DetailField>
+          )}
           <DetailField label="Enrolio account">{household.externalAccountId ?? '—'}</DetailField>
           {/* students.length, NOT household.studentCount: the overview view
                counts only ACTIVE children while the list below shows every
@@ -364,22 +391,49 @@ const HouseholdPanel: React.FC<{
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {students.map(({ student, enrollments }) => {
             const age = ageFrom(student.dateOfBirth, today);
+            const access = studentAccessLabel(student);
+            const accessKnown = student.ownLogins !== null || student.householdLogins !== null;
             return (
               <Card key={student.id} padding="sm">
-                <div style={{
-                  ...theme.typography.body,
-                  fontFamily: theme.fonts.primary,
-                  fontWeight: 600,
-                  color: theme.colors.txt.primary,
-                  overflowWrap: 'anywhere',
-                }}>
+                {/* The name is a button, the classes under it are not: a whole
+                    card that navigates would swallow a tap meant for reading.
+                    One control, and it is the child's own name — which is what
+                    anybody would try to tap to see more about them. */}
+                <button
+                  type="button"
+                  onClick={() => onOpenStudent(student.id)}
+                  aria-label={`Open ${studentFullName(student)}`}
+                  style={{
+                    appearance: 'none',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    margin: 0,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    color: 'inherit',
+                    minWidth: 0,
+                    ...theme.typography.body,
+                    fontFamily: theme.fonts.primary,
+                    fontWeight: 600,
+                    overflowWrap: 'anywhere',
+                    textDecoration: 'underline',
+                    textDecorationColor: theme.colors.bdr.secondary,
+                    textUnderlineOffset: '3px',
+                  }}
+                >
                   {studentFullName(student)}
-                  {student.displayName && (
+                  {/* The nickname only when it IS one. Some imported children
+                      carry their own full name in display_name, and printing
+                      it back in quotes says nothing. */}
+                  {student.displayName &&
+                    student.displayName.trim().toLowerCase() !== studentFullName(student).toLowerCase() && (
                     <span style={{ color: theme.colors.txt.tertiary, fontWeight: 400 }}>
                       {' '}“{student.displayName}”
                     </span>
                   )}
-                </div>
+                </button>
                 <div style={{
                   ...theme.typography.captionSmall,
                   fontFamily: theme.fonts.mono,
@@ -390,9 +444,17 @@ const HouseholdPanel: React.FC<{
                 </div>
                 {/* Withdrawn children stay on this screen — they explain an
                     attendance history that would otherwise have no owner — but
-                    they must be labelled, or the count above looks wrong. */}
-                {student.status !== 'active' && (
-                  <ChipRow><Badge variant="warning" size="sm">Inactive</Badge></ChipRow>
+                    they must be labelled, or the count above looks wrong.
+                    A dancer with a login of their own is marked here too: it
+                    is the difference between a child the parents can see and
+                    one who can sign in for themselves. */}
+                {(student.status !== 'active' || (accessKnown && access.state === 'own')) && (
+                  <ChipRow>
+                    {accessKnown && access.state === 'own' && (
+                      <Badge variant={STUDENT_ACCESS_BADGE.own} size="sm">{access.text}</Badge>
+                    )}
+                    {student.status !== 'active' && <Badge variant="warning" size="sm">Inactive</Badge>}
+                  </ChipRow>
                 )}
 
                 {enrollments.length === 0 ? (
@@ -463,7 +525,7 @@ const HouseholdPanel: React.FC<{
       <Modal
         isOpen={composing}
         onClose={() => setComposing(false)}
-        title={`Note to ${household.name}`}
+        title={`Note to ${householdTitle(household)}`}
         size="md"
         footer={
           <>

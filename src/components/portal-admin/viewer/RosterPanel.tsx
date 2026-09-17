@@ -7,6 +7,7 @@ import {
   ViewerClass,
   ViewerRosterRow,
   ageFrom,
+  familyLabel,
   loadClassRoster,
 } from '../../../lib/portalViewer';
 import { CategoryChips, ChipRow, ResultCount, RowSub, RowTitle, ViewerRow } from './ViewerShared';
@@ -27,9 +28,12 @@ import { CategoryChips, ChipRow, ResultCount, RowSub, RowTitle, ViewerRow } from
 const RosterPanel: React.FC<{
   klass: ViewerClass;
   onBack: () => void;
+  /** A name on a register opens that dancer's own record. */
+  onOpenStudent: (id: string) => void;
+  /** The fallback for a row whose student id did not survive the join. */
   onOpenHousehold: (id: string) => void;
   today: Date;
-}> = ({ klass, onBack, onOpenHousehold, today }) => {
+}> = ({ klass, onBack, onOpenStudent, onOpenHousehold, today }) => {
   const [rows, setRows] = useState<ViewerRosterRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,8 +131,11 @@ const RosterPanel: React.FC<{
           return (
             <ViewerRow
               key={r.enrollmentId}
-              label={`Open the household of ${r.studentName}`}
-              onClick={() => onOpenHousehold(r.householdId)}
+              // The dancer, not the family: the question that brings anyone to
+              // a roster is about the child whose name they tapped. The family
+              // is one button away on that screen.
+              label={r.studentId ? `Open ${r.studentName}` : `Open the household of ${r.studentName}`}
+              onClick={() => (r.studentId ? onOpenStudent(r.studentId) : onOpenHousehold(r.householdId))}
             >
               <RowTitle>
                 {r.studentName}
@@ -136,7 +143,12 @@ const RosterPanel: React.FC<{
                   <span style={{ color: theme.colors.txt.tertiary, fontWeight: 400 }}> · {age}</span>
                 )}
               </RowTitle>
-              <RowSub>{r.householdName}</RowSub>
+              {/* "Kettenbrink" under "Ava Kettenbrink" told the reader nothing.
+                  The roster query does not carry the parent's name — that is
+                  the household overview's join, and this is a register of 1,111
+                  enrollments — so the family reads as a family here, and the
+                  person's name is on the record one tap away. */}
+              <RowSub>{familyLabel({ name: r.householdName, email: r.householdEmail })}</RowSub>
               {r.householdName !== r.householdEmail && <RowSub mono>{r.householdEmail}</RowSub>}
               {r.status !== 'active' && (
                 <ChipRow><Badge variant="warning" size="sm">{r.status}</Badge></ChipRow>

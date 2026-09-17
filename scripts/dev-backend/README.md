@@ -64,7 +64,7 @@ the audit's own notes.
 | | |
 |---|---|
 | `index.js` | the server: `/rest/v1`, `/auth/v1`, `/storage/v1`, `/functions/v1` |
-| `pgrest.js` | the slice of PostgREST the app speaks — filters, order, limit, `.single()`, one-level embeds |
+| `pgrest.js` | the slice of PostgREST the app speaks — filters, order, limit, `.single()`, embeds (including `!inner` and one nested inside another, which is what the class roster asks for) |
 | `seed.js` | the data. All invented; none of it copied from production |
 
 ## Adding to it
