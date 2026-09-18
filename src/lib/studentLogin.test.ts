@@ -1,5 +1,5 @@
 import {
-  normaliseEmail, isValidEmail, dancerBlockedReason, emailBlockedReason,
+  normaliseEmail, isValidEmail, dancerBlockedReason, emailBlockedReason, DANCER_LOGIN_MIN_AGE,
 } from './studentLogin';
 import { ViewerStudent } from './portalViewer';
 
@@ -48,13 +48,46 @@ describe('dancerBlockedReason', () => {
   });
 
   it('refuses a dancer who already has one, rather than letting the server 400', () => {
-    expect(dancerBlockedReason(dancer(), new Set(['stu-1']))).toMatch(/already has/);
+    const blocked = dancerBlockedReason(dancer(), new Set(['stu-1']));
+    expect(blocked?.badge).toBe('Has a login');
+    expect(blocked?.reason).toMatch(/already has/);
   });
 
   // A row pointing at an archived dancer can never link, so it would create a
   // login that silently never works.
   it('refuses an archived dancer', () => {
-    expect(dancerBlockedReason(dancer({ status: 'inactive' }), new Set())).toMatch(/archived/);
+    const blocked = dancerBlockedReason(dancer({ status: 'inactive' }), new Set());
+    expect(blocked?.badge).toBe('Archived');
+    expect(blocked?.reason).toMatch(/archived/);
+  });
+
+  // The Privacy Policy promises dancer logins are 13+, and v58 makes the RPC
+  // refuse anyone younger. These pin the picker to the same line, on a fixed
+  // day so the tests do not age into passing.
+  describe(`the ${DANCER_LOGIN_MIN_AGE}+ rule`, () => {
+    const today = new Date(2026, 8, 18); // 18 September 2026, local
+
+    it('refuses a dancer under 13, and says so on the badge rather than "Has a login"', () => {
+      const blocked = dancerBlockedReason(dancer({ dateOfBirth: '2016-03-01' }), new Set(), today);
+      expect(blocked?.badge).toBe('Under 13');
+      expect(blocked?.reason).toMatch(/13 and up/);
+    });
+
+    it('refuses the day before a 13th birthday and allows the day itself', () => {
+      expect(dancerBlockedReason(dancer({ dateOfBirth: '2013-09-19' }), new Set(), today)?.badge)
+        .toBe('Under 13');
+      expect(dancerBlockedReason(dancer({ dateOfBirth: '2013-09-18' }), new Set(), today)).toBeNull();
+    });
+
+    it('refuses a dancer with no date of birth, because nothing shows they are old enough', () => {
+      const blocked = dancerBlockedReason(dancer({ dateOfBirth: null }), new Set(), today);
+      expect(blocked?.badge).toBe('No birth date');
+    });
+
+    it('still reports an existing login first, whatever the age', () => {
+      expect(dancerBlockedReason(dancer({ dateOfBirth: '2016-03-01' }), new Set(['stu-1']), today)?.badge)
+        .toBe('Has a login');
+    });
   });
 });
 

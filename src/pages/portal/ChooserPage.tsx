@@ -4,6 +4,7 @@ import { BRAND_MARK, getThemeColors, theme } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes } from '../../lib/portal';
+import { LEGAL_PATHS } from '../../lib/legal';
 import InstallAppGuide from '../../components/InstallAppGuide';
 import ThemeToggle from '../../components/ThemeToggle';
 import RefractedGlassField from '../../components/RefractedGlassField';
@@ -171,6 +172,14 @@ const TeamIcon = (
   </svg>
 );
 
+// Padded so a thumb has more than one line of 13px text to land on.
+const legalLinkStyle: React.CSSProperties = {
+  color: 'inherit',
+  textDecoration: 'underline',
+  textUnderlineOffset: '2px',
+  padding: '4px 2px',
+};
+
 const ChooserPage: React.FC = () => {
   const { isMobileOrTablet } = useResponsive();
 
@@ -256,18 +265,46 @@ const ChooserPage: React.FC = () => {
 
       <InstallAppGuide />
 
-      <p
-        style={{
-          ...theme.typography.caption,
-          fontFamily: theme.fonts.mono,
-          color: theme.colors.txt.tertiary,
-          textAlign: 'center',
-          margin: 0,
-          maxWidth: '440px',
-        }}
-      >
-        You are your only limit
-      </p>
+      {/* The tagline and the legal links are one group with their own small
+          gap, for the same reason as the logo and toggle above: as siblings
+          they would each take the page's 32/48px gap. */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+        <p
+          style={{
+            ...theme.typography.caption,
+            fontFamily: theme.fonts.mono,
+            color: theme.colors.txt.tertiary,
+            textAlign: 'center',
+            margin: 0,
+            maxWidth: '440px',
+          }}
+        >
+          You are your only limit
+        </p>
+
+        {/* The front door is where a privacy policy has to be findable
+            without an account. Centred, so it wraps (CLAUDE.md's third rule). */}
+        <nav
+          aria-label="Legal"
+          style={{
+            ...theme.typography.caption,
+            fontFamily: theme.fonts.mono,
+            color: theme.colors.txt.tertiary,
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            // Baseline, not the default stretch: on a touch screen index.css
+            // makes each link a 44px box, and the dot between them would
+            // otherwise sit at the top of its own box, above the words.
+            alignItems: 'baseline',
+            gap: '4px 12px',
+          }}
+        >
+          <Link to={LEGAL_PATHS.privacy} style={legalLinkStyle}>Privacy</Link>
+          <span aria-hidden="true">·</span>
+          <Link to={LEGAL_PATHS.terms} style={legalLinkStyle}>Terms</Link>
+        </nav>
+      </div>
 
     </div>
   );

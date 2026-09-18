@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { theme } from '../../theme';
 import { useResponsive } from '../../hooks/useResponsive';
 import { Button, Card, Divider, Input } from '../ui';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
+import { LEGAL_PATHS } from '../../lib/legal';
 import { ProfileCardProps } from '../../lib/profileCards';
+
+const legalLink: React.CSSProperties = {
+  color: 'inherit',
+  textDecoration: 'underline',
+  textUnderlineOffset: '2px',
+};
 
 /**
  * Email, password and the way out.
@@ -190,6 +197,19 @@ const AccountCard: React.FC<ProfileCardProps> = ({ email }) => {
           </div>
         </form>
       )}
+
+      {/* Last, under the form when it is open: where a family goes looking
+          for anything about their account, and never in the way of it. */}
+      <p style={{
+        ...theme.typography.captionSmall,
+        fontFamily: theme.fonts.primary,
+        color: theme.colors.txt.tertiary,
+        margin: `${theme.spacing.md} 0 0`,
+      }}>
+        <Link to={LEGAL_PATHS.privacy} style={legalLink}>Privacy Policy</Link>
+        {' · '}
+        <Link to={LEGAL_PATHS.terms} style={legalLink}>Terms of Use</Link>
+      </p>
     </Card>
   );
 };

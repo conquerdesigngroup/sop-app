@@ -73,6 +73,12 @@ interface RegisterInput {
   password: string;
   firstName: string;
   lastName: string;
+  /**
+   * LEGAL_VERSION of the Terms and Privacy Policy shown beside the button.
+   * Recorded in the audit log only; the server never refuses a signup without
+   * it, because an old cached app would then fail to register at all.
+   */
+  acceptedTermsVersion?: string;
 }
 
 const invokeSignup = async (body: Record<string, unknown>): Promise<boolean> => {

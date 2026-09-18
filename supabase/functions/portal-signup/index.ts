@@ -103,6 +103,8 @@ interface BaseBody {
   password?: string;
   firstName?: string;
   lastName?: string;
+  /** LEGAL_VERSION (src/lib/legal.ts) of the terms shown beside Create account. */
+  acceptedTermsVersion?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -216,6 +218,15 @@ Deno.serve(async (req: Request) => {
       }
       const firstName = (body.firstName ?? '').trim().slice(0, 80);
       const lastName = (body.lastName ?? '').trim().slice(0, 80);
+      // Which Terms of Use / Privacy Policy the family agreed to, for the audit
+      // row below. Recorded, never required: a cached app from before the
+      // notice existed sends nothing, and refusing it would stop that family
+      // signing up at all. null in the log means exactly that.
+      const termsVersion =
+        typeof body.acceptedTermsVersion === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(body.acceptedTermsVersion)
+          ? body.acceptedTermsVersion
+          : null;
 
       defer(
         (async () => {
@@ -366,6 +377,9 @@ Deno.serve(async (req: Request) => {
               // Viewer a fortnight later. False means no ACTIVE household
               // carries this address — the family needs looking up by hand.
               household_linked: !linkErr && !!linkedHousehold,
+              // Audit rows cannot be edited (v29), which is what makes this
+              // the record of what was agreed to.
+              terms_version: termsVersion,
             },
             { id: userId, email, name },
           );

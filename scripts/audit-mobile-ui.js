@@ -112,6 +112,10 @@ const DEVICES = [
 
 const PUBLIC_ROUTES = [
   '/', '/login', '/reset-password', '/portal',
+  // The Privacy Policy and Terms of Use. Long prose with an email address in
+  // it — one unbreakable word — and their own header and notch padding, since
+  // neither Navigation nor PortalLayout draws them.
+  '/privacy', '/terms',
   // The client login build (W1 of CLIENT-AUTH-BUILD.md). These routes only
   // exist when the app was BUILT with REACT_APP_CLIENT_AUTH=true — with the
   // flag off they fall through to the portal home redirect and the audit

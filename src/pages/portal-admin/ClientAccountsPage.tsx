@@ -1019,7 +1019,7 @@ const ClientAccountsPage: React.FC = () => {
                         <span style={{ ...theme.typography.bodySmall, fontFamily: theme.fonts.primary, fontWeight: 600, color: theme.colors.txt.primary, minWidth: 0, overflowWrap: 'anywhere' }}>
                           {studentFullName(s)}
                         </span>
-                        {blocked && <Badge variant="info" size="sm">Has a login</Badge>}
+                        {blocked && <Badge variant="info" size="sm">{blocked.badge}</Badge>}
                         <span style={{ ...theme.typography.caption, fontFamily: theme.fonts.primary, color: theme.colors.txt.tertiary, minWidth: 0, overflowWrap: 'anywhere' }}>
                           {s.householdName}
                           {age !== null && ` · ${age}`}

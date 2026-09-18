@@ -191,7 +191,7 @@ const UpdatesSection: React.FC<{
         isEmpty={rows.length === 0}
         emptyTitle="Nothing posted yet"
         emptyDescription={scope?.classId
-          ? 'Post reminders and announcements for this class. Only families in this class see them.'
+          ? 'Post reminders and announcements for this class. Families in this class can be notified, and every family who can open this section can read them.'
           : 'Post schedule changes, reminders and announcements. Parents see them newest first, pinned at the top.'}
         emptyAction={<Button leftIcon={<PlusIcon />} onClick={startNew}>New info post</Button>}
       >
