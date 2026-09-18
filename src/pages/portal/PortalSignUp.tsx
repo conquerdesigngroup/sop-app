@@ -122,7 +122,7 @@ const PortalSignUp: React.FC = () => {
     }
 
     setBusy(true);
-    const accepted = await register({
+    const result = await register({
       email: email.trim().toLowerCase(),
       password,
       firstName: firstName.trim(),
@@ -130,8 +130,8 @@ const PortalSignUp: React.FC = () => {
     });
     setBusy(false);
 
-    if (!accepted) {
-      setError('Something went wrong on our side. Please try again in a moment.');
+    if (!result.ok) {
+      setError(result.error ?? 'Something went wrong on our side. Please try again in a moment.');
       return;
     }
     setCooldown(RESEND_COOLDOWN_S);
