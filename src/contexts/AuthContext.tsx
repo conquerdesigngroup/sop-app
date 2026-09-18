@@ -411,7 +411,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // A client (parent) hitting the STAFF login gets turned away with the
         // session revoked — their door is /portal/login. Without the signOut
         // the password grant would leave a live session behind a login screen
-        // that just told them "no".
+        // that just told them "no". Local scope ends only the session this
+        // login just made; the default would also sign the parent out of the
+        // portal on every other device they use.
         if (profile && !profileError && profile.role === 'client') {
           // Awaited, and before the signOut: the log RPC attributes the actor
           // from the JWT, which the signOut is about to destroy.
@@ -423,7 +425,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             result: 'failure',
             details: { reason: 'client_role_on_staff_login' },
           });
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
           return false;
         }
 
@@ -485,7 +487,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      await supabase.auth.signOut();
+      // This device only. The default (global) scope also ended the same
+      // account's sessions on its other devices, which carried on with a dead
+      // token until the next refresh signed them out.
+      await supabase.auth.signOut({ scope: 'local' });
       setCurrentUser(null);
     } catch (error) {
       console.error('Logout error:', error);
