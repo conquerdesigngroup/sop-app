@@ -70,6 +70,14 @@ export interface ViewerHousehold {
   accountName: string | null;
   /** The address that account signs in with, which "Change email" can move. */
   accountEmail: string | null;
+  /**
+   * When this family first had an account (v59) — the earliest profile among
+   * the logins that claimed it, or an unclaimed one carrying its address.
+   *
+   * Null when nobody has signed up, and null for every family when v59 has not
+   * been applied — see signupDatesAreKnown.
+   */
+  signedUpAt: string | null;
 }
 
 export interface ViewerStudent {
@@ -193,6 +201,7 @@ const mapHousehold = (r: any): ViewerHousehold => ({
   // before the column existed.
   accountName: r.account_name ?? null,
   accountEmail: r.account_email ?? null,
+  signedUpAt: r.signed_up_at ?? null,
 });
 
 const mapStudent = (r: any): ViewerStudent => ({
@@ -496,6 +505,67 @@ export const studentAccessLabel = (
  */
 export const studentAccessIsKnown = (students: ViewerStudent[]): boolean =>
   students.some(s => s.ownLogins !== null || s.householdLogins !== null);
+
+/**
+ * The same honesty check for sign-up dates. Without v59 every family comes back
+ * with none, and a "Newest sign-ups" sort would silently be the A–Z list again —
+ * a control that does nothing. The Families tab hides it instead.
+ */
+export const signupDatesAreKnown = (households: ViewerHousehold[]): boolean =>
+  households.some(h => h.signedUpAt !== null);
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const sameDay = (a: Date, b: Date): boolean =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/**
+ * When a family signed up, in as few words as a badge can carry.
+ *
+ * "today" and "yesterday" rather than a date, because the point of sorting by
+ * newest is spotting who is new since you last looked, and "18 Sep" makes the
+ * reader work out whether that is today. The year only when it is not this one.
+ *
+ * Read in the device's zone, like every other timestamp on the family record.
+ */
+export const signedUpLabel = (iso: string | null, today: Date): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  if (sameDay(d, today)) return 'today';
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  if (sameDay(d, yesterday)) return 'yesterday';
+  const short = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return d.getFullYear() === today.getFullYear() ? short : `${short} ${d.getFullYear()}`;
+};
+
+/**
+ * 'name' is the order the families arrive in from the database. 'newest-signup'
+ * puts the most recent account first and every family with no account after
+ * them, still in that order — so choosing it with no Access filter shows the
+ * newcomers at the top of the whole list rather than hiding anybody.
+ */
+export type HouseholdSort = 'name' | 'newest-signup';
+
+export const sortHouseholds = (
+  households: ViewerHousehold[],
+  sort: HouseholdSort,
+): ViewerHousehold[] => {
+  if (sort === 'name') return households;
+  const at = (h: ViewerHousehold): number => {
+    const t = h.signedUpAt ? Date.parse(h.signedUpAt) : NaN;
+    return isNaN(t) ? -Infinity : t;
+  };
+  // A copy: the array belongs to the page and the A–Z list is read from it.
+  // Array.prototype.sort is stable, so ties and the no-account tail keep the
+  // name order.
+  return households.slice().sort((a, b) => {
+    const ta = at(a);
+    const tb = at(b);
+    if (ta === tb) return 0;
+    return ta > tb ? -1 : 1;
+  });
+};
 
 // ------------------------------------------------------------------ queries
 

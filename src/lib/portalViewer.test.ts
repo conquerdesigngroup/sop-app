@@ -31,6 +31,7 @@ const household = (over: Partial<ViewerHousehold> = {}): ViewerHousehold => ({
   lastNoteAt: null,
   accountName: null,
   accountEmail: null,
+  signedUpAt: null,
   ...over,
 });
 
@@ -536,5 +537,66 @@ describe('searching for the words that are actually on the row', () => {
     // A category the studio adds later has no label; falling back to the slug
     // means the row is never unsearchable.
     expect(classMatches(klass({ category: 'juniors' }), 'juniors')).toBe(true);
+  });
+});
+
+// ----------------------------------------------------------- sign-up order
+
+import { signedUpLabel, signupDatesAreKnown, sortHouseholds } from './portalViewer';
+
+describe('signedUpLabel', () => {
+  // Local-time construction throughout: the label reads the device's zone, so
+  // the test has to build its dates in the same one or it fails east of UTC.
+  const today = new Date(2026, 8, 18, 14, 0);
+
+  it('says today and yesterday in words, because that is what a newest-first list is for', () => {
+    expect(signedUpLabel(new Date(2026, 8, 18, 0, 5).toISOString(), today)).toBe('today');
+    expect(signedUpLabel(new Date(2026, 8, 17, 23, 59).toISOString(), today)).toBe('yesterday');
+  });
+
+  it('is a short date otherwise, with the year only when it is not this one', () => {
+    expect(signedUpLabel(new Date(2026, 8, 8, 9, 0).toISOString(), today)).toBe('8 Sep');
+    expect(signedUpLabel(new Date(2025, 11, 30, 9, 0).toISOString(), today)).toBe('30 Dec 2025');
+  });
+
+  it('crosses a month boundary for yesterday', () => {
+    expect(signedUpLabel(new Date(2026, 8, 30, 20, 0).toISOString(), new Date(2026, 9, 1, 8, 0)))
+      .toBe('yesterday');
+  });
+
+  it('says nothing rather than something wrong', () => {
+    expect(signedUpLabel(null, today)).toBeNull();
+    expect(signedUpLabel('not a date', today)).toBeNull();
+  });
+});
+
+describe('sortHouseholds', () => {
+  const a = household({ id: 'a', signedUpAt: '2026-09-10T10:00:00Z', linkedLogins: 1 });
+  const b = household({ id: 'b', signedUpAt: null });
+  const c = household({ id: 'c', signedUpAt: '2026-09-18T15:00:00Z', linkedLogins: 1 });
+  const d = household({ id: 'd', signedUpAt: null });
+  const e = household({ id: 'e', signedUpAt: '2026-09-12T08:00:00Z', unlinkedAccounts: 1 });
+  const byName = [a, b, c, d, e];
+
+  it('leaves the A–Z order alone', () => {
+    expect(sortHouseholds(byName, 'name')).toBe(byName);
+  });
+
+  it('puts the newest account first and everyone without one after, still A–Z', () => {
+    // A stranded account (e) is still a sign-up: the family who registered an
+    // hour ago and failed to link is the one that must not sink to the bottom.
+    expect(sortHouseholds(byName, 'newest-signup').map(h => h.id)).toEqual(['c', 'e', 'a', 'b', 'd']);
+  });
+
+  it('does not reorder the array the page owns', () => {
+    sortHouseholds(byName, 'newest-signup');
+    expect(byName.map(h => h.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+});
+
+describe('signupDatesAreKnown', () => {
+  it('is false until at least one family carries a date — v59 not applied, or nobody signed up', () => {
+    expect(signupDatesAreKnown([household(), household()])).toBe(false);
+    expect(signupDatesAreKnown([household(), household({ signedUpAt: '2026-09-18T15:00:00Z' })])).toBe(true);
   });
 });

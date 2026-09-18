@@ -14,6 +14,7 @@ import RosterPanel from '../../components/portal-admin/viewer/RosterPanel';
 import StudentPanel from '../../components/portal-admin/viewer/StudentPanel';
 import {
   EMPTY_FILTERS,
+  HouseholdSort,
   ViewerClass,
   ViewerFilters,
   ViewerHousehold,
@@ -110,6 +111,10 @@ const PortalViewerPage: React.FC = () => {
     (key: ViewKey) => (value: ViewerFilters) => setFilters(f => ({ ...f, [key]: value })),
     [],
   );
+
+  // Held here for the same reason: "newest sign-ups" should still be the order
+  // after opening one of them and coming back.
+  const [familySort, setFamilySort] = useState<HouseholdSort>('name');
 
   const requestedView = params.get('view') as ViewKey | null;
   const view: ViewKey = VIEWS.some(v => v.key === requestedView)
@@ -310,11 +315,14 @@ const PortalViewerPage: React.FC = () => {
                 households={households}
                 loading={loading}
                 error={error}
+                today={today}
                 onOpen={openHousehold}
                 query={queries.families}
                 setQuery={setQuery('families')}
                 filters={filters.families}
                 setFilters={setFilter('families')}
+                sort={familySort}
+                setSort={setFamilySort}
               />
             )}
             {view === 'dancers' && (

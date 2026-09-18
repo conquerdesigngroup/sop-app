@@ -462,6 +462,11 @@ const portal_admin_household_overview = FAMILY_NAMES.map((last, i) => ({
   // prints a second line.
   account_name: i % 4 === 0 ? null : `${['Dana', 'Marcus', 'Priya', 'Tom', 'Elin', 'Sam'][i % 6]} ${i === 3 ? 'Okafor' : last}`,
   account_email: i % 4 === 0 ? null : `${last.toLowerCase()}@localhost`,
+  // v59. Every family here has an account (linked, or v48's stranded one), so
+  // every one has a date — spread from today back a fortnight so the sort has
+  // an order to show and the widest badge ("Account not linked · 12 Sep") gets
+  // measured at 320px.
+  signed_up_at: iso(-((i * 5) % 14), 9 + i),
 }));
 
 const portal_admin_student_overview = GIVEN_NAMES.map((first, i) => {
