@@ -7,6 +7,7 @@ import { PortalClassCategory } from '../../../types';
 import {
   EMPTY_FILTERS,
   NO_DIVISION,
+  HouseholdSort,
   ViewerClass,
   ViewerFilters,
   ViewerHousehold,
@@ -20,6 +21,9 @@ import {
   householdPasses,
   householdSubtitle,
   householdTitle,
+  signedUpLabel,
+  signupDatesAreKnown,
+  sortHouseholds,
   studentAccessIsKnown,
   studentAccessLabel,
   studentFamilyName,
@@ -129,16 +133,23 @@ export const HouseholdList: React.FC<{
   households: ViewerHousehold[];
   loading: boolean;
   error: string | null;
+  today: Date;
   onOpen: (id: string) => void;
   query: string;
   setQuery: (value: string) => void;
   filters: ViewerFilters;
   setFilters: (f: ViewerFilters) => void;
-}> = ({ households, loading, error, onOpen, query, setQuery, filters, setFilters }) => {
+  sort: HouseholdSort;
+  setSort: (s: HouseholdSort) => void;
+}> = ({ households, loading, error, today, onOpen, query, setQuery, filters, setFilters, sort, setSort }) => {
   const shown = useMemo(
-    () => households.filter(h => householdPasses(h, query, filters)),
-    [households, query, filters],
+    () => sortHouseholds(households.filter(h => householdPasses(h, query, filters)), sort),
+    [households, query, filters, sort],
   );
+
+  // Until v59 is applied no family has a date, and the sort would quietly be
+  // the A–Z list again. Same rule as the dancer list's access badges.
+  const datesKnown = useMemo(() => signupDatesAreKnown(households), [households]);
 
   return (
     <>
@@ -163,6 +174,20 @@ export const HouseholdList: React.FC<{
           selected={filters.access === 'any' ? [] : [filters.access]}
           onToggle={v => setFilters({ ...filters, access: single(filters.access, v as any, 'any') })}
         />
+        {/* An ORDER, not a filter: one chip is always on, and Clear leaves it
+            alone. "Newest sign-ups" with no Access filter still lists every
+            family — the ones with no account simply follow the newcomers. */}
+        {datesKnown && (
+          <FilterChips
+            label="Sort"
+            options={[
+              { value: 'name', label: 'A–Z' },
+              { value: 'newest-signup', label: 'Newest sign-ups' },
+            ]}
+            selected={[sort]}
+            onToggle={v => setSort(v as HouseholdSort)}
+          />
+        )}
       </ListHeader>
 
       <ManagerList
@@ -178,6 +203,7 @@ export const HouseholdList: React.FC<{
       >
         {shown.map(h => {
           const access = accessLabel(h);
+          const joined = signedUpLabel(h.signedUpAt, today);
           const title = householdTitle(h);
           const sub = householdSubtitle(h);
           return (
@@ -194,7 +220,11 @@ export const HouseholdList: React.FC<{
                   well renders the same long address twice on one row. */}
               {title !== h.email && <RowSub mono>{h.email}</RowSub>}
               <ChipRow>
-                <Badge variant={ACCESS_BADGE[access.state]} size="sm">{access.text}</Badge>
+                {/* The date rides on the access badge rather than taking a chip
+                    of its own: "18 Sep" alone does not say what happened. */}
+                <Badge variant={ACCESS_BADGE[access.state]} size="sm">
+                  {joined ? `${access.text} · ${joined}` : access.text}
+                </Badge>
                 <Badge variant="default" size="sm">
                   {h.studentCount === 1 ? '1 dancer' : `${h.studentCount} dancers`}
                 </Badge>
