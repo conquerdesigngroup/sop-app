@@ -1,13 +1,17 @@
 -- =============================================================================
 -- v61 — DROP event_tags AND event_templates
 --
--- Nothing has ever used them. The old authored calendar kept its tags and
--- templates in localStorage ('mediamaple_event_tags' and
--- 'mediamaple_event_templates'), never in these tables, and that calendar was
--- replaced by the read-only Google subscription in v15/v16. Checked 2026-09-19
--- before dropping:
+-- Nothing uses them now. An older build did read them: pg_stat_statements
+-- (reset 2026-01-05) holds about 834 signed-in and 27 signed-out API reads of
+-- each, a plain select * ordered by created_at. That code is in no commit on
+-- any branch, and it never kept a row. The authored calendar in the repo kept
+-- its tags and templates in localStorage ('mediamaple_event_tags' and
+-- 'mediamaple_event_templates'), and v15/v16 replaced it with the read-only
+-- Google subscription. Checked 2026-09-19 before dropping:
 --
 --   * both tables hold 0 rows
+--   * the API logs show 0 requests to either table in the last 8 days, while
+--     calendar_events got 62 to 147 a day, so the old reads have stopped
 --   * no foreign key, view, trigger, function body or cron job names them
 --   * the app, the edge functions and the scripts never name them; the only
 --     code left was two unused interfaces in src/types.ts, removed with this
@@ -36,6 +40,8 @@
 --     notes text, tags text[] default '{}',
 --     created_by text not null,
 --     created_at timestamptz default now());
+--   -- the default grants would give anon TRUNCATE, which it did not have
+--   revoke truncate on public.event_tags, public.event_templates from anon;
 --   alter table public.event_tags enable row level security;
 --   alter table public.event_templates enable row level security;
 --   create policy "Allow authenticated read event_tags" on public.event_tags
