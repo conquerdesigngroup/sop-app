@@ -1,0 +1,53 @@
+-- =============================================================================
+-- v63 — TAKE TRUNCATE AWAY FROM anon AND authenticated
+--
+-- TRUNCATE empties a table in one statement, and row level security does not
+-- apply to it. Measured 2026-09-19 in public:
+--
+--   authenticated  26 relations, including profiles, push_vapid,
+--                  portal_calendar_tokens and work_hours_pay
+--   anon           3 tables: portal_avatar_prefs, portal_calendar_tokens,
+--                  portal_instructor_looks
+--
+-- Neither role can issue it today, as far as we can tell. Both are NOLOGIN, so
+-- the only way in is PostgREST's authenticator switching into them, and
+-- PostgREST and pg_graphql have no TRUNCATE (inferred). But the grant is the
+-- last line, and nothing needs it. No function body in any schema
+-- contains TRUNCATE, the repo never issues it, and pg_stat_statements shows it
+-- only from postgres and supabase_admin.
+--
+-- The cause is a default privilege. Every table postgres creates in public
+-- gives anon and authenticated TRUNCATE by default, so revoking today's
+-- grants alone would let the next migration bring it back. This removes both.
+-- Every other privilege is unchanged (compared before and after in a dry run),
+-- and service_role keeps TRUNCATE; it already bypasses RLS and can delete
+-- every row.
+--
+-- Not covered, because postgres did not grant them and cannot revoke them:
+-- supabase_admin's own default for public, graphql and graphql_public, and the
+-- storage schema's tables, which belong to supabase_storage_admin.
+--
+-- To undo:
+--
+--   grant truncate on public.calendar_events, public.calendar_sources,
+--     public.employee_pay_rates, public.job_tasks, public.jobs,
+--     public.portal_avatar_prefs, public.portal_calendar_sources,
+--     public.portal_calendar_tokens, public.portal_class_instructors,
+--     public.portal_classes, public.portal_documents, public.portal_events,
+--     public.portal_instructor_looks, public.portal_programs,
+--     public.portal_updates, public.profiles, public.push_subscriptions,
+--     public.push_vapid, public.sops, public.task_templates,
+--     public.work_categories, public.work_days, public.work_hours,
+--     public.work_hours_pay, public.work_hours_summary,
+--     public.work_schedule_templates
+--     to authenticated;
+--   grant truncate on public.portal_avatar_prefs, public.portal_calendar_tokens,
+--     public.portal_instructor_looks to anon;
+--   alter default privileges for role postgres in schema public
+--     grant truncate on tables to anon, authenticated;
+-- =============================================================================
+
+revoke truncate on all tables in schema public from anon, authenticated;
+
+alter default privileges for role postgres in schema public
+  revoke truncate on tables from anon, authenticated;
