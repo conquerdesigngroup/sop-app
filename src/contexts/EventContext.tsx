@@ -158,7 +158,6 @@ const mapEvent = (row: any): CalendarEvent => ({
   isRecurring: Boolean(row.is_recurring),
   recurrencePattern: row.recurrence_pattern ?? undefined,
   notes: row.notes ?? undefined,
-  tags: row.tags ?? undefined,
   createdBy: row.created_by ?? '',
   createdAt: row.created_at,
   updatedAt: row.updated_at ?? undefined,

@@ -197,7 +197,6 @@ export interface CalendarEvent {
   isRecurring: boolean;
   recurrencePattern?: RecurrencePattern;
   notes?: string;
-  tags?: string[]; // Tag IDs for categorization
   createdBy: string;
   createdAt: string;
   updatedAt?: string;

@@ -319,7 +319,6 @@ const calendar_events = portal_events.slice(0, 5).map((e, i) => ({
   is_recurring: false,
   recurrence_pattern: null,
   notes: null,
-  tags: [],
   created_by: STAFF.admin,
   source: 'manual',
   google_calendar_id: null,
