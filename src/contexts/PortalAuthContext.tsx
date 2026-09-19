@@ -227,7 +227,9 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
       void logActivity({ action: 'user_signed_out', entityType: 'user', entityId: id, details: { surface: 'portal' } });
     }
     try {
-      await supabase.auth.signOut();
+      // This device only, as on the staff side: a family often shares one
+      // login across phones, and the default (global) scope signed them all out.
+      await supabase.auth.signOut({ scope: 'local' });
     } catch (e) {
       console.error('Portal sign-out failed:', e);
     }
