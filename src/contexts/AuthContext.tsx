@@ -273,9 +273,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               // the portal would flip isAuthenticated and grow staff chrome.
               // A deactivated staff session is ended, which covers the
               // password sign-in login() has just refused and an open tab at
-              // its next token refresh.
+              // its next token refresh. currentUser is cleared here as well,
+              // because a failed /logout keeps the session and sends no
+              // SIGNED_OUT.
               if (profile && profile.role !== 'client' && profile.is_active === false) {
                 await supabase.auth.signOut({ scope: 'local' });
+                setCurrentUser(null);
               } else if (profile && profile.role !== 'client') {
                 setCurrentUser(mapProfileToUser(profile, session.user));
               }
