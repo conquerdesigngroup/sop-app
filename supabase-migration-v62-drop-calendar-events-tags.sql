@@ -1,0 +1,27 @@
+-- =============================================================================
+-- v62 — DROP calendar_events.tags
+--
+-- The column was meant for ids from event_tags, which v61 dropped. Nothing fills it
+-- now. The staff calendar is a Google subscription, and a Google event carries
+-- no tags. Checked 2026-09-19 before dropping:
+--
+--   * all 72 rows hold the default '{}'; none is null and none has a value
+--   * the only thing depending on the column is its own default; no index,
+--     view, trigger, policy or function body uses it
+--   * the app reads the table with select=* and only copied the value into
+--     CalendarEvent.tags, which nothing read; the field, the copy and the dev
+--     fixture's value are removed with this
+--   * the sync functions insert and update without it
+--   * pg_stat_statements has 5 signed-in inserts that listed tags. They came
+--     from the old authored calendar build, the same one that read event_tags
+--     on every load, and that had 0 requests in the 8 days before v61
+--
+-- Dropping a column is a catalog change, so the brief lock does not rewrite
+-- the table.
+--
+-- To undo (every row held '{}', so this restores it exactly):
+--
+--   alter table public.calendar_events add column tags text[] default '{}'::text[];
+-- =============================================================================
+
+alter table public.calendar_events drop column tags;
