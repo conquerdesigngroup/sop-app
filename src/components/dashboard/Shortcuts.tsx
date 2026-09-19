@@ -181,6 +181,7 @@ const Shortcuts: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) => {
           <button
             key={shortcut.key}
             type="button"
+            className="glass-tile"
             onClick={() => navigate(shortcut.to)}
             style={{
               display: 'flex',
@@ -199,7 +200,7 @@ const Shortcuts: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) => {
               fontFamily: theme.fonts.primary,
             }}
           >
-            <span style={{
+            <span className="glass-well" style={{
               position: 'relative',
               display: 'flex',
               alignItems: 'center',

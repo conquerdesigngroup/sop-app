@@ -103,6 +103,51 @@ export const applyThemeMode = (mode: 'dark' | 'light') => {
     mode === 'light' ? 'brightness(0.96)' : 'brightness(1.1)'
   );
 
+  // Liquid glass on the staff dashboard (see .glass-panel in index.css). Dark mode is a smoked pane
+  // over the void; light mode is a milky one over chalk, which needs a darker
+  // drop shadow than its rim to read as lifted at all.
+  const glass = mode === 'light'
+    ? {
+        fill: 'rgba(255, 255, 255, 0.55)',
+        sheen: 'rgba(255, 255, 255, 0.5)',
+        rim: 'rgba(255, 255, 255, 0.75)',
+        spec: 'rgba(255, 255, 255, 0.95)',
+        specLow: 'rgba(255, 255, 255, 0.6)',
+        glow: 'rgba(255, 255, 255, 0.35)',
+        well: 'rgba(17, 17, 17, 0.035)',
+        wellEdge: 'rgba(17, 17, 17, 0.07)',
+        today: 'rgba(17, 17, 17, 0.06)',
+        drop: '0 12px 30px -14px rgba(17, 17, 17, 0.28), 0 0 0 0.5px rgba(17, 17, 17, 0.08)',
+        filter: 'blur(8px) saturate(1.6) brightness(1.05)',
+        lens: 'blur(2px) saturate(1.8) brightness(1.08)',
+      }
+    : {
+        fill: 'rgba(20, 20, 23, 0.42)',
+        sheen: 'rgba(255, 255, 255, 0.07)',
+        rim: 'rgba(255, 255, 255, 0.10)',
+        spec: 'rgba(255, 255, 255, 0.55)',
+        specLow: 'rgba(255, 255, 255, 0.16)',
+        glow: 'rgba(255, 255, 255, 0.035)',
+        well: 'rgba(255, 255, 255, 0.04)',
+        wellEdge: 'rgba(255, 255, 255, 0.07)',
+        today: 'rgba(0, 0, 0, 0.3)',
+        drop: '0 14px 34px -14px rgba(0, 0, 0, 0.7)',
+        filter: 'blur(6px) saturate(1.7) brightness(1.04)',
+        lens: 'blur(2px) saturate(2.1) brightness(1.25)',
+      };
+  root.style.setProperty('--glass-fill', glass.fill);
+  root.style.setProperty('--glass-sheen', glass.sheen);
+  root.style.setProperty('--glass-rim', glass.rim);
+  root.style.setProperty('--glass-spec', glass.spec);
+  root.style.setProperty('--glass-spec-low', glass.specLow);
+  root.style.setProperty('--glass-glow', glass.glow);
+  root.style.setProperty('--glass-well', glass.well);
+  root.style.setProperty('--glass-well-edge', glass.wellEdge);
+  root.style.setProperty('--glass-today', glass.today);
+  root.style.setProperty('--glass-drop', glass.drop);
+  root.style.setProperty('--glass-filter', glass.filter);
+  root.style.setProperty('--glass-lens', glass.lens);
+
   // Shadows are much softer in light mode
   const s = mode === 'light'
     ? { sm: '0.08', md: '0.10', lg: '0.12', xl: '0.16' }

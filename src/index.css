@@ -30,6 +30,19 @@
   --font-display: 'Kanit', 'Barlow', sans-serif;
   --font-body: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Roboto Mono', monospace;
+  /* Liquid glass, dark defaults — applyThemeMode sets both modes. */
+  --glass-fill: rgba(20, 20, 23, 0.42);
+  --glass-sheen: rgba(255, 255, 255, 0.07);
+  --glass-rim: rgba(255, 255, 255, 0.10);
+  --glass-spec: rgba(255, 255, 255, 0.55);
+  --glass-spec-low: rgba(255, 255, 255, 0.16);
+  --glass-glow: rgba(255, 255, 255, 0.035);
+  --glass-well: rgba(255, 255, 255, 0.04);
+  --glass-well-edge: rgba(255, 255, 255, 0.07);
+  --glass-today: rgba(0, 0, 0, 0.3);
+  --glass-drop: 0 14px 34px -14px rgba(0, 0, 0, 0.7);
+  --glass-filter: blur(6px) saturate(1.7) brightness(1.04);
+  --glass-lens: blur(2px) saturate(2.1) brightness(1.25);
 }
 
 * {
@@ -628,6 +641,136 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
     scrollbar-width: thin;
     scrollbar-color: var(--c-bdr-secondary, #36363D) transparent;
   }
+}
+
+/* ============================================
+   Liquid glass
+   ============================================
+   The staff dashboard's panels, over the contour field (TopoField). Clear
+   glass rather than frosted: a light blur so the field stays visible through
+   the panel, a tint for legibility, a lit rim and a lens at the edge. Colours
+   are per-mode variables set by applyThemeMode in theme.ts.
+
+   Every rule is scoped to .glass-scope (the Dashboard wrapper), so a
+   component that carries these classes stays solid anywhere else.
+
+   The panels are styled inline, and a stylesheet cannot beat an inline style
+   without !important — hence the !important on background and border colour.
+   Borders keep their width, so nothing moves.
+
+   Everything that draws is a pseudo-element, never the panel itself: a panel
+   with its own backdrop-filter becomes a "backdrop root", and the lens layer
+   inside it would then see only the panel instead of the page behind it.
+
+   glass-panel  a section card. ::before is the glass (blur, saturation lift,
+                tint, a sheen from the top, inset highlights lit from the upper
+                left — the same light as the field's hill-shading). ::after is
+                the lens: a soft band inside the edge where the backdrop is
+                pushed brighter and more saturated than the middle, which is
+                what makes a flat panel read as a thick, rounded slab.
+   glass-tile   the same without the lens, for small tiles, where a second
+                backdrop pass per tile costs a phone more than it shows.
+   glass-well   something inside a panel (a row, a pill, an icon well): a faint
+                translucent fill and edge, no backdrop pass of its own.
+   glass-cell*  the month calendar's cells, which sit on the calendar panel's
+                glass instead of each painting their own.
+   glass-own-edge  keeps a border colour that means something (the Overdue
+                panel's red, today's electric schedule tile). */
+.glass-scope .glass-panel,
+.glass-scope .glass-tile {
+  position: relative;
+  isolation: isolate;
+  background-color: transparent !important;
+  box-shadow: var(--glass-drop);
+}
+.glass-scope :is(.glass-panel, .glass-tile):not(.glass-own-edge) {
+  border-color: var(--glass-rim) !important;
+}
+.glass-scope .glass-panel::before,
+.glass-scope .glass-tile::before,
+.glass-scope .glass-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.glass-scope .glass-panel::before,
+.glass-scope .glass-tile::before {
+  background:
+    linear-gradient(180deg, var(--glass-sheen), transparent 45%),
+    var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 1px 1.5px 1px -0.5px var(--glass-spec),
+    inset -1px -1px 1px -0.5px var(--glass-spec-low),
+    inset 0 0 24px var(--glass-glow);
+}
+.glass-scope .glass-panel::after {
+  -webkit-backdrop-filter: var(--glass-lens);
+  backdrop-filter: var(--glass-lens);
+  -webkit-mask:
+    linear-gradient(180deg, #000, transparent 14px),
+    linear-gradient(0deg, #000, transparent 14px),
+    linear-gradient(90deg, #000, transparent 14px),
+    linear-gradient(270deg, #000, transparent 14px);
+  mask:
+    linear-gradient(180deg, #000, transparent 14px),
+    linear-gradient(0deg, #000, transparent 14px),
+    linear-gradient(90deg, #000, transparent 14px),
+    linear-gradient(270deg, #000, transparent 14px);
+}
+/* A glass button must not take the global hover filter: a filter makes the
+   button a backdrop root, and its glass would go blank under the pointer.
+   It brightens its own glass instead. */
+.glass-scope button:is(.glass-panel, .glass-tile):hover:not(:disabled) {
+  filter: none;
+}
+.glass-scope button:is(.glass-panel, .glass-tile):hover:not(:disabled)::before {
+  background:
+    linear-gradient(180deg, var(--glass-sheen), transparent 60%),
+    var(--glass-fill);
+}
+.glass-scope .glass-well {
+  background-color: var(--glass-well) !important;
+  border-color: var(--glass-well-edge) !important;
+}
+.glass-scope .glass-cell {
+  background-color: transparent !important;
+}
+.glass-scope .glass-cell:hover {
+  background-color: var(--c-hover-tint) !important;
+}
+.glass-scope .glass-cell-muted {
+  background-color: var(--glass-well) !important;
+}
+.glass-scope .glass-cell-today {
+  background-color: var(--glass-today) !important;
+}
+.glass-scope :is(.glass-cell, .glass-cell-muted, .glass-cell-today) {
+  border-color: var(--glass-well-edge) !important;
+}
+/* A browser that cannot blur what is behind gets the solid panel back, so
+   text never sits on a clear pane over moving lines. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-scope .glass-panel::before,
+  .glass-scope .glass-tile::before { background: var(--c-bg-secondary, #161618); }
+}
+/* iOS and macOS "Reduce transparency": everything goes back to solid. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-scope .glass-panel,
+  .glass-scope .glass-tile { background-color: var(--c-bg-secondary, #161618) !important; box-shadow: none; }
+  .glass-scope :is(.glass-panel, .glass-tile):not(.glass-own-edge) { border-color: var(--c-bdr-primary, #26262B) !important; }
+  .glass-scope .glass-panel::before,
+  .glass-scope .glass-tile::before,
+  .glass-scope .glass-panel::after { display: none; }
+  .glass-scope .glass-well,
+  .glass-scope .glass-cell-muted { background-color: var(--c-bg-tertiary, #1E1E21) !important; }
+  .glass-scope .glass-cell { background-color: var(--c-bg-secondary, #161618) !important; }
+  .glass-scope .glass-cell-today { background-color: var(--c-bg-primary, #0B0B0D) !important; }
+  .glass-scope :is(.glass-cell, .glass-cell-muted, .glass-cell-today, .glass-well) { border-color: var(--c-bdr-primary, #26262B) !important; }
 }
 
 /* ============================================
