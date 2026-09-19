@@ -1,0 +1,49 @@
+-- =============================================================================
+-- v61 — DROP event_tags AND event_templates
+--
+-- Nothing has ever used them. The old authored calendar kept its tags and
+-- templates in localStorage ('mediamaple_event_tags' and
+-- 'mediamaple_event_templates'), never in these tables, and that calendar was
+-- replaced by the read-only Google subscription in v15/v16. Checked 2026-09-19
+-- before dropping:
+--
+--   * both tables hold 0 rows
+--   * no foreign key, view, trigger, function body or cron job names them
+--   * the app, the edge functions and the scripts never name them; the only
+--     code left was two unused interfaces in src/types.ts, removed with this
+--   * calendar_events.tags is a separate column (0 of 72 events use it) with
+--     no foreign key to event_tags, so nothing is orphaned
+--
+-- v60 had already taken away their write policies. This finishes the job. A
+-- plain DROP, not CASCADE: if something unseen still depended on either table,
+-- the migration fails instead of taking that thing down with it. Dropping a
+-- table also takes it out of the supabase_realtime publication.
+--
+-- To undo (the tables were empty, so this is the whole of them):
+--
+--   create table public.event_tags (
+--     id uuid primary key default gen_random_uuid(),
+--     name text not null,
+--     created_by text not null,
+--     created_at timestamptz default now());
+--   create table public.event_templates (
+--     id uuid primary key default gen_random_uuid(),
+--     name text not null, title text not null,
+--     description text default '', duration integer, location text,
+--     is_all_day boolean default false, color text default '#3B82F6',
+--     attendees text[] default '{}', reminders jsonb default '[]',
+--     is_recurring boolean default false, recurrence_pattern jsonb,
+--     notes text, tags text[] default '{}',
+--     created_by text not null,
+--     created_at timestamptz default now());
+--   alter table public.event_tags enable row level security;
+--   alter table public.event_templates enable row level security;
+--   create policy "Allow authenticated read event_tags" on public.event_tags
+--     for select to authenticated using (is_active_staff());
+--   create policy "Allow authenticated read event_templates" on public.event_templates
+--     for select to authenticated using (is_active_staff());
+--   alter publication supabase_realtime add table public.event_tags, public.event_templates;
+-- =============================================================================
+
+drop table public.event_tags;
+drop table public.event_templates;
