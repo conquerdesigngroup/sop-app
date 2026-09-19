@@ -17,6 +17,7 @@ import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import AdminAttention from '../components/dashboard/AdminAttention';
 import ClassesToday from '../components/dashboard/ClassesToday';
 import Shortcuts from '../components/dashboard/Shortcuts';
+import TopoField from '../components/TopoField';
 import { Button, Card } from '../components/ui';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 
@@ -25,7 +26,7 @@ import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 const parseLocalDate = (dateString: string) =>
   new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
 
-const Dashboard: React.FC = () => {
+const DashboardContent: React.FC = () => {
   const { sops, loading: sopsLoading } = useSOPs();
   const { isAdmin, currentUser, users } = useAuth();
   const { jobTasks, loading: tasksLoading } = useTask();
@@ -82,6 +83,19 @@ const Dashboard: React.FC = () => {
     />
   );
 };
+
+/**
+ * The contour field sits behind every state of the page — skeleton, team
+ * member and admin — so it mounts once and is not rebuilt when the data lands.
+ * The wrapper is a stacking context, which is what puts the field's z-index of
+ * -1 above the App background and below everything on the page.
+ */
+const Dashboard: React.FC = () => (
+  <div style={{ position: 'relative', isolation: 'isolate' }}>
+    <TopoField />
+    <DashboardContent />
+  </div>
+);
 
 /**
  * Whether Customize Dashboard has left anything on this person's dashboard.
