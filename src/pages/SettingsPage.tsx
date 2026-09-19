@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useTask } from '../contexts/TaskContext';
@@ -14,6 +15,7 @@ import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription } from '../lib/push';
+import { LEGAL_PATHS } from '../lib/legal';
 
 const SettingsPage: React.FC = () => {
   const { currentUser, updateUser, isAdmin } = useAuth();
@@ -745,6 +747,14 @@ const SettingsPage: React.FC = () => {
             <div style={styles.aboutItem}>
               <span style={styles.aboutLabel}>Build Date</span>
               <span style={styles.aboutValue}>{new Date().toLocaleDateString()}</span>
+            </div>
+            <div style={styles.aboutItem}>
+              <span style={styles.aboutLabel}>Privacy Policy</span>
+              <Link to={LEGAL_PATHS.privacy} style={{ ...styles.aboutValue, textDecoration: 'underline', textUnderlineOffset: '2px' }}>Read</Link>
+            </div>
+            <div style={styles.aboutItem}>
+              <span style={styles.aboutLabel}>Terms of Use</span>
+              <Link to={LEGAL_PATHS.terms} style={{ ...styles.aboutValue, textDecoration: 'underline', textUnderlineOffset: '2px' }}>Read</Link>
             </div>
           </div>
         </div>

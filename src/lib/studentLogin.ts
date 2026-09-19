@@ -6,7 +6,24 @@
  * so the reasons are pinned by tests rather than living in JSX.
  */
 
-import { ViewerStudent } from './portalViewer';
+import { ViewerStudent, ageFrom } from './portalViewer';
+
+/**
+ * The youngest a dancer may be to hold a login of their own.
+ *
+ * Thirteen is COPPA's line: below it, an account in the child's own name is
+ * personal information collected FROM a child, which needs verifiable parental
+ * consent. A family's own account already covers a younger dancer, so the line
+ * costs nobody access. The Privacy Policy and Terms of Use say 13 (legalDocs.ts)
+ * and admin_roster_add_student enforces it (v58) — change all three together.
+ */
+export const DANCER_LOGIN_MIN_AGE = 13;
+
+/** Why a dancer cannot be picked: a label for the picker row, and the sentence behind it. */
+export interface DancerBlock {
+  badge: string;
+  reason: string;
+}
 
 /** Same shape the edge function and the RPC test. */
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -29,12 +46,28 @@ export const isValidEmail = (raw: string): boolean => {
 export const dancerBlockedReason = (
   student: ViewerStudent,
   alreadyGranted: ReadonlySet<string>,
-): string | null => {
+  today: Date = new Date(),
+): DancerBlock | null => {
   if (student.status !== 'active') {
-    return 'That dancer’s record is archived. Restore the family first.';
+    return { badge: 'Archived', reason: 'That dancer’s record is archived. Restore the family first.' };
   }
   if (alreadyGranted.has(student.id)) {
-    return 'That dancer already has their own login.';
+    return { badge: 'Has a login', reason: 'That dancer already has their own login.' };
+  }
+  // No date of birth means no way to show the dancer is old enough. Every
+  // active dancer had one when this was written; the roster import carries it.
+  const age = ageFrom(student.dateOfBirth, today);
+  if (age === null) {
+    return {
+      badge: 'No birth date',
+      reason: `There is no date of birth on file for this dancer, and dancer logins are for ages ${DANCER_LOGIN_MIN_AGE} and up. Import the roster with it first.`,
+    };
+  }
+  if (age < DANCER_LOGIN_MIN_AGE) {
+    return {
+      badge: `Under ${DANCER_LOGIN_MIN_AGE}`,
+      reason: `Dancer logins are for ages ${DANCER_LOGIN_MIN_AGE} and up. Their family’s account already covers them.`,
+    };
   }
   return null;
 };

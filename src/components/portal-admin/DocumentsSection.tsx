@@ -400,7 +400,7 @@ const DocumentsSection: React.FC<{
         isEmpty={rows.length === 0}
         emptyTitle="No files yet"
         emptyDescription={scope?.classId
-          ? 'Music, choreography notes, costume details — anything this class needs. Only families in this class see them.'
+          ? 'Music, choreography notes, costume details — anything this class needs. Every family who can open this section can see them, not only this class.'
           : 'Costume lists, handbooks, permission slips — anything a parent needs to download.'}
         emptyAction={<Button leftIcon={<PlusIcon />} onClick={startUpload}>Upload file</Button>}
       >

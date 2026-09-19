@@ -19,6 +19,7 @@ import { RefreshProvider } from './contexts/RefreshContext';
 import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
+import { isLegalPath } from './lib/legal';
 import { PortalProvider } from './contexts/PortalContext';
 import { PortalAuthProvider } from './contexts/PortalAuthContext';
 import { PortalAdminProvider } from './contexts/PortalAdminContext';
@@ -44,6 +45,7 @@ const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const LegalPage = lazy(() => import('./pages/LegalPage'));
 
 // Client-facing portal — public with the access-code gate; with
 // REACT_APP_CLIENT_AUTH on, sits behind the family sign-in instead.
@@ -176,8 +178,10 @@ const AppContent: React.FC = () => {
   // Parents never trip this because staff nav is already gated on
   // isAuthenticated — it exists so a signed-in admin previewing the portal
   // doesn't get the staff header and bottom bar bleeding into it.
+  // The legal pages likewise draw their own header and notch padding, for
+  // staff and families alike.
   const onPortal = isPortalPath(pathname);
-  const showStaffChrome = isAuthenticated && !onPortal;
+  const showStaffChrome = isAuthenticated && !onPortal && !isLegalPath(pathname);
 
   return (
     <div
@@ -206,6 +210,13 @@ const AppContent: React.FC = () => {
           {/* Front door. Public, and shown on every visit — no remembered side.
               Staff continue to /login; families go to /portal, no account. */}
           <Route path="/" element={<ChooserPage />} />
+
+          {/* Privacy Policy and Terms of Use. Public, and deliberately neither a
+              PublicRoute (which would bounce signed-in staff to the dashboard)
+              nor inside the portal providers below: staff read them too, and
+              the words ship with the page, so there is nothing to fetch. */}
+          <Route path="/privacy" element={<LegalPage doc="privacy" />} />
+          <Route path="/terms" element={<LegalPage doc="terms" />} />
 
           {/* Parent portal. Public by design: these pages read only portal_*
               tables, which are the sole anon-readable surface in the schema.

@@ -7,6 +7,7 @@ import { Button, Card, Input, PasswordInput } from '../../components/ui';
 import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { portalCheckEmail, CLIENT_MIN_PASSWORD } from '../../lib/clientAuth';
 import { portalRoutes } from '../../lib/portal';
+import { LEGAL_PATHS, LEGAL_VERSION } from '../../lib/legal';
 
 /**
  * Family account creation, in three steps: who you are → a password → the
@@ -94,6 +95,14 @@ const PortalSignUp: React.FC = () => {
     color: theme.colors.txt.secondary,
   };
 
+  // Same treatment as the "Log in" link at the foot of the page.
+  const legalLink: React.CSSProperties = {
+    color: theme.colors.primary,
+    fontWeight: 600,
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
+  };
+
   // -------------------------------------------------------------- handlers
 
   const submitDetails = async (e: React.FormEvent) => {
@@ -127,6 +136,9 @@ const PortalSignUp: React.FC = () => {
       password,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      // The version of the words shown above the button, recorded on the
+      // server's client_signed_up audit row.
+      acceptedTermsVersion: LEGAL_VERSION,
     });
     setBusy(false);
 
@@ -258,6 +270,21 @@ const PortalSignUp: React.FC = () => {
                 disabled={busy}
                 style={inputFontFix}
               />
+              {/* Directly above the button it describes, in body colour and
+                  with links that look like links: a terms notice binds only if
+                  it is plainly visible at the moment of agreeing. New tabs, so
+                  reading the terms does not throw away this half-filled form. */}
+              <p style={{ ...bodyText, margin: 0 }}>
+                By tapping <strong>Create account</strong>, you agree to our{' '}
+                <a href={LEGAL_PATHS.terms} target="_blank" rel="noopener noreferrer" style={legalLink}>
+                  Terms of Use
+                </a>{' '}
+                and acknowledge our{' '}
+                <a href={LEGAL_PATHS.privacy} target="_blank" rel="noopener noreferrer" style={legalLink}>
+                  Privacy Policy
+                </a>
+                .
+              </p>
               <Button type="submit" variant="primary" fullWidth loading={busy}>
                 Create account
               </Button>

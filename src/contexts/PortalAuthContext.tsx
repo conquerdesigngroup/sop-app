@@ -65,7 +65,7 @@ interface PortalAuthValue {
 
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signOut: () => Promise<void>;
-  register: (input: { email: string; password: string; firstName: string; lastName: string }) => Promise<boolean>;
+  register: (input: { email: string; password: string; firstName: string; lastName: string; acceptedTermsVersion?: string }) => Promise<boolean>;
   resendCode: (email: string) => Promise<void>;
   verifyCode: (email: string, token: string) => Promise<{ ok: boolean; error?: string }>;
   requestReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
@@ -235,7 +235,7 @@ export const PortalAuthProvider: React.FC<{ children: ReactNode }> = ({ children
   }, [usable, profile?.id]);
 
   const register = useCallback(
-    (input: { email: string; password: string; firstName: string; lastName: string }) =>
+    (input: { email: string; password: string; firstName: string; lastName: string; acceptedTermsVersion?: string }) =>
       portalRegister({
         ...input,
         email: input.email.trim().toLowerCase(),
