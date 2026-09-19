@@ -20,6 +20,9 @@ let mockSession: Session | null = null;
 let mockProfile: Record<string, unknown> = {};
 let mockListener: ((event: string, session: Session | null) => void) | null = null;
 const mockSignOuts: string[] = [];
+// supabase-js returns an error instead of throwing when /logout fails, and
+// then keeps the session and sends no SIGNED_OUT.
+let mockSignOutFails = false;
 
 jest.mock('../lib/supabase', () => ({
   isSupabaseConfigured: () => true,
@@ -37,6 +40,7 @@ jest.mock('../lib/supabase', () => ({
       },
       signOut: (opts?: { scope?: string }) => {
         mockSignOuts.push(opts?.scope ?? 'global');
+        if (mockSignOutFails) return Promise.resolve({ error: { message: 'Failed to fetch' } });
         mockSession = null;
         mockListener?.('SIGNED_OUT', null);
         return Promise.resolve({ error: null });
@@ -95,6 +99,7 @@ beforeEach(() => {
   mockSession = null;
   mockListener = null;
   mockSignOuts.length = 0;
+  mockSignOutFails = false;
 });
 
 it('keeps a stored session out when the profile has been deactivated, and ends it on this device', async () => {
@@ -142,5 +147,31 @@ it('lets an active staff member in and leaves their session alone', async () => 
   await settle();
 
   expect(screen.getByTestId('who')).toHaveTextContent('in:sam@example.com');
+  expect(mockSignOuts).toEqual([]);
+});
+
+it('keeps an open tab out even when the sign-out request itself fails', async () => {
+  mockSession = { user: { id: 'staff-1', email: 'sam@example.com' } };
+  mockProfile = staffProfile(true);
+  render(<AuthProvider><Probe /></AuthProvider>);
+  await settle();
+
+  mockProfile = staffProfile(false);
+  mockSignOutFails = true;
+  act(() => mockListener?.('TOKEN_REFRESHED', mockSession));
+  await settle();
+
+  expect(screen.getByTestId('who')).toHaveTextContent('out');
+});
+
+it("leaves a parent's session to the portal, active or not", async () => {
+  mockSession = { user: { id: 'parent-1', email: 'rosa@example.com' } };
+  mockProfile = { ...staffProfile(false), id: 'parent-1', email: 'rosa@example.com', role: 'client' };
+  render(<AuthProvider><Probe /></AuthProvider>);
+  await settle();
+  act(() => mockListener?.('TOKEN_REFRESHED', mockSession));
+  await settle();
+
+  expect(screen.getByTestId('who')).toHaveTextContent('out');
   expect(mockSignOuts).toEqual([]);
 });
