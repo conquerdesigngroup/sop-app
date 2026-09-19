@@ -210,7 +210,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // the data contexts key off it — the staff table fetches and
           // realtime channels a client's RLS would return nothing for. The
           // session itself stays valid; PortalAuthContext is what reads it.
-          if (profile && !error && profile.role !== 'client') {
+          //
+          // A deactivated staff profile is ended instead. Deactivating only
+          // sets is_active = false, which the database already treats as
+          // non-staff (is_active_staff(), is_admin()); without this the app
+          // still drew the staff pages around that session.
+          if (profile && !error && profile.role !== 'client' && profile.is_active === false) {
+            await supabase.auth.signOut({ scope: 'local' });
+          } else if (profile && !error && profile.role !== 'client') {
             setCurrentUser(mapProfileToUser(profile, session.user));
 
             // Load all users (for admin features).
@@ -261,10 +268,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 .eq('id', session.user.id)
                 .single();
 
-              // Same rule as initializeAuth: a client session never becomes
+              // Same rules as initializeAuth: a client session never becomes
               // the staff currentUser. Without this, a parent signing in on
               // the portal would flip isAuthenticated and grow staff chrome.
-              if (profile && profile.role !== 'client') {
+              // A deactivated staff session is ended, which covers the
+              // password sign-in login() has just refused and an open tab at
+              // its next token refresh. currentUser is cleared here as well,
+              // because a failed /logout keeps the session and sends no
+              // SIGNED_OUT.
+              if (profile && profile.role !== 'client' && profile.is_active === false) {
+                await supabase.auth.signOut({ scope: 'local' });
+                setCurrentUser(null);
+              } else if (profile && profile.role !== 'client') {
                 setCurrentUser(mapProfileToUser(profile, session.user));
               }
             }, 0);
