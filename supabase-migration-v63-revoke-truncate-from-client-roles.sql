@@ -4,15 +4,18 @@
 -- TRUNCATE empties a table in one statement, and row level security does not
 -- apply to it. Measured 2026-09-19 in public:
 --
---   authenticated  26 relations, including profiles, push_vapid,
---                  portal_calendar_tokens and work_hours_pay
+--   authenticated  25 tables, including profiles, push_vapid,
+--                  portal_calendar_tokens and work_hours_pay, plus the
+--                  work_hours_summary view, where the grant does nothing
 --   anon           3 tables: portal_avatar_prefs, portal_calendar_tokens,
 --                  portal_instructor_looks
 --
--- Neither role can issue it today, as far as we can tell. Both are NOLOGIN, so
--- the only way in is PostgREST's authenticator switching into them, and
--- PostgREST and pg_graphql have no TRUNCATE (inferred). But the grant is the
--- last line, and nothing needs it. No function body in any schema
+-- Neither role can issue it today, as far as we can tell. Both are NOLOGIN.
+-- They are reached only by services that switch into them, PostgREST through
+-- authenticator and the storage API, and neither sends TRUNCATE for a client
+-- (inferred). postgres is a member of both but owns the tables anyway, and
+-- pg_graphql is not installed. But the grant is the last line, and nothing
+-- needs it. No function body in any schema
 -- contains TRUNCATE, the repo never issues it, and pg_stat_statements shows it
 -- only from postgres and supabase_admin.
 --
@@ -23,9 +26,14 @@
 -- and service_role keeps TRUNCATE; it already bypasses RLS and can delete
 -- every row.
 --
--- Not covered, because postgres did not grant them and cannot revoke them:
+-- Not covered. postgres did not grant these and cannot revoke them:
 -- supabase_admin's own default for public, graphql and graphql_public, and the
--- storage schema's tables, which belong to supabase_storage_admin.
+-- storage schema's tables, which belong to supabase_storage_admin. postgres's
+-- own default for storage still grants TRUNCATE too, but it never fires,
+-- because postgres has no CREATE on storage.
+--
+-- Only these comments changed after the migration was applied; the recorded
+-- statements carry the first wording.
 --
 -- To undo:
 --
