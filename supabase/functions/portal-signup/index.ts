@@ -85,6 +85,35 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const BREACHED_PASSWORD =
+  'That password has appeared in a data breach. Please choose a different one.';
+
+// The question GoTrue asks when password_hibp_enabled is on, through Have I
+// Been Pwned's range API: only the first five hex digits of the SHA-1 leave
+// this function. Padding rows carry a count of 0 and are not matches. No
+// answer counts as "not breached", which leaves the decision to GoTrue, as
+// it was before this check existed.
+const isBreachedPassword = async (password: string): Promise<boolean> => {
+  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password));
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+  try {
+    const res = await fetch(`https://api.pwnedpasswords.com/range/${hex.slice(0, 5)}`, {
+      headers: { 'Add-Padding': 'true' },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return false;
+    const suffix = hex.slice(5);
+    return (await res.text()).split('\n').some((line) => {
+      const [candidate, count] = line.trim().split(':');
+      return candidate === suffix && Number(count) > 0;
+    });
+  } catch {
+    return false;
+  }
+};
+
 // Runs work after the response is sent. waitUntil keeps the instance alive; if
 // the runtime ever lacks it, awaiting inline is a correctness fallback that
 // costs only timing flatness.
@@ -213,6 +242,14 @@ Deno.serve(async (req: Request) => {
       const password = body.password ?? '';
       if (password.length < MIN_PASSWORD) {
         return json(400, { error: `Password must be at least ${MIN_PASSWORD} characters` });
+      }
+      // GoTrue refuses a breached password inside createUser, which runs after
+      // this response. Refused there, the answer reached nobody: the family was
+      // told a code was on its way for an account that was never created. It
+      // depends only on the password, so asking it here says nothing about the
+      // roster.
+      if (await isBreachedPassword(password)) {
+        return json(400, { error: BREACHED_PASSWORD });
       }
       const firstName = (body.firstName ?? '').trim().slice(0, 80);
       const lastName = (body.lastName ?? '').trim().slice(0, 80);

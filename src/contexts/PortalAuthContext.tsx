@@ -65,7 +65,7 @@ interface PortalAuthValue {
 
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signOut: () => Promise<void>;
-  register: (input: { email: string; password: string; firstName: string; lastName: string }) => Promise<boolean>;
+  register: (input: { email: string; password: string; firstName: string; lastName: string }) => Promise<{ ok: boolean; error?: string }>;
   resendCode: (email: string) => Promise<void>;
   verifyCode: (email: string, token: string) => Promise<{ ok: boolean; error?: string }>;
   requestReset: (email: string) => Promise<{ ok: boolean; error?: string }>;

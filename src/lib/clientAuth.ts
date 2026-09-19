@@ -75,18 +75,24 @@ interface RegisterInput {
   lastName: string;
 }
 
-const invokeSignup = async (body: Record<string, unknown>): Promise<boolean> => {
-  if (!isSupabaseConfigured() || !supabase) return false;
+interface SignupResult {
+  ok: boolean;
+  /** Set only from a 400, which describes what was typed and never the roster. */
+  error?: string;
+}
+
+const invokeSignup = async (body: Record<string, unknown>): Promise<SignupResult> => {
+  if (!isSupabaseConfigured() || !supabase) return { ok: false };
   try {
     const { error } = await supabase.functions.invoke('portal-signup', { body });
-    if (error) {
-      console.error('portal-signup failed:', error);
-      return false;
-    }
-    return true;
+    if (!error) return { ok: true };
+    console.error('portal-signup failed:', error);
+    if (error.context?.status !== 400) return { ok: false };
+    const refusal = await error.context.json().catch(() => null);
+    return typeof refusal?.error === 'string' ? { ok: false, error: refusal.error } : { ok: false };
   } catch (e) {
     console.error('portal-signup threw:', e);
-    return false;
+    return { ok: false };
   }
 };
 
@@ -95,19 +101,20 @@ const invokeSignup = async (body: Record<string, unknown>): Promise<boolean> => 
  * the answer never says whether the email matched, so the return value is just
  * "the request went through".
  */
-export const portalCheckEmail = (email: string): Promise<boolean> =>
+export const portalCheckEmail = (email: string): Promise<SignupResult> =>
   invokeSignup({ action: 'check', email });
 
 /**
- * Step 2: create the account and send the 6-digit code. `true` means the
+ * Step 2: create the account and send the 6-digit code. `ok` means the
  * request was accepted, NOT that an account exists — that is the enumeration
- * contract above.
+ * contract above. A refused password comes back as `error`, in words the form
+ * can show.
  */
-export const portalRegister = (input: RegisterInput): Promise<boolean> =>
+export const portalRegister = (input: RegisterInput): Promise<SignupResult> =>
   invokeSignup({ action: 'register', ...input });
 
 /** "Send me a new code" on the verify screen. Same silence as register. */
-export const portalResendCode = (email: string): Promise<boolean> =>
+export const portalResendCode = (email: string): Promise<SignupResult> =>
   invokeSignup({ action: 'resend', email });
 
 /**
