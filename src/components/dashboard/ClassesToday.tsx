@@ -146,7 +146,7 @@ const ClassesToday: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) =>
   const earlier = gaps.filter(g => g.sessionDate < today).length;
 
   return (
-    <section style={card} aria-label="Your classes today">
+    <section className="glass-panel" style={card} aria-label="Your classes today">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
         <h3 style={{ fontSize: '17px', fontWeight: 700, color: theme.colors.txt.primary, margin: 0 }}>
           Your classes today

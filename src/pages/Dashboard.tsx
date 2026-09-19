@@ -89,9 +89,13 @@ const DashboardContent: React.FC = () => {
  * member and admin — so it mounts once and is not rebuilt when the data lands.
  * The wrapper is a stacking context, which is what puts the field's z-index of
  * -1 above the App background and below everything on the page.
+ *
+ * It is also the scope for the liquid glass: the panels below carry
+ * glass-panel / glass-tile / glass-well / glass-cell classes, and index.css
+ * only turns them into glass inside .glass-scope.
  */
 const Dashboard: React.FC = () => (
-  <div style={{ position: 'relative', isolation: 'isolate' }}>
+  <div className="glass-scope" style={{ position: 'relative', isolation: 'isolate' }}>
     <TopoField />
     <DashboardContent />
   </div>
@@ -118,7 +122,7 @@ const AllSectionsHidden: React.FC = () => {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Card style={{ marginBottom: theme.spacing.lg }}>
+      <Card className="glass-panel" style={{ marginBottom: theme.spacing.lg }}>
         <p style={styles.hiddenText}>Every section of your dashboard is switched off.</p>
         <Button variant="secondary" onClick={() => setOpen(true)}>Customize dashboard</Button>
       </Card>
@@ -143,6 +147,7 @@ const CalendarDayCell: React.FC<{
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
+      className={isToday ? 'glass-cell-today' : 'glass-cell'}
       style={{
         ...(isMobileOrTablet ? styles.calendarDayMobile : styles.calendarDay),
         ...(isToday ? styles.calendarDayToday : {}),
@@ -227,7 +232,7 @@ const TaskCalendar: React.FC<{
   };
 
   return (
-    <div style={styles.calendarSection}>
+    <div className="glass-panel" style={styles.calendarSection}>
       <div style={styles.calendarHeader}>
         <div>
           {/* The grid mixes two different things — scheduled job tasks and
@@ -252,11 +257,11 @@ const TaskCalendar: React.FC<{
 
       <div style={styles.calendarGrid}>
         {(isMobileOrTablet ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((day, idx) => (
-          <div key={idx} style={isMobileOrTablet ? styles.dayHeaderMobile : styles.dayHeader}>{day}</div>
+          <div key={idx} className="glass-cell-muted" style={isMobileOrTablet ? styles.dayHeaderMobile : styles.dayHeader}>{day}</div>
         ))}
 
         {Array.from({ length: startingDayOfWeek }).map((_, index) => (
-          <div key={`empty-${index}`} style={isMobileOrTablet ? styles.calendarDayEmptyMobile : styles.calendarDayEmpty} />
+          <div key={`empty-${index}`} className="glass-cell-muted" style={isMobileOrTablet ? styles.calendarDayEmptyMobile : styles.calendarDayEmpty} />
         ))}
 
         {Array.from({ length: daysInMonth }).map((_, index) => {
@@ -386,7 +391,7 @@ const TeamMemberDashboard: React.FC<{
 
       {/* Stats Row - Compact */}
       {isWidgetEnabled('stats') && (
-        <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
+        <div className="glass-panel" style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
           <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}>
             <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
             <span style={styles.statLabel}>Pending</span>
@@ -421,7 +426,7 @@ const TeamMemberDashboard: React.FC<{
         <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
           {/* Today's Tasks */}
           {isWidgetEnabled('todayTasks') && (
-            <div style={styles.section}>
+            <div className="glass-panel" style={styles.section}>
               <div style={styles.sectionHeader}>
                 <h3 style={styles.sectionTitle}>Today ({todayTasks.length})</h3>
                 <button onClick={() => navigate('/my-tasks')} style={styles.viewAllBtn}>View All</button>
@@ -431,7 +436,7 @@ const TeamMemberDashboard: React.FC<{
               ) : (
                 <div style={styles.tasksList}>
                   {todayTasks.slice(0, 4).map(task => (
-                    <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+                    <div key={task.id} className="glass-well" style={styles.taskCard} onClick={() => setSelectedTask(task)}>
                       <div style={styles.taskCardHeader}>
                         <span style={styles.taskCardTitle}>{task.title}</span>
                         <span style={{ ...styles.taskCardStatus, backgroundColor: getStatusColor(task.status) }}>
@@ -453,7 +458,7 @@ const TeamMemberDashboard: React.FC<{
 
           {/* Upcoming Tasks */}
           {isWidgetEnabled('upcomingTasks') && (
-            <div style={styles.section}>
+            <div className="glass-panel" style={styles.section}>
               <div style={styles.sectionHeader}>
                 <h3 style={styles.sectionTitle}>Upcoming ({upcomingTasks.length})</h3>
               </div>
@@ -462,7 +467,7 @@ const TeamMemberDashboard: React.FC<{
               ) : (
                 <div style={styles.tasksList}>
                   {upcomingTasks.slice(0, 4).map(task => (
-                    <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+                    <div key={task.id} className="glass-well" style={styles.taskCard} onClick={() => setSelectedTask(task)}>
                       <div style={styles.taskCardHeader}>
                         <span style={styles.taskCardTitle}>{task.title}</span>
                         <span style={styles.taskCardDate}>
@@ -480,13 +485,13 @@ const TeamMemberDashboard: React.FC<{
 
       {/* Overdue Tasks */}
       {isWidgetEnabled('overdueTasks') && overdueTasks.length > 0 && (
-        <div style={{ ...styles.section, borderColor: theme.colors.status.overdue }}>
+        <div className="glass-panel glass-own-edge" style={{ ...styles.section, borderColor: theme.colors.status.overdue }}>
           <div style={styles.sectionHeader}>
             <h3 style={{ ...styles.sectionTitle, color: theme.colors.status.overdue }}>Overdue ({overdueTasks.length})</h3>
           </div>
           <div style={styles.tasksList}>
             {overdueTasks.slice(0, 3).map(task => (
-              <div key={task.id} style={styles.taskCard} onClick={() => setSelectedTask(task)}>
+              <div key={task.id} className="glass-well" style={styles.taskCard} onClick={() => setSelectedTask(task)}>
                 <div style={styles.taskCardHeader}>
                   <span style={styles.taskCardTitle}>{task.title}</span>
                   <span style={{ ...styles.taskCardDate, color: theme.colors.status.overdue }}>
@@ -607,6 +612,7 @@ const ScheduleSnapshot: React.FC<{
           return (
             <div
               key={day.date}
+              className={day.isToday ? 'glass-tile glass-own-edge' : 'glass-tile'}
               style={{
                 ...styles.scheduleDayCard,
                 ...(isMobileOrTablet ? styles.scheduleDayCardMobile : {}),
@@ -728,7 +734,7 @@ const AdminDashboard: React.FC<{
 
       {/* Task Stats Row */}
       {isWidgetEnabled('stats') && (
-        <div style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
+        <div className="glass-panel" style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
           <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'pending' } })}>
             <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
             <span style={styles.statLabel}>Pending</span>
@@ -763,7 +769,7 @@ const AdminDashboard: React.FC<{
 
       {/* Departments - Compact pills */}
       {isWidgetEnabled('departments') && departmentStats.length > 0 && (
-        <div style={styles.section}>
+        <div className="glass-panel" style={styles.section}>
           <div style={styles.sectionHeader}>
             <h3 style={styles.sectionTitle}>Departments</h3>
           </div>
@@ -771,6 +777,7 @@ const AdminDashboard: React.FC<{
             {departmentStats.map((dept, index) => (
               <div
                 key={index}
+                className="glass-well"
                 style={styles.departmentPill}
                 onClick={() => navigate('/sop', { state: { filterDepartment: dept.name } })}
               >
@@ -784,7 +791,7 @@ const AdminDashboard: React.FC<{
 
       {/* Recent SOPs */}
       {isWidgetEnabled('recentSops') && (
-        <div style={styles.section}>
+        <div className="glass-panel" style={styles.section}>
           <div style={styles.sectionHeader}>
             <h3 style={styles.sectionTitle}>Recent SOPs</h3>
             <button onClick={() => navigate('/sop')} style={styles.viewAllBtn}>View All</button>
@@ -794,7 +801,7 @@ const AdminDashboard: React.FC<{
           ) : (
             <div style={styles.recentList}>
               {recentSOPs.map(sop => (
-                <div key={sop.id} style={styles.recentItem} onClick={() => navigate('/sop')}>
+                <div key={sop.id} className="glass-well" style={styles.recentItem} onClick={() => navigate('/sop')}>
                   <div style={styles.recentItemHeader}>
                     <span style={styles.recentItemTitle}>{sop.title}</span>
                     <span style={styles.recentItemCategory}>{sop.category}</span>

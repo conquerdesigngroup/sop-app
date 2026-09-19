@@ -176,7 +176,7 @@ const AdminAttention: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) 
       marginBottom: theme.spacing.lg,
     }}>
       {showOverdue && (
-        <section style={card} aria-label="Overdue by person">
+        <section className="glass-panel" style={card} aria-label="Overdue by person">
           <div style={header}>
             <h3 style={title}>Overdue by person</h3>
             <button style={linkBtn} onClick={() => navigate('/job-tasks', { state: { filterStatus: 'overdue' } })}>All overdue</button>
@@ -203,7 +203,7 @@ const AdminAttention: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) 
       )}
 
       {showHours && (
-        <section style={card} aria-label="Hours awaiting review">
+        <section className="glass-panel" style={card} aria-label="Hours awaiting review">
           <div style={header}>
             <h3 style={title}>Hours awaiting review</h3>
             <button style={linkBtn} onClick={() => navigate('/hours-input', { state: { tab: 'team' } })}>Review</button>
@@ -227,7 +227,7 @@ const AdminAttention: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) 
       )}
 
       {showActivity && (
-        <section style={card} aria-label="Latest activity">
+        <section className="glass-panel" style={card} aria-label="Latest activity">
           <div style={header}>
             <h3 style={title}>Latest activity</h3>
             <button style={linkBtn} onClick={() => navigate('/activity-log')}>Full log</button>

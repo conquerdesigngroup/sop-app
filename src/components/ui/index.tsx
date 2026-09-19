@@ -195,6 +195,8 @@ interface CardProps {
   hover?: boolean;
   onClick?: () => void;
   style?: React.CSSProperties;
+  /** For a surface treatment that needs a stylesheet, e.g. `liquid-glass`. */
+  className?: string;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -203,6 +205,7 @@ export const Card: React.FC<CardProps> = ({
   hover = false,
   onClick,
   style,
+  className,
 }) => {
   const { isMobileOrTablet } = useResponsive();
   const [isHovered, setIsHovered] = useState(false);
@@ -251,6 +254,7 @@ export const Card: React.FC<CardProps> = ({
 
   return (
     <div
+      className={className}
       style={cardStyle}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
