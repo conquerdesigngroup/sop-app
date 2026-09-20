@@ -20,8 +20,8 @@
 -- default privilege cannot reach tables that already exist.
 --
 -- postgres's own defaults do still grant TRUNCATE, to postgres and to
--- service_role, in public, storage and nora. Those stay, the same call v63
--- made when it kept service_role's grants.
+-- service_role in public and storage, and to service_role alone in nora.
+-- Those stay, the same call v63 made when it kept service_role's grants.
 --
 -- Nothing else moves. Every other privilege in both defaults stays, including
 -- SELECT, INSERT, UPDATE and DELETE, so a storage table would still be
