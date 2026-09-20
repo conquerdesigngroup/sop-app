@@ -1,0 +1,31 @@
+-- =============================================================================
+-- v64 — TAKE TRUNCATE OUT OF postgres's DEFAULT FOR THE storage SCHEMA
+--
+-- v63 revoked TRUNCATE from anon and authenticated in public and removed the
+-- default privilege that kept handing it back. postgres held the same default
+-- for the storage schema, so any table postgres created there would have given
+-- both roles TRUNCATE. This removes it.
+--
+-- It cannot fire today: postgres has no CREATE on storage (measured), and
+-- storage's own tables belong to supabase_storage_admin. So this changes
+-- nothing that is running. It is here so the next person reading the grants
+-- does not find a live rule that says clients may empty storage tables.
+--
+-- Measured 2026-09-19 after applying: these two were the last TRUNCATE entries
+-- in any default privilege postgres owns. What is left belongs to
+-- supabase_admin (public, graphql, graphql_public) and supabase_storage_admin
+-- (the three storage tables), and postgres can revoke neither.
+--
+-- Nothing else moves. Every other privilege in both defaults stays, including
+-- SELECT, INSERT, UPDATE and DELETE, so a storage table would still be
+-- reachable under its row level security if one were ever created this way.
+-- Checked in a dry run: the two entries go and the other 320 are identical.
+--
+-- To undo:
+--
+--   alter default privileges for role postgres in schema storage
+--     grant truncate on tables to anon, authenticated;
+-- =============================================================================
+
+alter default privileges for role postgres in schema storage
+  revoke truncate on tables from anon, authenticated;
