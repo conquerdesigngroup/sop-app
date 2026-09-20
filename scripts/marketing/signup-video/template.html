@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create your account — DIDC Family Portal</title>
+<style>
+__FONT_CSS__
+
+:root{
+  --void:#0B0B0D; --panel:#161618; --panel2:#1E1E21;
+  --chalk:#F4F4F5; --smoke:#9A9AA4; --second:#C9C9D1;
+  --bdr:#26262B; --bdr2:#36363D;
+  --electric:#E2144F; --electric2:#FF2D6B;
+  --display:'Kanit','Barlow',sans-serif;
+  --body:'Barlow',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--void)}
+body{font-family:var(--body);-webkit-font-smoothing:antialiased}
+
+#stage{position:relative;width:1920px;height:1080px;background:var(--void);overflow:hidden}
+
+/* ---- ambient background ---- */
+.glow{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none}
+#glowA{width:900px;height:900px;left:1140px;top:-180px;background:rgba(226,20,79,.13)}
+#glowB{width:760px;height:760px;left:-240px;top:520px;background:rgba(226,20,79,.06)}
+#grid{position:absolute;inset:0;opacity:.35;
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+  background-size:80px 80px}
+#vign{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(0,0,0,.55) 100%)}
+
+/* ---- top bar ---- */
+#topbar{position:absolute;left:112px;top:56px;display:flex;align-items:center;gap:22px}
+#topbar img{height:34px;width:auto;display:block}
+#topbar .rule{width:1px;height:26px;background:var(--bdr2)}
+#topbar .kicker{font-family:var(--mono);font-weight:500;font-size:16px;letter-spacing:.22em;color:var(--smoke)}
+
+/* ---- left copy column ---- */
+#left{position:absolute;left:112px;top:0;width:1060px;height:1080px;
+  display:flex;flex-direction:column;justify-content:center}
+#chip{display:inline-flex;align-items:center;gap:12px;font-family:var(--mono);font-weight:700;
+  font-size:19px;letter-spacing:.22em;color:var(--electric);margin-bottom:26px}
+#chip .bar{width:34px;height:3px;background:var(--electric);border-radius:2px}
+#head{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:78px;line-height:1.0;letter-spacing:-.005em;color:var(--chalk);max-width:980px}
+#sub{font-family:var(--body);font-weight:400;font-size:31px;line-height:1.45;color:var(--second);
+  max-width:830px;margin-top:28px}
+#note{display:inline-flex;align-items:center;gap:14px;margin-top:34px;padding:14px 22px 14px 18px;
+  border-radius:999px;background:rgba(226,20,79,.10);border:1.5px solid rgba(226,20,79,.32);
+  font-family:var(--body);font-weight:600;font-size:23px;color:#FF7096;align-self:flex-start}
+#note .ic{width:26px;height:26px;flex:0 0 26px}
+
+/* ---- title card ---- */
+#title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0}
+#tLogo{height:82px;width:auto;display:block}
+#tKick{font-family:var(--mono);font-weight:500;font-size:19px;letter-spacing:.34em;color:var(--smoke);margin-top:38px}
+#tHeadWrap{margin-top:26px;text-align:center}
+#tHead{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:104px;line-height:1.02;color:var(--chalk);letter-spacing:-.01em}
+#tHead .pk{color:var(--electric)}
+#tRule{width:0;height:4px;background:var(--electric);border-radius:2px;margin:40px auto 0}
+#tSub{font-family:var(--body);font-weight:500;font-size:31px;color:var(--second);margin-top:34px;text-align:center}
+
+/* ---- progress ---- */
+#prog{position:absolute;left:112px;bottom:64px;width:1060px;display:flex;gap:14px}
+.seg{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.09);overflow:hidden}
+.seg i{display:block;height:100%;width:0;background:var(--electric);border-radius:3px}
+
+/* ---- phone ---- */
+#phone{position:absolute;left:1306px;top:96px;width:428px;height:888px;border-radius:56px;
+  background:#08080A;border:2px solid #2C2C33;
+  box-shadow:0 60px 120px rgba(0,0,0,.75),0 0 0 11px #0F0F12,0 0 90px rgba(226,20,79,.14);
+  transform-origin:50% 50%}
+#screen{position:absolute;left:13px;top:13px;width:400px;height:860px;border-radius:44px;
+  overflow:hidden;background:var(--void)}
+#island{position:absolute;left:50%;top:22px;transform:translateX(-50%);width:104px;height:30px;
+  border-radius:16px;background:#000;z-index:60}
+.scr{position:absolute;inset:0;background:var(--void);display:flex;flex-direction:column}
+
+/* ---- phone UI atoms ---- */
+.ph-head{display:flex;align-items:center;gap:11px;padding:62px 16px 12px;border-bottom:2px solid var(--bdr);flex:0 0 auto}
+.ph-back{font-size:26px;line-height:1;color:var(--smoke);font-family:var(--body);width:20px}
+.ph-head img{height:19px;width:auto;display:block}
+.ph-head .sp{flex:1}
+.ph-lab{font-family:var(--body);font-weight:600;font-size:13px;color:var(--smoke)}
+.ph-ic{width:26px;height:26px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;
+  justify-content:center;color:var(--smoke);font-size:14px}
+.ph-body{flex:1;padding:22px 17px;overflow:hidden}
+.ph-h1{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:33px;line-height:1.16;color:var(--chalk)}
+.ph-sub{font-family:var(--body);font-size:15px;line-height:1.45;color:var(--smoke);margin-top:7px}
+.card{margin-top:22px;background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:17px;
+  display:flex;flex-direction:column;gap:15px}
+.p{font-family:var(--body);font-size:15px;line-height:1.5;color:var(--second)}
+.p.mut{color:var(--smoke)}
+.p b{font-weight:700;color:var(--chalk)}
+.fld{display:flex;flex-direction:column;gap:7px}
+.fld .lb{font-family:var(--body);font-weight:600;font-size:13px;color:var(--smoke)}
+.fld .in{height:48px;border-radius:8px;background:var(--panel2);border:2px solid var(--bdr);
+  display:flex;align-items:center;padding:0 13px;font-family:var(--body);font-size:17px;color:var(--chalk);
+  white-space:nowrap;overflow:hidden}
+.fld .in.ph{color:#6A6A74}
+.fld .in.mono{font-family:var(--mono);letter-spacing:.3em;font-size:18px}
+.fld .in.focus{border-color:var(--electric);box-shadow:0 0 0 4px rgba(226,20,79,.16)}
+.caret{display:inline-block;width:2px;height:21px;background:var(--electric);margin-left:2px;vertical-align:-4px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--chalk);margin-right:6px}
+.btn{height:51px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--body);font-weight:600;font-size:17px}
+.btn.pri{background:var(--electric);color:#FFFFFF}
+.btn.out{border:2px solid var(--bdr2);color:var(--chalk)}
+.btn.gh{height:34px;color:var(--smoke);font-size:14px;font-weight:500}
+.hr{height:1px;background:var(--bdr);margin-top:2px}
+.cap{font-family:var(--body);font-size:14px;line-height:1.4;color:var(--smoke)}
+
+/* door screen */
+.door{padding:78px 22px 76px;align-items:center;gap:0;justify-content:center}
+.door img.mark{width:252px;height:auto;display:block}
+.door .tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;margin-top:44px}
+.tile{background:var(--panel);border:2px solid var(--bdr);border-radius:12px;min-height:152px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px}
+.tile .well{width:50px;height:50px;border-radius:50%;background:var(--panel2);display:flex;
+  align-items:center;justify-content:center}
+.tile .nm{font-family:var(--body);font-weight:600;font-size:15px;color:var(--chalk)}
+.tile.acc{border-color:rgba(226,20,79,.55)}
+.tile.acc .well{background:rgba(226,20,79,.16)}
+.door .tag{position:absolute;left:0;right:0;bottom:34px;text-align:center;
+  font-family:var(--mono);font-size:13px;color:var(--smoke)}
+
+/* home tiles */
+.navtiles{display:flex;flex-direction:column;gap:12px;margin-top:22px}
+.ntile{background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:17px;
+  display:flex;align-items:center;gap:14px}
+.ntile .well{width:42px;height:42px;border-radius:10px;background:var(--panel2);display:flex;
+  align-items:center;justify-content:center;flex:0 0 42px}
+.ntile.acc .well{background:rgba(226,20,79,.16)}
+.ntile .nm{font-family:var(--body);font-weight:600;font-size:17px;color:var(--chalk)}
+.ntile .ch{margin-left:auto;color:var(--smoke);font-size:20px}
+
+/* success burst */
+#burst{position:absolute;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
+  background:rgba(11,11,13,.86);opacity:0}
+#burstRing{width:132px;height:132px;border-radius:50%;background:rgba(226,20,79,.14);
+  border:3px solid var(--electric);display:flex;align-items:center;justify-content:center}
+
+/* tap ripple */
+#tap{position:absolute;width:104px;height:104px;border-radius:50%;z-index:55;opacity:0;
+  border:3px solid rgba(226,20,79,.85);background:rgba(226,20,79,.16);
+  transform:translate(-50%,-50%) scale(.3);pointer-events:none}
+#tapDot{position:absolute;width:30px;height:30px;border-radius:50%;z-index:56;opacity:0;
+  background:rgba(244,244,245,.9);transform:translate(-50%,-50%);pointer-events:none;
+  box-shadow:0 2px 14px rgba(0,0,0,.6)}
+
+/* email callout badge next to phone */
+#callout{position:absolute;z-index:58;left:-266px;top:0;width:250px;opacity:0;
+  background:var(--panel);border:2px solid var(--electric);border-radius:12px;padding:14px 16px;
+  box-shadow:0 20px 50px rgba(0,0,0,.6)}
+#callout .t{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--electric)}
+#callout .d{font-family:var(--body);font-weight:500;font-size:17px;line-height:1.35;color:var(--chalk);margin-top:7px}
+#callout .arw{position:absolute;right:-9px;top:34px;width:14px;height:14px;background:var(--panel);
+  border-right:2px solid var(--electric);border-top:2px solid var(--electric);transform:rotate(45deg)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow" id="glowA"></div>
+  <div class="glow" id="glowB"></div>
+  <div id="grid"></div>
+  <div id="vign"></div>
+
+  <div id="topbar">
+    <img src="__LOGO__" alt="">
+    <div class="rule"></div>
+    <div class="kicker">FAMILY PORTAL</div>
+  </div>
+
+  <div id="left">
+    <div id="chip"><span class="bar"></span><span id="chipTxt">STEP 1 OF 4</span></div>
+    <h2 id="head">OPEN THE APP</h2>
+    <p id="sub">Sub line goes here.</p>
+    <div id="note"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#FF7096" stroke-width="2.1"
+      stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/>
+      <path d="m2 7 10 6 10-6"/></svg><span id="noteTxt">Check your spam folder.</span></div>
+  </div>
+
+  <div id="prog">
+    <div class="seg"><i></i></div><div class="seg"><i></i></div>
+    <div class="seg"><i></i></div><div class="seg"><i></i></div>
+  </div>
+
+  <div id="phone">
+    <div id="screen">
+
+      <!-- ============ DOOR ============ -->
+      <div class="scr door" data-k="door">
+        <img class="mark" src="__LOGO__" alt="">
+        <div class="tiles">
+          <div class="tile" id="tileStaff">
+            <div class="well"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/><path d="M9 7V5h6v2"/></svg></div>
+            <div class="nm">Staff Portal</div>
+          </div>
+          <div class="tile acc" id="tileDancer">
+            <div class="well"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#E2144F"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+            <div class="nm">Dancer Portal</div>
+          </div>
+        </div>
+        <div class="tag">You are your only limit</div>
+      </div>
+
+      <!-- ============ PARENT PORTAL (choose door) ============ -->
+      <div class="scr" data-k="portal">
+        <div class="ph-head"><div class="ph-back">&lsaquo;</div><img src="__LOGO__" alt="">
+          <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+        <div class="ph-body">
+          <div class="ph-h1">Parent Portal</div>
+          <div class="ph-sub">Schedules, class info and files for your dancer.</div>
+          <div class="card" style="gap:22px">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="btn pri">Log in</div>
+              <div class="cap">I already made an account for this app.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="btn out" id="btnSignup">Sign up</div>
+              <div class="cap">It&rsquo;s my first time &mdash; I need to make one.</div>
+            </div>
+            <div class="hr"></div>
+            <div class="p mut"><b>Signing up?</b> Use the same email address as your
+              <b>Enrollio</b> account &mdash; the one the studio already has for you.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ DETAILS ============ -->
+      <div class="scr" data-k="details">
+        <div class="ph-head"><div class="ph-back">&lsaquo;</div><img src="__LOGO__" alt="">
+          <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+        <div class="ph-body">
+          <div class="ph-h1">Create account</div>
+          <div class="ph-sub">For families enrolled at the studio.</div>
+          <div class="card">
+            <div class="p">Use the same email address as your <b>Enrollio</b> account &mdash; the one the
+              studio already has for you.</div>
+            <div class="fld"><div class="lb">Your first name</div>
+              <div class="in" id="fFirst"></div></div>
+            <div class="fld"><div class="lb">Your last name</div>
+              <div class="in" id="fLast"></div></div>
+            <div class="fld"><div class="lb">Email</div>
+              <div class="in ph" id="fEmail">Same as your Enrollio email</div></div>
+            <div class="btn pri" id="btnContinue">Continue</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ PASSWORD ============ -->
+      <div class="scr" data-k="password">
+        <div class="ph-head"><div class="ph-back">&lsaquo;</div><img src="__LOGO__" alt="">
+          <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+        <div class="ph-body">
+          <div class="ph-h1">Create account</div>
+          <div class="ph-sub">For families enrolled at the studio.</div>
+          <div class="card">
+            <div class="p">Choose a password for <b>sarah.mitchell@gmail.com</b>. At least 6 characters.</div>
+            <div class="fld"><div class="lb">Password</div><div class="in" id="fPw"></div></div>
+            <div class="fld"><div class="lb">Confirm password</div><div class="in" id="fPw2"></div></div>
+            <div class="btn pri" id="btnCreate">Create account</div>
+            <div class="btn gh">Back</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ VERIFY ============ -->
+      <div class="scr" data-k="verify">
+        <div class="ph-head"><div class="ph-back">&lsaquo;</div><img src="__LOGO__" alt="">
+          <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+        <div class="ph-body">
+          <div class="ph-h1">Create account</div>
+          <div class="ph-sub">For families enrolled at the studio.</div>
+          <div class="card">
+            <div class="p">A 6-digit code is on its way to <b>sarah.mitchell@gmail.com</b>.
+              Enter the code to finish.</div>
+            <div class="p"><b>Check your spam or junk folder.</b> The code often lands there the first time.</div>
+            <div class="fld"><div class="lb">Code from your email</div>
+              <div class="in mono" id="fCode"></div></div>
+            <div class="btn pri" id="btnVerify">Verify and log in</div>
+            <div class="btn gh">Send a new code</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ HOME ============ -->
+      <div class="scr" data-k="home">
+        <div class="ph-head"><img src="__LOGO__" alt="">
+          <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+        <div class="ph-body">
+          <div class="ph-h1">Hi, Sarah</div>
+          <div class="ph-sub">Pick your section to see schedules, info and documents.</div>
+          <div class="navtiles">
+            <div class="ntile acc"><div class="well"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+              stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m12 3 2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.2l5.9-.9Z"/></svg></div>
+              <div class="nm">All Stars</div><div class="ch">&rsaquo;</div></div>
+            <div class="ntile"><div class="well"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+              stroke="#9A9AA4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></div>
+              <div class="nm">Academy</div><div class="ch">&rsaquo;</div></div>
+            <div class="ntile"><div class="well"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+              stroke="#9A9AA4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></div>
+              <div class="nm">Billing &amp; Admin</div><div class="ch">&rsaquo;</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="burst"><div id="burstRing">
+        <svg width="66" height="66" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2.6"
+          stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div></div>
+    </div>
+    <div id="island"></div>
+    <div id="tap"></div>
+    <div id="tapDot"></div>
+    <div id="callout"><div class="arw"></div>
+      <div class="t">IMPORTANT</div>
+      <div class="d">The same email Enrollio has for you.</div>
+    </div>
+  </div>
+
+  <div id="title">
+    <img id="tLogo" src="__LOGO__" alt="">
+    <div id="tKick">DANCING IMAGES DANCE CENTER</div>
+    <div id="tHeadWrap"><div id="tHead">How to create<br>your <span class="pk">account</span></div>
+      <div id="tRule"></div></div>
+    <div id="tSub">Four steps. About two minutes.</div>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   Deterministic timeline. Nothing animates on its own — every visual
+   property is a pure function of t, so Playwright can seek to any
+   frame and screenshot it. 15.000s @ 30fps = 450 frames.
+   =================================================================== */
+const DUR = 15.0;
+
+const clamp = (x,a,b)=>Math.min(b,Math.max(a,x));
+const inv   = (t,a,b)=> b<=a ? (t>=b?1:0) : clamp((t-a)/(b-a),0,1);
+const eOut  = p=>1-Math.pow(1-p,3);
+const eOut4 = p=>1-Math.pow(1-p,4);
+const eInOut= p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const eBack = p=>{const c1=1.5,c3=c1+1;return 1+c3*Math.pow(p-1,3)+c1*Math.pow(p-1,2);};
+const mix   = (a,b,p)=>a+(b-a)*p;
+
+const $ = s=>document.querySelector(s);
+const $$ = s=>Array.from(document.querySelectorAll(s));
+
+/* ---------------- scenes ---------------- */
+const SCENES = [
+  {k:'title', a:0.00,  b:1.70},
+  {k:'s1',    a:1.70,  b:4.30},
+  {k:'s2',    a:4.30,  b:7.40},
+  {k:'s3',    a:7.40,  b:9.70},
+  {k:'s4',    a:9.70,  b:12.90},
+  {k:'out',   a:12.90, b:15.00},
+];
+
+const COPY = {
+  s1:{chip:'STEP 1 OF 4', head:'Open the app,<br>tap <span style="color:var(--electric)">Sign&nbsp;up</span>',
+      sub:'At the front door choose <b style="color:var(--chalk);font-weight:600">Dancer Portal</b>, then tap Sign up.', note:null},
+  s2:{chip:'STEP 2 OF 4', head:'Use your<br>Enrollio email',
+      sub:'Your name, then the same email address the studio already has for you.',
+      note:'Any other address will not be recognised.'},
+  s3:{chip:'STEP 3 OF 4', head:'Choose a<br>password',
+      sub:'At least 6 characters. Type it twice, then tap Create&nbsp;account.', note:null},
+  s4:{chip:'STEP 4 OF 4', head:'Enter the<br>6-digit code',
+      sub:'We email the code to you. Type it in and you are done.',
+      note:'Not there? Check your spam or junk folder.'},
+  out:{chip:'YOU&rsquo;RE IN', head:'That&rsquo;s it &mdash;<br>you&rsquo;re in',
+      sub:'Schedules, class info and files for your dancer, all in one place.',
+      note:null},
+};
+
+/* phone screen switch points */
+const SCREENS = [
+  {k:'door',     at:-1.00},
+  {k:'portal',   at: 2.78},
+  {k:'details',  at: 3.88},
+  {k:'password', at: 7.32},
+  {k:'verify',   at: 9.42},
+  {k:'home',     at:12.62},
+];
+const SCR_D = 0.30;
+
+/* Taps land on the centre of the thing being tapped, measured off the live
+   layout — a hardcoded x/y drifts the moment any copy above it rewraps. */
+const TAPS = [
+  {t:2.48, el:'#tileDancer'},
+  {t:3.58, el:'#btnSignup'},
+  {t:7.02, el:'#btnContinue'},
+  {t:9.12, el:'#btnCreate'},
+  {t:12.20,el:'#btnVerify'},
+];
+function centreIn(sel, host){
+  const a = $(sel).getBoundingClientRect(), b = $(host).getBoundingClientRect();
+  return { x: a.left - b.left + a.width/2, y: a.top - b.top + a.height/2 };
+}
+
+const FIRST='Sarah', LAST='Mitchell', EMAIL='sarah.mitchell@gmail.com', CODE='482917';
+
+/* ---------------- helpers ---------------- */
+function typed(str, t, t0, dur){
+  const p = inv(t,t0,t0+dur);
+  return str.slice(0, Math.round(p*str.length));
+}
+function caretOn(t, t0, t1){
+  if(t < t0 || t > t1) return false;
+  return Math.floor((t-t0)*1.8) % 2 === 0;
+}
+function setField(el, text, focused, showCaret, placeholder){
+  if(!text && placeholder && !focused){ el.className='in ph'; el.textContent=placeholder; return; }
+  el.className = 'in' + (focused ? ' focus':'');
+  el.innerHTML = escapeHtml(text) + (showCaret ? '<span class="caret"></span>' : '');
+}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function dots(n){let s='';for(let i=0;i<n;i++)s+='<span class="dot"></span>';return s;}
+
+/* ---------------- the seek function ---------------- */
+function seek(t){
+  t = clamp(t, 0, DUR);
+
+  /* ---- title card ---- */
+  const tIn  = eOut(inv(t,0.06,0.70));
+  const tOut = eInOut(inv(t,1.34,1.72));
+  const title = $('#title');
+  title.style.opacity = (tIn * (1-tOut)).toFixed(4);
+  title.style.transform = `scale(${mix(0.985,1,tIn) * mix(1,1.06,tOut)})`;
+  $('#tLogo').style.transform = `scale(${mix(0.88,1,eBack(inv(t,0.06,0.78)))})`;
+  $('#tLogo').style.opacity = eOut(inv(t,0.06,0.50)).toFixed(3);
+  $('#tKick').style.opacity = eOut(inv(t,0.26,0.66)).toFixed(3);
+  $('#tKick').style.letterSpacing = mix(0.50,0.34,eOut(inv(t,0.26,0.90))).toFixed(3)+'em';
+  const th = eOut(inv(t,0.40,1.02));
+  $('#tHead').style.opacity = th.toFixed(3);
+  $('#tHead').style.transform = `translateY(${((1-th)*30).toFixed(2)}px)`;
+  $('#tRule').style.width = (eOut(inv(t,0.80,1.30))*230).toFixed(1)+'px';
+  const ts = eOut(inv(t,0.92,1.40));
+  $('#tSub').style.opacity = ts.toFixed(3);
+  $('#tSub').style.transform = `translateY(${((1-ts)*18).toFixed(2)}px)`;
+
+  /* ---- which scene ---- */
+  const sc = SCENES.find(s=>t>=s.a && t<s.b) || SCENES[SCENES.length-1];
+  const copy = COPY[sc.k];
+
+  /* ---- persistent chrome fades in after the title ---- */
+  const chrome = eOut(inv(t,1.42,1.92));
+  $('#topbar').style.opacity = chrome.toFixed(3);
+  $('#topbar').style.transform = `translateY(${((1-chrome)*-14).toFixed(2)}px)`;
+  $('#prog').style.opacity = chrome.toFixed(3);
+
+  /* ---- phone entrance ---- */
+  const pIn = eOut(inv(t,1.38,2.10));
+  const ph = $('#phone');
+  ph.style.opacity = pIn.toFixed(3);
+  ph.style.transform = `translateY(${((1-pIn)*54).toFixed(2)}px) scale(${mix(0.94,1,pIn).toFixed(4)})`;
+
+  /* ---- left copy: retype on every scene change, animate in ---- */
+  if(copy){
+    $('#chipTxt').innerHTML = copy.chip;
+    $('#head').innerHTML = copy.head;
+    $('#sub').innerHTML = copy.sub;
+    if(copy.note){ $('#noteTxt').innerHTML = copy.note; $('#note').style.display='inline-flex'; }
+    else { $('#note').style.display='none'; }
+  }
+  const lead = Math.max(sc.a, 1.44);          /* scene 1 waits for the title to clear */
+  const pc = eOut(inv(t, lead, lead+0.46));
+  const pcOut = sc.b >= DUR ? 0 : eInOut(inv(t, sc.b-0.16, sc.b));
+  const lop = (pc*(1-pcOut)).toFixed(3);
+  const lx  = (mix(30,0,pc) + pcOut*-22).toFixed(2);
+  ['#chip','#head','#sub','#note'].forEach((s,i)=>{
+    const e=$(s); if(!e) return;
+    const q = eOut(inv(t, lead+i*0.075, lead+0.46+i*0.075));
+    e.style.opacity = (q*(1-pcOut)).toFixed(3);
+    e.style.transform = `translate(${(mix(34,0,q) + pcOut*-22).toFixed(2)}px, ${((1-q)*10).toFixed(2)}px)`;
+  });
+  $('#left').style.opacity = t<1.30 ? '0' : '1';
+
+  /* ---- progress segments ---- */
+  const stepIdx = {s1:0,s2:1,s3:2,s4:3};
+  $$('#prog .seg i').forEach((e,i)=>{
+    let w = 0;
+    const cur = stepIdx[sc.k];
+    if(sc.k==='out') w = 1;
+    else if(cur===undefined) w = 0;
+    else if(i < cur) w = 1;
+    else if(i === cur) w = eInOut(inv(t, sc.a, sc.b));
+    e.style.width = (w*100).toFixed(2)+'%';
+  });
+
+  /* ---- phone screens ---- */
+  SCREENS.forEach((s,i)=>{
+    const el = document.querySelector(`.scr[data-k="${s.k}"]`);
+    const start = s.at, end = SCREENS[i+1] ? SCREENS[i+1].at : 1e9;
+    let op, x;
+    if(t < start){ op=0; x=40; }
+    else if(t < start+SCR_D){ const p=eOut(inv(t,start,start+SCR_D)); op=p; x=40*(1-p); }
+    else if(t < end){ op=1; x=0; }
+    else if(t < end+SCR_D){ const p=eInOut(inv(t,end,end+SCR_D)); op=1-p; x=-40*p; }
+    else { op=0; x=-40; }
+    el.style.opacity = op.toFixed(3);
+    el.style.transform = `translateX(${x.toFixed(2)}px)`;
+  });
+
+  /* ---- form typing ---- */
+  const focus = (a,b)=> t>=a-0.06 && t<=b;
+  setField($('#fFirst'), typed(FIRST, t, 4.38, 0.42), focus(4.38,4.90), caretOn(t,4.38,4.86), '');
+  setField($('#fLast'),  typed(LAST,  t, 4.96, 0.46), focus(4.96,5.52), caretOn(t,4.96,5.48), '');
+  const em = typed(EMAIL, t, 5.62, 1.02);
+  setField($('#fEmail'), em, focus(5.62,6.84), caretOn(t,5.62,6.78), 'Same as your Enrollio email');
+
+  const pw1 = Math.round(inv(t,7.54,8.12)*9);
+  $('#fPw').className = 'in' + (t>7.5&&t<8.2 ? ' focus':'');
+  $('#fPw').innerHTML = dots(pw1) + (caretOn(t,7.54,8.16)?'<span class="caret"></span>':'');
+  const pw2 = Math.round(inv(t,8.30,8.88)*9);
+  $('#fPw2').className = 'in' + (t>8.26&&t<8.96 ? ' focus':'');
+  $('#fPw2').innerHTML = dots(pw2) + (caretOn(t,8.30,8.92)?'<span class="caret"></span>':'');
+
+  const cd = typed(CODE, t, 10.42, 0.96);
+  $('#fCode').className = 'in mono' + (t>10.38&&t<11.50 ? ' focus':'');
+  $('#fCode').innerHTML = escapeHtml(cd) + (caretOn(t,10.42,11.44)?'<span class="caret"></span>':'');
+
+  /* ---- email callout beside the phone ---- */
+  const co = $('#callout');
+  const coIn = eOut(inv(t,5.72,6.14)), coOut = eInOut(inv(t,6.92,7.22));
+  co.style.opacity = (coIn*(1-coOut)).toFixed(3);
+  co.style.top = (centreIn('#fEmail','#phone').y - 41) + 'px';
+  co.style.transform = `translateX(${mix(26,0,coIn).toFixed(2)}px) scale(${mix(.94,1,coIn).toFixed(3)})`;
+
+  /* ---- taps ---- */
+  const tap=$('#tap'), dot=$('#tapDot');
+  let tOp=0, tSc=.3, dOp=0;
+  let pressed = null;
+  TAPS.forEach(k=>{
+    const p = inv(t, k.t, k.t+0.46);
+    if(t>=k.t-0.16 && t<=k.t+0.50){
+      const c = centreIn(k.el, '#phone');
+      tap.style.left = c.x+'px'; tap.style.top = c.y+'px';
+      dot.style.left = c.x+'px'; dot.style.top = c.y+'px';
+      if(p>0){ tOp=Math.max(tOp,1-p); tSc=mix(.3,1.5,eOut(p)); }
+      dOp = Math.max(dOp, 1 - inv(t,k.t+0.10,k.t+0.40));
+      if(t>=k.t && t<k.t+0.16) pressed = k.el;
+    }
+  });
+  tap.style.opacity=tOp.toFixed(3);
+  tap.style.transform=`translate(-50%,-50%) scale(${tSc.toFixed(3)})`;
+  dot.style.opacity=(dOp*0.9).toFixed(3);
+  ['#tileDancer','#btnSignup','#btnContinue','#btnCreate','#btnVerify'].forEach(s=>{
+    const e=$(s); if(!e) return;
+    e.style.transform = (pressed===s) ? 'scale(0.965)' : 'scale(1)';
+    e.style.transition='none';
+  });
+
+  /* ---- success burst on verify ---- */
+  const b = $('#burst');
+  const bIn = eOut(inv(t,12.34,12.58)), bOut = eInOut(inv(t,12.86,13.16));
+  b.style.opacity = (bIn*(1-bOut)).toFixed(3);
+  $('#burstRing').style.transform = `scale(${mix(.55,1,eBack(inv(t,12.34,12.74))).toFixed(3)})`;
+}
+
+window.__seek = seek;
+window.__dur = DUR;
+seek(0);
+</script>
+</body>
+</html>
