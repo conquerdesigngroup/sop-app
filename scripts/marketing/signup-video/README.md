@@ -20,6 +20,8 @@ The real flow, in the app's own words, so nothing on screen contradicts what a
 parent is looking at:
 
 1. Front door → **Dancer Portal** → **Sign up** (`ChooserPage`, `PortalLogin`)
+   — which of the two doors, and which of the two buttons, is the thing the
+   opening has to make unmissable; see **Making the taps readable** below
 2. Name and **the Enrollio email** (`PortalSignUp`, step `details`)
 3. A password, twice, 6+ characters (step `password`, `CLIENT_MIN_PASSWORD`)
 4. The 6-digit code (step `verify`)
@@ -94,7 +96,11 @@ Editing:
   Collapsing both onto one curve is visible.
 - **Taps and the email callout are anchored by selector** and measured off the
   live layout, not by hardcoded x/y, so they stay on target when copy above
-  them rewraps.
+  them rewraps. `centreIn()` divides the live punch-in scale back out, because
+  `getBoundingClientRect()` returns the transformed rect while the indicators
+  are positioned in the phone's own unscaled pixels.
+- **`punch`** zooms the phone during a beat, and **`spot`** lights one target
+  and pulls back what competes with it.
 - **Brand** — colours and type are the tokens from `public/brand/tokens.json`,
   and the mark is `public/brand/logos/didc-mark-3d.png` read from the repo and
   base64'd in at render time. Pink stays at accent level, per the ~5% rule. The
@@ -103,6 +109,28 @@ Editing:
 - **Fonts** — `assets/fonts.css` holds the latin subsets of Kanit, Barlow and
   JetBrains Mono, base64'd. Embedded rather than fetched so a render is
   identical offline and never races a webfont load.
+
+## Making the taps readable
+
+The opening originally showed the two front-door tiles at 1:1, where each is
+about 85px on a 1080p frame — and this is watched on a phone. You could see
+that something was tapped but not *which* tile, which is the one thing step 1
+exists to teach: families go through **Dancer Portal**, not Staff Portal. Four
+things fix it, and all four matter at small sizes:
+
+1. The tiles are drawn larger than the app's own (198px tall, 20px labels).
+   This screen is a recreation, not a screenshot, so it is allowed to be.
+2. `spot` rings the target and drops the alternative to 26% — "not that one"
+   is as much of the message as "this one".
+3. `punch` scales the phone to 1.20 across the whole of step 1. It scales
+   about the centre with no pan, which keeps it clear of the caption column
+   and inside the frame; panning to centre a tile pushes it into the text.
+4. The ripple `aim`s at the tile's icon well rather than its centre, so it
+   never sits on the label you are meant to read.
+
+The 30s cut also splits step 1 into two beats — *Tap Dancer Portal*, then
+*Then tap Sign up* — so each choice gets its own headline and about two
+seconds. The 15s cut keeps one beat but names both in it.
 
 ## If you re-cut it
 

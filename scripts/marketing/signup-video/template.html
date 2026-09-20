@@ -117,14 +117,21 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
 /* door screen */
 .door{padding:78px 22px 76px;align-items:center;gap:0;justify-content:center}
 .door img.mark{width:252px;height:auto;display:block}
-.door .tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;margin-top:44px}
-.tile{background:var(--panel);border:2px solid var(--bdr);border-radius:12px;min-height:152px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px}
-.tile .well{width:50px;height:50px;border-radius:50%;background:var(--panel2);display:flex;
+.door .tiles{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;margin-top:40px}
+.tile{background:var(--panel);border:2px solid var(--bdr);border-radius:14px;min-height:198px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:17px}
+.tile .well{width:68px;height:68px;border-radius:50%;background:var(--panel2);display:flex;
   align-items:center;justify-content:center}
-.tile .nm{font-family:var(--body);font-weight:600;font-size:15px;color:var(--chalk)}
+.tile .nm{font-family:var(--body);font-weight:700;font-size:20px;color:var(--chalk);text-align:center}
 .tile.acc{border-color:rgba(226,20,79,.55)}
 .tile.acc .well{background:rgba(226,20,79,.16)}
+
+/* Spotlight. At the moment of a choice the target is ringed and everything
+   competing with it is pulled back, because at playback size a tap ripple on
+   its own does not say WHICH of two tiles was tapped. */
+.dim{opacity:.26}
+.hot{border-color:var(--electric) !important;
+  box-shadow:0 0 0 4px rgba(226,20,79,.22), 0 0 46px rgba(226,20,79,.32)}
 .door .tag{position:absolute;left:0;right:0;bottom:34px;text-align:center;
   font-family:var(--mono);font-size:13px;color:var(--smoke)}
 
@@ -279,12 +286,12 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
         <img class="mark" src="__LOGO__" alt="">
         <div class="tiles">
           <div class="tile" id="tileStaff">
-            <div class="well"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4"
+            <div class="well"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/><path d="M9 7V5h6v2"/></svg></div>
             <div class="nm">Staff Portal</div>
           </div>
           <div class="tile acc" id="tileDancer">
-            <div class="well"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#E2144F"
+            <div class="well" id="tileDancerIcon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#E2144F"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
             <div class="nm">Dancer Portal</div>
           </div>
@@ -300,11 +307,11 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
           <div class="ph-h1">Parent Portal</div>
           <div class="ph-sub">Schedules, class info and files for your dancer.</div>
           <div class="card" style="gap:22px">
-            <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;flex-direction:column;gap:8px" id="doorLogin">
               <div class="btn pri">Log in</div>
               <div class="cap">I already made an account for this app.</div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;flex-direction:column;gap:8px" id="doorSignup">
               <div class="btn out" id="btnSignup">Sign up</div>
               <div class="cap">It&rsquo;s my first time &mdash; I need to make one.</div>
             </div>
@@ -543,8 +550,8 @@ const TIMELINES = {
     dur: 15.0,
     beats: [
       {a:1.70, b:4.30, step:0, chip:'STEP 1 OF 4',
-       head:'Open the app,<br>tap <span class="pk">Sign&nbsp;up</span>',
-       sub:'At the front door choose <b>Dancer Portal</b>, then tap Sign up.'},
+       head:'Tap <span class="pk">Dancer Portal</span>,<br>then Sign up',
+       sub:'The front door asks who you are. Families go through <b>Dancer Portal</b> &mdash; then tap <b>Sign up</b>, because it is your first time.'},
       {a:4.30, b:7.40, step:1, chip:'STEP 2 OF 4',
        head:'Use your<br>Enrollio email',
        sub:'Your name, then the same email address the studio already has for you.',
@@ -565,7 +572,7 @@ const TIMELINES = {
       {at:7.32, k:'password'}, {at:9.42, k:'verify'}, {at:12.62, k:'home'},
     ],
     taps: [
-      {t:2.48, el:'#tileDancer'}, {t:3.58, el:'#btnSignup'}, {t:7.02, el:'#btnContinue'},
+      {t:2.48, el:'#tileDancer', aim:'#tileDancerIcon'}, {t:3.58, el:'#btnSignup'}, {t:7.02, el:'#btnContinue'},
       {t:9.12, el:'#btnCreate'}, {t:12.20, el:'#btnVerify'},
     ],
     type: {
@@ -575,67 +582,81 @@ const TIMELINES = {
       callout:[5.72,6.14,6.92,7.22], burst:[12.34,12.58,12.86,13.16],
       mailArrive:[-2,-1], junkHot:[-2,-1], codePop:[-2,-1],
     },
+    punch: [{a:1.92, b:4.32, scale:1.20}],
+    spot: [
+      {a:2.02, b:2.88, hot:['#tileDancer'], dim:['#tileStaff']},
+      {a:3.12, b:3.98, hot:['#btnSignup'],  dim:['#doorLogin']},
+    ],
     diagram: null,
   },
 
   full: {
     dur: 30.0,
     beats: [
-      {a:2.00, b:5.30, step:0, chip:'STEP 1 OF 4',
-       head:'Open the app,<br>tap <span class="pk">Sign&nbsp;up</span>',
-       sub:'At the front door choose <b>Dancer Portal</b>, then tap Sign up.'},
-      {a:5.30, b:8.00, step:1, chip:'STEP 2 OF 4',
+      {a:2.00, b:4.40, step:0, chip:'STEP 1 OF 4',
+       head:'Tap <span class="pk">Dancer<br>Portal</span>',
+       sub:'The front door asks who you are. <b>Staff Portal</b> is for the teachers. Families go through <b>Dancer Portal</b>.'},
+      {a:4.40, b:6.40, step:0, chip:'STEP 1 OF 4',
+       head:'Then tap<br><span class="pk">Sign up</span>',
+       sub:'<b>Sign up</b> is for your first time. <b>Log in</b> is for afterwards, once this account exists.'},
+      {a:6.40, b:8.90, step:1, chip:'STEP 2 OF 4',
        head:'Start with<br>your name',
        sub:'Your first and last name. Then the email box &mdash; and that one matters.'},
-      {a:8.00, b:13.60, step:1, chip:'STEP 2 OF 4',
+      {a:8.90, b:13.90, step:1, chip:'STEP 2 OF 4',
        head:'Why <span class="pk">that</span><br>email?',
        sub:'The studio&rsquo;s family list comes from <b>Enrollio</b>, where you registered and pay. The app looks your address up on that list.'},
-      {a:13.60, b:15.80, step:1, chip:'STEP 2 OF 4',
+      {a:13.90, b:16.10, step:1, chip:'STEP 2 OF 4',
        head:'Type your<br>Enrollio email',
        sub:'The same address the studio already has for you.',
        note:'Not sure which one? Ask at the front desk.'},
-      {a:15.80, b:18.60, step:2, chip:'STEP 3 OF 4',
+      {a:16.10, b:18.90, step:2, chip:'STEP 3 OF 4',
        head:'Choose a<br>password',
        sub:'At least 6 characters. Type it twice, then tap Create&nbsp;account.'},
-      {a:18.60, b:19.70, step:3, chip:'STEP 4 OF 4',
+      {a:18.90, b:20.00, step:3, chip:'STEP 4 OF 4',
        head:'Now open<br>your email',
        sub:'A 6-digit code is on its way to your inbox. Leave this page open and go and find it.'},
-      {a:19.70, b:22.30, step:3, chip:'STEP 4 OF 4',
+      {a:20.00, b:22.60, step:3, chip:'STEP 4 OF 4',
        head:'Find the email<br>from the studio',
        sub:'It is from <b>Dancing Images Dance Center</b>, subject <b>Your DIDC login code</b>. Open it.',
        note:'Not in your inbox? Look in Spam or Junk.'},
-      {a:22.30, b:24.30, step:3, chip:'STEP 4 OF 4',
+      {a:22.60, b:24.60, step:3, chip:'STEP 4 OF 4',
        head:'Read the<br>6 digits',
        sub:'The code is inside the email. It works for a whole hour, so there is no rush.'},
-      {a:24.30, b:26.80, step:3, chip:'STEP 4 OF 4',
+      {a:24.60, b:27.10, step:3, chip:'STEP 4 OF 4',
        head:'Type them<br>into the app',
        sub:'Go back to the app, type the 6 digits and tap <b>Verify and log in</b>.'},
-      {a:26.80, b:30.00, step:-1, chip:'YOU&rsquo;RE IN',
+      {a:27.10, b:30.00, step:-1, chip:'YOU&rsquo;RE IN',
        head:'That&rsquo;s it &mdash;<br>you&rsquo;re in',
        sub:'Schedules, class info and files for your dancer, all in one place.'},
     ],
     segs: [
-      {at:-1.00, k:'door'},   {at:3.20,  k:'portal'},   {at:4.40,  k:'details'},
-      {at:8.00,  k:'diagram'},{at:13.60, k:'details'},  {at:15.60, k:'password'},
-      {at:18.00, k:'verify'}, {at:19.70, k:'mailbox'},  {at:22.30, k:'mailopen'},
-      {at:24.30, k:'verify'}, {at:26.60, k:'home'},
+      {at:-1.00, k:'door'},   {at:4.40,  k:'portal'},   {at:6.50,  k:'details'},
+      {at:8.90,  k:'diagram'},{at:13.90, k:'details'},  {at:15.90, k:'password'},
+      {at:18.30, k:'verify'}, {at:20.00, k:'mailbox'},  {at:22.60, k:'mailopen'},
+      {at:24.60, k:'verify'}, {at:26.90, k:'home'},
     ],
     taps: [
-      {t:2.90, el:'#tileDancer'}, {t:4.10, el:'#btnSignup'}, {t:15.30, el:'#btnContinue'},
-      {t:17.70, el:'#btnCreate'}, {t:21.95, el:'#mailNew'},  {t:26.00, el:'#btnVerify'},
+      {t:4.05, el:'#tileDancer', aim:'#tileDancerIcon'}, {t:6.15, el:'#btnSignup'},
+      {t:15.60, el:'#btnContinue'}, {t:18.00, el:'#btnCreate'},
+      {t:22.25, el:'#mailNew'},  {t:26.30, el:'#btnVerify'},
     ],
     type: {
-      first:[5.45,0.42], last:[6.05,0.46], email:[13.95,1.05],
-      pw:[16.00,0.58], pw2:[16.75,0.58], code:[24.70,1.00],
-      emailFocus:[[6.80,8.00],[13.95,15.24]], codeFocus:[[24.66,25.90]],
-      callout:[14.05,14.45,15.06,15.34], burst:[26.10,26.34,26.62,26.92],
-      mailArrive:[20.10,20.52], junkHot:[20.90,22.10], codePop:[22.55,23.05],
+      first:[6.55,0.42], last:[7.15,0.46], email:[14.25,1.05],
+      pw:[16.30,0.58], pw2:[17.05,0.58], code:[25.00,1.00],
+      emailFocus:[[7.90,8.90],[14.25,15.54]], codeFocus:[[24.96,26.20]],
+      callout:[14.35,14.75,15.36,15.64], burst:[26.40,26.64,26.92,27.22],
+      mailArrive:[20.40,20.82], junkHot:[21.20,22.40], codePop:[22.85,23.35],
     },
+    punch: [{a:2.22, b:6.45, scale:1.20}],
+    spot: [
+      {a:2.32, b:4.45, hot:['#tileDancer'], dim:['#tileStaff']},
+      {a:4.75, b:6.45, hot:['#btnSignup'],  dim:['#doorLogin']},
+    ],
     /* the Enrollio explainer, 8.00 → 13.60 */
     diagram: {
-      cardA:[8.10,8.75], litA:[8.85,9.15], cardB:[8.95,9.55],
-      line:[9.60,10.20], fill:[10.20,10.78], pill:[10.60,10.95],
-      ok:[11.05,11.70], no:[11.95,12.60],
+      cardA:[9.00,9.60], litA:[9.70,10.00], cardB:[9.80,10.35],
+      line:[10.40,10.95], fill:[10.95,11.50], pill:[11.35,11.68],
+      ok:[11.80,12.40], no:[12.60,13.20],
     },
   },
 };
@@ -663,8 +684,12 @@ function setField(el, text, focused, showCaret, placeholder){
 /* Taps land on the centre of the thing being tapped, measured off the live
    layout — a hardcoded x/y drifts the moment any copy above it rewraps. */
 function centreIn(sel, host){
-  const a = $(sel).getBoundingClientRect(), b = $(host).getBoundingClientRect();
-  return { x: a.left - b.left + a.width/2, y: a.top - b.top + a.height/2 };
+  const h = $(host);
+  const a = $(sel).getBoundingClientRect(), b = h.getBoundingClientRect();
+  /* b is the TRANSFORMED rect, so divide the live scale back out — children
+     are positioned in the phone's own unscaled pixels. */
+  const s = b.width / h.offsetWidth;
+  return { x: (a.left-b.left+a.width/2)/s, y: (a.top-b.top+a.height/2)/s };
 }
 function stepRanges(beats){
   const r = {};
@@ -762,11 +787,37 @@ function seek(t){
     el.style.transform = `translateX(${x.toFixed(2)}px)`;
   });
 
+  /* Punch-in. At 1:1 the front-door tiles are ~85px on a 1080p frame, which is
+     unreadable on a phone — you cannot tell WHICH tile was tapped. Scaling
+     about the phone's centre (no pan) keeps it clear of the caption column and
+     inside the frame at 1.20. */
+  let punch = 1;
+  (TL.punch||[]).forEach(k=>{
+    if(t < k.a || t > k.b) return;
+    const up = eOut(inv(t, k.a, k.a+0.50));
+    const dn = eInOut(inv(t, k.b-0.42, k.b));
+    punch = 1 + (k.scale-1) * up * (1-dn);
+  });
+
   const pIn = eOut(inv(t, tEnd-0.32, tEnd+0.40));
   const phone = $('#phone');
+  const S = mix(0.94,1,pIn) * punch;
   phone.style.opacity = (pIn*phoneOp).toFixed(3);
-  phone.style.transform = `translateY(${((1-pIn)*54).toFixed(2)}px) scale(${mix(0.94,1,pIn).toFixed(4)})`;
+  phone.style.transform = `translateY(${((1-pIn)*54).toFixed(2)}px) scale(${S.toFixed(4)})`;
   $('#diagram').style.opacity = (pIn*diaOp).toFixed(3);
+
+  /* Spotlight: ring the thing being chosen, pull back what competes with it. */
+  const lit = new Set(), dimmed = new Set();
+  (TL.spot||[]).forEach(k=>{
+    if(t < k.a || t > k.b) return;
+    (k.hot||[]).forEach(x=>lit.add(x));
+    (k.dim||[]).forEach(x=>dimmed.add(x));
+  });
+  ['#tileDancer','#tileStaff','#btnSignup','#doorLogin','#doorSignup'].forEach(sel=>{
+    const e = $(sel); if(!e) return;
+    e.classList.toggle('hot', lit.has(sel));
+    e.classList.toggle('dim', dimmed.has(sel));
+  });
 
   /* ---- the signup form ---- */
   setField($('#fFirst'), typed(FIRST,t,TY.first), inAny(t,[[TY.first[0],TY.first[0]+TY.first[1]+0.06]]),
@@ -838,7 +889,7 @@ function seek(t){
   TL.taps.forEach(k=>{
     if(t>=k.t-0.16 && t<=k.t+0.50){
       const pr = inv(t, k.t, k.t+0.46);
-      const c = centreIn(k.el, '#phone');
+      const c = centreIn(k.aim || k.el, '#phone');
       tap.style.left = c.x+'px'; tap.style.top = c.y+'px';
       dot.style.left = c.x+'px'; dot.style.top = c.y+'px';
       if(pr>0){ tOp=Math.max(tOp,1-pr); tSc=mix(.3,1.5,eOut(pr)); }
