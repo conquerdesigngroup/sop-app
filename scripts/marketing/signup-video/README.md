@@ -5,9 +5,9 @@ both built from `template.html`:
 
 | | `--variant full` | `--variant short` |
 |---|---|---|
-| File | `docs/marketing/how-to-create-your-account-30s.mp4` | `…-15s.mp4` |
-| Length | exactly 30.000s (900 frames) | exactly 15.000s (450 frames) |
-| Size | ~2.3 MB | ~1.2 MB |
+| File | `docs/marketing/how-to-create-your-account-60s.mp4` | `…-15s.mp4` |
+| Length | exactly 60.000s (1800 frames) | exactly 15.000s (450 frames) |
+| Size | ~3.1 MB | ~1.4 MB |
 | For | sending to a family who is stuck, or a help page | a text, a story, a reminder |
 
 Both are 1920×1080, H.264 High / yuv420p, 30fps, `+faststart`, with a poster
@@ -49,7 +49,7 @@ junk-folder warning and the 30s spends five seconds on the Enrollio point.
 
 ```bash
 npm install --no-save playwright ffmpeg-static   # both, in ONE command
-node scripts/marketing/signup-video/render.js --variant full     # 30s, ~4.5 min
+node scripts/marketing/signup-video/render.js --variant full     # 60s, ~9 min
 node scripts/marketing/signup-video/render.js --variant short    # 15s, ~2.5 min
 ```
 
@@ -67,7 +67,9 @@ While iterating, render one frame instead of all of them — about a second:
 node scripts/marketing/signup-video/render.js --variant full --frame 10.6
 ```
 
-Other flags: `--fps`, `--out`.
+Other flags: `--fps`, `--out`. The output filename carries the length and is
+taken from the page's own duration, so it cannot drift from the timeline the
+way a hardcoded name does.
 
 ## How it is built
 
@@ -109,6 +111,29 @@ Editing:
 - **Fonts** — `assets/fonts.css` holds the latin subsets of Kanit, Barlow and
   JetBrains Mono, base64'd. Embedded rather than fetched so a render is
   identical offline and never races a webfont load.
+
+## Pacing: why the long cut is 60s and not a slower 30s
+
+The 30s cut moved faster than anyone could read it. The fix is **dwell time,
+not slow motion**: `holds` is a list of `[source time, seconds added]`, and
+`warp()` maps output time to source time — 1:1 between holds, and frozen
+inside one. Every animation therefore keeps the speed it was designed at, and
+the picture simply stops at the moments where there is something to read.
+
+Halving the rate instead would have stretched the typing, the transitions and
+the tap ripples to half speed, which reads as broken rather than as generous.
+
+Each hold sits on a frame where nothing is mid-motion — no transition running,
+no caret lit, no glow still easing — otherwise it freezes an element at 86%
+opacity for three seconds and looks like a bug. The comments on each entry say
+what the viewer is meant to be reading. The longest is the code itself.
+
+`holds` is the whole of it: the 60s cut and the 30s cut before it produce the
+same frames in the same order, because `seek()` does the identical work on the
+source time it is handed. A cut with no `holds` key, like `short`, passes
+straight through unchanged.
+
+To re-pace, edit the numbers. They must still sum to whatever you want added.
 
 ## Making the taps readable
 

@@ -647,6 +647,29 @@ const TIMELINES = {
       callout:[14.35,14.75,15.36,15.64], burst:[26.40,26.64,26.92,27.22],
       mailArrive:[20.40,20.82], junkHot:[21.20,22.40], codePop:[22.85,23.35],
     },
+    /* Holds. To go from 30s to 60s WITHOUT changing anything, the source
+       clock freezes at these moments and everything keeps its designed
+       speed — slowing the animation itself to half rate reads as broken,
+       not as "more time to read". Each entry is [source time, seconds
+       added], and every one sits on a frame where nothing is mid-motion:
+       no transition running, no caret lit, no glow still easing. They add
+       up to exactly 30.00s. */
+    holds: [
+      [1.55,  1.5],   // the title lands
+      [3.50,  2.5],   // Dancer Portal against Staff Portal
+      [5.60,  2.0],   // Sign up against Log in
+      [8.30,  1.5],   // name filled, cursor waiting in the email box
+      [11.78, 2.0],   // the Enrollio match, before the outcomes
+      [12.50, 1.5],   // "your code is sent"
+      [13.40, 2.5],   // "no code, and nothing to say why"
+      [15.32, 2.0],   // the email typed out in full
+      [17.80, 2.0],   // both passwords in
+      [19.62, 2.0],   // "now open your email"
+      [21.60, 3.0],   // the email sitting in the inbox, sender and subject
+      [23.70, 3.5],   // the code itself — the longest hold in the film
+      [26.10, 1.5],   // the code typed into the app
+      [28.60, 2.5],   // the outro
+    ],
     punch: [{a:2.22, b:6.45, scale:1.20}],
     spot: [
       {a:2.32, b:4.45, hot:['#tileDancer'], dim:['#tileStaff']},
@@ -691,6 +714,21 @@ function centreIn(sel, host){
   const s = b.width / h.offsetWidth;
   return { x: (a.left-b.left+a.width/2)/s, y: (a.top-b.top+a.height/2)/s };
 }
+/* Output time -> source time. Between holds it runs 1:1; inside a hold the
+   source clock stands still, so the frame is simply repeated. */
+function warp(tOut, holds){
+  let acc = 0;
+  for(const h of (holds||[])){
+    const start = h[0] + acc;
+    if(tOut <= start) return tOut - acc;
+    if(tOut < start + h[1]) return h[0];
+    acc += h[1];
+  }
+  return tOut - acc;
+}
+const heldTotal = tl => (tl.holds||[]).reduce((n,h)=>n+h[1], 0);
+const outDur    = tl => tl.dur + heldTotal(tl);
+
 function stepRanges(beats){
   const r = {};
   beats.forEach(b=>{
@@ -702,9 +740,9 @@ function stepRanges(beats){
 }
 
 /* ------------------------------------------------------ the seek function */
-function seek(t){
-  const DUR = TL.dur;
-  t = clamp(t, 0, DUR);
+function seek(clock){
+  const DUR = TL.dur;                                   /* source length */
+  const t = warp(clamp(clock, 0, outDur(TL)), TL.holds); /* source time  */
   const TY = TL.type;
   const tEnd = TL.beats[0].a;            /* when the title card hands over */
 
@@ -911,9 +949,9 @@ function seek(t){
   $('#burstRing').style.transform = `scale(${mix(.55,1,eBack(inv(t,B[0],B[1]+0.16))).toFixed(3)})`;
 }
 
-window.__setVariant = v => { TL = TIMELINES[v]; window.__dur = TL.dur; seek(0); };
+window.__setVariant = v => { TL = TIMELINES[v]; window.__dur = outDur(TL); seek(0); };
 window.__seek = seek;
-window.__dur = TL.dur;
+window.__dur = outDur(TL);
 seek(0);
 </script>
 </body>

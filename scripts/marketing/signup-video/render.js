@@ -57,12 +57,17 @@ const arg = (name, dflt) => {
 };
 
 const FPS = Number(arg('fps', 30));
-const VARIANT = arg('variant', 'full');          // 'full' = 30s, 'short' = 15s
+const VARIANT = arg('variant', 'full');
 const SINGLE = arg('frame', null);
-const LENGTH = { full: '30s', short: '15s' }[VARIANT];
-if (!LENGTH) { console.error(`unknown --variant ${VARIANT} (expected full or short)`); process.exit(1); }
-const OUT = path.resolve(arg('out',
-  path.join(REPO, `docs/marketing/how-to-create-your-account-${LENGTH}.mp4`)));
+if (!['full', 'short'].includes(VARIANT)) {
+  console.error(`unknown --variant ${VARIANT} (expected full or short)`);
+  process.exit(1);
+}
+/* The filename carries the length, so take it from the page rather than a
+   table here — a table drifts the moment the timeline is re-paced. */
+const namedOut = arg('out', null);
+const outFor = dur => path.resolve(namedOut
+  || path.join(REPO, `docs/marketing/how-to-create-your-account-${Math.round(dur)}s.mp4`));
 
 /** Inline the fonts and the brand mark so the page renders with no network. */
 function buildHtml() {
@@ -100,6 +105,7 @@ function buildHtml() {
   }
 
   const DUR = await page.evaluate(() => window.__dur);
+  const OUT = outFor(DUR);
   const total = Math.round(DUR * FPS);
   const dir = path.join(tmp, 'frames');
   fs.mkdirSync(dir);
