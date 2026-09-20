@@ -160,6 +160,88 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
 #callout .d{font-family:var(--body);font-weight:500;font-size:17px;line-height:1.35;color:var(--chalk);margin-top:7px}
 #callout .arw{position:absolute;right:-9px;top:34px;width:14px;height:14px;background:var(--panel);
   border-right:2px solid var(--electric);border-top:2px solid var(--electric);transform:rotate(45deg)}
+
+/* ---- inline emphasis in the left column ---- */
+#head .pk{color:var(--electric)}
+#sub b{color:var(--chalk);font-weight:600}
+
+/* ---- Enrollio explainer diagram (takes the phone's slot) ---- */
+#diagram{position:absolute;left:1218px;top:96px;width:604px;height:888px;opacity:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0}
+.dg-card{width:100%;background:var(--panel);border:2px solid var(--bdr);border-radius:16px;padding:22px 24px}
+.dg-card.lit{border-color:rgba(226,20,79,.55)}
+.dg-badge{display:inline-block;font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:.2em;
+  color:var(--electric);border:1.5px solid rgba(226,20,79,.45);border-radius:999px;padding:5px 13px}
+.dg-badge.alt{color:var(--smoke);border-color:var(--bdr2)}
+.dg-title{font-family:var(--body);font-weight:500;font-size:20px;color:var(--smoke);margin-top:14px}
+.dg-row{display:flex;align-items:center;gap:16px;margin-top:18px}
+.dg-av{width:52px;height:52px;flex:0 0 52px;border-radius:50%;background:var(--panel2);border:2px solid var(--bdr2);
+  display:flex;align-items:center;justify-content:center;font-family:var(--body);font-weight:700;
+  font-size:18px;color:var(--smoke)}
+.dg-nm{font-family:var(--body);font-weight:600;font-size:21px;color:var(--chalk)}
+.dg-em{font-family:var(--mono);font-weight:500;font-size:19px;color:var(--smoke);margin-top:6px;
+  display:inline-block;padding:5px 11px;border-radius:7px;border:2px solid transparent}
+.dg-em.lit{color:#FF7096;border-color:rgba(226,20,79,.55);background:rgba(226,20,79,.10)}
+.dg-fld{margin-top:18px}
+.dg-lb{font-family:var(--body);font-weight:600;font-size:15px;color:var(--smoke)}
+.dg-in{margin-top:8px;height:54px;border-radius:9px;background:var(--panel2);border:2px solid var(--bdr);
+  display:flex;align-items:center;padding:0 15px;font-family:var(--mono);font-size:19px;color:var(--chalk)}
+.dg-in.lit{border-color:var(--electric);box-shadow:0 0 0 4px rgba(226,20,79,.16)}
+.dg-link{width:100%;display:flex;flex-direction:column;align-items:center;gap:0;padding:4px 0}
+.dg-line{width:3px;background:var(--bdr2);border-radius:2px;overflow:hidden}
+.dg-line i{display:block;width:100%;height:0;background:var(--electric)}
+.dg-pill{font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.16em;color:var(--electric);
+  border:2px solid var(--electric);border-radius:999px;padding:8px 16px;margin:9px 0;
+  background:rgba(226,20,79,.10);display:flex;align-items:center;gap:9px;opacity:0}
+.dg-out{width:100%;margin-top:26px;display:flex;flex-direction:column;gap:13px}
+.dg-o{display:flex;align-items:flex-start;gap:12px;font-family:var(--body);font-weight:500;font-size:19px;
+  line-height:1.35;opacity:0}
+.dg-o svg{flex:0 0 23px;margin-top:2px}
+.dg-o.ok{color:var(--chalk)}
+.dg-o.no{color:var(--smoke)}
+
+/* ---- the mail app: light, so leaving the portal is obvious ---- */
+.mail{background:#F2F2F4}
+.m-top{padding:58px 18px 10px;background:#FFFFFF;border-bottom:1px solid #E3E3E7;flex:0 0 auto}
+.m-title{font-family:var(--body);font-weight:700;font-size:27px;color:#111111}
+.m-search{margin-top:11px;height:38px;border-radius:9px;background:#EDEDF0;display:flex;align-items:center;
+  padding:0 12px;gap:9px;font-family:var(--body);font-size:15px;color:#8A8A93}
+.m-tabs{display:flex;gap:9px;padding:11px 18px;background:#FFFFFF;border-bottom:1px solid #E3E3E7;flex:0 0 auto}
+.m-tabs span{font-family:var(--body);font-weight:600;font-size:14px;color:#6B6B74;
+  padding:6px 14px;border-radius:999px;background:#EDEDF0}
+.m-tabs span.on{background:#111111;color:#FFFFFF}
+.m-tabs span.hot{background:rgba(226,20,79,.12);color:var(--electric);box-shadow:0 0 0 2px var(--electric)}
+.m-list{flex:1;overflow:hidden}
+.m-row{display:flex;gap:11px;padding:15px 18px;background:#FFFFFF;border-bottom:1px solid #E9E9ED;
+  align-items:flex-start}
+.m-row.new{background:#FFFFFF;height:0;padding-top:0;padding-bottom:0;overflow:hidden;
+  border-left:4px solid var(--electric)}
+.m-dot{width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:var(--electric);margin-top:6px}
+.m-dot.off{background:transparent}
+.m-txt{flex:1;min-width:0}
+.m-from{font-family:var(--body);font-weight:700;font-size:16px;color:#111111;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-subj{font-family:var(--body);font-weight:600;font-size:15px;color:#2A2A2F;margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-prev{font-family:var(--body);font-size:14px;color:#7A7A83;margin-top:3px;line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-time{font-family:var(--body);font-size:13px;color:#8A8A93;flex:0 0 auto}
+.m-time.now{color:var(--electric);font-weight:700}
+.m-back{font-family:var(--body);font-weight:600;font-size:17px;color:var(--electric)}
+.m-open{padding:20px 18px;background:#FFFFFF;flex:1}
+.m-osubj{font-family:var(--body);font-weight:700;font-size:22px;line-height:1.25;color:#111111}
+.m-ofrom{display:flex;align-items:center;gap:10px;margin-top:14px;padding-bottom:15px;
+  border-bottom:1px solid #E9E9ED}
+.m-oav{width:36px;height:36px;flex:0 0 36px;border-radius:50%;background:#111111;display:flex;
+  align-items:center;justify-content:center}
+.m-oav img{width:26px;height:auto;display:block}
+.m-oname{font-family:var(--body);font-weight:600;font-size:15px;color:#111111}
+.m-oto{font-family:var(--body);font-size:13px;color:#8A8A93;margin-top:2px}
+.m-obody{font-family:var(--body);font-size:16px;line-height:1.5;color:#2A2A2F;margin-top:18px}
+.m-code{margin-top:18px;border:3px solid var(--electric);border-radius:14px;background:rgba(226,20,79,.06);
+  padding:20px 0;text-align:center;font-family:var(--mono);font-weight:700;font-size:44px;
+  letter-spacing:.14em;color:#111111}
+.m-onote{font-family:var(--body);font-size:15px;line-height:1.5;color:#7A7A83;margin-top:16px}
 </style>
 </head>
 <body>
@@ -314,6 +396,60 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
         </div>
       </div>
 
+
+      <!-- ============ MAIL: INBOX ============ -->
+      <div class="scr mail" data-k="mailbox">
+        <div class="m-top">
+          <div class="m-title">Inbox</div>
+          <div class="m-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A8A93"
+            stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            Search</div>
+        </div>
+        <div class="m-tabs"><span class="on">Inbox</span><span id="tabJunk">Junk</span><span>Sent</span></div>
+        <div class="m-list">
+          <div class="m-row new" id="mailNew">
+            <div class="m-dot"></div>
+            <div class="m-txt">
+              <div class="m-from">Dancing Images Dance Center</div>
+              <div class="m-subj">Your DIDC login code</div>
+              <div class="m-prev">Your code is 482917 &mdash; it works for one hour.</div>
+            </div>
+            <div class="m-time now">now</div>
+          </div>
+          <div class="m-row"><div class="m-dot off"></div><div class="m-txt">
+            <div class="m-from">Riverside Elementary</div>
+            <div class="m-subj">Picture day is Thursday</div>
+            <div class="m-prev">A reminder that school photos are this week.</div></div>
+            <div class="m-time">9:14 AM</div></div>
+          <div class="m-row"><div class="m-dot off"></div><div class="m-txt">
+            <div class="m-from">Receipts</div>
+            <div class="m-subj">Your order has shipped</div>
+            <div class="m-prev">Track your parcel with the link below.</div></div>
+            <div class="m-time">Yesterday</div></div>
+          <div class="m-row"><div class="m-dot off"></div><div class="m-txt">
+            <div class="m-from">Mum</div>
+            <div class="m-subj">Sunday lunch?</div>
+            <div class="m-prev">Let me know if you are all free about one.</div></div>
+            <div class="m-time">Yesterday</div></div>
+        </div>
+      </div>
+
+      <!-- ============ MAIL: THE CODE ============ -->
+      <div class="scr mail" data-k="mailopen">
+        <div class="m-top" style="padding-bottom:12px"><div class="m-back">&lsaquo; Inbox</div></div>
+        <div class="m-open">
+          <div class="m-osubj">Your DIDC login code</div>
+          <div class="m-ofrom">
+            <div class="m-oav"><img src="__LOGO__" alt=""></div>
+            <div><div class="m-oname">Dancing Images Dance Center</div>
+              <div class="m-oto">to sarah.mitchell@gmail.com</div></div>
+          </div>
+          <div class="m-obody">Here is the code to finish making your account:</div>
+          <div class="m-code" id="mailCode">482917</div>
+          <div class="m-onote">Type these 6 digits into the app. The code works for one hour.</div>
+        </div>
+      </div>
+
       <div id="burst"><div id="burstRing">
         <svg width="66" height="66" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2.6"
           stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -325,6 +461,46 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
     <div id="callout"><div class="arw"></div>
       <div class="t">IMPORTANT</div>
       <div class="d">The same email Enrollio has for you.</div>
+    </div>
+  </div>
+
+
+  <div id="diagram">
+    <div class="dg-card" id="dgA">
+      <div class="dg-badge">ENROLLIO</div>
+      <div class="dg-title">Where you registered and pay the studio</div>
+      <div class="dg-row">
+        <div class="dg-av">SM</div>
+        <div><div class="dg-nm">Mitchell family</div>
+          <div class="dg-em" id="dgEmA">sarah.mitchell@gmail.com</div></div>
+      </div>
+    </div>
+
+    <div class="dg-link">
+      <div class="dg-line" id="dgL1"><i></i></div>
+      <div class="dg-pill" id="dgPill">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="3.2"
+          stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        SAME ADDRESS</div>
+      <div class="dg-line" id="dgL2"><i></i></div>
+    </div>
+
+    <div class="dg-card" id="dgB">
+      <div class="dg-badge alt">THIS APP</div>
+      <div class="dg-title">The account you are making now</div>
+      <div class="dg-fld"><div class="dg-lb">Email</div>
+        <div class="dg-in" id="dgEmB"></div></div>
+    </div>
+
+    <div class="dg-out">
+      <div class="dg-o ok" id="dgOk"><svg width="23" height="23" viewBox="0 0 24 24" fill="none"
+        stroke="#E2144F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+        <span>That address is on the list, so your code is sent.</span></div>
+      <div class="dg-o no" id="dgNo"><svg width="23" height="23" viewBox="0 0 24 24" fill="none"
+        stroke="#9A9AA4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg>
+        <span>Any other address is not on it &mdash; no code, and nothing to say why.</span></div>
     </div>
   </div>
 
@@ -341,98 +517,175 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
 /* ===================================================================
    Deterministic timeline. Nothing animates on its own — every visual
    property is a pure function of t, so Playwright can seek to any
-   frame and screenshot it. 15.000s @ 30fps = 450 frames.
+   frame and screenshot it.
+
+   Two cuts share this one page:
+     short — 15s, the quick "here are the four steps" version
+     full  — 30s, which also explains WHY the email has to be the
+             Enrollio one, and walks into the inbox to fetch the code
    =================================================================== */
-const DUR = 15.0;
 
 const clamp = (x,a,b)=>Math.min(b,Math.max(a,x));
 const inv   = (t,a,b)=> b<=a ? (t>=b?1:0) : clamp((t-a)/(b-a),0,1);
 const eOut  = p=>1-Math.pow(1-p,3);
-const eOut4 = p=>1-Math.pow(1-p,4);
 const eInOut= p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
 const eBack = p=>{const c1=1.5,c3=c1+1;return 1+c3*Math.pow(p-1,3)+c1*Math.pow(p-1,2);};
 const mix   = (a,b,p)=>a+(b-a)*p;
 
-const $ = s=>document.querySelector(s);
+const $  = s=>document.querySelector(s);
 const $$ = s=>Array.from(document.querySelectorAll(s));
-
-/* ---------------- scenes ---------------- */
-const SCENES = [
-  {k:'title', a:0.00,  b:1.70},
-  {k:'s1',    a:1.70,  b:4.30},
-  {k:'s2',    a:4.30,  b:7.40},
-  {k:'s3',    a:7.40,  b:9.70},
-  {k:'s4',    a:9.70,  b:12.90},
-  {k:'out',   a:12.90, b:15.00},
-];
-
-const COPY = {
-  s1:{chip:'STEP 1 OF 4', head:'Open the app,<br>tap <span style="color:var(--electric)">Sign&nbsp;up</span>',
-      sub:'At the front door choose <b style="color:var(--chalk);font-weight:600">Dancer Portal</b>, then tap Sign up.', note:null},
-  s2:{chip:'STEP 2 OF 4', head:'Use your<br>Enrollio email',
-      sub:'Your name, then the same email address the studio already has for you.',
-      note:'Any other address will not be recognised.'},
-  s3:{chip:'STEP 3 OF 4', head:'Choose a<br>password',
-      sub:'At least 6 characters. Type it twice, then tap Create&nbsp;account.', note:null},
-  s4:{chip:'STEP 4 OF 4', head:'Enter the<br>6-digit code',
-      sub:'We email the code to you. Type it in and you are done.',
-      note:'Not there? Check your spam or junk folder.'},
-  out:{chip:'YOU&rsquo;RE IN', head:'That&rsquo;s it &mdash;<br>you&rsquo;re in',
-      sub:'Schedules, class info and files for your dancer, all in one place.',
-      note:null},
-};
-
-/* phone screen switch points */
-const SCREENS = [
-  {k:'door',     at:-1.00},
-  {k:'portal',   at: 2.78},
-  {k:'details',  at: 3.88},
-  {k:'password', at: 7.32},
-  {k:'verify',   at: 9.42},
-  {k:'home',     at:12.62},
-];
-const SCR_D = 0.30;
-
-/* Taps land on the centre of the thing being tapped, measured off the live
-   layout — a hardcoded x/y drifts the moment any copy above it rewraps. */
-const TAPS = [
-  {t:2.48, el:'#tileDancer'},
-  {t:3.58, el:'#btnSignup'},
-  {t:7.02, el:'#btnContinue'},
-  {t:9.12, el:'#btnCreate'},
-  {t:12.20,el:'#btnVerify'},
-];
-function centreIn(sel, host){
-  const a = $(sel).getBoundingClientRect(), b = $(host).getBoundingClientRect();
-  return { x: a.left - b.left + a.width/2, y: a.top - b.top + a.height/2 };
-}
 
 const FIRST='Sarah', LAST='Mitchell', EMAIL='sarah.mitchell@gmail.com', CODE='482917';
 
-/* ---------------- helpers ---------------- */
-function typed(str, t, t0, dur){
-  const p = inv(t,t0,t0+dur);
+/* ------------------------------------------------------------------ cuts */
+const TIMELINES = {
+  short: {
+    dur: 15.0,
+    beats: [
+      {a:1.70, b:4.30, step:0, chip:'STEP 1 OF 4',
+       head:'Open the app,<br>tap <span class="pk">Sign&nbsp;up</span>',
+       sub:'At the front door choose <b>Dancer Portal</b>, then tap Sign up.'},
+      {a:4.30, b:7.40, step:1, chip:'STEP 2 OF 4',
+       head:'Use your<br>Enrollio email',
+       sub:'Your name, then the same email address the studio already has for you.',
+       note:'Any other address will not be recognised.'},
+      {a:7.40, b:9.70, step:2, chip:'STEP 3 OF 4',
+       head:'Choose a<br>password',
+       sub:'At least 6 characters. Type it twice, then tap Create&nbsp;account.'},
+      {a:9.70, b:12.90, step:3, chip:'STEP 4 OF 4',
+       head:'Enter the<br>6-digit code',
+       sub:'We email the code to you. Type it in and you are done.',
+       note:'Not there? Check your spam or junk folder.'},
+      {a:12.90, b:15.00, step:-1, chip:'YOU&rsquo;RE IN',
+       head:'That&rsquo;s it &mdash;<br>you&rsquo;re in',
+       sub:'Schedules, class info and files for your dancer, all in one place.'},
+    ],
+    segs: [
+      {at:-1.00, k:'door'}, {at:2.78, k:'portal'}, {at:3.88, k:'details'},
+      {at:7.32, k:'password'}, {at:9.42, k:'verify'}, {at:12.62, k:'home'},
+    ],
+    taps: [
+      {t:2.48, el:'#tileDancer'}, {t:3.58, el:'#btnSignup'}, {t:7.02, el:'#btnContinue'},
+      {t:9.12, el:'#btnCreate'}, {t:12.20, el:'#btnVerify'},
+    ],
+    type: {
+      first:[4.38,0.42], last:[4.96,0.46], email:[5.62,1.02],
+      pw:[7.54,0.58], pw2:[8.30,0.58], code:[10.42,0.96],
+      emailFocus:[[5.62,6.84]], codeFocus:[[10.38,11.50]],
+      callout:[5.72,6.14,6.92,7.22], burst:[12.34,12.58,12.86,13.16],
+      mailArrive:[-2,-1], junkHot:[-2,-1], codePop:[-2,-1],
+    },
+    diagram: null,
+  },
+
+  full: {
+    dur: 30.0,
+    beats: [
+      {a:2.00, b:5.30, step:0, chip:'STEP 1 OF 4',
+       head:'Open the app,<br>tap <span class="pk">Sign&nbsp;up</span>',
+       sub:'At the front door choose <b>Dancer Portal</b>, then tap Sign up.'},
+      {a:5.30, b:8.00, step:1, chip:'STEP 2 OF 4',
+       head:'Start with<br>your name',
+       sub:'Your first and last name. Then the email box &mdash; and that one matters.'},
+      {a:8.00, b:13.60, step:1, chip:'STEP 2 OF 4',
+       head:'Why <span class="pk">that</span><br>email?',
+       sub:'The studio&rsquo;s family list comes from <b>Enrollio</b>, where you registered and pay. The app looks your address up on that list.'},
+      {a:13.60, b:15.80, step:1, chip:'STEP 2 OF 4',
+       head:'Type your<br>Enrollio email',
+       sub:'The same address the studio already has for you.',
+       note:'Not sure which one? Ask at the front desk.'},
+      {a:15.80, b:18.60, step:2, chip:'STEP 3 OF 4',
+       head:'Choose a<br>password',
+       sub:'At least 6 characters. Type it twice, then tap Create&nbsp;account.'},
+      {a:18.60, b:19.70, step:3, chip:'STEP 4 OF 4',
+       head:'Now open<br>your email',
+       sub:'A 6-digit code is on its way to your inbox. Leave this page open and go and find it.'},
+      {a:19.70, b:22.30, step:3, chip:'STEP 4 OF 4',
+       head:'Find the email<br>from the studio',
+       sub:'It is from <b>Dancing Images Dance Center</b>, subject <b>Your DIDC login code</b>. Open it.',
+       note:'Not in your inbox? Look in Spam or Junk.'},
+      {a:22.30, b:24.30, step:3, chip:'STEP 4 OF 4',
+       head:'Read the<br>6 digits',
+       sub:'The code is inside the email. It works for a whole hour, so there is no rush.'},
+      {a:24.30, b:26.80, step:3, chip:'STEP 4 OF 4',
+       head:'Type them<br>into the app',
+       sub:'Go back to the app, type the 6 digits and tap <b>Verify and log in</b>.'},
+      {a:26.80, b:30.00, step:-1, chip:'YOU&rsquo;RE IN',
+       head:'That&rsquo;s it &mdash;<br>you&rsquo;re in',
+       sub:'Schedules, class info and files for your dancer, all in one place.'},
+    ],
+    segs: [
+      {at:-1.00, k:'door'},   {at:3.20,  k:'portal'},   {at:4.40,  k:'details'},
+      {at:8.00,  k:'diagram'},{at:13.60, k:'details'},  {at:15.60, k:'password'},
+      {at:18.00, k:'verify'}, {at:19.70, k:'mailbox'},  {at:22.30, k:'mailopen'},
+      {at:24.30, k:'verify'}, {at:26.60, k:'home'},
+    ],
+    taps: [
+      {t:2.90, el:'#tileDancer'}, {t:4.10, el:'#btnSignup'}, {t:15.30, el:'#btnContinue'},
+      {t:17.70, el:'#btnCreate'}, {t:21.95, el:'#mailNew'},  {t:26.00, el:'#btnVerify'},
+    ],
+    type: {
+      first:[5.45,0.42], last:[6.05,0.46], email:[13.95,1.05],
+      pw:[16.00,0.58], pw2:[16.75,0.58], code:[24.70,1.00],
+      emailFocus:[[6.80,8.00],[13.95,15.24]], codeFocus:[[24.66,25.90]],
+      callout:[14.05,14.45,15.06,15.34], burst:[26.10,26.34,26.62,26.92],
+      mailArrive:[20.10,20.52], junkHot:[20.90,22.10], codePop:[22.55,23.05],
+    },
+    /* the Enrollio explainer, 8.00 → 13.60 */
+    diagram: {
+      cardA:[8.10,8.75], litA:[8.85,9.15], cardB:[8.95,9.55],
+      line:[9.60,10.20], fill:[10.20,10.78], pill:[10.60,10.95],
+      ok:[11.05,11.70], no:[11.95,12.60],
+    },
+  },
+};
+
+let TL = TIMELINES.full;
+const SCR_D = 0.30;
+
+/* ------------------------------------------------------------- helpers */
+function typed(str, t, spec){
+  const p = inv(t, spec[0], spec[0]+spec[1]);
   return str.slice(0, Math.round(p*str.length));
 }
 function caretOn(t, t0, t1){
   if(t < t0 || t > t1) return false;
   return Math.floor((t-t0)*1.8) % 2 === 0;
 }
+function inAny(t, ranges){ return ranges.some(r => t >= r[0]-0.06 && t <= r[1]); }
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function dots(n){let s='';for(let i=0;i<n;i++)s+='<span class="dot"></span>';return s;}
 function setField(el, text, focused, showCaret, placeholder){
   if(!text && placeholder && !focused){ el.className='in ph'; el.textContent=placeholder; return; }
   el.className = 'in' + (focused ? ' focus':'');
   el.innerHTML = escapeHtml(text) + (showCaret ? '<span class="caret"></span>' : '');
 }
-function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function dots(n){let s='';for(let i=0;i<n;i++)s+='<span class="dot"></span>';return s;}
+/* Taps land on the centre of the thing being tapped, measured off the live
+   layout — a hardcoded x/y drifts the moment any copy above it rewraps. */
+function centreIn(sel, host){
+  const a = $(sel).getBoundingClientRect(), b = $(host).getBoundingClientRect();
+  return { x: a.left - b.left + a.width/2, y: a.top - b.top + a.height/2 };
+}
+function stepRanges(beats){
+  const r = {};
+  beats.forEach(b=>{
+    if(b.step < 0) return;
+    if(!r[b.step]) r[b.step] = {a:b.a, b:b.b};
+    else { r[b.step].a = Math.min(r[b.step].a, b.a); r[b.step].b = Math.max(r[b.step].b, b.b); }
+  });
+  return r;
+}
 
-/* ---------------- the seek function ---------------- */
+/* ------------------------------------------------------ the seek function */
 function seek(t){
+  const DUR = TL.dur;
   t = clamp(t, 0, DUR);
+  const TY = TL.type;
+  const tEnd = TL.beats[0].a;            /* when the title card hands over */
 
   /* ---- title card ---- */
   const tIn  = eOut(inv(t,0.06,0.70));
-  const tOut = eInOut(inv(t,1.34,1.72));
+  const tOut = eInOut(inv(t, tEnd-0.36, tEnd+0.02));
   const title = $('#title');
   title.style.opacity = (tIn * (1-tOut)).toFixed(4);
   title.style.transform = `scale(${mix(0.985,1,tIn) * mix(1,1.06,tOut)})`;
@@ -448,105 +701,147 @@ function seek(t){
   $('#tSub').style.opacity = ts.toFixed(3);
   $('#tSub').style.transform = `translateY(${((1-ts)*18).toFixed(2)}px)`;
 
-  /* ---- which scene ---- */
-  const sc = SCENES.find(s=>t>=s.a && t<s.b) || SCENES[SCENES.length-1];
-  const copy = COPY[sc.k];
-
-  /* ---- persistent chrome fades in after the title ---- */
-  const chrome = eOut(inv(t,1.42,1.92));
+  /* ---- persistent chrome ---- */
+  const chrome = eOut(inv(t, tEnd-0.28, tEnd+0.22));
   $('#topbar').style.opacity = chrome.toFixed(3);
   $('#topbar').style.transform = `translateY(${((1-chrome)*-14).toFixed(2)}px)`;
   $('#prog').style.opacity = chrome.toFixed(3);
 
-  /* ---- phone entrance ---- */
-  const pIn = eOut(inv(t,1.38,2.10));
-  const ph = $('#phone');
-  ph.style.opacity = pIn.toFixed(3);
-  ph.style.transform = `translateY(${((1-pIn)*54).toFixed(2)}px) scale(${mix(0.94,1,pIn).toFixed(4)})`;
+  /* ---- which caption beat ---- */
+  const beat = TL.beats.find(b=>t>=b.a && t<b.b) || TL.beats[TL.beats.length-1];
+  $('#chipTxt').innerHTML = beat.chip;
+  $('#head').innerHTML = beat.head;
+  $('#sub').innerHTML = beat.sub;
+  if(beat.note){ $('#noteTxt').innerHTML = beat.note; $('#note').style.display='inline-flex'; }
+  else { $('#note').style.display='none'; }
 
-  /* ---- left copy: retype on every scene change, animate in ---- */
-  if(copy){
-    $('#chipTxt').innerHTML = copy.chip;
-    $('#head').innerHTML = copy.head;
-    $('#sub').innerHTML = copy.sub;
-    if(copy.note){ $('#noteTxt').innerHTML = copy.note; $('#note').style.display='inline-flex'; }
-    else { $('#note').style.display='none'; }
-  }
-  const lead = Math.max(sc.a, 1.44);          /* scene 1 waits for the title to clear */
-  const pc = eOut(inv(t, lead, lead+0.46));
-  const pcOut = sc.b >= DUR ? 0 : eInOut(inv(t, sc.b-0.16, sc.b));
-  const lop = (pc*(1-pcOut)).toFixed(3);
-  const lx  = (mix(30,0,pc) + pcOut*-22).toFixed(2);
+  const lead  = Math.max(beat.a, tEnd - 0.26);
+  const bOut  = beat.b >= DUR ? 0 : eInOut(inv(t, beat.b-0.16, beat.b));
   ['#chip','#head','#sub','#note'].forEach((s,i)=>{
     const e=$(s); if(!e) return;
     const q = eOut(inv(t, lead+i*0.075, lead+0.46+i*0.075));
-    e.style.opacity = (q*(1-pcOut)).toFixed(3);
-    e.style.transform = `translate(${(mix(34,0,q) + pcOut*-22).toFixed(2)}px, ${((1-q)*10).toFixed(2)}px)`;
+    e.style.opacity = (q*(1-bOut)).toFixed(3);
+    e.style.transform = `translate(${(mix(34,0,q) + bOut*-22).toFixed(2)}px, ${((1-q)*10).toFixed(2)}px)`;
   });
-  $('#left').style.opacity = t<1.30 ? '0' : '1';
+  $('#left').style.opacity = t < tEnd-0.40 ? '0' : '1';
 
-  /* ---- progress segments ---- */
-  const stepIdx = {s1:0,s2:1,s3:2,s4:3};
+  /* ---- progress ---- */
+  const ranges = stepRanges(TL.beats);
   $$('#prog .seg i').forEach((e,i)=>{
-    let w = 0;
-    const cur = stepIdx[sc.k];
-    if(sc.k==='out') w = 1;
-    else if(cur===undefined) w = 0;
-    else if(i < cur) w = 1;
-    else if(i === cur) w = eInOut(inv(t, sc.a, sc.b));
+    let w;
+    if(beat.step < 0) w = 1;
+    else if(i < beat.step) w = 1;
+    else if(i === beat.step) w = eInOut(inv(t, ranges[i].a, ranges[i].b));
+    else w = 0;
     e.style.width = (w*100).toFixed(2)+'%';
   });
 
-  /* ---- phone screens ---- */
-  SCREENS.forEach((s,i)=>{
-    const el = document.querySelector(`.scr[data-k="${s.k}"]`);
-    const start = s.at, end = SCREENS[i+1] ? SCREENS[i+1].at : 1e9;
-    let op, x;
-    if(t < start){ op=0; x=40; }
-    else if(t < start+SCR_D){ const p=eOut(inv(t,start,start+SCR_D)); op=p; x=40*(1-p); }
-    else if(t < end){ op=1; x=0; }
-    else if(t < end+SCR_D){ const p=eInOut(inv(t,end,end+SCR_D)); op=1-p; x=-40*p; }
-    else { op=0; x=-40; }
+  /* ---- stage right: which screen, and phone vs diagram ----
+     Segments are a list of (time, key) rather than one entry per screen,
+     because the full cut visits `details` and `verify` twice each. */
+  let ci = 0;
+  for(let k=0;k<TL.segs.length;k++) if(t >= TL.segs[k].at) ci = k;
+  const cur = TL.segs[ci], prev = ci>0 ? TL.segs[ci-1] : null;
+  /* Asymmetric on purpose: what is arriving eases out, so it lands decisively,
+     while what is leaving eases in-out and slides away under it. */
+  const raw  = inv(t, cur.at, cur.at+SCR_D);
+  const sIn  = eOut(raw), sOut = eInOut(raw);
+  const isDia = k => k === 'diagram';
+
+  let phoneOp = 1, diaOp = 0, outK = null, inK = cur.k, ip = sIn;
+  if(isDia(cur.k)){ phoneOp = 1-sOut; diaOp = sIn; inK = prev ? prev.k : null; ip = 1; }
+  else if(prev && isDia(prev.k)){ phoneOp = sIn; diaOp = 1-sOut; ip = 1; }
+  else { outK = prev ? prev.k : null; }
+
+  $$('.scr').forEach(el=>{
+    const k = el.dataset.k;
+    let op = 0, x = 0;
+    if(k === inK){ op = ip; x = 40*(1-ip); }
+    else if(k === outK){ op = 1-sOut; x = -40*sOut; }
     el.style.opacity = op.toFixed(3);
     el.style.transform = `translateX(${x.toFixed(2)}px)`;
   });
 
-  /* ---- form typing ---- */
-  const focus = (a,b)=> t>=a-0.06 && t<=b;
-  setField($('#fFirst'), typed(FIRST, t, 4.38, 0.42), focus(4.38,4.90), caretOn(t,4.38,4.86), '');
-  setField($('#fLast'),  typed(LAST,  t, 4.96, 0.46), focus(4.96,5.52), caretOn(t,4.96,5.48), '');
-  const em = typed(EMAIL, t, 5.62, 1.02);
-  setField($('#fEmail'), em, focus(5.62,6.84), caretOn(t,5.62,6.78), 'Same as your Enrollio email');
+  const pIn = eOut(inv(t, tEnd-0.32, tEnd+0.40));
+  const phone = $('#phone');
+  phone.style.opacity = (pIn*phoneOp).toFixed(3);
+  phone.style.transform = `translateY(${((1-pIn)*54).toFixed(2)}px) scale(${mix(0.94,1,pIn).toFixed(4)})`;
+  $('#diagram').style.opacity = (pIn*diaOp).toFixed(3);
 
-  const pw1 = Math.round(inv(t,7.54,8.12)*9);
-  $('#fPw').className = 'in' + (t>7.5&&t<8.2 ? ' focus':'');
-  $('#fPw').innerHTML = dots(pw1) + (caretOn(t,7.54,8.16)?'<span class="caret"></span>':'');
-  const pw2 = Math.round(inv(t,8.30,8.88)*9);
-  $('#fPw2').className = 'in' + (t>8.26&&t<8.96 ? ' focus':'');
-  $('#fPw2').innerHTML = dots(pw2) + (caretOn(t,8.30,8.92)?'<span class="caret"></span>':'');
+  /* ---- the signup form ---- */
+  setField($('#fFirst'), typed(FIRST,t,TY.first), inAny(t,[[TY.first[0],TY.first[0]+TY.first[1]+0.06]]),
+           caretOn(t,TY.first[0],TY.first[0]+TY.first[1]+0.04), '');
+  setField($('#fLast'),  typed(LAST,t,TY.last),   inAny(t,[[TY.last[0],TY.last[0]+TY.last[1]+0.06]]),
+           caretOn(t,TY.last[0],TY.last[0]+TY.last[1]+0.04), '');
+  setField($('#fEmail'), typed(EMAIL,t,TY.email), inAny(t,TY.emailFocus),
+           caretOn(t,TY.email[0],TY.email[0]+TY.email[1]+0.30), 'Same as your Enrollio email');
 
-  const cd = typed(CODE, t, 10.42, 0.96);
-  $('#fCode').className = 'in mono' + (t>10.38&&t<11.50 ? ' focus':'');
-  $('#fCode').innerHTML = escapeHtml(cd) + (caretOn(t,10.42,11.44)?'<span class="caret"></span>':'');
+  const pw1 = Math.round(inv(t,TY.pw[0],TY.pw[0]+TY.pw[1])*9);
+  $('#fPw').className = 'in' + (inAny(t,[[TY.pw[0],TY.pw[0]+TY.pw[1]+0.06]]) ? ' focus':'');
+  $('#fPw').innerHTML = dots(pw1) + (caretOn(t,TY.pw[0],TY.pw[0]+TY.pw[1]+0.04)?'<span class="caret"></span>':'');
+  const pw2 = Math.round(inv(t,TY.pw2[0],TY.pw2[0]+TY.pw2[1])*9);
+  $('#fPw2').className = 'in' + (inAny(t,[[TY.pw2[0],TY.pw2[0]+TY.pw2[1]+0.06]]) ? ' focus':'');
+  $('#fPw2').innerHTML = dots(pw2) + (caretOn(t,TY.pw2[0],TY.pw2[0]+TY.pw2[1]+0.04)?'<span class="caret"></span>':'');
 
-  /* ---- email callout beside the phone ---- */
-  const co = $('#callout');
-  const coIn = eOut(inv(t,5.72,6.14)), coOut = eInOut(inv(t,6.92,7.22));
+  $('#fCode').className = 'in mono' + (inAny(t,TY.codeFocus) ? ' focus':'');
+  $('#fCode').innerHTML = escapeHtml(typed(CODE,t,TY.code)) +
+    (caretOn(t,TY.code[0],TY.code[0]+TY.code[1]+0.32)?'<span class="caret"></span>':'');
+
+  /* ---- mail: the code arriving, and the junk-folder nudge ---- */
+  const arr = eOut(inv(t, TY.mailArrive[0], TY.mailArrive[1]));
+  const row = $('#mailNew');
+  row.style.height = (arr*96).toFixed(1)+'px';
+  row.style.paddingTop = (arr*15).toFixed(1)+'px';
+  row.style.paddingBottom = (arr*15).toFixed(1)+'px';
+  row.style.opacity = arr.toFixed(3);
+  $('#tabJunk').className = (t>=TY.junkHot[0] && t<=TY.junkHot[1]) ? 'hot' : '';
+  const cp = eBack(inv(t, TY.codePop[0], TY.codePop[1]));
+  $('#mailCode').style.transform = `scale(${mix(0.86,1,cp).toFixed(3)})`;
+  $('#mailCode').style.boxShadow = `0 0 0 ${(mix(14,0,eOut(inv(t,TY.codePop[0],TY.codePop[1]+0.35)))).toFixed(1)}px rgba(226,20,79,.18)`;
+
+  /* ---- Enrollio explainer ---- */
+  if(TL.diagram){
+    const D = TL.diagram;
+    const rise = (sel, r, dy)=>{
+      const q = eOut(inv(t, r[0], r[1]));
+      const e = $(sel);
+      e.style.opacity = q.toFixed(3);
+      e.style.transform = `translateY(${((1-q)*(dy||22)).toFixed(2)}px)`;
+    };
+    rise('#dgA', D.cardA); rise('#dgB', D.cardB);
+    $('#dgEmA').className = 'dg-em' + (t>=D.litA[0] ? ' lit':'');
+    $('#dgA').className = 'dg-card' + (t>=D.litA[0] ? ' lit':'');
+    const ln = eInOut(inv(t, D.line[0], D.line[1]));
+    $('#dgL1').style.height = '30px'; $('#dgL2').style.height = '30px';
+    $('#dgL1').querySelector('i').style.height = (ln*100).toFixed(1)+'%';
+    $('#dgL2').querySelector('i').style.height = (Math.max(0,(ln-0.5)*2)*100).toFixed(1)+'%';
+    const filled = typed(EMAIL, t, [D.fill[0], D.fill[1]-D.fill[0]]);
+    $('#dgEmB').textContent = filled;
+    $('#dgEmB').className = 'dg-in' + (t>=D.fill[0] ? ' lit':'');
+    $('#dgB').className = 'dg-card' + (t>=D.pill[0] ? ' lit':'');
+    const pl = eBack(inv(t, D.pill[0], D.pill[1]));
+    $('#dgPill').style.opacity = inv(t, D.pill[0], D.pill[1]).toFixed(3);
+    $('#dgPill').style.transform = `scale(${mix(0.8,1,pl).toFixed(3)})`;
+    rise('#dgOk', D.ok, 14); rise('#dgNo', D.no, 14);
+  }
+
+  /* ---- the Enrollio reminder beside the email field ---- */
+  const co = $('#callout'), C = TY.callout;
+  const coIn = eOut(inv(t,C[0],C[1])), coOut = eInOut(inv(t,C[2],C[3]));
   co.style.opacity = (coIn*(1-coOut)).toFixed(3);
   co.style.top = (centreIn('#fEmail','#phone').y - 41) + 'px';
   co.style.transform = `translateX(${mix(26,0,coIn).toFixed(2)}px) scale(${mix(.94,1,coIn).toFixed(3)})`;
 
   /* ---- taps ---- */
   const tap=$('#tap'), dot=$('#tapDot');
-  let tOp=0, tSc=.3, dOp=0;
-  let pressed = null;
-  TAPS.forEach(k=>{
-    const p = inv(t, k.t, k.t+0.46);
+  let tOp=0, tSc=.3, dOp=0, pressed=null;
+  TL.taps.forEach(k=>{
     if(t>=k.t-0.16 && t<=k.t+0.50){
+      const pr = inv(t, k.t, k.t+0.46);
       const c = centreIn(k.el, '#phone');
       tap.style.left = c.x+'px'; tap.style.top = c.y+'px';
       dot.style.left = c.x+'px'; dot.style.top = c.y+'px';
-      if(p>0){ tOp=Math.max(tOp,1-p); tSc=mix(.3,1.5,eOut(p)); }
+      if(pr>0){ tOp=Math.max(tOp,1-pr); tSc=mix(.3,1.5,eOut(pr)); }
       dOp = Math.max(dOp, 1 - inv(t,k.t+0.10,k.t+0.40));
       if(t>=k.t && t<k.t+0.16) pressed = k.el;
     }
@@ -554,21 +849,20 @@ function seek(t){
   tap.style.opacity=tOp.toFixed(3);
   tap.style.transform=`translate(-50%,-50%) scale(${tSc.toFixed(3)})`;
   dot.style.opacity=(dOp*0.9).toFixed(3);
-  ['#tileDancer','#btnSignup','#btnContinue','#btnCreate','#btnVerify'].forEach(s=>{
+  ['#tileDancer','#btnSignup','#btnContinue','#btnCreate','#btnVerify','#mailNew'].forEach(s=>{
     const e=$(s); if(!e) return;
     e.style.transform = (pressed===s) ? 'scale(0.965)' : 'scale(1)';
-    e.style.transition='none';
   });
 
-  /* ---- success burst on verify ---- */
-  const b = $('#burst');
-  const bIn = eOut(inv(t,12.34,12.58)), bOut = eInOut(inv(t,12.86,13.16));
-  b.style.opacity = (bIn*(1-bOut)).toFixed(3);
-  $('#burstRing').style.transform = `scale(${mix(.55,1,eBack(inv(t,12.34,12.74))).toFixed(3)})`;
+  /* ---- success burst ---- */
+  const b = $('#burst'), B = TY.burst;
+  b.style.opacity = (eOut(inv(t,B[0],B[1])) * (1-eInOut(inv(t,B[2],B[3])))).toFixed(3);
+  $('#burstRing').style.transform = `scale(${mix(.55,1,eBack(inv(t,B[0],B[1]+0.16))).toFixed(3)})`;
 }
 
+window.__setVariant = v => { TL = TIMELINES[v]; window.__dur = TL.dur; seek(0); };
 window.__seek = seek;
-window.__dur = DUR;
+window.__dur = TL.dur;
 seek(0);
 </script>
 </body>

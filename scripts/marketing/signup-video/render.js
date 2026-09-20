@@ -9,6 +9,12 @@
  *
  *   node render.js [--fps 30] [--out path.mp4] [--frame 6.2]
  *
+ *   node render.js [--variant full|short] [--fps 30] [--out x.mp4] [--frame 6.2]
+ *
+ * `--variant` picks the cut: `full` is the 30s one that explains the Enrollio
+ * email and walks into the inbox for the code, `short` the 15s summary. Both
+ * timelines live in template.html.
+ *
  * `--frame` renders a single still at that timestamp instead of the video —
  * use it while iterating on the design, it takes about a second.
  */
@@ -51,8 +57,12 @@ const arg = (name, dflt) => {
 };
 
 const FPS = Number(arg('fps', 30));
-const OUT = path.resolve(arg('out', path.join(REPO, 'docs/marketing/how-to-create-your-account.mp4')));
+const VARIANT = arg('variant', 'full');          // 'full' = 30s, 'short' = 15s
 const SINGLE = arg('frame', null);
+const LENGTH = { full: '30s', short: '15s' }[VARIANT];
+if (!LENGTH) { console.error(`unknown --variant ${VARIANT} (expected full or short)`); process.exit(1); }
+const OUT = path.resolve(arg('out',
+  path.join(REPO, `docs/marketing/how-to-create-your-account-${LENGTH}.mp4`)));
 
 /** Inline the fonts and the brand mark so the page renders with no network. */
 function buildHtml() {
@@ -77,11 +87,12 @@ function buildHtml() {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   await page.goto('file://' + page4);
   await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(v => window.__setVariant(v), VARIANT);
 
   if (SINGLE !== null) {
     const t = Number(SINGLE);
     await page.evaluate(tt => window.__seek(tt), t);
-    const still = path.join(HERE, `frame-${t.toFixed(2)}.png`);
+    const still = path.join(HERE, `frame-${VARIANT}-${t.toFixed(2)}.png`);
     await page.screenshot({ path: still });
     await browser.close();
     console.log('still →', still);
@@ -93,7 +104,7 @@ function buildHtml() {
   const dir = path.join(tmp, 'frames');
   fs.mkdirSync(dir);
 
-  process.stdout.write(`rendering ${total} frames @ ${FPS}fps `);
+  process.stdout.write(`rendering ${VARIANT} (${DUR}s): ${total} frames @ ${FPS}fps `);
   for (let i = 0; i < total; i++) {
     await page.evaluate(t => window.__seek(t), i / FPS);
     await page.screenshot({ path: path.join(dir, String(i).padStart(4, '0') + '.png') });
