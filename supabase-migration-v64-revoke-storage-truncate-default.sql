@@ -11,10 +11,17 @@
 -- nothing that is running. It is here so the next person reading the grants
 -- does not find a live rule that says clients may empty storage tables.
 --
--- Measured 2026-09-19 after applying: these two were the last TRUNCATE entries
--- in any default privilege postgres owns. What is left belongs to
--- supabase_admin (public, graphql, graphql_public) and supabase_storage_admin
--- (the three storage tables), and postgres can revoke neither.
+-- Measured 2026-09-19 after applying, and corrected after review: these two
+-- were the last TRUNCATE entries for anon or authenticated in any default
+-- privilege postgres owns. Six remain for those two roles, all owned by
+-- supabase_admin, in public, graphql and graphql_public, and postgres can
+-- revoke none of them. Separately, three of storage's eight tables grant
+-- TRUNCATE to both roles; those grants came from supabase_storage_admin and a
+-- default privilege cannot reach tables that already exist.
+--
+-- postgres's own defaults do still grant TRUNCATE, to postgres and to
+-- service_role, in public, storage and nora. Those stay, the same call v63
+-- made when it kept service_role's grants.
 --
 -- Nothing else moves. Every other privilege in both defaults stays, including
 -- SELECT, INSERT, UPDATE and DELETE, so a storage table would still be
