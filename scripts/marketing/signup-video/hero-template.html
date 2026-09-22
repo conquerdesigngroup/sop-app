@@ -12,31 +12,60 @@ __FONT_CSS__
   --chalk:#F4F4F5; --smoke:#9A9AA4; --second:#C9C9D1;
   --bdr:#26262B; --bdr2:#36363D;
   --electric:#E2144F;
-  /* The studio, which is light: a seamless sweep, the way a product is shot. */
-  --sweep:#ECECEE; --sweep2:#CFCFD4;
-  --ink:#0B0B0D; --ink2:#4B4B54; --ink3:#86868E;
   --display:'Kanit','Barlow',sans-serif;
   --body:'Barlow',sans-serif;
   --mono:'JetBrains Mono',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:1920px;height:1080px;overflow:hidden;background:var(--sweep)}
+
+/* ---------------------------------------------------------------------------
+   The studio flips; the app does not. Everything the room is made of is a
+   variable that `data-mode` swaps, while the phone's screen keeps the app's
+   own dark UI in both cuts — that is what a parent actually opens, and a
+   film that recoloured it to suit its background would be lying about the
+   product. So the device is the same object photographed in two rooms.
+   --------------------------------------------------------------------------- */
+#stage[data-mode="light"]{
+  --sweep:#ECECEE;
+  --key:radial-gradient(112% 88% at 68% 34%,#FBFBFC 0%,#EFEFF1 38%,#DCDCE1 72%,#C6C6CC 100%);
+  --floor:linear-gradient(to bottom,rgba(150,150,160,0),rgba(150,150,160,.16));
+  --ink:#0B0B0D; --ink2:#4B4B54; --ink3:#86868E;
+  --rule:rgba(11,11,13,.16);
+  --chip-bg:#FFFFFF; --chip-bdr:rgba(11,11,13,.10);
+  --chip-sh:0 14px 34px rgba(60,60,70,.12);
+  --cast:rgba(28,28,38,.60);
+  --bloom:rgba(226,20,79,.055); --bloom-max:.85;
+  --glass-sh:0 34px 90px rgba(30,30,40,.34);
+}
+#stage[data-mode="dark"]{
+  --sweep:#0B0B0D;
+  --key:radial-gradient(112% 88% at 68% 34%,#2A2A32 0%,#1B1B21 38%,#111116 72%,#08080A 100%);
+  --floor:linear-gradient(to bottom,rgba(0,0,0,0),rgba(0,0,0,.35));
+  --ink:#F4F4F5; --ink2:#B6B6C0; --ink3:#7C7C88;
+  --rule:rgba(255,255,255,.18);
+  --chip-bg:#161618; --chip-bdr:rgba(255,255,255,.15);
+  --chip-sh:0 18px 46px rgba(0,0,0,.55);
+  --cast:rgba(0,0,0,.66);
+  --bloom:rgba(226,20,79,.20); --bloom-max:1;
+  /* In a dark room the device would vanish into the ground, so the screen is
+     allowed to light its own surroundings — which is what a lit screen does. */
+  --glass-sh:0 34px 90px rgba(0,0,0,.62),0 0 130px rgba(226,20,79,.16);
+}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#ECECEE}
 body{font-family:var(--body);-webkit-font-smoothing:antialiased}
 #stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--sweep)}
 
 /* ---------- the sweep: one soft key light, falling off to the corners ---------- */
-#key{position:absolute;inset:0;
-  background:radial-gradient(112% 88% at 68% 34%,#FBFBFC 0%,#EFEFF1 38%,#DCDCE1 72%,#C6C6CC 100%)}
-#floor{position:absolute;left:0;right:0;bottom:0;height:420px;
-  background:linear-gradient(to bottom,rgba(150,150,160,0) 0%,rgba(150,150,160,.16) 100%)}
+#key{position:absolute;inset:0;background:var(--key)}
+#floor{position:absolute;left:0;right:0;bottom:0;height:420px;background:var(--floor)}
 /* The screen is the only light source in the frame, so let it spill. */
 #bloom{position:absolute;width:760px;height:760px;border-radius:50%;filter:blur(130px);
-  left:972px;top:132px;background:rgba(226,20,79,.055);opacity:0}
+  left:972px;top:132px;background:var(--bloom);opacity:0}
 
 /* ---------- copy ---------- */
 #mark{position:absolute;left:118px;top:74px;display:flex;align-items:center;gap:20px}
 #mark img{height:44px;width:auto;display:block}
-#mark .rule{width:1px;height:28px;background:rgba(11,11,13,.16)}
+#mark .rule{width:1px;height:28px;background:var(--rule)}
 #mark .kick{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:.26em;color:var(--ink3)}
 
 #copy{position:absolute;left:118px;top:0;width:930px;height:1080px;
@@ -51,9 +80,9 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
 /* The address itself, set big enough to read on a phone held at arm's length. */
 #chip{margin-top:38px;display:inline-flex;flex-direction:column;gap:11px;align-self:flex-start}
 #chip .lb{font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:.2em;color:var(--ink3)}
-#chip .em{display:inline-flex;align-items:center;gap:16px;background:#FFFFFF;
-  border:2px solid rgba(11,11,13,.10);border-radius:14px;padding:19px 26px;
-  box-shadow:0 14px 34px rgba(60,60,70,.12);align-self:flex-start}
+#chip .em{display:inline-flex;align-items:center;gap:16px;background:var(--chip-bg);
+  border:2px solid var(--chip-bdr);border-radius:14px;padding:19px 26px;
+  box-shadow:var(--chip-sh);align-self:flex-start}
 #chip .em span{font-family:var(--mono);font-weight:700;font-size:30px;color:var(--ink);letter-spacing:-.01em}
 #chip .em .tick{width:30px;height:30px;flex:0 0 30px}
 #cta{margin-top:40px;display:flex;align-items:center;gap:16px;
@@ -67,7 +96,7 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
    It sits below and a little left of centre, where this key light would put it. */
 #shadow{position:absolute;left:1300px;top:512px;width:600px;height:164px;
   transform:translate(-50%,426px);border-radius:50%;
-  background:radial-gradient(closest-side,rgba(28,28,38,.60),rgba(28,28,38,0) 100%);
+  background:radial-gradient(closest-side,var(--cast),transparent 100%);
   filter:blur(30px);opacity:0}
 #phone{position:absolute;left:-214px;top:-444px;width:428px;height:888px;
   transform-style:preserve-3d;transform-origin:50% 50%}
@@ -78,7 +107,7 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
   background:linear-gradient(118deg,#F6F6F8,#9EA0A8 16%,#EDEDF1 32%,#84868F 50%,#F4F4F7 68%,#9A9CA4 86%,#E4E4E9);
   box-shadow:0 0 0 1px rgba(255,255,255,.5) inset}
 #glass{position:absolute;inset:0;border-radius:58px;background:#08080A;overflow:hidden;
-  box-shadow:0 34px 90px rgba(30,30,40,.34)}
+  box-shadow:var(--glass-sh)}
 #screen{position:absolute;left:13px;top:13px;width:400px;height:860px;border-radius:46px;
   overflow:hidden;background:var(--void)}
 #island{position:absolute;left:50%;top:22px;transform:translateX(-50%);width:104px;height:30px;
@@ -141,7 +170,7 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
 </style>
 </head>
 <body>
-<div id="stage">
+<div id="stage" data-mode="light">
   <div id="key"></div>
   <div id="floor"></div>
   <div id="bloom"></div>
@@ -160,10 +189,10 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
 
     <div class="beat" id="beat2">
       <div id="head2">Sign up with<br>your <span class="pk">Enrollio</span> email</div>
-      <div class="sub">Use the same address the studio already has for you. Any other
-        address will not be recognised.</div>
+      <div class="sub">To sign up for the app, use the same email address you signed up
+        with in Enrollio. Any other address will not be recognised.</div>
       <div id="chip">
-        <div class="lb">THE EMAIL ENROLLIO HAS FOR YOU</div>
+        <div class="lb">THE EMAIL YOU SIGNED UP WITH IN ENROLLIO</div>
         <div class="em">
           <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2.4"
             stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -349,7 +378,8 @@ function seek(t){
   /* Glass: the key light slides across as the frame turns. */
   $('#sheen').style.transform = `translateX(${(-ry * 3.1).toFixed(1)}px)`;
   $('#sheen').style.opacity   = (0.55 + 0.45 * Math.abs(ry) / 22).toFixed(3);
-  $('#bloom').style.opacity   = (0.15 + arr * 0.85).toFixed(3);
+  const bloomMax = parseFloat(getComputedStyle($('#stage')).getPropertyValue('--bloom-max')) || 0.85;
+  $('#bloom').style.opacity   = (bloomMax * (0.18 + arr * 0.82)).toFixed(3);
 
   /* ---------- screens ---------- */
   setScreens(t);
@@ -384,9 +414,17 @@ function seek(t){
   $('#mark').style.opacity = markUp.toFixed(3);
 }
 
+/* Light and dark are the same film in a different room — same timeline, same
+   frames, same app on the screen. Only the studio's variables change, so the
+   two cuts cannot drift apart the way two edited copies would. */
+window.__setMode = m => {
+  const mode = m === 'dark' ? 'dark' : 'light';
+  $('#stage').dataset.mode = mode;
+  window.__name = 'dancer-portal-enrollio-email-' + mode;
+};
 window.__seek = seek;
 window.__dur  = DUR;
-window.__name = 'dancer-portal-enrollio-email';
+window.__setMode('light');
 seek(0);
 </script>
 </body>

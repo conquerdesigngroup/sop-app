@@ -1,8 +1,8 @@
 # Sign-up motion graphics
 
-Three 16:9 films for families signing up to the parent portal. Two of them are
-cuts of the same step-by-step explainer (`template.html`); the third is a
-product film (`hero-template.html`) that makes one point instead of four.
+Four 16:9 films for families signing up to the parent portal. Two are cuts of
+the same step-by-step explainer (`template.html`); the other two are the same
+product film (`hero-template.html`) shot in a light studio and a dark one.
 
 All are 1920×1080, H.264 High / yuv420p, 30fps, `+faststart`, each with a
 poster frame beside it. **None has audio** — they are captioned throughout, so
@@ -10,7 +10,8 @@ they work muted, which is how they will be watched.
 
 | | The film | Length | Use it for |
 |---|---|---|---|
-| `hero-template.html` | `dancer-portal-enrollio-email-10s.mp4` | 10.000s | a post, a story, the top of a page — the announcement |
+| `hero-template.html --mode light` | `dancer-portal-enrollio-email-light-10s.mp4` | 10.000s | a light page, a printed-feel post, anywhere on white |
+| `hero-template.html --mode dark` | `dancer-portal-enrollio-email-dark-10s.mp4` | 10.000s | a dark page, a story, a feed where black reads as premium |
 | `template.html --variant short` | `how-to-create-your-account-15s.mp4` | 15.000s | a text, a story, a reminder |
 | `template.html --variant full` | `how-to-create-your-account-60s.mp4` | 60.000s | a family who is stuck, or a help page |
 
@@ -20,18 +21,41 @@ they work muted, which is how they will be watched.
 
 Ten seconds, one message: **sign up with the email Enrollio has for you.**
 
-It is shot the way a phone is shot in a product ad — a light seamless sweep, a
-single soft key light, the device floating at an angle with a real contact
-shadow under it, turning to camera when there is something on screen to read.
-The app's UI is dark, so on a light sweep the screen is the brightest thing in
-the frame and the eye goes there without being told to.
+It is shot the way a phone is shot in a product ad — a seamless sweep, a single
+soft key light, the device floating at an angle with a real contact shadow under
+it, turning to camera when there is something on screen to read.
 
-The move is three beats and two turns:
+### Light and dark
+
+`--mode light|dark` picks the studio. **Only the room changes.** Same timeline,
+same frames, same app on the screen — `data-mode` swaps a dozen custom
+properties on `#stage` and nothing else, so the two cuts cannot drift apart the
+way two separately edited copies would.
+
+The app's UI stays dark in **both**, deliberately. It would have been easy to
+show the app's light theme in the light cut, and it would have been a lie: a
+parent opens the app and sees the dark one. So it is the same object
+photographed in two rooms, not two different products.
+
+Each room has to solve a different problem:
+
+- **Light.** The dark screen is the brightest-contrast thing on a pale sweep,
+  so the eye goes to it unprompted, and the device sits over a real cast
+  shadow that ties it to the ground.
+- **Dark.** A near-black device on a near-black ground would disappear, so the
+  screen is allowed to light its own surroundings — a pink bloom and a halo on
+  the glass — and the titanium rail carries the silhouette. The cast shadow is
+  all but invisible there, which is correct: a lit object in a dark room is
+  grounded by its own spill, not by a shadow.
+
+### The move
+
+Three beats and two turns:
 
 | | Screen | Words |
 |---|---|---|
 | 0.0–3.5s | Front door — **Dancer Portal** is the pink-edged tile, as it is in the app | The new Dancer Portal |
-| 3.5–7.6s | Create account, the email typing in | Sign up with your **Enrollio** email |
+| 3.5–7.6s | Create account, the email typing in | Sign up with your **Enrollio** email — *to sign up for the app, use the same email address you signed up with in Enrollio* |
 | 7.6–10.0s | Portal home, *Hi, Sarah* | You're in. → Dancer Portal → Sign up → your Enrollio email |
 
 The address is set **twice**: on the phone, where it is small and typing, and
@@ -52,7 +76,8 @@ That is what the explainer below is for — this one exists to get somebody to
 open the app at all.
 
 ```bash
-node scripts/marketing/signup-video/render.js --template hero-template.html
+node scripts/marketing/signup-video/render.js --template hero-template.html --mode light
+node scripts/marketing/signup-video/render.js --template hero-template.html --mode dark
 ```
 
 It shares `render.js`, `assets/fonts.css` and the app's screen CSS with the
@@ -109,7 +134,8 @@ junk-folder warning and the long cut spends a full beat on the Enrollio point.
 ```bash
 npm install --no-save playwright ffmpeg-static   # both, in ONE command
 cd scripts/marketing/signup-video
-node render.js --template hero-template.html     # 10s, ~2 min
+node render.js --template hero-template.html --mode light   # 10s, ~3 min
+node render.js --template hero-template.html --mode dark    # 10s, ~3 min
 node render.js --variant short                   # 15s, ~2.5 min
 node render.js --variant full                    # 60s, ~9 min
 ```
@@ -128,7 +154,7 @@ While iterating, render one frame instead of all of them — about a second:
 node scripts/marketing/signup-video/render.js --variant full --frame 10.6
 ```
 
-Other flags: `--template`, `--fps`, `--out`. The output filename is built from
+Other flags: `--template`, `--mode`, `--fps`, `--out`. The output filename is built from
 `window.__name` and `window.__dur` on the page itself, so it cannot drift from
 the timeline the way a hardcoded name does — that is how a file called `-30s`
 outlived the 30s cut once already.
@@ -225,7 +251,7 @@ Keep the captions. These are silent, autoplaying videos in a text message or on
 a studio page — the words on screen are the whole explanation, not decoration
 for a voiceover.
 
-The outro of **all three films** shows the portal home with sections named
+The outro of **every film here** shows the portal home with sections named
 **All Stars**, **Academy** and **Billing & Admin**. The slugs are real
 (`PROGRAM_SLUGS`) but the display names come from `portal_programs` in the
 database, so check them against the studio's before sending any of them out.

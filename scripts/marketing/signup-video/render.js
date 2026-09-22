@@ -7,13 +7,14 @@
  * than screen-recording it, which is why the output lands on its exact stated
  * length with no dropped or duplicated frames however slow the machine is.
  *
- *   node render.js [--template f.html] [--variant full|short] [--fps 30]
- *                  [--out x.mp4] [--frame 6.2]
+ *   node render.js [--template f.html] [--variant full|short] [--mode light|dark]
+ *                  [--fps 30] [--out x.mp4] [--frame 6.2]
  *
  * `--template` picks the film. `template.html` is the step-by-step explainer,
  * where `--variant` then picks the cut: `full` is the 60s one that explains the
  * Enrollio email and walks into the inbox for the code, `short` the 15s
- * summary. `hero-template.html` is the 10s product film and has no variants.
+ * summary. `hero-template.html` is the 10s product film, where `--mode` picks
+ * the light or the dark studio instead.
  *
  * `--frame` renders a single still at that timestamp instead of the video —
  * use it while iterating on the design, it takes about a second.
@@ -60,6 +61,11 @@ const FPS = Number(arg('fps', 30));
 const VARIANT = arg('variant', 'full');
 const SINGLE = arg('frame', null);
 const TEMPLATE = arg('template', 'template.html');
+const MODE = arg('mode', null);
+if (MODE && !['light', 'dark'].includes(MODE)) {
+  console.error(`unknown --mode ${MODE} (expected light or dark)`);
+  process.exit(1);
+}
 if (TEMPLATE === 'template.html' && !['full', 'short'].includes(VARIANT)) {
   console.error(`unknown --variant ${VARIANT} (expected full or short)`);
   process.exit(1);
@@ -97,11 +103,15 @@ function buildHtml() {
   if (await page.evaluate(() => typeof window.__setVariant === 'function')) {
     await page.evaluate(v => window.__setVariant(v), VARIANT);
   }
+  /* Only the hero film has a light and a dark studio. */
+  if (MODE && await page.evaluate(() => typeof window.__setMode === 'function')) {
+    await page.evaluate(m => window.__setMode(m), MODE);
+  }
 
   if (SINGLE !== null) {
     const t = Number(SINGLE);
     await page.evaluate(tt => window.__seek(tt), t);
-    const still = path.join(HERE, `frame-${VARIANT}-${t.toFixed(2)}.png`);
+    const still = path.join(HERE, `frame-${MODE || VARIANT}-${t.toFixed(2)}.png`);
     await page.screenshot({ path: still });
     await browser.close();
     console.log('still →', still);
