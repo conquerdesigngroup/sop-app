@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * Render the "How to create your account" motion graphic to an MP4.
+ * Render one of the DIDC sign-up motion graphics to an MP4.
  *
- * The animation in template.html is a pure function of time: nothing moves on
- * its own, every property is computed by `__seek(t)`. So we drive it frame by
- * frame rather than screen-recording it, which is why the output is exactly
- * 15.000s with no dropped or duplicated frames however slow the machine is.
+ * Each template is a pure function of time: nothing moves on its own, every
+ * property is computed by `__seek(t)`. So we drive it frame by frame rather
+ * than screen-recording it, which is why the output lands on its exact stated
+ * length with no dropped or duplicated frames however slow the machine is.
  *
- *   node render.js [--fps 30] [--out path.mp4] [--frame 6.2]
+ *   node render.js [--template f.html] [--variant full|short] [--fps 30]
+ *                  [--out x.mp4] [--frame 6.2]
  *
- *   node render.js [--variant full|short] [--fps 30] [--out x.mp4] [--frame 6.2]
- *
- * `--variant` picks the cut: `full` is the 30s one that explains the Enrollio
- * email and walks into the inbox for the code, `short` the 15s summary. Both
- * timelines live in template.html.
+ * `--template` picks the film. `template.html` is the step-by-step explainer,
+ * where `--variant` then picks the cut: `full` is the 60s one that explains the
+ * Enrollio email and walks into the inbox for the code, `short` the 15s
+ * summary. `hero-template.html` is the 10s product film and has no variants.
  *
  * `--frame` renders a single still at that timestamp instead of the video —
  * use it while iterating on the design, it takes about a second.
@@ -59,19 +59,20 @@ const arg = (name, dflt) => {
 const FPS = Number(arg('fps', 30));
 const VARIANT = arg('variant', 'full');
 const SINGLE = arg('frame', null);
-if (!['full', 'short'].includes(VARIANT)) {
+const TEMPLATE = arg('template', 'template.html');
+if (TEMPLATE === 'template.html' && !['full', 'short'].includes(VARIANT)) {
   console.error(`unknown --variant ${VARIANT} (expected full or short)`);
   process.exit(1);
 }
-/* The filename carries the length, so take it from the page rather than a
-   table here — a table drifts the moment the timeline is re-paced. */
+/* Both the name and the length come off the page, not from a table here — a
+   table drifts the moment a timeline is re-paced or a film is added. */
 const namedOut = arg('out', null);
-const outFor = dur => path.resolve(namedOut
-  || path.join(REPO, `docs/marketing/how-to-create-your-account-${Math.round(dur)}s.mp4`));
+const outFor = (name, dur) => path.resolve(namedOut
+  || path.join(REPO, `docs/marketing/${name}-${Math.round(dur)}s.mp4`));
 
 /** Inline the fonts and the brand mark so the page renders with no network. */
 function buildHtml() {
-  let html = fs.readFileSync(path.join(HERE, 'template.html'), 'utf8');
+  let html = fs.readFileSync(path.join(HERE, TEMPLATE), 'utf8');
   const fontCss = fs.readFileSync(path.join(HERE, 'assets/fonts.css'), 'utf8');
   const logo = fs.readFileSync(path.join(REPO, 'public/brand/logos/didc-mark-3d.png'));
   html = html.replace('__FONT_CSS__', fontCss);
@@ -92,7 +93,10 @@ function buildHtml() {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   await page.goto('file://' + page4);
   await page.evaluate(() => document.fonts.ready);
-  await page.evaluate(v => window.__setVariant(v), VARIANT);
+  /* Only the explainer has cuts; the hero film is a single timeline. */
+  if (await page.evaluate(() => typeof window.__setVariant === 'function')) {
+    await page.evaluate(v => window.__setVariant(v), VARIANT);
+  }
 
   if (SINGLE !== null) {
     const t = Number(SINGLE);
@@ -105,12 +109,13 @@ function buildHtml() {
   }
 
   const DUR = await page.evaluate(() => window.__dur);
-  const OUT = outFor(DUR);
+  const NAME = await page.evaluate(() => window.__name || 'how-to-create-your-account');
+  const OUT = outFor(NAME, DUR);
   const total = Math.round(DUR * FPS);
   const dir = path.join(tmp, 'frames');
   fs.mkdirSync(dir);
 
-  process.stdout.write(`rendering ${VARIANT} (${DUR}s): ${total} frames @ ${FPS}fps `);
+  process.stdout.write(`rendering ${NAME} (${DUR}s): ${total} frames @ ${FPS}fps `);
   for (let i = 0; i < total; i++) {
     await page.evaluate(t => window.__seek(t), i / FPS);
     await page.screenshot({ path: path.join(dir, String(i).padStart(4, '0') + '.png') });

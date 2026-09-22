@@ -1,7 +1,70 @@
-# "How to create your account" — explainer videos
+# Sign-up motion graphics
 
-Two cuts of one 16:9 explainer for families signing up to the parent portal,
-both built from `template.html`:
+Three 16:9 films for families signing up to the parent portal. Two of them are
+cuts of the same step-by-step explainer (`template.html`); the third is a
+product film (`hero-template.html`) that makes one point instead of four.
+
+All are 1920×1080, H.264 High / yuv420p, 30fps, `+faststart`, each with a
+poster frame beside it. **None has audio** — they are captioned throughout, so
+they work muted, which is how they will be watched.
+
+| | The film | Length | Use it for |
+|---|---|---|---|
+| `hero-template.html` | `dancer-portal-enrollio-email-10s.mp4` | 10.000s | a post, a story, the top of a page — the announcement |
+| `template.html --variant short` | `how-to-create-your-account-15s.mp4` | 15.000s | a text, a story, a reminder |
+| `template.html --variant full` | `how-to-create-your-account-60s.mp4` | 60.000s | a family who is stuck, or a help page |
+
+---
+
+# 1. The hero film — `hero-template.html`
+
+Ten seconds, one message: **sign up with the email Enrollio has for you.**
+
+It is shot the way a phone is shot in a product ad — a light seamless sweep, a
+single soft key light, the device floating at an angle with a real contact
+shadow under it, turning to camera when there is something on screen to read.
+The app's UI is dark, so on a light sweep the screen is the brightest thing in
+the frame and the eye goes there without being told to.
+
+The move is three beats and two turns:
+
+| | Screen | Words |
+|---|---|---|
+| 0.0–3.5s | Front door — **Dancer Portal** is the pink-edged tile, as it is in the app | The new Dancer Portal |
+| 3.5–7.6s | Create account, the email typing in | Sign up with your **Enrollio** email |
+| 7.6–10.0s | Portal home, *Hi, Sarah* | You're in. → Dancer Portal → Sign up → your Enrollio email |
+
+The address is set **twice**: on the phone, where it is small and typing, and
+beside it as a plain white chip at 30px mono, which is what actually survives
+being watched on a phone. Same for the device angle — it sits at a 20° hero
+pose for the announcement and turns to within 3.5° of flat for the middle
+beat, because at 20° the text on the screen is foreshortened past reading.
+
+Everything in the frame is derived from the pose rather than keyframed beside
+it: the shadow's blur, darkness and spread come from how high the phone is
+sitting, and the specular band on the glass slides with the rotation. Keyframe
+those separately and they drift out of sync with the device the moment the
+motion is re-timed.
+
+What it does **not** do is explain the verification code, the password rules,
+or what happens if the address is wrong. Ten seconds does not hold four steps.
+That is what the explainer below is for — this one exists to get somebody to
+open the app at all.
+
+```bash
+node scripts/marketing/signup-video/render.js --template hero-template.html
+```
+
+It shares `render.js`, `assets/fonts.css` and the app's screen CSS with the
+explainer, but carries its own copy of that CSS rather than importing it — the
+two films light the same screens very differently and should be able to move
+apart without one breaking the other.
+
+---
+
+# 2. The explainer — `template.html`
+
+Two cuts of one 16:9 step-by-step, both built from `template.html`:
 
 | | `--variant full` | `--variant short` |
 |---|---|---|
@@ -9,10 +72,6 @@ both built from `template.html`:
 | Length | exactly 60.000s (1800 frames) | exactly 15.000s (450 frames) |
 | Size | ~3.1 MB | ~1.4 MB |
 | For | sending to a family who is stuck, or a help page | a text, a story, a reminder |
-
-Both are 1920×1080, H.264 High / yuv420p, 30fps, `+faststart`, with a poster
-frame beside them. **Neither has audio** — they are captioned throughout, so
-they work muted, which is how they will be watched.
 
 ## What they show
 
@@ -26,7 +85,7 @@ parent is looking at:
 3. A password, twice, 6+ characters (step `password`, `CLIENT_MIN_PASSWORD`)
 4. The 6-digit code (step `verify`)
 
-The 30s cut adds the two things the 15s can only assert:
+The long cut adds the two things the 15s can only assert:
 
 - **Why the email has to be the Enrollio one.** A diagram: Enrollio holds the
   studio's family list, the app looks your address up on it, same address →
@@ -43,14 +102,16 @@ answers `200 { ok: true }` whether or not the address is on the roster — on
 purpose, so signup cannot be used to test which families attend — so a parent
 who used the wrong address just never gets a code, with nothing to say why.
 Saying it in advance is the only place left, which is why both cuts carry the
-junk-folder warning and the 30s spends five seconds on the Enrollio point.
+junk-folder warning and the long cut spends a full beat on the Enrollio point.
 
 ## Regenerating
 
 ```bash
 npm install --no-save playwright ffmpeg-static   # both, in ONE command
-node scripts/marketing/signup-video/render.js --variant full     # 60s, ~9 min
-node scripts/marketing/signup-video/render.js --variant short    # 15s, ~2.5 min
+cd scripts/marketing/signup-video
+node render.js --template hero-template.html     # 10s, ~2 min
+node render.js --variant short                   # 15s, ~2.5 min
+node render.js --variant full                    # 60s, ~9 min
 ```
 
 Install them together. `--no-save` leaves `package.json` alone, so a second
@@ -67,13 +128,14 @@ While iterating, render one frame instead of all of them — about a second:
 node scripts/marketing/signup-video/render.js --variant full --frame 10.6
 ```
 
-Other flags: `--fps`, `--out`. The output filename carries the length and is
-taken from the page's own duration, so it cannot drift from the timeline the
-way a hardcoded name does.
+Other flags: `--template`, `--fps`, `--out`. The output filename is built from
+`window.__name` and `window.__dur` on the page itself, so it cannot drift from
+the timeline the way a hardcoded name does — that is how a file called `-30s`
+outlived the 30s cut once already.
 
-## How it is built
+## How both are built
 
-`template.html` is a standalone page whose every animated property is a pure
+Each template is a standalone page whose every animated property is a pure
 function of time. Nothing runs on a timer or a CSS animation: `__seek(t)` sets
 the whole frame, and `render.js` calls it once per frame and screenshots each
 one.
@@ -128,7 +190,7 @@ no caret lit, no glow still easing — otherwise it freezes an element at 86%
 opacity for three seconds and looks like a bug. The comments on each entry say
 what the viewer is meant to be reading. The longest is the code itself.
 
-`holds` is the whole of it: the 60s cut and the 30s cut before it produce the
+`holds` is the whole of it: the 60s cut and the 30s cut it replaced produce the
 same frames in the same order, because `seek()` does the identical work on the
 source time it is handed. A cut with no `holds` key, like `short`, passes
 straight through unchanged.
@@ -153,7 +215,7 @@ things fix it, and all four matter at small sizes:
 4. The ripple `aim`s at the tile's icon well rather than its centre, so it
    never sits on the label you are meant to read.
 
-The 30s cut also splits step 1 into two beats — *Tap Dancer Portal*, then
+The long cut also splits step 1 into two beats — *Tap Dancer Portal*, then
 *Then tap Sign up* — so each choice gets its own headline and about two
 seconds. The 15s cut keeps one beat but names both in it.
 
@@ -163,7 +225,8 @@ Keep the captions. These are silent, autoplaying videos in a text message or on
 a studio page — the words on screen are the whole explanation, not decoration
 for a voiceover.
 
-The outro shows the portal home with sections named **All Stars**, **Academy**
-and **Billing & Admin**. The slugs are real (`PROGRAM_SLUGS`) but the display
-names come from `portal_programs` in the database, so check them against the
-studio's before sending either cut out.
+The outro of **all three films** shows the portal home with sections named
+**All Stars**, **Academy** and **Billing & Admin**. The slugs are real
+(`PROGRAM_SLUGS`) but the display names come from `portal_programs` in the
+database, so check them against the studio's before sending any of them out.
+They appear in both templates; change both.

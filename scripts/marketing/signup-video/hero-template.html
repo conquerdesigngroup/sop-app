@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dancer Portal — sign up with your Enrollio email</title>
+<style>
+__FONT_CSS__
+
+:root{
+  /* The app's own dark UI, unchanged — it is what shows on the screen. */
+  --void:#0B0B0D; --panel:#161618; --panel2:#1E1E21;
+  --chalk:#F4F4F5; --smoke:#9A9AA4; --second:#C9C9D1;
+  --bdr:#26262B; --bdr2:#36363D;
+  --electric:#E2144F;
+  /* The studio, which is light: a seamless sweep, the way a product is shot. */
+  --sweep:#ECECEE; --sweep2:#CFCFD4;
+  --ink:#0B0B0D; --ink2:#4B4B54; --ink3:#86868E;
+  --display:'Kanit','Barlow',sans-serif;
+  --body:'Barlow',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--sweep)}
+body{font-family:var(--body);-webkit-font-smoothing:antialiased}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--sweep)}
+
+/* ---------- the sweep: one soft key light, falling off to the corners ---------- */
+#key{position:absolute;inset:0;
+  background:radial-gradient(112% 88% at 68% 34%,#FBFBFC 0%,#EFEFF1 38%,#DCDCE1 72%,#C6C6CC 100%)}
+#floor{position:absolute;left:0;right:0;bottom:0;height:420px;
+  background:linear-gradient(to bottom,rgba(150,150,160,0) 0%,rgba(150,150,160,.16) 100%)}
+/* The screen is the only light source in the frame, so let it spill. */
+#bloom{position:absolute;width:760px;height:760px;border-radius:50%;filter:blur(130px);
+  left:972px;top:132px;background:rgba(226,20,79,.055);opacity:0}
+
+/* ---------- copy ---------- */
+#mark{position:absolute;left:118px;top:74px;display:flex;align-items:center;gap:20px}
+#mark img{height:44px;width:auto;display:block}
+#mark .rule{width:1px;height:28px;background:rgba(11,11,13,.16)}
+#mark .kick{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:.26em;color:var(--ink3)}
+
+#copy{position:absolute;left:118px;top:0;width:930px;height:1080px;
+  display:flex;flex-direction:column;justify-content:center}
+.beat{position:absolute;left:0;width:930px;top:50%;transform:translateY(-50%)}
+#head1,#head2,#head3{font-family:var(--display);font-weight:800;font-style:italic;
+  text-transform:uppercase;font-size:80px;line-height:1.0;letter-spacing:-.012em;color:var(--ink)}
+.pk{color:var(--electric)}
+.sub{font-family:var(--body);font-weight:400;font-size:30px;line-height:1.42;color:var(--ink2);
+  margin-top:28px;max-width:790px}
+
+/* The address itself, set big enough to read on a phone held at arm's length. */
+#chip{margin-top:38px;display:inline-flex;flex-direction:column;gap:11px;align-self:flex-start}
+#chip .lb{font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:.2em;color:var(--ink3)}
+#chip .em{display:inline-flex;align-items:center;gap:16px;background:#FFFFFF;
+  border:2px solid rgba(11,11,13,.10);border-radius:14px;padding:19px 26px;
+  box-shadow:0 14px 34px rgba(60,60,70,.12);align-self:flex-start}
+#chip .em span{font-family:var(--mono);font-weight:700;font-size:30px;color:var(--ink);letter-spacing:-.01em}
+#chip .em .tick{width:30px;height:30px;flex:0 0 30px}
+#cta{margin-top:40px;display:flex;align-items:center;gap:16px;
+  font-family:var(--body);font-weight:600;font-size:25px;color:var(--ink2)}
+#cta .n{width:36px;height:36px;border-radius:50%;background:var(--electric);color:#FFFFFF;
+  display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:16px}
+
+/* ---------- the device ---------- */
+#rig{position:absolute;left:1352px;top:512px;width:0;height:0;perspective:2400px}
+/* The device floats, so the only thing tying it to the room is what it casts.
+   It sits below and a little left of centre, where this key light would put it. */
+#shadow{position:absolute;left:1300px;top:512px;width:600px;height:164px;
+  transform:translate(-50%,426px);border-radius:50%;
+  background:radial-gradient(closest-side,rgba(28,28,38,.60),rgba(28,28,38,0) 100%);
+  filter:blur(30px);opacity:0}
+#phone{position:absolute;left:-214px;top:-444px;width:428px;height:888px;
+  transform-style:preserve-3d;transform-origin:50% 50%}
+/* Two plates behind the glass give the frame real thickness once it turns. */
+#back{position:absolute;inset:-3px;border-radius:61px;transform:translateZ(-21px);
+  background:linear-gradient(118deg,#6E6E78,#3C3C46 40%,#585862 62%,#2E2E38)}
+#rail{position:absolute;inset:-4px;border-radius:62px;transform:translateZ(-10px);
+  background:linear-gradient(118deg,#F6F6F8,#9EA0A8 16%,#EDEDF1 32%,#84868F 50%,#F4F4F7 68%,#9A9CA4 86%,#E4E4E9);
+  box-shadow:0 0 0 1px rgba(255,255,255,.5) inset}
+#glass{position:absolute;inset:0;border-radius:58px;background:#08080A;overflow:hidden;
+  box-shadow:0 34px 90px rgba(30,30,40,.34)}
+#screen{position:absolute;left:13px;top:13px;width:400px;height:860px;border-radius:46px;
+  overflow:hidden;background:var(--void)}
+#island{position:absolute;left:50%;top:22px;transform:translateX(-50%);width:104px;height:30px;
+  border-radius:16px;background:#000;z-index:60}
+/* Glass catches the key light; the band slides as the phone turns. */
+#sheen{position:absolute;inset:0;border-radius:58px;z-index:70;pointer-events:none;
+  background:linear-gradient(104deg,rgba(255,255,255,0) 26%,rgba(255,255,255,.20) 42%,
+             rgba(255,255,255,.05) 52%,rgba(255,255,255,0) 66%)}
+
+/* ---------- the app's own screens, at the app's own scale ---------- */
+.scr{position:absolute;inset:0;background:var(--void);display:flex;flex-direction:column;opacity:0}
+.ph-head{display:flex;align-items:center;gap:11px;padding:62px 16px 12px;border-bottom:2px solid var(--bdr);flex:0 0 auto}
+.ph-head img{height:19px;width:auto;display:block}
+.ph-head .sp{flex:1}
+.ph-lab{font-family:var(--body);font-weight:600;font-size:13px;color:var(--smoke)}
+.ph-ic{width:26px;height:26px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;
+  justify-content:center;color:var(--smoke);font-size:14px}
+.ph-back{font-size:26px;line-height:1;color:var(--smoke);font-family:var(--body);width:20px}
+.ph-body{flex:1;padding:22px 17px;overflow:hidden}
+.ph-h1{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:33px;line-height:1.16;color:var(--chalk)}
+.ph-sub{font-family:var(--body);font-size:15px;line-height:1.45;color:var(--smoke);margin-top:7px}
+.card{margin-top:22px;background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:17px;
+  display:flex;flex-direction:column;gap:15px}
+.p{font-family:var(--body);font-size:15px;line-height:1.5;color:var(--second)}
+.p b{font-weight:700;color:var(--chalk)}
+.fld{display:flex;flex-direction:column;gap:7px}
+.fld .lb{font-family:var(--body);font-weight:600;font-size:13px;color:var(--smoke)}
+.fld .in{height:48px;border-radius:8px;background:var(--panel2);border:2px solid var(--bdr);
+  display:flex;align-items:center;padding:0 13px;font-family:var(--body);font-size:17px;color:var(--chalk);
+  white-space:nowrap;overflow:hidden}
+.fld .in.ph{color:#6A6A74}
+.fld .in.focus{border-color:var(--electric);box-shadow:0 0 0 4px rgba(226,20,79,.16)}
+.caret{display:inline-block;width:2px;height:21px;background:var(--electric);margin-left:2px;vertical-align:-4px}
+.btn{height:51px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--body);font-weight:600;font-size:17px}
+.btn.pri{background:var(--electric);color:#FFFFFF}
+.btn.out{border:2px solid var(--bdr2);color:var(--chalk)}
+
+.door{padding:78px 22px 76px;align-items:center;justify-content:center}
+.door img.mark{width:252px;height:auto;display:block}
+.door .tiles{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;margin-top:40px}
+.tile{background:var(--panel);border:2px solid var(--bdr);border-radius:14px;min-height:198px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:17px}
+.tile .well{width:68px;height:68px;border-radius:50%;background:var(--panel2);display:flex;
+  align-items:center;justify-content:center}
+.tile .nm{font-family:var(--body);font-weight:700;font-size:20px;color:var(--chalk);text-align:center}
+.tile.acc{border-color:rgba(226,20,79,.55)}
+.tile.acc .well{background:rgba(226,20,79,.16)}
+.door .tag{position:absolute;left:0;right:0;bottom:34px;text-align:center;
+  font-family:var(--mono);font-size:13px;color:var(--smoke)}
+.navtiles{display:flex;flex-direction:column;gap:12px;margin-top:22px}
+.ntile{background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:17px;
+  display:flex;align-items:center;gap:14px}
+.ntile .well{width:42px;height:42px;border-radius:10px;background:var(--panel2);display:flex;
+  align-items:center;justify-content:center;flex:0 0 42px}
+.ntile.acc .well{background:rgba(226,20,79,.16)}
+.ntile .nm{font-family:var(--body);font-weight:600;font-size:17px;color:var(--chalk)}
+.ntile .ch{margin-left:auto;color:var(--smoke);font-size:20px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="key"></div>
+  <div id="floor"></div>
+  <div id="bloom"></div>
+
+  <div id="mark">
+    <img src="__LOGO__" alt="">
+    <div class="rule"></div>
+    <div class="kick">DANCING IMAGES DANCE CENTER</div>
+  </div>
+
+  <div id="copy">
+    <div class="beat" id="beat1">
+      <div id="head1">The new<br>Dancer Portal</div>
+      <div class="sub">Schedules, studio info, photos and videos &mdash; all in one app.</div>
+    </div>
+
+    <div class="beat" id="beat2">
+      <div id="head2">Sign up with<br>your <span class="pk">Enrollio</span> email</div>
+      <div class="sub">Use the same address the studio already has for you. Any other
+        address will not be recognised.</div>
+      <div id="chip">
+        <div class="lb">THE EMAIL ENROLLIO HAS FOR YOU</div>
+        <div class="em">
+          <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>sarah.mitchell@gmail.com</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="beat" id="beat3">
+      <div id="head3">You&rsquo;re in.</div>
+      <div class="sub">Open the app, tap Dancer Portal, then Sign up.</div>
+      <div id="cta"><span class="n">1</span>Dancer Portal<span class="n">2</span>Sign up<span class="n">3</span>Your Enrollio email</div>
+    </div>
+  </div>
+
+  <div id="shadow"></div>
+  <div id="rig">
+    <div id="phone">
+      <div id="back"></div>
+      <div id="rail"></div>
+      <div id="glass">
+        <div id="screen">
+
+          <!-- ============ FRONT DOOR ============ -->
+          <div class="scr door" data-k="door">
+            <img class="mark" src="__LOGO__" alt="">
+            <div class="tiles">
+              <div class="tile" id="tileStaff">
+                <div class="well"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/><path d="M9 7V5h6v2"/></svg></div>
+                <div class="nm">Staff Portal</div>
+              </div>
+              <div class="tile acc" id="tileDancer">
+                <div class="well"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#E2144F"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                <div class="nm">Dancer Portal</div>
+              </div>
+            </div>
+            <div class="tag">You are your only limit</div>
+          </div>
+
+          <!-- ============ CREATE ACCOUNT ============ -->
+          <div class="scr" data-k="details">
+            <div class="ph-head"><div class="ph-back">&lsaquo;</div><img src="__LOGO__" alt="">
+              <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+            <div class="ph-body">
+              <div class="ph-h1">Create account</div>
+              <div class="ph-sub">For families enrolled at the studio.</div>
+              <div class="card">
+                <div class="p">Use the same email address as your <b>Enrollio</b> account &mdash; the one the
+                  studio already has for you.</div>
+                <div class="fld"><div class="lb">Your first name</div><div class="in">Sarah</div></div>
+                <div class="fld"><div class="lb">Your last name</div><div class="in">Mitchell</div></div>
+                <div class="fld"><div class="lb">Email</div>
+                  <div class="in ph" id="fEmail">Same as your Enrollio email</div></div>
+                <div class="btn pri">Continue</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ HOME ============ -->
+          <div class="scr" data-k="home">
+            <div class="ph-head"><img src="__LOGO__" alt="">
+              <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+            <div class="ph-body">
+              <div class="ph-h1">Hi, Sarah</div>
+              <div class="ph-sub">Pick your section to see schedules, info and documents.</div>
+              <div class="navtiles">
+                <div class="ntile acc"><div class="well"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+                  stroke="#E2144F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m12 3 2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8L3.5 9.2l5.9-.9Z"/></svg></div>
+                  <div class="nm">All Stars</div><div class="ch">&rsaquo;</div></div>
+                <div class="ntile"><div class="well"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+                  stroke="#9A9AA4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></div>
+                  <div class="nm">Academy</div><div class="ch">&rsaquo;</div></div>
+                <div class="ntile"><div class="well"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"
+                  stroke="#9A9AA4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></div>
+                  <div class="nm">Billing &amp; Admin</div><div class="ch">&rsaquo;</div></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div id="island"></div>
+        <div id="sheen"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   Every property in this film is a pure function of time. Nothing runs
+   on a timer, nothing is a CSS animation: render.js calls __seek(t) for
+   each frame it wants. That is what makes the output exactly 10.000s
+   however slow the machine doing the rendering is.
+   =================================================================== */
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const inv   = (t,a,b) => b <= a ? (t >= b ? 1 : 0) : clamp((t-a)/(b-a), 0, 1);
+const mix   = (a,b,k) => a + (b-a)*k;
+const eOut  = k => 1 - Math.pow(1-k, 3);
+const eInOut= k => k < .5 ? 4*k*k*k : 1 - Math.pow(-2*k+2, 3)/2;
+
+const DUR = 10.0;
+
+/* The two poses the camera works between. HERO is the product shot — turned
+   far enough to show the frame has a thickness. FLAT is for the moment the
+   screen has to be read, because at HERO the text on it is foreshortened. */
+const HERO = { ry:  20, rx: 5.5, rz: -6.5, sc: 0.930 };
+const FLAT = { ry: 3.5, rx: 1.2, rz: -1.0, sc: 1.015 };
+
+const EMAIL   = 'sarah.mitchell@gmail.com';
+const SCREENS = [ {k:'door', at:0.00}, {k:'details', at:4.10}, {k:'home', at:7.95} ];
+const XF      = 0.42;                       /* screen cross-dissolve */
+
+/* Copy beats: [el, in, out]. They overlap the device moves by design — the
+   words change while the phone is turning, so neither ever waits on the other. */
+const BEATS = [
+  ['#beat1', 0.85, 3.45],
+  ['#beat2', 3.70, 7.55],
+  ['#beat3', 7.80, DUR ],
+];
+
+function setScreens(t){
+  let cur = SCREENS[0], nxt = null;
+  for(let i = 0; i < SCREENS.length; i++){
+    if(t >= SCREENS[i].at) cur = SCREENS[i];
+  }
+  const ci = SCREENS.indexOf(cur);
+  nxt = SCREENS[ci+1] || null;
+  const k = nxt ? inv(t, nxt.at - XF, nxt.at) : 0;
+  document.querySelectorAll('.scr').forEach(el => {
+    const key = el.dataset.k;
+    let o = 0;
+    if(key === cur.k)            o = 1 - k;
+    if(nxt && key === nxt.k)     o = k;
+    el.style.opacity = o.toFixed(3);
+  });
+}
+
+function seek(t){
+  t = clamp(t, 0, DUR);
+
+  /* ---------- device pose ---------- */
+  const arr  = eOut  (inv(t, 0.00, 1.45));   /* it arrives             */
+  const turn = eInOut(inv(t, 3.55, 4.90));   /* turns to face you      */
+  const back = eInOut(inv(t, 7.25, 8.55));   /* turns back for the end */
+
+  let ry = mix(HERO.ry + 13, HERO.ry, arr);
+  let rx = mix(HERO.rx - 7,  HERO.rx, arr);
+  let rz = mix(HERO.rz - 8,  HERO.rz, arr);
+  let sc = mix(0.78, HERO.sc, arr);
+  let ty = mix(300, 0, arr);
+
+  ry = mix(ry, FLAT.ry, turn); rx = mix(rx, FLAT.rx, turn);
+  rz = mix(rz, FLAT.rz, turn); sc = mix(sc, FLAT.sc, turn);
+
+  ry = mix(ry, HERO.ry, back); rx = mix(rx, HERO.rx, back);
+  rz = mix(rz, HERO.rz, back); sc = mix(sc, HERO.sc, back);
+
+  /* A slow drift so it reads as floating rather than parked. */
+  ty += Math.sin(t * 0.80) * 6.5 * arr;
+  ry += Math.sin(t * 0.57 + 1.2) * 0.95 * arr;
+  rx += Math.sin(t * 0.69) * 0.55 * arr;
+
+  const phone = $('#phone');
+  phone.style.transform =
+    `translateY(${ty.toFixed(2)}px) rotateX(${rx.toFixed(2)}deg) ` +
+    `rotateY(${ry.toFixed(2)}deg) rotateZ(${rz.toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+
+  /* The shadow is cast by the device, so it is derived from the pose rather
+     than keyframed separately — it tightens and darkens as the phone lands. */
+  const lift = clamp(ty / 300, 0, 1);
+  const sh = $('#shadow');
+  sh.style.opacity   = mix(1, 0.30, lift).toFixed(3);
+  sh.style.filter    = `blur(${mix(30, 62, lift).toFixed(1)}px)`;
+  sh.style.transform = `translate(-50%, ${(426 + ty * 0.08).toFixed(1)}px) ` +
+                       `scale(${mix(1, 1.38, lift).toFixed(3)}, ${mix(1, .72, lift).toFixed(3)})`;
+
+  /* Glass: the key light slides across as the frame turns. */
+  $('#sheen').style.transform = `translateX(${(-ry * 3.1).toFixed(1)}px)`;
+  $('#sheen').style.opacity   = (0.55 + 0.45 * Math.abs(ry) / 22).toFixed(3);
+  $('#bloom').style.opacity   = (0.15 + arr * 0.85).toFixed(3);
+
+  /* ---------- screens ---------- */
+  setScreens(t);
+
+  /* The email typing out, letter by letter, on the field itself. */
+  const typed = Math.round(inv(t, 5.20, 6.55) * EMAIL.length);
+  const f = $('#fEmail');
+  const focused = t >= 5.05;
+  const done    = typed >= EMAIL.length;
+  const caret   = focused && !done && (Math.floor(t * 2.2) % 2 === 0);
+  f.className = 'in' + (typed ? '' : ' ph') + (focused ? ' focus' : '');
+  f.innerHTML = (typed ? EMAIL.slice(0, typed) : 'Same as your Enrollio email') +
+                (caret ? '<i class="caret"></i>' : '');
+
+  /* ---------- copy ---------- */
+  BEATS.forEach(([sel, a, b]) => {
+    const el = $(sel);
+    const up = eOut(inv(t, a, a + 0.55));
+    const dn = b >= DUR ? 0 : eInOut(inv(t, b, b + 0.40));
+    el.style.opacity   = (up * (1 - dn)).toFixed(3);
+    el.style.transform = `translateY(calc(-50% + ${(mix(22, 0, up) - dn * 20).toFixed(1)}px))`;
+  });
+  /* The address lands a beat after the headline that introduces it. */
+  const chipUp = eOut(inv(t, 4.55, 5.10));
+  $('#chip').style.opacity   = chipUp.toFixed(3);
+  $('#chip').style.transform = `translateY(${mix(16, 0, chipUp).toFixed(1)}px)`;
+  const ctaUp = eOut(inv(t, 8.45, 9.05));
+  $('#cta').style.opacity   = ctaUp.toFixed(3);
+  $('#cta').style.transform = `translateY(${mix(14, 0, ctaUp).toFixed(1)}px)`;
+
+  const markUp = eOut(inv(t, 0.15, 0.85));
+  $('#mark').style.opacity = markUp.toFixed(3);
+}
+
+window.__seek = seek;
+window.__dur  = DUR;
+window.__name = 'dancer-portal-enrollio-email';
+seek(0);
+</script>
+</body>
+</html>
