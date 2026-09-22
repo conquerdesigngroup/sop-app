@@ -7,14 +7,15 @@
  * than screen-recording it, which is why the output lands on its exact stated
  * length with no dropped or duplicated frames however slow the machine is.
  *
- *   node render.js [--template f.html] [--variant full|short] [--mode light|dark]
+ *   node render.js [--template f.html] [--variant full|short]
+ *                  [--mode light|dark] [--aspect 16x9|9x16]
  *                  [--fps 30] [--out x.mp4] [--frame 6.2]
  *
  * `--template` picks the film. `template.html` is the step-by-step explainer,
  * where `--variant` then picks the cut: `full` is the 60s one that explains the
  * Enrollio email and walks into the inbox for the code, `short` the 15s
  * summary. `hero-template.html` is the 10s product film, where `--mode` picks
- * the light or the dark studio instead.
+ * the light or the dark studio and `--aspect` the 16:9 or the 9:16 cut.
  *
  * `--frame` renders a single still at that timestamp instead of the video —
  * use it while iterating on the design, it takes about a second.
@@ -62,8 +63,13 @@ const VARIANT = arg('variant', 'full');
 const SINGLE = arg('frame', null);
 const TEMPLATE = arg('template', 'template.html');
 const MODE = arg('mode', null);
+const ASPECT = arg('aspect', null);
 if (MODE && !['light', 'dark'].includes(MODE)) {
   console.error(`unknown --mode ${MODE} (expected light or dark)`);
+  process.exit(1);
+}
+if (ASPECT && !['16x9', '9x16'].includes(ASPECT)) {
+  console.error(`unknown --aspect ${ASPECT} (expected 16x9 or 9x16)`);
   process.exit(1);
 }
 if (TEMPLATE === 'template.html' && !['full', 'short'].includes(VARIANT)) {
@@ -103,15 +109,22 @@ function buildHtml() {
   if (await page.evaluate(() => typeof window.__setVariant === 'function')) {
     await page.evaluate(v => window.__setVariant(v), VARIANT);
   }
-  /* Only the hero film has a light and a dark studio. */
+  /* Only the hero film has a light and a dark studio, and two shapes. */
+  if (ASPECT && await page.evaluate(() => typeof window.__setAspect === 'function')) {
+    await page.evaluate(a => window.__setAspect(a), ASPECT);
+  }
   if (MODE && await page.evaluate(() => typeof window.__setMode === 'function')) {
     await page.evaluate(m => window.__setMode(m), MODE);
   }
+  /* The page decides its own frame size, so the viewport follows it rather
+     than the other way round — a 9:16 cut is a different canvas, not a crop. */
+  const SIZE = await page.evaluate(() => window.__size || { w: 1920, h: 1080 });
+  await page.setViewportSize({ width: SIZE.w, height: SIZE.h });
 
   if (SINGLE !== null) {
     const t = Number(SINGLE);
     await page.evaluate(tt => window.__seek(tt), t);
-    const still = path.join(HERE, `frame-${MODE || VARIANT}-${t.toFixed(2)}.png`);
+    const still = path.join(HERE, `frame-${[MODE, ASPECT, VARIANT].filter(Boolean)[0]}-${ASPECT || ''}${t.toFixed(2)}.png`);
     await page.screenshot({ path: still });
     await browser.close();
     console.log('still →', still);
@@ -157,6 +170,6 @@ function buildHtml() {
 
   fs.rmSync(tmp, { recursive: true, force: true });
   const mb = (fs.statSync(OUT).size / 1048576).toFixed(2);
-  console.log(`\n${OUT}\n${mb} MB · 1920x1080 · ${FPS}fps · ${DUR}s`);
+  console.log(`\n${OUT}\n${mb} MB · ${SIZE.w}x${SIZE.h} · ${FPS}fps · ${DUR}s`);
   console.log(poster);
 })();

@@ -27,7 +27,7 @@ __FONT_CSS__
    --------------------------------------------------------------------------- */
 #stage[data-mode="light"]{
   --sweep:#ECECEE;
-  --key:radial-gradient(112% 88% at 68% 34%,#FBFBFC 0%,#EFEFF1 38%,#DCDCE1 72%,#C6C6CC 100%);
+  --stops:#FBFBFC 0%,#EFEFF1 38%,#DCDCE1 72%,#C6C6CC 100%;
   --floor:linear-gradient(to bottom,rgba(150,150,160,0),rgba(150,150,160,.16));
   --ink:#0B0B0D; --ink2:#4B4B54; --ink3:#86868E;
   --rule:rgba(11,11,13,.16);
@@ -39,7 +39,7 @@ __FONT_CSS__
 }
 #stage[data-mode="dark"]{
   --sweep:#0B0B0D;
-  --key:radial-gradient(112% 88% at 68% 34%,#2A2A32 0%,#1B1B21 38%,#111116 72%,#08080A 100%);
+  --stops:#2A2A32 0%,#1B1B21 38%,#111116 72%,#08080A 100%;
   --floor:linear-gradient(to bottom,rgba(0,0,0,0),rgba(0,0,0,.35));
   --ink:#F4F4F5; --ink2:#B6B6C0; --ink3:#7C7C88;
   --rule:rgba(255,255,255,.18);
@@ -51,31 +51,31 @@ __FONT_CSS__
      allowed to light its own surroundings — which is what a lit screen does. */
   --glass-sh:0 34px 90px rgba(0,0,0,.62),0 0 130px rgba(226,20,79,.16);
 }
-html,body{width:1920px;height:1080px;overflow:hidden;background:#ECECEE}
+html,body{overflow:hidden;background:#ECECEE}
 body{font-family:var(--body);-webkit-font-smoothing:antialiased}
-#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--sweep)}
+#stage{position:relative;overflow:hidden;background:var(--sweep)}
 
 /* ---------- the sweep: one soft key light, falling off to the corners ---------- */
 #key{position:absolute;inset:0;background:var(--key)}
-#floor{position:absolute;left:0;right:0;bottom:0;height:420px;background:var(--floor)}
+#floor{position:absolute;left:0;right:0;bottom:0;background:var(--floor)}
 /* The screen is the only light source in the frame, so let it spill. */
 #bloom{position:absolute;width:760px;height:760px;border-radius:50%;filter:blur(130px);
-  left:972px;top:132px;background:var(--bloom);opacity:0}
+  background:var(--bloom);opacity:0}
 
 /* ---------- copy ---------- */
-#mark{position:absolute;left:118px;top:74px;display:flex;align-items:center;gap:20px}
+#mark{position:absolute;display:flex;align-items:center;gap:20px}
 #mark img{height:44px;width:auto;display:block}
 #mark .rule{width:1px;height:28px;background:var(--rule)}
 #mark .kick{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:.26em;color:var(--ink3)}
 
-#copy{position:absolute;left:118px;top:0;width:930px;height:1080px;
-  display:flex;flex-direction:column;justify-content:center}
-.beat{position:absolute;left:0;width:930px;top:50%;transform:translateY(-50%)}
+#copy{position:absolute;display:flex;flex-direction:column;justify-content:center}
+.beat{position:absolute;left:0;width:100%;top:50%;transform:translateY(-50%)}
+#stage[data-aspect="9x16"] .beat{top:auto;bottom:0}
 #head1,#head2,#head3{font-family:var(--display);font-weight:800;font-style:italic;
-  text-transform:uppercase;font-size:80px;line-height:1.0;letter-spacing:-.012em;color:var(--ink)}
+  text-transform:uppercase;font-size:var(--head);line-height:1.0;letter-spacing:-.012em;color:var(--ink)}
 .pk{color:var(--electric)}
-.sub{font-family:var(--body);font-weight:400;font-size:30px;line-height:1.42;color:var(--ink2);
-  margin-top:28px;max-width:790px}
+.sub{font-family:var(--body);font-weight:400;font-size:var(--subsz);line-height:1.42;color:var(--ink2);
+  margin-top:28px;max-width:var(--submax)}
 
 /* The address itself, set big enough to read on a phone held at arm's length. */
 #chip{margin-top:38px;display:inline-flex;flex-direction:column;gap:11px;align-self:flex-start}
@@ -91,11 +91,10 @@ body{font-family:var(--body);-webkit-font-smoothing:antialiased}
   display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:16px}
 
 /* ---------- the device ---------- */
-#rig{position:absolute;left:1352px;top:512px;width:0;height:0;perspective:2400px}
+#rig{position:absolute;width:0;height:0;perspective:2400px}
 /* The device floats, so the only thing tying it to the room is what it casts.
    It sits below and a little left of centre, where this key light would put it. */
-#shadow{position:absolute;left:1300px;top:512px;width:600px;height:164px;
-  transform:translate(-50%,426px);border-radius:50%;
+#shadow{position:absolute;transform:translate(-50%,426px);border-radius:50%;
   background:radial-gradient(closest-side,var(--cast),transparent 100%);
   filter:blur(30px);opacity:0}
 #phone{position:absolute;left:-214px;top:-444px;width:428px;height:888px;
@@ -307,6 +306,30 @@ const DUR = 10.0;
 const HERO = { ry:  20, rx: 5.5, rz: -6.5, sc: 0.930 };
 const FLAT = { ry: 3.5, rx: 1.2, rz: -1.0, sc: 1.015 };
 
+/* 9:16 is not a crop of 16:9, it is a different composition: the copy stops
+   sitting beside the device and starts sitting above it. Everything that has
+   to move to make that true lives here, in one table, rather than being spread
+   between a stylesheet and a second copy of the film.
+
+   The vertical budget is what drives the 9:16 numbers. A story is covered at
+   the top by the poster's name and at the bottom by the reply bar, so nothing
+   that has to be read goes above y=220 or below y=1700 — which leaves 1480px
+   for a headline, three lines of body, the address, and a phone. That is why
+   the device is at 0.90 there and not larger. */
+const LAYOUT = {
+  '16x9': { w:1920, h:1080, k:1.00, floor:420, anchor:'-50% + ',
+            mark:[118, 74], copy:[118,   0, 930, 1080],
+            rig:[1352, 512], shX:1300, shW:600, shH:164,
+            key:'112% 88% at 68% 34%',
+            head:'80px', sub:'30px', submax:'790px' },
+  '9x16': { w:1080, h:1920, k:0.92, floor:560, anchor:'',
+            mark:[ 72,238], copy:[ 72, 265, 936,  525],
+            rig:[ 540,1262], shX: 524, shW:544, shH:152,
+            key:'132% 62% at 50% 62%',
+            head:'74px', sub:'31px', submax:'900px' },
+};
+let L = LAYOUT['16x9'];
+
 const EMAIL   = 'sarah.mitchell@gmail.com';
 const SCREENS = [ {k:'door', at:0.00}, {k:'details', at:4.10}, {k:'home', at:7.95} ];
 const XF      = 0.42;                       /* screen cross-dissolve */
@@ -364,7 +387,7 @@ function seek(t){
   const phone = $('#phone');
   phone.style.transform =
     `translateY(${ty.toFixed(2)}px) rotateX(${rx.toFixed(2)}deg) ` +
-    `rotateY(${ry.toFixed(2)}deg) rotateZ(${rz.toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+    `rotateY(${ry.toFixed(2)}deg) rotateZ(${rz.toFixed(2)}deg) scale(${(sc * L.k).toFixed(4)})`;
 
   /* The shadow is cast by the device, so it is derived from the pose rather
      than keyframed separately — it tightens and darkens as the phone lands. */
@@ -372,7 +395,7 @@ function seek(t){
   const sh = $('#shadow');
   sh.style.opacity   = mix(1, 0.30, lift).toFixed(3);
   sh.style.filter    = `blur(${mix(30, 62, lift).toFixed(1)}px)`;
-  sh.style.transform = `translate(-50%, ${(426 + ty * 0.08).toFixed(1)}px) ` +
+  sh.style.transform = `translate(-50%, ${(426 * L.k + ty * L.k * 0.08).toFixed(1)}px) ` +
                        `scale(${mix(1, 1.38, lift).toFixed(3)}, ${mix(1, .72, lift).toFixed(3)})`;
 
   /* Glass: the key light slides across as the frame turns. */
@@ -400,7 +423,7 @@ function seek(t){
     const up = eOut(inv(t, a, a + 0.55));
     const dn = b >= DUR ? 0 : eInOut(inv(t, b, b + 0.40));
     el.style.opacity   = (up * (1 - dn)).toFixed(3);
-    el.style.transform = `translateY(calc(-50% + ${(mix(22, 0, up) - dn * 20).toFixed(1)}px))`;
+    el.style.transform = `translateY(calc(${L.anchor}${(mix(22, 0, up) - dn * 20).toFixed(1)}px))`;
   });
   /* The address lands a beat after the headline that introduces it. */
   const chipUp = eOut(inv(t, 4.55, 5.10));
@@ -414,17 +437,52 @@ function seek(t){
   $('#mark').style.opacity = markUp.toFixed(3);
 }
 
-/* Light and dark are the same film in a different room — same timeline, same
-   frames, same app on the screen. Only the studio's variables change, so the
-   two cuts cannot drift apart the way two edited copies would. */
-window.__setMode = m => {
-  const mode = m === 'dark' ? 'dark' : 'light';
-  $('#stage').dataset.mode = mode;
-  window.__name = 'dancer-portal-enrollio-email-' + mode;
-};
+/* Mode and aspect are the only two things a caller can change, and neither
+   touches the timeline: every cut runs the same seek() over the same beats.
+   That is the point — four films that cannot drift apart, rather than four
+   copies that will. */
+let MODE = 'light', ASPECT = '16x9';
+
+function apply(){
+  const st = $('#stage');
+  st.dataset.mode = MODE;
+  st.dataset.aspect = ASPECT;
+  L = LAYOUT[ASPECT];
+
+  const px = n => n + 'px';
+  document.documentElement.style.cssText = `width:${px(L.w)};height:${px(L.h)}`;
+  document.body.style.width = px(L.w); document.body.style.height = px(L.h);
+  st.style.width = px(L.w); st.style.height = px(L.h);
+
+  st.style.setProperty('--key', `radial-gradient(${L.key},` +
+    getComputedStyle(st).getPropertyValue('--stops') + ')');
+  st.style.setProperty('--head', L.head);
+  st.style.setProperty('--subsz', L.sub);
+  st.style.setProperty('--submax', L.submax);
+
+  $('#floor').style.height = px(L.floor);
+  $('#mark').style.left = px(L.mark[0]);  $('#mark').style.top = px(L.mark[1]);
+  const c = $('#copy');
+  c.style.left = px(L.copy[0]); c.style.top    = px(L.copy[1]);
+  c.style.width= px(L.copy[2]); c.style.height = px(L.copy[3]);
+  $('#rig').style.left = px(L.rig[0]); $('#rig').style.top = px(L.rig[1]);
+  const sh = $('#shadow');
+  sh.style.left = px(L.shX); sh.style.top = px(L.rig[1]);
+  sh.style.width = px(L.shW); sh.style.height = px(L.shH);
+  /* The bloom is the screen's own spill, so it is centred on the device
+     wherever the device happens to be, not pinned to a corner of the frame. */
+  $('#bloom').style.left = px(L.rig[0] - 380);
+  $('#bloom').style.top  = px(L.rig[1] - 380);
+
+  window.__size = { w: L.w, h: L.h };
+  window.__name = `dancer-portal-enrollio-email-${MODE}-${ASPECT}`;
+}
+
+window.__setMode   = m => { MODE   = m === 'dark'  ? 'dark'  : 'light'; apply(); seek(0); };
+window.__setAspect = a => { ASPECT = a === '9x16'  ? '9x16'  : '16x9';  apply(); seek(0); };
 window.__seek = seek;
 window.__dur  = DUR;
-window.__setMode('light');
+apply();
 seek(0);
 </script>
 </body>

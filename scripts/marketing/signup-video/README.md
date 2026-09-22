@@ -1,19 +1,27 @@
 # Sign-up motion graphics
 
-Four 16:9 films for families signing up to the parent portal. Two are cuts of
-the same step-by-step explainer (`template.html`); the other two are the same
-product film (`hero-template.html`) shot in a light studio and a dark one.
+Six films for families signing up to the parent portal. Two are cuts of the
+same step-by-step explainer (`template.html`); the other four are one product
+film (`hero-template.html`) in a light studio and a dark one, landscape and
+vertical.
 
-All are 1920×1080, H.264 High / yuv420p, 30fps, `+faststart`, each with a
-poster frame beside it. **None has audio** — they are captioned throughout, so
-they work muted, which is how they will be watched.
+All are H.264 High / yuv420p, 30fps, `+faststart`, each with a poster frame
+beside it. **None has audio** — they are captioned throughout, so they work
+muted, which is how they will be watched.
 
-| | The film | Length | Use it for |
-|---|---|---|---|
-| `hero-template.html --mode light` | `dancer-portal-enrollio-email-light-10s.mp4` | 10.000s | a light page, a printed-feel post, anywhere on white |
-| `hero-template.html --mode dark` | `dancer-portal-enrollio-email-dark-10s.mp4` | 10.000s | a dark page, a story, a feed where black reads as premium |
-| `template.html --variant short` | `how-to-create-your-account-15s.mp4` | 15.000s | a text, a story, a reminder |
-| `template.html --variant full` | `how-to-create-your-account-60s.mp4` | 60.000s | a family who is stuck, or a help page |
+| | The film | Size | Length | Use it for |
+|---|---|---|---|---|
+| `hero --mode light --aspect 16x9` | `dancer-portal-enrollio-email-light-16x9-10s.mp4` | 1920×1080 | 10.000s | a light page, a feed post, a screen in the studio |
+| `hero --mode dark --aspect 16x9` | `dancer-portal-enrollio-email-dark-16x9-10s.mp4` | 1920×1080 | 10.000s | a dark page, a feed post where black reads as premium |
+| `hero --mode light --aspect 9x16` | `dancer-portal-enrollio-email-light-9x16-10s.mp4` | 1080×1920 | 10.000s | a story or a reel, light |
+| `hero --mode dark --aspect 9x16` | `dancer-portal-enrollio-email-dark-9x16-10s.mp4` | 1080×1920 | 10.000s | a story or a reel, dark |
+| `template.html --variant short` | `how-to-create-your-account-15s.mp4` | 1920×1080 | 15.000s | a text, a reminder |
+| `template.html --variant full` | `how-to-create-your-account-60s.mp4` | 1920×1080 | 60.000s | a family who is stuck, or a help page |
+
+Every hero filename carries both its room and its shape. The explainer's two
+cuts do not, because they only ever had one of each — if either grows a
+variant, give them the same treatment rather than leaving a name that no
+longer says what it is.
 
 ---
 
@@ -25,12 +33,13 @@ It is shot the way a phone is shot in a product ad — a seamless sweep, a singl
 soft key light, the device floating at an angle with a real contact shadow under
 it, turning to camera when there is something on screen to read.
 
-### Light and dark
+### Four cuts, one film
 
-`--mode light|dark` picks the studio. **Only the room changes.** Same timeline,
-same frames, same app on the screen — `data-mode` swaps a dozen custom
-properties on `#stage` and nothing else, so the two cuts cannot drift apart the
-way two separately edited copies would.
+`--mode light|dark` picks the studio and `--aspect 16x9|9x16` the shape. Every
+cut runs **the same timeline over the same beats** — mode swaps a dozen custom
+properties on `#stage`, aspect swaps one row of the `LAYOUT` table, and neither
+touches `seek()`. That is the whole point: four films that cannot drift apart,
+rather than four copies that will.
 
 The app's UI stays dark in **both**, deliberately. It would have been easy to
 show the app's light theme in the light cut, and it would have been a lie: a
@@ -47,6 +56,27 @@ Each room has to solve a different problem:
   the glass — and the titanium rail carries the silhouette. The cast shadow is
   all but invisible there, which is correct: a lit object in a dark room is
   grounded by its own spill, not by a shadow.
+
+### Vertical is a recomposition, not a crop
+
+In 16:9 the copy sits **beside** the device. In 9:16 there is no beside, so it
+sits **above** it, and that changes two things a crop could not:
+
+- **The copy is bottom-anchored**, growing upward from a fixed line just above
+  the phone. Centre it, as 16:9 does, and a short beat ("You're in.") floats
+  away from the device while a long one crowds it. In 16:9 that never shows,
+  because the copy is not what the device is measured against.
+- **The device is at 0.92** and the type a step smaller. The vertical budget is
+  what forces it: a story is covered at the top by the poster's name and at the
+  bottom by the reply bar, so nothing that has to be read sits above y=220 or
+  below y=1700, which leaves 1480px for a headline, three lines of body, the
+  address and a phone.
+
+The 9:16 cut is also where the app's own screen finally becomes readable. A
+1080-wide frame fills a real phone one-for-one, so the 15px type in the app
+renders at about 15 real pixels — where the same screen inside a 1920-wide
+frame, watched on that same phone, lands at about a third of that. The chip is
+still there for the address, but in vertical the device is doing real work.
 
 ### The move
 
@@ -76,8 +106,9 @@ That is what the explainer below is for — this one exists to get somebody to
 open the app at all.
 
 ```bash
-node scripts/marketing/signup-video/render.js --template hero-template.html --mode light
-node scripts/marketing/signup-video/render.js --template hero-template.html --mode dark
+cd scripts/marketing/signup-video
+node render.js --template hero-template.html --mode light --aspect 16x9
+node render.js --template hero-template.html --mode dark  --aspect 9x16   # etc
 ```
 
 It shares `render.js`, `assets/fonts.css` and the app's screen CSS with the
@@ -134,8 +165,9 @@ junk-folder warning and the long cut spends a full beat on the Enrollio point.
 ```bash
 npm install --no-save playwright ffmpeg-static   # both, in ONE command
 cd scripts/marketing/signup-video
-node render.js --template hero-template.html --mode light   # 10s, ~3 min
-node render.js --template hero-template.html --mode dark    # 10s, ~3 min
+for m in light dark; do for a in 16x9 9x16; do          # 4 x 10s, ~3 min each
+  node render.js --template hero-template.html --mode $m --aspect $a
+done; done
 node render.js --variant short                   # 15s, ~2.5 min
 node render.js --variant full                    # 60s, ~9 min
 ```
@@ -154,7 +186,7 @@ While iterating, render one frame instead of all of them — about a second:
 node scripts/marketing/signup-video/render.js --variant full --frame 10.6
 ```
 
-Other flags: `--template`, `--mode`, `--fps`, `--out`. The output filename is built from
+Other flags: `--template`, `--mode`, `--aspect`, `--fps`, `--out`. The output filename is built from
 `window.__name` and `window.__dur` on the page itself, so it cannot drift from
 the timeline the way a hardcoded name does — that is how a file called `-30s`
 outlived the 30s cut once already.
@@ -196,6 +228,10 @@ Editing:
   base64'd in at render time. Pink stays at accent level, per the ~5% rule. The
   mail app is the one light surface, and it is light precisely to signal that
   you have left the portal.
+- **The frame size comes from the page**, not from `render.js`. `window.__size`
+  is read after the mode and aspect are applied and the viewport is set to
+  match, so adding a shape is a row in `LAYOUT` rather than a flag in two
+  places that can disagree.
 - **Fonts** — `assets/fonts.css` holds the latin subsets of Kanit, Barlow and
   JetBrains Mono, base64'd. Embedded rather than fetched so a render is
   identical offline and never races a webfont load.
