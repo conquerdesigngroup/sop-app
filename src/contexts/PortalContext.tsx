@@ -466,6 +466,9 @@ export const PortalProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       .from('portal_documents')
       .select('*')
       .eq('program_id', programId)
+      // A file attached to an info post (v65) belongs under that post, not in
+      // the class's own file list. loadUpdateFiles is what fetches those.
+      .is('update_id', null)
       .eq('is_published', true);
 
     if (classId === null) query = query.is('class_id', null);

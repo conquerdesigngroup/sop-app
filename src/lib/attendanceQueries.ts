@@ -875,6 +875,10 @@ export const loadMyDocuments = async (
     .from('portal_documents')
     .select('*')
     .eq('is_published', true)
+    // Files attached to an info post (v65) are shown with the post, on the
+    // Updates card. Left in, they would appear twice and one of the two
+    // would have lost the words explaining what it is.
+    .is('update_id', null)
     .order('sort_order');
 
   if (error) return { rows: [], error: GENERIC_LOAD_ERROR };

@@ -548,8 +548,21 @@ export type PortalStreamStatus = 'pending' | 'ready' | 'error';
 
 export interface PortalDocument {
   id: string;
-  programId: string;
+  /**
+   * Null only on a file attached to an info post that goes to both sections
+   * (v65) — such a post belongs to no one section either, and the All-Star
+   * read gate reads a null program as "everyone", which is the right answer.
+   */
+  programId: string | null;
   classId: string | null;
+  /**
+   * The info post this file hangs on (v65), or null for a standalone file.
+   *
+   * An attachment is listed under its post and nowhere else: every query that
+   * feeds a Files list filters it out, and its visibility is decided by the
+   * post rather than by its own row. See supabase-migration-v65.
+   */
+  updateId: string | null;
   title: string;
   description: string;
   category: string | null;

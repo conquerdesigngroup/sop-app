@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import UpdatesSection from './UpdatesSection';
-import { PortalClass, PortalProgram, PortalUpdate } from '../../types';
+import { PortalClass, PortalDocument, PortalProgram, PortalUpdate } from '../../types';
 
 /**
  * The info post editor, driven the way a person drives it.
@@ -18,6 +18,13 @@ import { PortalClass, PortalProgram, PortalUpdate } from '../../types';
  * 2. A dangerous scheme is refused BEFORE the write, with a sentence next to
  *    the form rather than a thrown error.
  * 3. A label cannot be stranded without a link to label.
+ *
+ * v65 added files, which are the other field that is not just text, and they
+ * have an ordering problem of their own: a file is attached by update_id, so
+ * nothing can upload until the post exists. The tests at the bottom pin that
+ * order, and pin the two ways it can go wrong — a second post inserted when a
+ * failed save is retried, and a file deleted by a Cancel that said it would
+ * not.
  *
  * Fields are found by their visible label, which works because Input wires
  * htmlFor to the field's id.
@@ -71,17 +78,28 @@ const post = (over: Partial<PortalUpdate> = {}): PortalUpdate => ({
 // close over has to be `mock`-prefixed.
 const mockSaveUpdate = jest.fn();
 const mockFetchUpdates = jest.fn();
+const mockUploadDocument = jest.fn();
+const mockUploadStreamVideo = jest.fn();
+const mockDeleteDocument = jest.fn();
+const mockLoadUpdateFiles = jest.fn();
 
 jest.mock('../../contexts/PortalAdminContext', () => ({
   usePortalAdmin: () => ({
     fetchUpdates: mockFetchUpdates,
     saveUpdate: mockSaveUpdate,
     deleteUpdate: jest.fn(),
+    uploadDocument: mockUploadDocument,
+    uploadStreamVideo: mockUploadStreamVideo,
+    deleteDocument: mockDeleteDocument,
     canEditClass: () => true,
     editableClassIds: [],
     programs: mockPrograms,
   }),
   describeWriteError: (e: any) => String(e?.message ?? e),
+}));
+
+jest.mock('../../lib/updateFiles', () => ({
+  loadUpdateFiles: (...args: unknown[]) => mockLoadUpdateFiles(...args),
 }));
 
 jest.mock('../../contexts/AuthContext', () => ({
@@ -131,10 +149,45 @@ const setValue = (dialog: HTMLElement, label: string | RegExp, value: string) =>
 const save = (dialog: HTMLElement) =>
   fireEvent.click(within(dialog).getByRole('button', { name: /Publish|Save draft/ }));
 
+const attachment = (over: Partial<PortalDocument> = {}): PortalDocument => ({
+  id: 'doc-1',
+  programId: 'prog-academy',
+  classId: null,
+  updateId: 'upd-1',
+  title: 'Costume list',
+  description: '',
+  category: null,
+  storagePath: 'academy/abc-costume-list.pdf',
+  streamUid: null,
+  streamPlaybackUrl: null,
+  streamStatus: null,
+  durationSeconds: null,
+  streamDownloadUrl: null,
+  fileName: 'costume-list.pdf',
+  mimeType: 'application/pdf',
+  sizeBytes: 2048,
+  sortOrder: 0,
+  isPublished: true,
+  createdAt: '2026-08-28T09:00:00Z',
+  ...over,
+});
+
+const pdf = (name: string) =>
+  new File(['%PDF-1.4'], name, { type: 'application/pdf' });
+
+const pick = (dialog: HTMLElement, files: File[]) => {
+  const input = within(dialog).getByLabelText('Files (optional)') as HTMLInputElement;
+  fireEvent.change(input, { target: { files } });
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
-  mockSaveUpdate.mockResolvedValue(undefined);
+  // The post's id, which is what a new post's files are hung on.
+  mockSaveUpdate.mockResolvedValue('upd-1');
   mockFetchUpdates.mockResolvedValue([post()]);
+  mockLoadUpdateFiles.mockResolvedValue({});
+  mockUploadDocument.mockResolvedValue(undefined);
+  mockDeleteDocument.mockResolvedValue(undefined);
 });
 
 // --------------------------------------------------------------- round trip
@@ -268,5 +321,119 @@ describe('who a post goes to', () => {
 
     const dialog = await openNew();
     expect(within(dialog).queryByLabelText('Who sees this')).not.toBeInTheDocument();
+  });
+});
+
+// ------------------------------------------------------------------- files
+
+describe('files on a post (v65)', () => {
+  it('saves the post first, then hangs the files on the id it got back', async () => {
+    mockFetchUpdates.mockResolvedValue([]);
+    renderSection();
+    const dialog = await openNew();
+
+    setValue(dialog, 'Title', 'Recital pack');
+    pick(dialog, [pdf('order-form.pdf')]);
+    save(dialog);
+
+    await waitFor(() => expect(mockUploadDocument).toHaveBeenCalledTimes(1));
+
+    // The order is the whole point: update_id is a foreign key, so an upload
+    // that runs first has nothing to reference.
+    expect(mockSaveUpdate.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUploadDocument.mock.invocationCallOrder[0]);
+
+    const [file, folder, meta] = mockUploadDocument.mock.calls[0];
+    expect(file.name).toBe('order-form.pdf');
+    // The post's own section, so the All-Star gate on the object key agrees
+    // with the gate on the row.
+    expect(folder).toBe('academy');
+    expect(meta).toMatchObject({ updateId: 'upd-1', isPublished: true });
+  });
+
+  it('files a post for everyone under the section-less folder', async () => {
+    mockFetchUpdates.mockResolvedValue([]);
+    renderSection();
+    const dialog = await openNew();
+
+    setValue(dialog, 'Title', 'Studio closed Monday');
+    fireEvent.change(within(dialog).getByLabelText('Who sees this'), { target: { value: 'both' } });
+    pick(dialog, [pdf('notice.pdf')]);
+    save(dialog);
+
+    await waitFor(() => expect(mockUploadDocument).toHaveBeenCalledTimes(1));
+    expect(mockUploadDocument.mock.calls[0][1]).toBe('updates');
+    expect(mockUploadDocument.mock.calls[0][2]).toMatchObject({ programId: null });
+  });
+
+  it('does not write a second post when a failed upload is retried', async () => {
+    // The bug this exists to stop: the post went in, the file did not, and
+    // pressing Save again inserted the announcement twice.
+    mockFetchUpdates.mockResolvedValue([]);
+    mockUploadDocument.mockRejectedValueOnce(new Error('Network error'));
+    mockLoadUpdateFiles.mockResolvedValue({});
+
+    renderSection();
+    const dialog = await openNew();
+    setValue(dialog, 'Title', 'Recital pack');
+    pick(dialog, [pdf('order-form.pdf')]);
+    save(dialog);
+
+    // The modal stays open and says what went wrong.
+    expect(await within(dialog).findByText('Network error')).toBeInTheDocument();
+
+    mockUploadDocument.mockResolvedValue(undefined);
+    save(dialog);
+
+    await waitFor(() => expect(mockUploadDocument).toHaveBeenCalledTimes(2));
+    expect(mockSaveUpdate).toHaveBeenCalledTimes(2);
+    // Second time round it is an edit of the post that already exists.
+    expect(mockSaveUpdate.mock.calls[1][0]).toMatchObject({ id: 'upd-1' });
+  });
+
+  it('deletes nothing until Save — Cancel really does leave the post alone', async () => {
+    mockLoadUpdateFiles.mockResolvedValue({ 'upd-1': [attachment()] });
+    renderSection();
+    const dialog = await openEditor('Recital tickets are on sale');
+
+    expect(await within(dialog).findByText('costume-list.pdf')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+
+    // Still on screen, struck through, with the deletion described as future.
+    expect(within(dialog).getByText('costume-list.pdf')).toBeInTheDocument();
+    expect(within(dialog).getByText(/will be deleted when you save/)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockDeleteDocument).not.toHaveBeenCalled();
+  });
+
+  it('deletes a removed file on Save', async () => {
+    mockLoadUpdateFiles.mockResolvedValue({ 'upd-1': [attachment()] });
+    renderSection();
+    const dialog = await openEditor('Recital tickets are on sale');
+
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Remove' }));
+    save(dialog);
+
+    await waitFor(() => expect(mockDeleteDocument).toHaveBeenCalledTimes(1));
+    expect(mockDeleteDocument.mock.calls[0][0]).toMatchObject({ id: 'doc-1' });
+  });
+
+  it('tells staff from the list which posts carry files', async () => {
+    mockLoadUpdateFiles.mockResolvedValue({ 'upd-1': [attachment(), attachment({ id: 'doc-2' })] });
+    renderSection();
+    expect(await screen.findByText(/2 files/)).toBeInTheDocument();
+  });
+
+  it('refuses a file the bucket would refuse, and names it', async () => {
+    mockFetchUpdates.mockResolvedValue([]);
+    renderSection();
+    const dialog = await openNew();
+
+    pick(dialog, [new File(['x'], 'macro.exe', { type: 'application/x-msdownload' })]);
+
+    expect(await within(dialog).findByText(/macro\.exe/)).toBeInTheDocument();
+    expect(mockUploadDocument).not.toHaveBeenCalled();
   });
 });

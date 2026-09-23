@@ -581,7 +581,20 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):active {
   to { background-position: 0 0; }
 }
 
+/* The keyframes above animate background-position, which moves nothing unless
+   there is a repeating image to move — without this the bar is a flat block
+   that reads as frozen, which is the opposite of what an indeterminate bar is
+   for. The stripes are drawn in white at low alpha so the bar keeps whatever
+   base colour its own style sets, in either theme. */
 .progress-striped {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.22) 0,
+    rgba(255, 255, 255, 0.22) 0.35rem,
+    transparent 0.35rem,
+    transparent 0.7rem
+  );
+  background-size: 1rem 1rem;
   animation: progress-stripes 1s linear infinite;
 }
 

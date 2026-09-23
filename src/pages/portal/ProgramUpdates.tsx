@@ -5,6 +5,7 @@ import PortalLayout from '../../components/portal/PortalLayout';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import EmptyArt from '../../components/portal/EmptyArt';
 import UpdateLink from '../../components/portal/UpdateLink';
+import UpdateFiles, { useUpdateFiles } from '../../components/portal/UpdateFiles';
 import { usePortal } from '../../contexts/PortalContext';
 import { portalRoutes } from '../../lib/portal';
 import { useProgramPage, useProgramQuery } from './useProgramPage';
@@ -55,6 +56,8 @@ const ProgramUpdates: React.FC = () => {
   const { slug, program } = useProgramPage();
   const { fetchUpdates } = usePortal();
   const { data: updates, loading, error } = useProgramQuery<PortalUpdate[]>(program?.id, fetchUpdates, []);
+  // One request for the whole feed's attachments rather than one per card.
+  const files = useUpdateFiles(updates.map(u => u.id));
 
   return (
     <PortalLayout
@@ -111,6 +114,7 @@ const ProgramUpdates: React.FC = () => {
 
                 <UpdateBody body={u.body} />
                 <UpdateLink url={u.linkUrl} label={u.linkLabel} />
+                <UpdateFiles files={files[u.id]} />
               </Card>
             ))}
           </div>
