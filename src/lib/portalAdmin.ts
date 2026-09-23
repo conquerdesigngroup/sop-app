@@ -91,6 +91,12 @@ const randomId = (): string => {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
+/** Where an attachment with no section of its own goes. See below. */
+export const UPDATE_FOLDER = 'updates';
+
+/** Top-level folder in the bucket: a section's slug, or UPDATE_FOLDER. */
+export type StorageFolder = PortalProgramSlug | typeof UPDATE_FOLDER;
+
 /**
  * Object key inside the `portal-documents` bucket.
  *
@@ -99,15 +105,21 @@ const randomId = (): string => {
  * otherwise collide, and the second insert would fail after the upload
  * succeeded. The original file name is kept on the row and is what parents
  * download as.
+ *
+ * The FOLDER is not decoration either. portal_object_is_allstars() (v55) reads
+ * the first segment as one of its three tests, so a file under `allstars/` is
+ * gated by its key alone, before anything looks at its row. UPDATE_FOLDER is
+ * for the one file that belongs to no section — an attachment on an info post
+ * sent to everyone (v65) — and being neither section is the whole point of it.
  */
-export const buildStoragePath = (programSlug: PortalProgramSlug, fileName: string): string => {
+export const buildStoragePath = (folder: StorageFolder, fileName: string): string => {
   const safe = fileName
     .toLowerCase()
     .replace(/[^a-z0-9.\-_]+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(-80);
-  return `${programSlug}/${randomId()}-${safe || 'file'}`;
+  return `${folder}/${randomId()}-${safe || 'file'}`;
 };
 
 // ----------------------------------------------------------------- program hero

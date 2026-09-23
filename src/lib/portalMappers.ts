@@ -115,8 +115,9 @@ export const mapEvent = (r: any): PortalEvent => ({
 
 export const mapDocument = (r: any): PortalDocument => ({
   id: r.id,
-  programId: r.program_id,
+  programId: r.program_id ?? null,
   classId: r.class_id,
+  updateId: r.update_id ?? null,
   title: r.title,
   description: r.description ?? '',
   category: r.category,

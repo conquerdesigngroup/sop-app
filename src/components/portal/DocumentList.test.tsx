@@ -41,6 +41,7 @@ const doc = (over: Partial<PortalDocument>): PortalDocument => ({
   id: 'doc-1',
   programId: 'prog-1',
   classId: 'class-1',
+  updateId: null,
   title: 'Costume photo',
   description: '',
   category: null,

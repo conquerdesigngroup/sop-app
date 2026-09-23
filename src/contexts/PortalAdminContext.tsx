@@ -11,7 +11,7 @@ import {
 import {
   mapProgram, mapClass, mapUpdate, mapEvent, mapDocument, mapCalendarSource,
 } from '../lib/portalMappers';
-import { buildStoragePath, buildHeroPath, MAX_DOCUMENT_MB } from '../lib/portalAdmin';
+import { buildStoragePath, buildHeroPath, MAX_DOCUMENT_MB, StorageFolder } from '../lib/portalAdmin';
 import { InstructorLook, mapInstructorLook } from '../lib/instructorLook';
 import { validateAvatar } from '../lib/avatarPalette';
 import {
@@ -102,8 +102,15 @@ export interface EventInput {
 
 export interface DocumentInput {
   id?: string;
-  programId: string;
+  /** Null only for an attachment to an info post that goes to everyone (v65). */
+  programId: string | null;
   classId: string | null;
+  /**
+   * The info post this file hangs on (v65). Set means it is an attachment: it
+   * is listed under that post, every Files list filters it out, and the post
+   * decides who may read it.
+   */
+  updateId?: string | null;
   title: string;
   description: string;
   category: string | null;
@@ -196,7 +203,9 @@ interface PortalAdminContextValue {
   fetchEvents: (programId: string) => Promise<PortalEvent[]>;
   fetchDocuments: (programId: string) => Promise<PortalDocument[]>;
 
-  saveUpdate: (input: UpdateInput) => Promise<void>;
+  /** Resolves with the post's id, which a new post's attachments are hung on. */
+  saveUpdate: (input: UpdateInput) => Promise<string>;
+  /** Takes the post's files with it — the objects first, then the rows. */
   deleteUpdate: (id: string) => Promise<void>;
 
   saveEvent: (input: EventInput) => Promise<void>;
@@ -204,7 +213,7 @@ interface PortalAdminContextValue {
 
   uploadDocument: (
     file: File,
-    programSlug: PortalProgramSlug,
+    folder: StorageFolder,
     meta: DocumentInput,
     onProgress?: (stage: 'uploading' | 'saving') => void,
   ) => Promise<void>;
@@ -514,11 +523,16 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
       .from('portal_documents')
       .select('*')
       .eq('program_id', programId)
+      // A file attached to an info post (v65) is listed under that post and
+      // nowhere else. Leaving it in would put it in the Files manager too,
+      // where deleting it would silently strip an attachment off a live post.
+      .is('update_id', null)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []).map(mapDocument);
   }, []);
+
 
   // ---------------------------------------------------------------- updates
 
@@ -567,24 +581,59 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
         throw error;
       }
       void logActivity({ ...log, entityId: input.id });
-    } else {
-      const { data, error } = await supabase
-        .from('portal_updates')
-        .insert({ ...row, author_id: authorId })
-        .select('id')
-        .single();
-      if (error) {
-        void logActivity({ ...log, result: 'failure', details: { reason: failureReason(error) } });
-        throw error;
-      }
-      void logActivity({ ...log, entityId: data.id as string });
+      return input.id;
     }
+
+    const { data, error } = await supabase
+      .from('portal_updates')
+      .insert({ ...row, author_id: authorId })
+      .select('id')
+      .single();
+    if (error) {
+      void logActivity({ ...log, result: 'failure', details: { reason: failureReason(error) } });
+      throw error;
+    }
+    void logActivity({ ...log, entityId: data.id as string });
+    // The caller needs this to hang attachments on a post that did not exist
+    // a moment ago — a file cannot be uploaded before there is a post to
+    // attach it to, because update_id is a foreign key.
+    return data.id as string;
   }, [authorId]);
 
+  /**
+   * THE POST'S FILES GO FIRST, AND THEY GO AS FILES, NOT AS ROWS.
+   *
+   * v65 puts ON DELETE CASCADE on portal_documents.update_id, so deleting a
+   * post takes its attachment ROWS with it whatever happens here. What the
+   * cascade cannot do is delete the stored OBJECTS, and an object with no row
+   * pointing at it is unreachable by every route this app has — the same trap
+   * that stranded two files for two days and made deleteDocument reverse its
+   * order. So the objects are removed first, by hand, and only then is the
+   * post deleted.
+   *
+   * A file that will not go is not swallowed: the post stays, the attachment
+   * stays with it, and the delete can be tried again. A visible thing that
+   * still works is the recoverable failure.
+   */
   const deleteUpdate = useCallback(async (id: string) => {
+    const { data: files, error: readErr } = await supabase
+      .from('portal_documents')
+      .select('*')
+      .eq('update_id', id);
+    if (readErr) throw readErr;
+
+    for (const row of files ?? []) {
+      const doc = mapDocument(row);
+      if (doc.streamUid) await deleteStreamVideo(doc.streamUid);
+      else await removeStorageObject('portal-documents', doc.storagePath ?? '');
+    }
+
     const { error } = await supabase.from('portal_updates').delete().eq('id', id);
     if (error) throw error;
-    void logActivity({ action: 'update_deleted', entityType: 'update', entityId: id });
+    void logActivity({
+      action: 'update_deleted', entityType: 'update', entityId: id,
+      details: { fileCount: (files ?? []).length },
+    });
   }, []);
 
   // ----------------------------------------------------------------- events
@@ -655,11 +704,11 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
    */
   const uploadDocument = useCallback(async (
     file: File,
-    programSlug: PortalProgramSlug,
+    folder: StorageFolder,
     meta: DocumentInput,
     onProgress?: (stage: 'uploading' | 'saving') => void,
   ) => {
-    const storagePath = buildStoragePath(programSlug, file.name);
+    const storagePath = buildStoragePath(folder, file.name);
 
     onProgress?.('uploading');
     const { error: uploadErr } = await supabase.storage
@@ -675,6 +724,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     const { data, error: rowErr } = await supabase.from('portal_documents').insert({
       program_id: meta.programId,
       class_id: meta.classId,
+      update_id: meta.updateId ?? null,
       title: meta.title.trim(),
       description: meta.description,
       category: meta.category,
@@ -765,6 +815,7 @@ export const PortalAdminProvider: React.FC<{ children: ReactNode }> = ({ childre
     const { data, error: rowErr } = await supabase.from('portal_documents').insert({
       program_id: meta.programId,
       class_id: meta.classId,
+      update_id: meta.updateId ?? null,
       title,
       description: meta.description,
       category: meta.category,

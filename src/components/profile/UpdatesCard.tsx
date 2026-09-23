@@ -5,6 +5,7 @@ import { PortalUpdate } from '../../types';
 import { LoadError, loadMyUpdates } from '../../lib/attendanceQueries';
 import CardError from './CardError';
 import UpdateLink from '../portal/UpdateLink';
+import UpdateFiles, { useUpdateFiles } from '../portal/UpdateFiles';
 import { ProfileCardProps } from '../../lib/profileCards';
 import { useHousehold } from './useHousehold';
 
@@ -69,6 +70,12 @@ const UpdatesCard: React.FC<ProfileCardProps> = ({ ctx }) => {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [seenAt] = useState(readSeenAt);
+
+  // Every visible post's attachments in one request. The demo source has no
+  // rows behind it, so there is nothing to ask for and nothing to show.
+  const files = useUpdateFiles(
+    ctx.source.source === 'fixture' ? [] : (updates ?? []).map(u => u.id),
+  );
 
   const classIds = data?.enrolledClassIds;
   const householdId = data?.householdId ?? null;
@@ -203,6 +210,18 @@ const UpdatesCard: React.FC<ProfileCardProps> = ({ ctx }) => {
                         {'  '}PINNED
                       </span>
                     )}
+                    {/* On the COLLAPSED row on purpose: the files are inside,
+                        and a parent who cannot see that there are any has no
+                        reason to open the one post that has the form in it. */}
+                    {(files[update.id]?.length ?? 0) > 0 && (
+                      <span style={{
+                        ...theme.typography.captionSmall,
+                        fontFamily: theme.fonts.mono,
+                        color: theme.colors.txt.tertiary,
+                      }}>
+                        {'  '}{files[update.id].length} {files[update.id].length === 1 ? 'FILE' : 'FILES'}
+                      </span>
+                    )}
                     {isNew && (
                       <span style={{
                         ...theme.typography.captionSmall,
@@ -242,8 +261,11 @@ const UpdatesCard: React.FC<ProfileCardProps> = ({ ctx }) => {
                     </p>
                     {/* Inside the expanded row, not next to the title: the
                         collapsed row is a <button>, and an anchor nested in a
-                        button is neither tappable reliably nor valid. */}
+                        button is neither tappable reliably nor valid. The same
+                        goes for the files — a photo inside a button is not a
+                        photo a phone will let you press and hold to save. */}
                     <UpdateLink url={update.linkUrl} label={update.linkLabel} compact />
+                    <UpdateFiles files={files[update.id]} />
                   </>
                 )}
               </div>

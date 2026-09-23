@@ -16,6 +16,7 @@ import { DocumentList } from '../../components/portal/DocumentList';
 import { ContentCardSkeleton } from '../../components/portal/PortalSkeleton';
 import EmptyArt from '../../components/portal/EmptyArt';
 import UpdateLink from '../../components/portal/UpdateLink';
+import UpdateFiles, { useUpdateFiles } from '../../components/portal/UpdateFiles';
 import TeacherAvatar from '../../components/portal/TeacherAvatar';
 import { logDownload } from '../../lib/portalDownloads';
 import { PortalClass, PortalDocument, PortalUpdate } from '../../types';
@@ -63,6 +64,10 @@ const ClassDetail: React.FC = () => {
   const [klass, setKlass] = useState<PortalClass | null>(null);
   const [updates, setUpdates] = useState<PortalUpdate[]>([]);
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
+  // The files hung on this class's posts (v65), as opposed to `documents`,
+  // which is the class's own content. Both are portal_documents rows; only
+  // these belong to a post.
+  const updateFiles = useUpdateFiles(updates.map(u => u.id));
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -383,6 +388,12 @@ const ClassDetail: React.FC = () => {
                       </h3>
                       <UpdateBody body={u.body} />
                       <UpdateLink url={u.linkUrl} label={u.linkLabel} />
+                      {/* Logged like any other file a parent opens — an
+                          attachment is a download, whatever it hangs on. */}
+                      <UpdateFiles
+                        files={updateFiles[u.id]}
+                        onDownload={(doc) => { void logDownload(doc.id); }}
+                      />
                     </Card>
                   ))}
                 </div>

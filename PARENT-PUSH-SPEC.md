@@ -262,6 +262,12 @@ and enqueues only on the `false → true` transition (or an insert already
 published). The `unique (kind, source_id)` is what makes a later typo fix
 silent rather than a second buzz.
 
+**Amended by v65.** A `portal_documents` row can now be a file attached to an
+info post (`update_id` set) rather than a file of its own. The document trigger
+gained `when (NEW.update_id is null)` for that reason: the post announces
+itself, and a post published with three files attached would otherwise buzz four
+times, three of them about files a parent can only reach through the post.
+
 The drain follows the shape already established by `run_alert_push()` (v38)
 and `run_calendar_syncs()` (v18): service-role key out of Vault,
 fire-and-forget `net.http_post`, so a slow function never holds a cron worker.

@@ -489,6 +489,7 @@ const doc = (
   id,
   programId,
   classId,
+  updateId: null,
   title,
   description,
   category,
