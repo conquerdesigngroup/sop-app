@@ -11,7 +11,7 @@
 // this function is the only thing that holds it. The phone talks to Cloudflare
 // directly for the bytes themselves — nothing large passes through here.
 //
-// THREE ACTIONS
+// ACTIONS
 //
 //   create   Mint a one-time resumable (tus) upload URL for one video. The
 //            caller must be allowed to edit the class it is for — the same
@@ -25,6 +25,15 @@
 //            Once the video is ready it also asks Cloudflare for the MP4
 //            download and, when that exists, records stream_download_url
 //            (v41) — the parent-facing Download button appears from that.
+//
+//   sweep    The status check above for every unfinished video at once —
+//            rows still 'pending', and 'ready' ones with no MP4 recorded.
+//            SERVICE ROLE ONLY: the pg_cron job run_portal_stream_sweep()
+//            (v66) calls it every five minutes. Until then `status` only ran
+//            while somebody had the editor's Files list open, and gave up
+//            after ten minutes; six videos uploaded back to back on
+//            2026-09-21 sat on "Processing" for days, for staff AND parents,
+//            although Cloudflare had finished them within minutes.
 //
 //   delete   Remove the video from Cloudflare, then its row. Video first for
 //            the same reason the bucket path deletes the object first: a row
@@ -121,7 +130,7 @@ interface CfReply<T = CfVideo> {
 }
 
 interface Body {
-  action?: 'create' | 'status' | 'delete' | 'download-url';
+  action?: 'create' | 'status' | 'sweep' | 'delete' | 'download-url';
   classId?: string | null;
   title?: string;
   fileName?: string;
@@ -136,6 +145,29 @@ const toStatus = (v: CfVideo): StreamStatus => {
   if (state === 'error') return 'error';
   if (v.readyToStream || state === 'ready') return 'ready';
   return 'pending';
+};
+
+/** A sweep looks back this far; an upload abandoned before then stops being asked about. */
+const SWEEP_LOOKBACK_DAYS = 30;
+/** Each row costs one to three Cloudflare calls; this keeps a run well inside the timeout. */
+const SWEEP_MAX_ROWS = 40;
+
+/**
+ * The cron hook sends the service-role key itself. Recognised by the token's
+ * role claim, not by comparing it to the env value: the gateway has already
+ * verified the signature (verify_jwt), and the copy in Vault need not be
+ * byte-identical to the one in Deno.env — see alert-push, where a trailing
+ * newline made a string compare answer 401 to the cron job.
+ */
+const isServiceToken = (authHeader: string): boolean => {
+  const parts = authHeader.replace(/^Bearer\s+/i, '').trim().split('.');
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload?.role === 'service_role';
+  } catch {
+    return false;
+  }
 };
 
 /** "https://customer-x.cloudflarestream.com/<uid>/watch" → the part before /watch. */
@@ -212,10 +244,6 @@ Deno.serve(async (req: Request) => {
     return json(200, { url: target ?? start });
   }
 
-  const { data: userData, error: userErr } = await caller.auth.getUser();
-  if (userErr || !userData?.user) return json(401, { error: 'Invalid or expired session' });
-  const callerId = userData.user.id;
-
   // ------------------------------------------------------------- helpers
 
   const cf = (path: string, init: RequestInit = {}) =>
@@ -247,6 +275,95 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(props),
     });
+
+  /**
+   * Ask Cloudflare where one video is and write the answer onto its row —
+   * the body of `status`, shared with `sweep`.
+   *
+   * The MP4 behind the Download button: Cloudflare builds it once per video,
+   * on request, and only from a finished encode, so it is asked for on every
+   * check that finds the video ready, until Cloudflare says the file exists.
+   * GET reads an existing job; POST starts one. Neither is fatal — a video
+   * with no download still plays.
+   */
+  const refreshVideo = async (uid: string) => {
+    const r = await cfJson(`/${uid}`);
+    if (!r.ok || !r.result) {
+      return { ok: false as const, httpStatus: r.status === 404 ? 404 : 502, error: cfError('lookup', r) };
+    }
+    const v = r.result;
+    const status = toStatus(v);
+    const durationSeconds = v.duration && v.duration > 0 ? Math.round(v.duration) : null;
+    const playbackUrl = playbackBase(v.preview);
+
+    let downloadUrl: string | null = null;
+    if (status === 'ready') {
+      let dl = await cfJson<CfDownloads>(`/${uid}/downloads`);
+      if (!dl.ok || !dl.result?.default) {
+        dl = await cfJson<CfDownloads>(`/${uid}/downloads`, { method: 'POST' });
+        if (!dl.ok) console.error(cfError('download request', dl));
+      }
+      const def = dl.result?.default;
+      if (def?.status === 'ready' && def.url) downloadUrl = def.url;
+    }
+
+    const patch: Record<string, unknown> = { stream_status: status };
+    if (durationSeconds !== null) patch.duration_seconds = durationSeconds;
+    if (playbackUrl) patch.stream_playback_url = playbackUrl;
+    if (downloadUrl) patch.stream_download_url = downloadUrl;
+    const { error: rowErr } = await admin
+      .from('portal_documents')
+      .update(patch)
+      .eq('stream_uid', uid);
+    if (rowErr) console.error('portal-stream could not record status:', rowErr.message);
+
+    // Belt and braces: if the property update at create time failed, the
+    // first status check after it is ready sets the origins.
+    if (status === 'ready' && !(v.allowedOrigins?.length)) {
+      const fix = await setVideoProps(uid, { allowedOrigins });
+      if (!fix.ok) console.error(cfError('origin update', fix));
+    }
+
+    return {
+      ok: true as const,
+      status,
+      state: v.status?.state ?? null,
+      durationSeconds,
+      errorText: v.status?.errorReasonText || null,
+      playbackUrl,
+      downloadUrl,
+    };
+  };
+
+  // ------------------------------------------------ service role: sweep
+  // Before the session check: the cron caller is the service role, which has
+  // no user for getUser() to find. Nobody else may run it.
+  if (body.action === 'sweep') {
+    if (!isServiceToken(authHeader)) return json(403, { error: 'Service role only' });
+    const since = new Date(Date.now() - SWEEP_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const { data: rows, error } = await admin
+      .from('portal_documents')
+      .select('stream_uid')
+      .not('stream_uid', 'is', null)
+      .or('stream_status.eq.pending,and(stream_status.eq.ready,stream_download_url.is.null)')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(SWEEP_MAX_ROWS);
+    if (error) return json(500, { error: `Could not list videos: ${error.message}` });
+
+    const results: Record<string, string> = {};
+    for (const row of rows ?? []) {
+      const uid = row.stream_uid as string;
+      if (!UID_RE.test(uid)) continue;
+      const res = await refreshVideo(uid);
+      results[uid] = res.ok ? (res.downloadUrl ? `${res.status}+mp4` : res.status) : `failed ${res.httpStatus}`;
+    }
+    return json(200, { checked: Object.keys(results).length, results });
+  }
+
+  const { data: userData, error: userErr } = await caller.auth.getUser();
+  if (userErr || !userData?.user) return json(401, { error: 'Invalid or expired session' });
+  const callerId = userData.user.id;
 
   // Through `caller`: log_activity takes identity from the JWT.
   const log = async (
@@ -354,56 +471,10 @@ Deno.serve(async (req: Request) => {
       if (!UID_RE.test(uid)) return json(400, { error: 'uid is required' });
       if (!(await mayEditPortal())) return json(403, { error: 'Portal access required' });
 
-      const r = await cfJson(`/${uid}`);
-      if (!r.ok || !r.result) {
-        return json(r.status === 404 ? 404 : 502, { error: cfError('lookup', r) });
-      }
-      const v = r.result;
-      const status = toStatus(v);
-      const durationSeconds = v.duration && v.duration > 0 ? Math.round(v.duration) : null;
-      const playbackUrl = playbackBase(v.preview);
-
-      // The MP4 behind the Download button. Cloudflare builds it once per
-      // video, on request, and only from a finished encode: so it is asked
-      // for on every check that finds the video ready, until Cloudflare says
-      // the file exists. GET reads an existing job; POST starts one. Neither
-      // is fatal — a video with no download still plays.
-      let downloadUrl: string | null = null;
-      if (status === 'ready') {
-        let dl = await cfJson<CfDownloads>(`/${uid}/downloads`);
-        if (!dl.ok || !dl.result?.default) {
-          dl = await cfJson<CfDownloads>(`/${uid}/downloads`, { method: 'POST' });
-          if (!dl.ok) console.error(cfError('download request', dl));
-        }
-        const def = dl.result?.default;
-        if (def?.status === 'ready' && def.url) downloadUrl = def.url;
-      }
-
-      const patch: Record<string, unknown> = { stream_status: status };
-      if (durationSeconds !== null) patch.duration_seconds = durationSeconds;
-      if (playbackUrl) patch.stream_playback_url = playbackUrl;
-      if (downloadUrl) patch.stream_download_url = downloadUrl;
-      const { error: rowErr } = await admin
-        .from('portal_documents')
-        .update(patch)
-        .eq('stream_uid', uid);
-      if (rowErr) console.error('portal-stream could not record status:', rowErr.message);
-
-      // Belt and braces: if the property update at create time failed, the
-      // first status check after it is ready sets the origins.
-      if (status === 'ready' && !(v.allowedOrigins?.length)) {
-        const fix = await setVideoProps(uid, { allowedOrigins });
-        if (!fix.ok) console.error(cfError('origin update', fix));
-      }
-
-      return json(200, {
-        status,
-        state: v.status?.state ?? null,
-        durationSeconds,
-        errorText: v.status?.errorReasonText || null,
-        playbackUrl,
-        downloadUrl,
-      });
+      const res = await refreshVideo(uid);
+      if (!res.ok) return json(res.httpStatus, { error: res.error });
+      const { ok: _ok, ...reply } = res;
+      return json(200, reply);
     }
 
     case 'delete': {
