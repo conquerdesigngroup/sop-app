@@ -15,9 +15,10 @@ import { DOCUMENT_ACCEPT, DOCUMENT_HINT, validateDocumentFile } from '../../lib/
 import { compatibilityWarning, mediaKindOf } from '../../lib/portalMedia';
 import {
   goesToStream, validateStreamFile, STREAM_HINT,
-  streamThumbnailUrl, streamWatchUrl, streamDownloadHref, streamStatusLabel, formatDuration,
+  streamThumbnailUrl, streamDownloadHref, streamStatusLabel, formatDuration,
 } from '../../lib/portalStream';
 import { useAdminList } from './useAdminList';
+import StreamPlayerModal from './StreamPlayerModal';
 import { ManagerList, ClassSelect, RowActions, RowMeta, PublishedBadge, audienceLabel, useAutoFocus } from './shared';
 
 /**
@@ -228,6 +229,8 @@ const DocumentsSection: React.FC<{
   const abortRef = useRef<AbortController | null>(null);
   const [formError, setFormError] = useState('');
   const [opening, setOpening] = useState<string | null>(null);
+  // Played here, not on Cloudflare's /watch page — see StreamPlayerModal.
+  const [playing, setPlaying] = useState<PortalDocument | null>(null);
   const focusRef = useAutoFocus(meta !== null);
 
   // Inside a class workspace the audience is wherever you are standing.
@@ -441,17 +444,18 @@ const DocumentsSection: React.FC<{
 
                 {doc.streamPlaybackUrl ? (
                   <>
-                    {/* Cloudflare's own watch page. Nothing to sign, and it
-                        shows "processing" itself until the video is ready. */}
-                    <a
-                      href={streamWatchUrl(doc.streamPlaybackUrl)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => logDownload(doc)}
-                      style={OPEN_LINK}
-                    >
-                      {doc.streamStatus === 'ready' ? 'Watch' : 'Open on Cloudflare'}
-                    </a>
+                    {/* Nothing to sign. Until Cloudflare has finished, the
+                        meta line above says "Processing" and there is no
+                        player to open yet. */}
+                    {doc.streamStatus === 'ready' && (
+                      <button
+                        type="button"
+                        onClick={() => { logDownload(doc); setPlaying(doc); }}
+                        style={{ ...OPEN_LINK, appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                      >
+                        Watch
+                      </button>
+                    )}
                     {/* The same MP4 parents get, once Cloudflare has built it. */}
                     {doc.streamDownloadUrl && (
                       <a
@@ -676,6 +680,7 @@ const DocumentsSection: React.FC<{
         )}
       </Modal>
 
+      <StreamPlayerModal doc={playing} onClose={() => setPlaying(null)} />
       {confirmDialog}
     </>
   );

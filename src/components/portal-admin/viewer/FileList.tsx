@@ -8,11 +8,12 @@ import { logActivity } from '../../../lib/activityLog';
 import { mediaKindOf } from '../../../lib/portalMedia';
 import { signDocumentUrls } from '../../../lib/portalStorage';
 import {
-  formatDuration, streamDownloadHref, streamStatusLabel, streamThumbnailUrl, streamWatchUrl,
+  formatDuration, streamDownloadHref, streamStatusLabel, streamThumbnailUrl,
 } from '../../../lib/portalStream';
 import {
   ViewerFile, downloadHref, filePasses, fileWhereLabel, signViewerFile, uploaderOptions, UNKNOWN_UPLOADER,
 } from '../../../lib/portalViewerFiles';
+import StreamPlayerModal from '../StreamPlayerModal';
 import FilterChips from './FilterChips';
 import { ChipRow, ResultCount, RowSub, RowTitle } from './ViewerShared';
 
@@ -131,6 +132,8 @@ export const FileList: React.FC<{
 
   const { error: toastError } = useToast();
   const [opening, setOpening] = useState<string | null>(null);
+  // Played here, not on Cloudflare's /watch page — see StreamPlayerModal.
+  const [playing, setPlaying] = useState<ViewerFile['doc'] | null>(null);
   const openOne = async (f: ViewerFile) => {
     if (!f.doc.storagePath || opening) return;
     setOpening(f.doc.id);
@@ -229,10 +232,13 @@ export const FileList: React.FC<{
                   }}>
                     {doc.streamPlaybackUrl ? (
                       <>
-                        <a href={streamWatchUrl(doc.streamPlaybackUrl)} target="_blank"
-                          rel="noopener noreferrer" onClick={() => logOpen(f, 'view')} style={LINK}>
-                          {doc.streamStatus === 'ready' ? 'Watch' : 'Open on Cloudflare'}
-                        </a>
+                        {doc.streamStatus === 'ready' && (
+                          <button type="button"
+                            onClick={() => { logOpen(f, 'view'); setPlaying(doc); }}
+                            style={{ ...LINK, appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                            Watch
+                          </button>
+                        )}
                         {doc.streamDownloadUrl && (
                           <a href={streamDownloadHref(doc.streamDownloadUrl, doc.title)}
                             onClick={() => logOpen(f, 'download')} style={LINK}>
@@ -274,6 +280,8 @@ export const FileList: React.FC<{
           );
         })}
       </ManagerList>
+
+      <StreamPlayerModal doc={playing} onClose={() => setPlaying(null)} />
     </>
   );
 };
