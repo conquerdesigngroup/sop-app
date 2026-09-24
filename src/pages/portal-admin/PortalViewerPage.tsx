@@ -12,6 +12,7 @@ import { ClassList, HouseholdList, StudentList } from '../../components/portal-a
 import HouseholdPanel from '../../components/portal-admin/viewer/HouseholdPanel';
 import RosterPanel from '../../components/portal-admin/viewer/RosterPanel';
 import StudentPanel from '../../components/portal-admin/viewer/StudentPanel';
+import FileList from '../../components/portal-admin/viewer/FileList';
 import {
   EMPTY_FILTERS,
   HouseholdSort,
@@ -24,6 +25,7 @@ import {
   loadStudents,
   loadViewerClasses,
 } from '../../lib/portalViewer';
+import { ViewerFile, loadViewerFiles } from '../../lib/portalViewerFiles';
 
 /**
  * Oversight: everything the account holders have, from the studio's side.
@@ -53,12 +55,14 @@ import {
  * that starts "a parent called about…" ends there.
  */
 
-type ViewKey = 'families' | 'dancers' | 'classes';
+type ViewKey = 'families' | 'dancers' | 'classes' | 'files';
 
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: 'families', label: 'Families' },
   { key: 'dancers', label: 'Dancers' },
   { key: 'classes', label: 'Classes & rosters' },
+  // Who put what in the portal. Staff upload; families only ever download.
+  { key: 'files', label: 'Files' },
 ];
 
 const PortalViewerPage: React.FC = () => {
@@ -70,6 +74,7 @@ const PortalViewerPage: React.FC = () => {
   const [households, setHouseholds] = useState<ViewerHousehold[]>([]);
   const [students, setStudents] = useState<ViewerStudent[]>([]);
   const [classes, setClasses] = useState<ViewerClass[]>([]);
+  const [files, setFiles] = useState<ViewerFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,7 +102,7 @@ const PortalViewerPage: React.FC = () => {
    * reason that screen cannot explain.
    */
   const [queries, setQueries] = useState<Record<ViewKey, string>>({
-    families: '', dancers: '', classes: '',
+    families: '', dancers: '', classes: '', files: '',
   });
   const setQuery = useCallback(
     (key: ViewKey) => (value: string) => setQueries(q => ({ ...q, [key]: value })),
@@ -105,8 +110,9 @@ const PortalViewerPage: React.FC = () => {
   );
 
   const [filters, setFilters] = useState<Record<ViewKey, ViewerFilters>>({
-    families: EMPTY_FILTERS, dancers: EMPTY_FILTERS, classes: EMPTY_FILTERS,
+    families: EMPTY_FILTERS, dancers: EMPTY_FILTERS, classes: EMPTY_FILTERS, files: EMPTY_FILTERS,
   });
+  const [fileUploader, setFileUploader] = useState<string | null>(null);
   const setFilter = useCallback(
     (key: ViewKey) => (value: ViewerFilters) => setFilters(f => ({ ...f, [key]: value })),
     [],
@@ -161,12 +167,15 @@ const PortalViewerPage: React.FC = () => {
   const requestRef = useRef(0);
   const loadAll = useCallback(async () => {
     const requestId = ++requestRef.current;
-    const [h, s, c] = await Promise.all([loadHouseholds(), loadStudents(), loadViewerClasses()]);
+    const [h, s, c, f] = await Promise.all([
+      loadHouseholds(), loadStudents(), loadViewerClasses(), loadViewerFiles(),
+    ]);
     if (requestId !== requestRef.current) return;
     setHouseholds(h.rows);
     setStudents(s.rows);
     setClasses(c.rows);
-    setError(h.error ?? s.error ?? c.error);
+    setFiles(f.rows);
+    setError(h.error ?? s.error ?? c.error ?? f.error);
     setLoading(false);
   }, []);
 
@@ -348,6 +357,17 @@ const PortalViewerPage: React.FC = () => {
                 setQuery={setQuery('classes')}
                 filters={filters.classes}
                 setFilters={setFilter('classes')}
+              />
+            )}
+            {view === 'files' && (
+              <FileList
+                files={files}
+                loading={loading}
+                error={error}
+                query={queries.files}
+                setQuery={setQuery('files')}
+                uploader={fileUploader}
+                setUploader={setFileUploader}
               />
             )}
           </div>
