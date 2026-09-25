@@ -204,6 +204,10 @@ export interface EnrollmentDrop extends ClassRef {
 export type UnassignedReason =
   | 'no_dancers'
   | 'export_names_unknown_dancer'
+  /** A name in All Students is only a student marked inactive — probably back (v69). */
+  | 'export_names_inactive_dancer'
+  /** The family's one dancer is 3 or more years outside the class's age range (v69). */
+  | 'only_dancer_outside_age_range'
   | 'missing_birthday'
   | 'no_sibling_in_age_range'
   | 'several_siblings_in_age_range';
@@ -217,8 +221,10 @@ export interface EnrollmentUnassigned extends ClassRef {
   reason: UnassignedReason;
   dancers: { name: string; age: number | null }[];
   export_names: string[];
-  /** Names in All Students that are none of the family's dancers. */
-  unknown_names: string[];
+  /** Names in All Students that are none of the family's students, each with the one it is perhaps a misspelling of. */
+  unknown_names: { name: string; likely: string | null }[];
+  /** Names in All Students that are only a student marked inactive. */
+  inactive_names: { name: string; dancer: string }[];
 }
 
 export type ConflictReason =
@@ -238,19 +244,30 @@ export interface EnrollmentConflict extends ClassRef {
   on: string | null;
 }
 
-export type BlockReason =
-  | 'no_class_tags'
-  | 'duplicate_class_title'
-  | 'marked_after_drop_day'
-  | 'enrolled_after_drop_day'
-  | 'several_active_enrollments';
+/** What still stops a whole file. Anything about one place is held instead (v69). */
+export type BlockReason = 'no_class_tags' | 'duplicate_class_title';
 
 export interface EnrollmentBlock extends ClassRef {
-  kind: 'file' | 'class' | 'drop';
+  kind: 'file' | 'class';
   reason: BlockReason;
   on: string | null;
   detail: string | null;
   student_name: string | null;
+}
+
+export type HeldDropReason =
+  | 'several_active_places'
+  | 'starts_after_drop_day'
+  | 'marked_after_drop_day';
+
+/** A place whose tag is gone but which cannot be ended safely yet: listed, left as it is, looked at again next sync. */
+export interface EnrollmentHeldDrop extends ClassRef {
+  student_id: string;
+  student_name: string;
+  family: string | null;
+  reason: HeldDropReason;
+  /** starts_after_drop_day: the place's start; marked_after_drop_day: the latest mark. */
+  on: string | null;
 }
 
 export interface EnrollmentNewFamily {
@@ -305,11 +322,14 @@ export interface EnrollmentImportResult {
   baseline_hash: string;
   /** Apply needs p_confirm: the drop is large enough to be a damaged export. */
   confirm_drops: boolean;
+  /** Apply needs p_confirm: so many places or new families that it may be the wrong export (v69). */
+  confirm_adds: boolean;
   counts: {
     contacts: number;
     families: number;
     adds: number;
     drops: number;
+    held_drops: number;
     unassigned: number;
     conflicts: number;
     blocked: number;
@@ -322,12 +342,15 @@ export interface EnrollmentImportResult {
     missing_families: number;
     held_untagged: number;
     tagged_unheld: number;
+    spelling_matches: number;
     memory_changes: number;
     unmatched_class_tags: number;
   };
   adds: EnrollmentAdd[];
   drops: EnrollmentDrop[];
-  whole_class_drops: (ClassRef & { dropping: number })[];
+  held_drops: EnrollmentHeldDrop[];
+  /** Every tagged family's tag for the class gone at once: dancers to drop, dancers held, families. */
+  whole_class_drops: (ClassRef & { dropping: number; held: number; families: number })[];
   unassigned: EnrollmentUnassigned[];
   conflicts: EnrollmentConflict[];
   blocked: EnrollmentBlock[];
@@ -343,7 +366,10 @@ export interface EnrollmentImportResult {
   /** Remembered tags nobody in the family holds — usually left behind in Enrolio. */
   tagged_unheld: (ClassRef & { family: string | null; email: string })[];
   unmatched_tags: { tag: string; families: number; looks_like_class: boolean }[];
-  memory_changes: { added: number; removed: number };
+  /** Names in All Students taken for a dancer the app spells differently: same first name, surname close. */
+  spelling_matches: { family: string | null; export_name: string; dancer: string }[];
+  /** Tags remembered and forgotten, and families marked seen for the first time. */
+  memory_changes: { added: number; removed: number; families_seen: number };
   /** What a starting point would record. */
   baseline_counts: { families: number; tags: number };
   /** apply only */
@@ -374,10 +400,16 @@ export const runEnrollmentImport = async (
   });
   // PostgREST's "no such function": this screen deployed ahead of its migration.
   if (error?.code === 'PGRST202') {
-    throw new Error('Roster sync is not set up in the database yet (migration v68). Nothing was changed.');
+    throw new Error('Roster sync is not set up in the database yet (migration v69). Nothing was changed.');
   }
   if (error) throw new Error(error.message || 'The roster sync failed');
   if (!data) throw new Error('The roster sync returned nothing');
+  // v68 answers with the same signature but without what this screen reads.
+  // Only a preview is refused for it: nothing is written by one, so "nothing
+  // was changed" is true — and an apply only ever follows a v69 preview.
+  if (mode === 'preview' && !Array.isArray((data as EnrollmentImportResult).held_drops)) {
+    throw new Error('Roster sync needs the v69 database update first. Nothing was changed.');
+  }
   return data as EnrollmentImportResult;
 };
 
@@ -386,8 +418,10 @@ export const changeCount = (r: EnrollmentImportResult): number =>
   r.counts.adds + r.counts.drops + r.counts.new_families;
 
 /**
- * Tags the sync would remember or forget. Worth applying on their own: left
- * unsaved, a later drop is missed or a later re-join hidden.
+ * What the sync would remember for next time: tags remembered or forgotten, and
+ * families seen for the first time. Worth applying on their own: left unsaved,
+ * a later drop is missed, a later re-join hidden, or a family's next real class
+ * taken for an old tag.
  */
 export const memoryChangeCount = (r: EnrollmentImportResult): number =>
-  r.memory_changes.added + r.memory_changes.removed;
+  r.memory_changes.added + r.memory_changes.removed + (r.memory_changes.families_seen ?? 0);

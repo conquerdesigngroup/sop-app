@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
 import { Button, Modal } from '../ui';
 import { CustomCheckbox } from '../CustomCheckbox';
@@ -7,20 +7,20 @@ import { dayName, formatTime } from '../../lib/portal';
 import {
   contactsCsvToImport, runEnrollmentImport, changeCount, memoryChangeCount,
   ContactsCsvParse, EnrollmentImportResult, EnrollmentImportMode,
-  EnrollmentUnassigned, EnrollmentConflict, EnrollmentBlock, NotImportedReason,
+  EnrollmentUnassigned, EnrollmentConflict, EnrollmentBlock, EnrollmentHeldDrop, NotImportedReason,
 } from '../../lib/enrollmentImport';
 
 /**
  * Sync class rosters from the Enrolio contacts export: choose the file, read
  * every change, apply it — or nothing.
  *
- * The rules live in admin_enrollment_import (v67, corrected by v68) and the
- * preview is the database's own answer, not a guess made here. This screen's
+ * The rules live in admin_enrollment_import (v67, corrected by v68 and v69)
+ * and the preview is the database's own answer, not a guess made here. This screen's
  * job is to make that answer readable on a phone and to make applying it hard
  * to do by accident: nothing is written until Apply, Apply sends the hash of
  * exactly the preview on screen, and the database refuses if anything moved
- * since. A large drop and an export older than the last sync each have to be
- * confirmed in words first.
+ * since. A large drop, a large addition and an export older than the last
+ * sync each have to be confirmed in words first.
  *
  * SLOW TAPS (CLAUDE.md)
  *
@@ -30,7 +30,9 @@ import {
  * striped bar and a sentence saying what is happening, and end on a screen
  * that says what happened. A preview can be abandoned, so it has Cancel. An
  * apply cannot — the database either takes all of it or none of it — so it
- * says that instead of offering a Cancel that would only hide the answer.
+ * says that instead of offering a Cancel that would only hide the answer. An
+ * answer slow in coming is said to be, and after a while the dialog may close:
+ * the activity log then says whether the sync went through.
  *
  * REFRESH
  *
@@ -81,9 +83,13 @@ const dayAfter = (iso: string): string => {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** First-seen families with class tags to check. One with none has nothing to decide. */
+const firstSeenToCheck = (r: EnrollmentImportResult) => r.first_seen_families.filter(f => f.tags > 0);
+
 /** Everything listed for a person, counted the same way on the preview and on the end screen. */
 const forAPerson = (r: EnrollmentImportResult): number =>
-  r.counts.unassigned + r.counts.conflicts + r.counts.first_seen_families + r.counts.email_conflicts;
+  r.counts.unassigned + r.counts.conflicts + (r.counts.held_drops ?? 0) + r.counts.email_conflicts +
+  firstSeenToCheck(r).length;
 
 const ageRange = (u: EnrollmentUnassigned): string | null =>
   u.age_min !== null && u.age_max !== null ? `aged ${u.age_min}–${u.age_max}`
@@ -103,8 +109,30 @@ export const unassignedText = (u: EnrollmentUnassigned): string => {
     case 'no_dancers':
       return 'This family has no dancers in the app yet. Add them with the roster import; the next sync then places this tag.';
     case 'export_names_unknown_dancer':
-      return `Enrolio lists ${u.unknown_names.join(', ')}, who is not in the app. Add them with the roster import ` +
-        '(with a birthday) — or fix the spelling, if it is a dancer the app has — and the next sync places this tag.';
+    case 'export_names_inactive_dancer': {
+      // Names are never guessed at: a first name spelled differently is named
+      // with the student it perhaps is, and either way there is a next step.
+      const inactive = u.inactive_names ?? [];
+      const likely = u.unknown_names.filter(n => n.likely);
+      const strangers = u.unknown_names.filter(n => !n.likely);
+      return [
+        inactive.length > 0 &&
+          `Enrolio lists ${inactive.map(n => (n.name === n.dancer ? n.name : `${n.name} (in the app as ${n.dancer})`))
+            .join(', ')}, marked inactive in the app — probably back. If so, have them set active by hand, and ` +
+          'the next sync places this tag.',
+        likely.length > 0 &&
+          `Enrolio lists ${likely.map(n => `${n.name} — perhaps ${n.likely}, spelled differently`).join('; ')}. ` +
+          'If so, the two spellings need to match — in Enrolio, or in the app by hand — and the next sync places ' +
+          'this tag. If not, add them with the roster import (with a birthday).',
+        strangers.length > 0 &&
+          `Enrolio lists ${strangers.map(n => n.name).join(', ')}, who ${strangers.length === 1 ? 'is' : 'are'} not ` +
+          'in the app. If new, add them with the roster import (with a birthday), and the next sync places this tag.',
+      ].filter(Boolean).join(' ');
+    }
+    case 'only_dancer_outside_age_range':
+      return `${dancers || 'The dancer'} is the family’s only dancer, and this class is for dancers ` +
+        `${range ?? 'of another age'} — 3 or more years off. The tag may be for a child the app does not have ` +
+        `yet: add them with the roster import and the next sync places it. ${PICK_BY_HAND}`;
     case 'missing_birthday':
       return `${dancers || 'A dancer'} — no birthday on file yet, so the age range cannot pick one. The roster ` +
         'import fills birthdays in; the next sync then places this tag.';
@@ -134,36 +162,42 @@ export const conflictText = (c: EnrollmentConflict): string => {
     case 'class_off_schedule':
       return 'the class is switched off in the app. If it is running, turn on "Show on the schedule", then sync again.';
     case 'marked_before_start':
-      return `already has an attendance mark in this class on ${shortDate(c.on)}, before a place starting today ` +
-        'would begin. Add the place by hand with the right start date.';
+      return `has attendance marks in this class from ${shortDate(c.on)}, before a place starting today would ` +
+        `begin. Add the place by hand, starting on or before ${shortDate(c.on)}.`;
     default:
       return '';
   }
 };
 
-export const blockText = (b: EnrollmentBlock, asOf: string, dropDay: string): string => {
-  const cls = classLabel(b);
+/** What stops the whole file. Anything about one place is held instead, and listed for a person. */
+export const blockText = (b: EnrollmentBlock): string => {
   switch (b.reason) {
     case 'no_class_tags':
       return 'This file has no class tags at all — it looks like a different or damaged export. Download ' +
         'Export Contacts → Current Families again, with the Tags column.';
     case 'duplicate_class_title':
-      return `Two active classes share the Enrolio title "${b.detail}", so its tag cannot be told apart. ` +
-        'Switch the old one off, or rename one in Enrolio and import classes again.';
-    case 'marked_after_drop_day':
-      return `${b.student_name} has an attendance mark in ${cls} on ${shortDate(b.on)} — after their last ` +
-        `day would be (${shortDate(dropDay)}). Sync again tomorrow.`;
-    case 'enrolled_after_drop_day':
-      return b.on && b.on > asOf
-        ? `${b.student_name}'s place in ${cls} does not start until ${shortDate(b.on)}, so it cannot end ` +
-          `before it begins. Sync again from ${shortDate(dayAfter(b.on))}.`
-        : `${b.student_name} only joined ${cls} on ${shortDate(b.on)}, so cannot leave it as of ` +
-          `${shortDate(dropDay)}. Sync again tomorrow.`;
-    case 'several_active_enrollments':
-      return `${b.student_name} holds more than one active place in ${cls}, so the drop is ambiguous. ` +
-        'The extra place has to be ended by hand first.';
+      return `More than one class has the Enrolio title "${b.detail}", so its tag cannot be told apart. Keep ` +
+        'exactly one of them switched on in the app, or rename one in Enrolio and import classes again.';
     default:
       return 'Something in this file blocks the sync.';
+  }
+};
+
+/** A place whose tag is gone but which cannot be ended safely yet. */
+export const heldDropText = (h: EnrollmentHeldDrop): string => {
+  switch (h.reason) {
+    case 'several_active_places':
+      return 'holds more than one active place in this class, so which one ends is unclear. End the extra ' +
+        'place by hand; the next sync then drops the other.';
+    case 'starts_after_drop_day':
+      return `the place starts ${shortDate(h.on)}, but the tag is gone from Enrolio. If they are not coming, the ` +
+        'place has to be ended by hand' +
+        (h.on ? `; left alone, a sync from ${shortDate(dayAfter(h.on))} drops it.` : '.');
+    case 'marked_after_drop_day':
+      return `was marked in this class on ${shortDate(h.on)}, after the tag went from Enrolio. If they have ` +
+        'left, sync again tomorrow and the place is dropped; if not, put the tag back in Enrolio.';
+    default:
+      return '';
   }
 };
 
@@ -174,6 +208,12 @@ const NOT_IMPORTED: Record<NotImportedReason, string> = {
   no_dancer_name: 'no dancer named in All Students',
   dancer_name_needs_surname: 'a dancer’s name has no surname to file them under',
 };
+
+/** How long an apply may take before the screen says it is slow, and lets the dialog close. */
+const SLOW_ANSWER_MS = 45_000;
+const SLOW_ANSWER = 'Still no answer — the connection may have dropped. You can close this now: the sync either ' +
+  'went through completely or changed nothing. Preview the file again to see which — one that went through ' +
+  'leaves nothing to apply.';
 
 /** Failures that mean the request never reached the database. */
 const NETWORK = /failed to fetch|networkerror|load failed|network request failed/i;
@@ -321,11 +361,33 @@ const Working: React.FC<{ label: string; message: string; note?: string }> = ({ 
 /** The lists worth a glance but not a decision, folded. */
 const Informational: React.FC<{ r: EnrollmentImportResult; file: ChosenFile }> = ({ r, file }) => {
   const classTags = r.unmatched_tags.filter(t => t.looks_like_class);
+  const seenBlank = r.first_seen_families.filter(f => f.tags === 0);
   const anything = r.missing_families.length + r.merged_contacts.length + classTags.length +
-    file.parse.skipped.length + r.tagged_unheld.length + r.held_untagged.length;
+    file.parse.skipped.length + r.tagged_unheld.length + r.held_untagged.length +
+    r.spelling_matches.length + seenBlank.length;
   if (anything === 0) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {r.spelling_matches.length > 0 && (
+        <Fold label={`${plural(r.spelling_matches.length, 'name')} in Enrolio spelled differently from the app — taken as the same dancer`}>
+          <p style={{ ...text('captionSmall', theme.colors.txt.tertiary), marginBottom: '8px' }}>
+            Same first name, and a surname a middle name, a second surname or a letter or two away. If one of
+            these is really a different child, add them with the roster import.
+          </p>
+          <Rows>
+            {r.spelling_matches.map((m, i) => (
+              <Row key={i} title={`${m.export_name} → ${m.dancer}`} detail={m.family ?? undefined} />
+            ))}
+          </Rows>
+        </Fold>
+      )}
+      {seenBlank.length > 0 && (
+        <Fold label={`${plural(seenBlank.length, 'family', 'families')} in a sync for the first time, with no class tags — nothing to check`}>
+          <Rows>
+            {seenBlank.map(f => <Row key={f.household_id} title={f.family ?? f.email} detail={f.email} />)}
+          </Rows>
+        </Fold>
+      )}
       {r.missing_families.length > 0 && (
         <Fold label={`${plural(r.missing_families.length, 'family', 'families')} in the app but not in this file — left as they are`}>
           <Rows>
@@ -413,7 +475,7 @@ const Blocked: React.FC<{ r: EnrollmentImportResult }> = ({ r }) =>
   r.blocked.length === 0 ? null : (
     <Section label="Can’t apply yet" count={r.blocked.length} tone="error">
       <Rows>
-        {r.blocked.map((b, i) => <Row key={i} title={blockText(b, r.as_of, r.drop_day)} />)}
+        {r.blocked.map((b, i) => <Row key={i} title={blockText(b)} />)}
       </Rows>
       <p style={text('captionSmall', theme.colors.txt.tertiary)}>Nothing is changed until all of these clear.</p>
     </Section>
@@ -431,9 +493,9 @@ const FirstRun: React.FC<{ r: EnrollmentImportResult; file: ChosenFile }> = ({ r
     </div>
     <Section label="Starting point" tone="warning">
       <p style={text('bodySmall', theme.colors.txt.primary)}>
-        This records {plural(r.baseline_counts.tags, 'class tag')} across{' '}
-        {plural(r.baseline_counts.families, 'family', 'families')} as where things stand. From the next export on,
-        only what changed since is applied.
+        This records the {plural(r.baseline_counts.tags, 'class tag')} in this file, and the{' '}
+        {plural(r.baseline_counts.families, 'family', 'families')} it lists, as where things stand. From the next
+        export on, only what changed since is applied.
       </p>
       <p style={text('bodySmall', theme.colors.txt.primary)}>
         Use the export the rosters were last brought up to date with. Enrolio does not always remove a tag when a
@@ -461,9 +523,16 @@ const Preview: React.FC<{
   onConfirmStale: (on: boolean) => void;
   confirmDrops: boolean;
   onConfirmDrops: (on: boolean) => void;
-}> = ({ r, file, stale, confirmStale, onConfirmStale, confirmDrops, onConfirmDrops }) => {
+  confirmAdds: boolean;
+  onConfirmAdds: (on: boolean) => void;
+}> = ({ r, file, stale, confirmStale, onConfirmStale, confirmDrops, onConfirmDrops, confirmAdds, onConfirmAdds }) => {
   const changes = changeCount(r);
   const person = forAPerson(r);
+  const seenToCheck = firstSeenToCheck(r);
+  // A first-seen family's tags are all "added"; they are said as its own, not
+  // as tags that changed in Enrolio.
+  const firstSeenTags = r.first_seen_families.reduce((n, f) => n + f.tags, 0);
+  const tagChanges = Math.max(r.memory_changes.added - firstSeenTags, 0) + r.memory_changes.removed;
   const summary = [
     r.counts.adds > 0 && `${r.counts.adds} to add`,
     r.counts.drops > 0 && `${r.counts.drops} to drop`,
@@ -507,10 +576,18 @@ const Preview: React.FC<{
       <Blocked r={r} />
 
       {r.whole_class_drops.length > 0 && (
-        <Section label="Whole class leaving" count={r.whole_class_drops.length} tone="warning">
+        <Section label="Tag gone from a whole class" count={r.whole_class_drops.length} tone="warning">
           <Rows>
             {r.whole_class_drops.map((w, i) => (
-              <Row key={i} title={`${classLabel(w)} — ${w.dropping === 1 ? 'its one dancer' : `all ${w.dropping} dancers`} in this file`} />
+              <Row
+                key={i}
+                title={`${classLabel(w)} — the tag is gone from every family in this file tagged for it`}
+                detail={[
+                  `${plural(w.dropping, 'dancer')} to drop`,
+                  w.held > 0 && `${w.held} held`,
+                  plural(w.families, 'family', 'families'),
+                ].filter(Boolean).join(' · ')}
+              />
             ))}
           </Rows>
           <p style={text('captionSmall', theme.colors.txt.secondary)}>
@@ -574,10 +651,26 @@ const Preview: React.FC<{
         </Section>
       )}
 
+      {r.confirm_adds && (
+        <Section label="A large addition" tone="warning">
+          <p style={text('bodySmall', theme.colors.txt.primary)}>
+            This adds {plural(r.counts.adds, 'place')}
+            {r.counts.new_families > 0 ? ` and ${plural(r.counts.new_families, 'new family', 'new families')}` : ''} at
+            once — more than a usual week. The wrong export (every contact instead of Current Families) looks like
+            this.
+          </p>
+          <Confirm
+            checked={confirmAdds}
+            onChange={onConfirmAdds}
+            label="Yes — these places and families are right."
+          />
+        </Section>
+      )}
+
       {person > 0 && (
         <Section label="For a person to decide" count={person} tone="warning">
           <Rows>
-            {r.first_seen_families.map(f => (
+            {seenToCheck.map(f => (
               <Row
                 key={`f${f.household_id}`}
                 title={<><strong>{f.family ?? f.email}</strong> — first time in a sync</>}
@@ -607,9 +700,17 @@ const Preview: React.FC<{
                 detail={conflictText(c)}
               />
             ))}
+            {r.held_drops.map((h, i) => (
+              <Row
+                key={`h${i}`}
+                title={<><strong>{h.student_name}</strong> · {classLabel(h)} — not dropped</>}
+                detail={heldDropText(h)}
+              />
+            ))}
           </Rows>
           <p style={text('captionSmall', theme.colors.txt.tertiary)}>
-            None of these is applied. Each comes back every sync until what it says is done.
+            None of these is applied. Each comes back every sync until what it says is done
+            {seenToCheck.length > 0 ? ' — except a family seen for the first time, which is compared like any other from the next sync' : ''}.
           </p>
         </Section>
       )}
@@ -618,9 +719,14 @@ const Preview: React.FC<{
 
       {changes === 0 && memoryChangeCount(r) > 0 && (
         <p style={text('bodySmall', theme.colors.txt.secondary)}>
-          No roster changes, but {plural(memoryChangeCount(r), 'tag')} changed in Enrolio for classes a dancer
-          already holds or nobody takes. Saving {memoryChangeCount(r) === 1 ? 'it' : 'them'} keeps the next sync
-          right — unsaved, a later drop can be missed.
+          No roster changes, but {[
+            tagChanges > 0 &&
+              `${plural(tagChanges, 'tag')} changed in Enrolio for classes a dancer already holds or nobody takes`,
+            r.memory_changes.families_seen > 0 &&
+              `${plural(r.memory_changes.families_seen, 'family', 'families')} ${r.memory_changes.families_seen === 1 ? 'is' : 'are'} in a sync for the first time` +
+              (firstSeenTags > 0 ? `, with ${plural(firstSeenTags, 'class tag')} to record` : ''),
+          ].filter(Boolean).join(', and ')}. Saving keeps the next sync right — unsaved, a later drop can be missed,
+          or a family’s next class taken for an old tag.
         </p>
       )}
 
@@ -644,7 +750,12 @@ const EnrollmentImportModal: React.FC<{
   const [error, setError] = useState('');
   const [confirmStale, setConfirmStale] = useState(false);
   const [confirmDrops, setConfirmDrops] = useState(false);
+  const [confirmAdds, setConfirmAdds] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
+  // An apply that has not answered in a while: say so, and let the dialog close.
+  const [waitedLong, setWaitedLong] = useState(false);
+  // Only while an apply is still out: a later preview starts with Cancel again.
+  const slow = waitedLong && (phase === 'applying' || phase === 'recording');
   // The tap can land between a render and the state update it caused, so the
   // guard against a second request is a ref, not `phase`.
   const busyRef = useRef(false);
@@ -657,11 +768,13 @@ const EnrollmentImportModal: React.FC<{
     setResult(r);
     setConfirmStale(false);
     setConfirmDrops(false);
+    setConfirmAdds(false);
   };
 
   const close = () => {
-    // An apply cannot be abandoned; closing mid-way would only hide its answer.
-    if (phase === 'applying' || phase === 'recording') return;
+    // An apply cannot be abandoned; closing mid-way would only hide its answer —
+    // unless it has gone quiet, when hiding it is all that is left to do.
+    if ((phase === 'applying' || phase === 'recording') && !slow) return;
     requestRef.current += 1;
     busyRef.current = false;
     setPhase('choose');
@@ -734,21 +847,31 @@ const EnrollmentImportModal: React.FC<{
       setRefreshed(true);
       setConfirmStale(false);
       setConfirmDrops(false);
+      setConfirmAdds(false);
     }
     setResult(r);
   }, [file, result]);
   useRefreshable(refreshPreview, isOpen && phase === 'preview');
+
+  useEffect(() => {
+    if (phase !== 'applying' && phase !== 'recording') return undefined;
+    const timer = window.setTimeout(() => setWaitedLong(true), SLOW_ANSWER_MS);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
 
   const commit = async (mode: Exclude<EnrollmentImportMode, 'preview'>) => {
     if (busyRef.current || !file || !result) return;
     busyRef.current = true;
     const request = ++requestRef.current;
     setError('');
+    setWaitedLong(false);
     setPhase(mode === 'apply' ? 'applying' : 'recording');
+    // Only what the preview asked for, and only once it is all ticked.
+    const confirmed = (!result.confirm_drops || confirmDrops) && (!result.confirm_adds || confirmAdds);
     try {
       const r = await runEnrollmentImport(
         mode, file.parse.contacts, mode === 'apply' ? result.plan_hash : result.baseline_hash, file.name,
-        mode === 'apply' && result.confirm_drops && confirmDrops);
+        mode === 'apply' && (result.confirm_drops || result.confirm_adds) && confirmed);
       if (request !== requestRef.current) return;
       setOutcome(r);
       setPhase(mode === 'apply' ? 'applied' : 'recorded');
@@ -779,7 +902,8 @@ const EnrollmentImportModal: React.FC<{
   } else if (phase === 'applied' || phase === 'recorded') {
     buttons = <Button variant="primary" onClick={close} style={footerButton}>Done</Button>;
   } else if (result) {
-    const waitingFor = (stale && !confirmStale) || (result.confirm_drops && !confirmDrops);
+    const waitingFor = (stale && !confirmStale) || (result.confirm_drops && !confirmDrops)
+      || (result.confirm_adds && !confirmAdds);
     const primary = error
       ? (
         <Button variant="primary" onClick={() => file && startPreview(file)} disabled={busy} style={footerButton}>
@@ -806,13 +930,13 @@ const EnrollmentImportModal: React.FC<{
               >
                 {phase === 'applying' ? 'Applying…'
                   : changes > 0 ? `Apply ${plural(changes, 'change')}`
-                  : 'Save tag changes'}
+                  : 'Save for the next sync'}
               </Button>
             );
     buttons = (
       <>
-        <Button variant="secondary" onClick={close} disabled={busy} style={footerButton}>
-          {primary ? 'Cancel' : 'Close'}
+        <Button variant="secondary" onClick={close} disabled={busy && !slow} style={footerButton}>
+          {primary && !slow ? 'Cancel' : 'Close'}
         </Button>
         {primary}
       </>
@@ -870,9 +994,10 @@ const EnrollmentImportModal: React.FC<{
         {phase === 'applying' && result && (
           <Working
             label="Applying the roster changes"
-            message={changes > 0
-              ? `Applying ${plural(changes, 'change')} — this takes a few seconds. Keep this page open.`
-              : 'Saving the tag changes — a few seconds. Keep this page open.'}
+            message={slow ? SLOW_ANSWER
+              : changes > 0
+                ? `Applying ${plural(changes, 'change')} — this takes a few seconds. Keep this page open.`
+                : 'Saving for the next sync — a few seconds. Keep this page open.'}
             note="It cannot be stopped part-way: either every change goes through or none does."
           />
         )}
@@ -880,7 +1005,8 @@ const EnrollmentImportModal: React.FC<{
         {phase === 'recording' && (
           <Working
             label="Recording the starting point"
-            message="Recording this export as the starting point — a few seconds. Keep this page open."
+            message={slow ? SLOW_ANSWER
+              : 'Recording this export as the starting point — a few seconds. Keep this page open.'}
             note="Nothing on the rosters changes."
           />
         )}
@@ -911,6 +1037,8 @@ const EnrollmentImportModal: React.FC<{
                   onConfirmStale={setConfirmStale}
                   confirmDrops={confirmDrops}
                   onConfirmDrops={setConfirmDrops}
+                  confirmAdds={confirmAdds}
+                  onConfirmAdds={setConfirmAdds}
                 />
               )}
           </>
@@ -925,7 +1053,7 @@ const EnrollmentImportModal: React.FC<{
                   `${outcome.counts.drops} dropped`,
                   outcome.counts.new_families > 0 && plural(outcome.counts.new_families, 'new family', 'new families'),
                 ].filter(Boolean).join(', ')}.`
-                : `Saved — ${plural(memoryChangeCount(outcome), 'tag change')} remembered, no roster changes.`}
+                : 'Saved for the next sync — no roster changes.'}
             </p>
             <p style={text('bodySmall', theme.colors.txt.secondary)}>
               Rosters from {shortDate(outcome.as_of)} show any change. Attendance is unchanged
@@ -935,7 +1063,11 @@ const EnrollmentImportModal: React.FC<{
             {forAPerson(outcome) > 0 && (
               <p style={{ ...text('bodySmall', theme.colors.txt.primary), fontWeight: 600 }}>
                 {plural(forAPerson(outcome), 'item')} still {forAPerson(outcome) === 1 ? 'needs' : 'need'} a person
-                to decide — they will be listed again next sync.
+                to decide.{' '}
+                {firstSeenToCheck(outcome).length > 0
+                  ? 'Tags and places come back every sync until dealt with; a family seen for the first time is ' +
+                    'compared like any other from now on.'
+                  : 'Each comes back every sync until dealt with.'}
               </p>
             )}
           </div>

@@ -1,5 +1,5 @@
 /**
- * admin_enrollment_import (v67, corrected by v68), run against a real Postgres.
+ * admin_enrollment_import (v67, corrected by v68 and v69), run against a real Postgres.
  *
  *   npm install --no-save @electric-sql/pglite
  *   npm run test:sql
@@ -12,11 +12,13 @@
  * of it. PGlite is Postgres compiled to WebAssembly — the same planner, the
  * same constraints, no server, no network — so each test gets a fresh database
  * in a few hundred milliseconds, built from the production-shaped schema in
- * schema.sql plus v67 and v68 in the order production applied them.
+ * schema.sql plus v67, v68 and v69 in the order production applies them.
  *
  * The tests marked "review:" are the independent review's findings, each kept
- * as the regression test that failed before v68; "second review:" are the
- * second review's, which failed before the fix beside them.
+ * as the regression test that failed before v68; "second review:" and "third
+ * review:" are the later reviews', each failing before the fix beside it.
+ * "pinned:" tests hold a boundary those fixes rely on, true before them too;
+ * "known limit:" tests hold a limit chosen on purpose, said in the headers.
  *
  * Every family, dancer and email here is invented. The repo is public.
  */
@@ -40,6 +42,7 @@ const read = (path) => readFileSync(`${root}${path}`, 'utf8');
 const SCHEMA = read('scripts/sql-tests/schema.sql');
 const V67 = read('supabase-migration-v67-enrollment-import.sql');
 const V68 = read('supabase-migration-v68-enrollment-import-review-fixes.sql');
+const V69 = read('supabase-migration-v69-enrollment-import-second-review.sql');
 const ROSTER_IMPORT = read('scripts/sql-tests/live-admin-roster-import.sql');
 
 const ADMIN = '00000000-0000-4000-8000-00000000a001';
@@ -61,6 +64,7 @@ const studio = async (today = '2026-10-01') => {
   await db.exec(SCHEMA);
   await db.exec(V67);
   await db.exec(V68);
+  await db.exec(V69);
   await db.exec(ROSTER_IMPORT);
   await db.query(
     `insert into profiles (id, email, role) values ($1, 'office@example.com', 'admin'), ($2, 'teacher@example.com', 'team')`,
@@ -266,6 +270,7 @@ test('second review: running v68 again after the starting point keeps the memory
   await recordStart(db, file);
 
   await db.exec(V68);
+  await db.exec(V69);
   const p = await preview(db, file);
   assert.equal(p.first_import, false);
   assert.deepEqual([p.adds, p.drops, p.unassigned], [[], [], []]);
@@ -461,7 +466,7 @@ test('All Students naming more dancers than the app has stops the one-dancer rul
   const p = await preview(db, [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)], { students: ['Maya Alvarez', 'Tomas Alvarez'] })]);
   assert.deepEqual(p.adds, []);
   assert.equal(p.unassigned[0].reason, 'export_names_unknown_dancer');
-  assert.deepEqual(p.unassigned[0].unknown_names, ['Tomas Alvarez']);
+  assert.deepEqual(p.unassigned[0].unknown_names, [{ name: 'Tomas Alvarez', likely: null }]);
 });
 
 test('review: All Students naming ONLY a dancer the app has not met stops the one-dancer rule', async () => {
@@ -474,7 +479,8 @@ test('review: All Students naming ONLY a dancer the app has not met stops the on
   // the little sibling's, and the 14-year-old must not be enrolled.
   const p = await preview(s.db, [ALVAREZ([tag(TEEN_HIPHOP), tag(MINI_JAZZ)], { students: ['Tomas Alvarez'] })]);
   assert.deepEqual(p.adds, []);
-  assert.deepEqual(p.unassigned.map((u) => [u.reason, u.unknown_names]), [['export_names_unknown_dancer', ['Tomas Alvarez']]]);
+  assert.deepEqual(p.unassigned.map((u) => [u.reason, u.unknown_names]),
+    [['export_names_unknown_dancer', [{ name: 'Tomas Alvarez', likely: null }]]]);
 });
 
 test('review: siblings — one known name and one unknown is not "two names, two dancers"', async () => {
@@ -605,13 +611,13 @@ test('review: a second contact on an address the app does not know joins the fam
 
   const file = [
     // Parent 1: matched by contact id, address changed in Enrolio.
-    contact({ id: 'c-300', email: 'new-address@example.com', tags: [tag(JUNIOR_BALLET), tag(TURNS)], row: 2 }),
+    contact({ id: 'c-300', email: 'new-address@example.com', tags: [tag(JUNIOR_BALLET), tag(OPEN_TAP)], row: 2 }),
     // Parent 2: same new address, a contact id the app has never seen.
-    contact({ id: 'c-301', email: 'new-address@example.com', tags: [tag(TURNS)], students: ['Ingrid Eriksen'], row: 3 }),
+    contact({ id: 'c-301', email: 'new-address@example.com', tags: [tag(OPEN_TAP)], students: ['Ingrid Eriksen'], row: 3 }),
   ];
   const p = await preview(s.db, file);
   assert.deepEqual(p.new_families, []);
-  assert.deepEqual(names(p.adds), ['Ingrid Eriksen → Petite Turns & Jumps']);
+  assert.deepEqual(names(p.adds), ['Ingrid Eriksen → Open Tap']);
   assert.deepEqual(p.merged_contacts.map((m) => m.contacts), [2]);
 
   await apply(s.db, file);
@@ -674,7 +680,8 @@ test('review: a family the sync has never seen, which existed at the starting po
   const p = await preview(s.db, file);
   assert.deepEqual(p.adds, []);
   assert.deepEqual(p.first_seen_families.map((f) => [f.email, f.tags]), [['gupta@example.com', 3]]);
-  assert.equal(p.counts.memory_changes, 3);
+  assert.deepEqual(p.memory_changes, { added: 3, removed: 0, families_seen: 1 });
+  assert.equal(p.counts.memory_changes, 4);
 
   await apply(s.db, file);
   // Recorded: from now on this family is diffed like any other.
@@ -819,11 +826,25 @@ test('review: a tag for a class switched off in the app never enrols', async () 
 
 test('a whole class emptying at once is called out — it is usually a renamed class', async () => {
   const { db, maya, cls } = await oneDancerFamily();
+  const hh = await household(db, 'c-500', 'gupta@example.com', 'Gupta');
+  const eli = await dancer(db, hh, 'Eli', 'Gupta', '2018-01-01');
+  await enrol(db, maya, cls[TURNS]);
+  await enrol(db, eli, cls[TURNS]);
+  const gupta = (tags) => contact({ id: 'c-500', email: 'gupta@example.com', tags });
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)]), gupta([tag(TURNS)])]);
+
+  const renamed = 'petite turns & jumps (kai/th-4pm)';
+  const p = await preview(db, [ALVAREZ([tag(MINI_JAZZ), renamed]), gupta([renamed])]);
+  assert.deepEqual(p.whole_class_drops.map((w) => [w.class_name, w.dropping, w.families]), [['Petite Turns & Jumps', 2, 2]]);
+});
+
+test('known limit: a class only one family in the file is tagged for is never called out — a rename looks like a leaver', async () => {
+  const { db, maya, cls } = await oneDancerFamily();
   await enrol(db, maya, cls[TURNS]);
   await recordStart(db, [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)])]);
-
   const p = await preview(db, [ALVAREZ([tag(MINI_JAZZ), 'petite turns & jumps (kai/th-4pm)'])]);
-  assert.deepEqual(p.whole_class_drops.map((w) => [w.class_name, w.dropping]), [['Petite Turns & Jumps', 1]]);
+  assert.equal(p.counts.drops, 1);
+  assert.deepEqual(p.whole_class_drops, []);
 });
 
 test('review: the whole-class warning counts only families in the file', async () => {
@@ -832,53 +853,73 @@ test('review: the whole-class warning counts only families in the file', async (
   const maya = await dancer(s.db, a, 'Maya', 'Alvarez', '2019-03-02');
   const b = await household(s.db, 'c-500', 'gupta@example.com', 'Gupta');
   const eli = await dancer(s.db, b, 'Eli', 'Gupta', '2018-01-01');
+  const c = await household(s.db, 'c-600', 'haddad@example.com', 'Haddad');
+  const omar = await dancer(s.db, c, 'Omar', 'Haddad', '2018-05-01');
   await enrol(s.db, maya, s.cls[TURNS]);
   await enrol(s.db, eli, s.cls[TURNS]);
-  await recordStart(s.db, [ALVAREZ([tag(TURNS)]), contact({ id: 'c-500', email: 'gupta@example.com', tags: [tag(TURNS)] })]);
+  await enrol(s.db, omar, s.cls[TURNS]);
+  const haddad = (tags) => contact({ id: 'c-600', email: 'haddad@example.com', tags });
+  await recordStart(s.db, [ALVAREZ([tag(TURNS)]), contact({ id: 'c-500', email: 'gupta@example.com', tags: [tag(TURNS)] }),
+    haddad([tag(TURNS)])]);
   // Renamed in Enrolio; Gupta happens to be missing from this export.
-  const p = await preview(s.db, [ALVAREZ(['petite turns & jumps (kai/th-4pm)'])]);
-  assert.equal(p.whole_class_drops.length, 1);
+  const renamed = 'petite turns & jumps (kai/th-4pm)';
+  const p = await preview(s.db, [ALVAREZ([renamed]), haddad([renamed])]);
+  assert.deepEqual(p.whole_class_drops.map((w) => [w.dropping, w.families]), [[2, 2]]);
 });
 
 // ------------------------------------------------------------------- guards
 
-test('a dancer marked in today\'s class cannot be dropped as of yesterday', async () => {
+test('a dancer marked in today\'s class is not dropped as of yesterday — that place is held', async () => {
   const { db, maya, cls } = await oneDancerFamily();
   await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
   await mark(db, maya, cls[MINI_JAZZ], await session(db, cls[MINI_JAZZ], '2026-10-01'), 'absent');
 
   const file = [ALVAREZ([tag(TURNS)])];
   const p = await preview(db, file);
-  assert.deepEqual(p.blocked.map((b) => [b.reason, b.student_name, b.on]),
+  assert.deepEqual(p.blocked, []);
+  assert.deepEqual(p.drops, []);
+  assert.deepEqual(p.held_drops.map((h) => [h.reason, h.student_name, h.on]),
     [['marked_after_drop_day', 'Maya Alvarez', '2026-10-01']]);
-  await assert.rejects(() => sync(db, file, 'apply', p.plan_hash), /sync again tomorrow/);
-  assert.equal((await enrolments(db))[0].status, 'active');
+  // The rest of the file goes through; the held place stays, and stays remembered.
+  const done = await sync(db, file, 'apply', p.plan_hash);
+  assert.deepEqual([done.counts.adds, done.counts.drops], [1, 0]);
+  assert.equal((await enrolments(db)).find((e) => e.class === tag(MINI_JAZZ)).status, 'active');
 
   // Tomorrow the drop day is today, and the mark sits inside the window.
   await setToday(db, '2026-10-02');
   const next = await apply(db, file);
-  assert.equal(next.counts.drops, 1);
+  assert.deepEqual([next.counts.adds, next.counts.drops, next.counts.held_drops], [0, 1, 0]);
   assert.equal((await enrolments(db)).find((e) => e.class === tag(MINI_JAZZ)).dropped_on, '2026-10-01');
 });
 
-test('a drop must match exactly one active place', async () => {
+test('a drop that would match two active places is held, not guessed — and the rest goes through', async () => {
   const { db, maya, cls } = await oneDancerFamily();
   await enrol(db, maya, cls[MINI_JAZZ], { season: '2025-2026', on: '2025-09-01' });
   await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
 
   const file = [ALVAREZ([tag(TURNS)])];
   const p = await preview(db, file);
-  assert.ok(p.blocked.some((b) => b.reason === 'several_active_enrollments'));
-  await assert.rejects(() => sync(db, file, 'apply', p.plan_hash), /ambiguous/);
+  assert.deepEqual(p.blocked, []);
+  assert.deepEqual(p.drops, []);
+  assert.deepEqual(p.held_drops.map((h) => [h.reason, h.student_name]), [['several_active_places', 'Maya Alvarez']]);
+  assert.deepEqual(names(p.adds), ['Maya Alvarez → Petite Turns & Jumps']);
+  await sync(db, file, 'apply', p.plan_hash);
+  assert.deepEqual((await enrolments(db)).filter((e) => e.class === tag(MINI_JAZZ)).map((e) => e.status), ['active', 'active']);
+
+  // Once the extra place is ended by hand, the next sync drops the other.
+  await db.query(`update portal_enrollments set status = 'dropped', dropped_on = '2026-06-01' where season = '2025-2026'`);
+  await setToday(db, '2026-10-02');
+  assert.deepEqual(names((await preview(db, file)).drops), ['Maya Alvarez → Mini Jazz 1']);
 });
 
-test('a place added today cannot be dropped as of yesterday', async () => {
+test('a place added today is not dropped as of yesterday — it is held', async () => {
   const { db } = await oneDancerFamily();
   await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
   await apply(db, [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)])]);
 
   const p = await preview(db, [ALVAREZ([tag(MINI_JAZZ)])]);
-  assert.deepEqual(p.blocked.map((b) => [b.reason, b.on]), [['enrolled_after_drop_day', '2026-10-01']]);
+  assert.deepEqual(p.blocked, []);
+  assert.deepEqual(p.held_drops.map((h) => [h.reason, h.on]), [['starts_after_drop_day', '2026-10-01']]);
 });
 
 test('review: an export whose Tags came out empty is refused, not a mass drop', async () => {
@@ -948,7 +989,7 @@ test('review: a week with no roster change still saves what changed in the tags'
   const week1 = [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)])];
   const p1 = await preview(db, week1);
   assert.equal(p1.counts.adds + p1.counts.drops + p1.counts.new_families, 0);
-  assert.deepEqual(p1.memory_changes, { added: 1, removed: 0 });
+  assert.deepEqual(p1.memory_changes, { added: 1, removed: 0, families_seen: 0 });
   await sync(db, week1, 'apply', p1.plan_hash);
 
   // Maya leaves Turns; Enrolio removes the tag — now a drop, not a miss.
@@ -966,7 +1007,7 @@ test('review: a sticky tag removed in a quiet week is forgotten, so a real re-jo
   const quiet = [ALVAREZ([tag(MINI_JAZZ)])];
   const p1 = await preview(db, quiet);
   assert.equal(p1.counts.adds + p1.counts.drops, 0);
-  assert.deepEqual(p1.memory_changes, { added: 0, removed: 1 });
+  assert.deepEqual(p1.memory_changes, { added: 0, removed: 1, families_seen: 0 });
   await sync(db, quiet, 'apply', p1.plan_hash);
 
   // Weeks later Maya really joins Turns, and Enrolio tags the family again.
@@ -983,6 +1024,344 @@ test('review: the run log, not the activity log, says when the last sync was', a
   await db.query(`select public.log_activity('enrollments_imported', 'enrollment', null, 'x', '{"as_of":"2099-12-31"}'::jsonb, 'success')`);
   await signIn(db, ADMIN);
   assert.equal((await preview(db, [ALVAREZ([tag(MINI_JAZZ)])])).last_sync_on, '2026-10-01');
+});
+
+// ---------------------------------------------------- the second review (v69)
+
+test('second review: a large addition must be confirmed, like a large drop', async () => {
+  const { db } = await oneDancerFamily();
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+  // The wrong export: past families the app never had, each with an old tag.
+  const all = [ALVAREZ([tag(MINI_JAZZ)])].concat(Array.from({ length: 12 }, (_, i) => contact({
+    id: `old-${i}`, email: `past${i}@example.com`, students: [`Kid${i} Past${i}`], tags: [tag(OPEN_TAP)], row: i + 3,
+  })));
+  const p = await preview(db, all);
+  assert.deepEqual([p.counts.new_families, p.counts.adds, p.confirm_adds, p.confirm_drops], [12, 12, true, false]);
+  await assert.rejects(() => sync(db, all, 'apply', p.plan_hash), /This sync adds 12 places and creates 12 new families\. Tick the confirmation/);
+  assert.equal((await db.query(`select count(*)::int as n from portal_households`)).rows[0].n, 1);
+
+  const done = await sync(db, all, 'apply', p.plan_hash, true);
+  assert.equal(done.counts.new_families, 12);
+});
+
+test('pinned: a tenth of the places needs at least five drops before it asks', async () => {
+  const s = await studio();
+  const file = [];
+  for (let i = 0; i < 5; i++) {
+    const hh = await household(s.db, `c-${i}`, `f${i}@example.com`, `F${i}`);
+    const kid = await dancer(s.db, hh, `Kid${i}`, `F${i}`, '2019-01-01');
+    await enrol(s.db, kid, s.cls[MINI_JAZZ]);
+    await enrol(s.db, kid, s.cls[OPEN_TAP]);
+    file.push(contact({ id: `c-${i}`, email: `f${i}@example.com`, tags: [tag(MINI_JAZZ), tag(OPEN_TAP)], row: i + 2 }));
+  }
+  await recordStart(s.db, file);
+  const leaving = (n) => file.map((c, i) => (i < n ? { ...c, tags: [tag(OPEN_TAP)] } : c));
+  assert.equal((await preview(s.db, leaving(4))).confirm_drops, false); // 4 of 10 places
+  assert.equal((await preview(s.db, leaving(5))).confirm_drops, true);  // 5 of 10
+});
+
+test('second review: the name rule — same first name, surname a middle name, a part or a letter or two away', async () => {
+  const { db } = await studio();
+  const close = async (name, first, last) =>
+    (await db.query(`select public.portal_enrollment_name_close($1, $2, $3) as ok`, [name, first, last])).rows[0].ok;
+  assert.equal(await close('Ana Maria Lopez', 'Ana', 'Lopez'), true);        // a middle name
+  assert.equal(await close('Ana Lopez Garcia', 'Ana', 'Lopez'), true);       // a second surname
+  assert.equal(await close('Ana Lopez-Garcia', 'Ana', 'Lopez'), true);       // ...hyphenated
+  assert.equal(await close('Ana Lopez', 'Ana', 'Lopez-Garcia'), true);       // one of two surnames
+  assert.equal(await close('Ana Lopez-Garcia', 'Ana', 'Lopez Garcia'), true);
+  assert.equal(await close('Ana Lopes', 'Ana', 'Lopez'), true);              // a letter
+  assert.equal(await close('Ana Lpez', 'Ana', 'Lopez'), true);
+  assert.equal(await close('Ana Lu', 'Ana', 'Li'), true);                    // a short surname: one letter
+  assert.equal(await close('Ana Wu', 'Ana', 'Li'), false);                   // ...two is another name
+  assert.equal(await close('Ana Ruiz', 'Ana', 'Lopez'), false);              // another surname
+  assert.equal(await close('Eva Lopez', 'Ana', 'Lopez'), false);             // another first name
+  assert.equal(await close('Ana', 'Ana', 'Lopez'), false);                   // nothing to compare
+  const distance = async (a, b) =>
+    (await db.query(`select public.portal_enrollment_edit_distance($1, $2) as d`, [a, b])).rows[0].d;
+  assert.deepEqual([await distance('kitten', 'sitting'), await distance('', 'abc'), await distance('same', 'same')], [3, 3, 0]);
+});
+
+test('second review: a dancer spelled a little differently in Enrolio is still that dancer, and it is listed', async () => {
+  const { db } = await oneDancerFamily();
+  await recordStart(db, [ALVAREZ([tag(OPEN_TAP)])]);
+  for (const spelled of ['Maya Lucia Alvarez', 'Maya Alvares', 'Maya Alvarez Ruiz', 'Maya Alvarez-Ruiz']) {
+    const p = await preview(db, [ALVAREZ([tag(OPEN_TAP), tag(TURNS)], { students: [spelled] })]);
+    assert.deepEqual(names(p.adds), ['Maya Alvarez → Petite Turns & Jumps'], spelled);
+    assert.deepEqual(p.spelling_matches.map((m) => [m.export_name, m.dancer]), [[spelled, 'Maya Alvarez']], spelled);
+  }
+});
+
+test('second review: a first name spelled differently still waits for a person, shown with its likely dancer', async () => {
+  const { db } = await oneDancerFamily();
+  await recordStart(db, [ALVAREZ([tag(OPEN_TAP)])]);
+  const p = await preview(db, [ALVAREZ([tag(OPEN_TAP), tag(TURNS)], { students: ['Mya Alvarez'] })]);
+  assert.deepEqual(p.adds, []);
+  assert.deepEqual(p.unassigned.map((u) => [u.reason, u.unknown_names]),
+    [['export_names_unknown_dancer', [{ name: 'Mya Alvarez', likely: 'Maya Alvarez' }]]]);
+  assert.deepEqual(p.spelling_matches, []);
+});
+
+test('third review: a dancer marked inactive, named in All Students, holds the family\'s new classes — not given to a sibling', async () => {
+  const { db, hh } = await oneDancerFamily(); // Maya, 7
+  const tomas = await dancer(db, hh, 'Tomas', 'Alvarez', '2016-03-02'); // 10, stopped last year
+  await db.query(`update portal_students set status = 'inactive' where id = $1`, [tomas]);
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+
+  // Junior Ballet (8–11) is surely Tomas's, back again — not Maya's, a year under.
+  for (const students of [['Maya Alvarez', 'Tomas Alvarez'], ['Tomas Alvarez']]) {
+    const p = await preview(db, [ALVAREZ([tag(MINI_JAZZ), tag(JUNIOR_BALLET)], { students })]);
+    assert.deepEqual(p.adds, [], students.join());
+    assert.deepEqual(p.unassigned.map((u) => [u.reason, u.inactive_names, u.unknown_names]),
+      [['export_names_inactive_dancer', [{ name: 'Tomas Alvarez', dancer: 'Tomas Alvarez' }], []]], students.join());
+  }
+});
+
+test('second review: a one-dancer family\'s new class 3 or more years outside the dancer\'s age waits for a person', async () => {
+  const s = await studio();
+  const hh = await household(s.db, 'c-300', 'eriksen@example.com', 'Eriksen');
+  await dancer(s.db, hh, 'Ingrid', 'Eriksen', '2013-04-04'); // 13
+  await recordStart(s.db, [contact({ id: 'c-300', email: 'eriksen@example.com', tags: [tag(TEEN_HIPHOP)] })]);
+
+  const p = await preview(s.db, [contact({ id: 'c-300', email: 'eriksen@example.com',
+    tags: [tag(TEEN_HIPHOP), tag(JUNIOR_BALLET), tag(TURNS), tag(MINI_JAZZ), tag(OPEN_TAP)] })]);
+  // Junior Ballet (8–11) is 2 years off and Open Tap has no range: hers, as the
+  // office would place her. Turns (6–9, 4 off) and Mini Jazz (5–7, 6 off) are
+  // more likely a child the app does not have yet.
+  assert.deepEqual(names(p.adds), ['Ingrid Eriksen → Junior Ballet 2', 'Ingrid Eriksen → Open Tap']);
+  assert.deepEqual(p.unassigned.map((u) => [u.class_name, u.reason, u.dancers]), [
+    ['Mini Jazz 1', 'only_dancer_outside_age_range', [{ name: 'Ingrid Eriksen', age: 13 }]],
+    ['Petite Turns & Jumps', 'only_dancer_outside_age_range', [{ name: 'Ingrid Eriksen', age: 13 }]],
+  ]);
+});
+
+test('pinned: with no birthday on file, the one dancer still takes a new class', async () => {
+  const s = await studio();
+  const hh = await household(s.db, 'c-300', 'eriksen@example.com', 'Eriksen');
+  await dancer(s.db, hh, 'Ingrid', 'Eriksen', null);
+  await recordStart(s.db, [contact({ id: 'c-300', email: 'eriksen@example.com', tags: [tag(TEEN_HIPHOP)] })]);
+  const p = await preview(s.db, [contact({ id: 'c-300', email: 'eriksen@example.com', tags: [tag(TEEN_HIPHOP), tag(MINI_JAZZ)] })]);
+  assert.deepEqual(names(p.adds), ['Ingrid Eriksen → Mini Jazz 1']);
+});
+
+test('second review: a family first seen with no class tag is saved as seen, so its next real class is placed', async () => {
+  const s = await studio();
+  const a = await household(s.db, 'c-100', 'alvarez@example.com', 'Alvarez');
+  await dancer(s.db, a, 'Maya', 'Alvarez', '2019-03-02');
+  const g = await household(s.db, 'c-500', 'gupta@example.com', 'Gupta');
+  await dancer(s.db, g, 'Eli', 'Gupta', '2016-01-01'); // 10
+  // Gupta was on a break, and absent from the starting-point file.
+  await recordStart(s.db, [ALVAREZ([tag(MINI_JAZZ)])]);
+
+  // Back in the export with no class tag yet: nothing to place, one family to see.
+  await setToday(s.db, '2026-10-05');
+  const week1 = [ALVAREZ([tag(MINI_JAZZ)]), contact({ id: 'c-500', email: 'gupta@example.com', tags: ['current family'] })];
+  const p1 = await preview(s.db, week1);
+  assert.equal(p1.counts.adds + p1.counts.drops + p1.counts.new_families, 0);
+  assert.deepEqual(p1.memory_changes, { added: 0, removed: 0, families_seen: 1 });
+  assert.equal(p1.counts.memory_changes, 1);
+  await sync(s.db, week1, 'apply', p1.plan_hash);
+
+  // Eli really joins Junior Ballet.
+  await setToday(s.db, '2026-10-12');
+  const p2 = await preview(s.db, [ALVAREZ([tag(MINI_JAZZ)]),
+    contact({ id: 'c-500', email: 'gupta@example.com', tags: [tag(JUNIOR_BALLET)] })]);
+  assert.deepEqual(p2.first_seen_families, []);
+  assert.deepEqual(names(p2.adds), ['Eli Gupta → Junior Ballet 2']);
+});
+
+test('second review: a dancer back in a class a season later is placed — last season\'s place covers its marks', async () => {
+  const { db, maya, cls } = await oneDancerFamily();
+  // Last season Maya took Turns (the same class row: v50 updates a class in
+  // place), completed it, and was marked while she held it.
+  await enrol(db, maya, cls[TURNS], { season: '2025-2026', on: '2025-09-01', status: 'completed', dropped: '2026-06-01' });
+  await mark(db, maya, cls[TURNS], await session(db, cls[TURNS], '2025-10-06'));
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+
+  const p = await preview(db, [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)])]);
+  assert.deepEqual(p.conflicts, []);
+  assert.deepEqual(names(p.adds), ['Maya Alvarez → Petite Turns & Jumps']);
+});
+
+test('second review: a place not started yet whose tag is gone is held — another family\'s place still goes through', async () => {
+  const s = await studio();
+  const a = await household(s.db, 'c-100', 'alvarez@example.com', 'Alvarez');
+  const maya = await dancer(s.db, a, 'Maya', 'Alvarez', '2019-03-02');
+  await enrol(s.db, maya, s.cls[TURNS], { on: '2026-11-02' }); // registered ahead
+  const g = await household(s.db, 'c-500', 'gupta@example.com', 'Gupta');
+  await dancer(s.db, g, 'Eli', 'Gupta', '2016-01-01'); // 10
+  await recordStart(s.db, [ALVAREZ([tag(TURNS)]), contact({ id: 'c-500', email: 'gupta@example.com', tags: [tag(OPEN_TAP)] })]);
+
+  const file = [ALVAREZ([]), contact({ id: 'c-500', email: 'gupta@example.com', tags: [tag(OPEN_TAP), tag(JUNIOR_BALLET)] })];
+  await setToday(s.db, '2026-10-15');
+  const p = await preview(s.db, file);
+  assert.deepEqual(p.blocked, []);
+  assert.deepEqual(p.held_drops.map((h) => [h.reason, h.on]), [['starts_after_drop_day', '2026-11-02']]);
+  assert.deepEqual(names(p.adds), ['Eli Gupta → Junior Ballet 2']);
+  await sync(s.db, file, 'apply', p.plan_hash);
+
+  // Still remembered: once the place has begun, a sync drops it.
+  await setToday(s.db, '2026-11-09');
+  assert.deepEqual(names((await preview(s.db, file)).drops), ['Maya Alvarez → Petite Turns & Jumps']);
+});
+
+test('second review: a mark made after the preview holds its drop, and the preview is refused as stale', async () => {
+  const { db, maya, cls } = await oneDancerFamily();
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+  const file = [ALVAREZ([tag(OPEN_TAP)])];
+  const p = await preview(db, file);
+  assert.equal(p.counts.drops, 1);
+  await mark(db, maya, cls[MINI_JAZZ], await session(db, cls[MINI_JAZZ], '2026-10-01'));
+  await assert.rejects(() => sync(db, file, 'apply', p.plan_hash), /changed since this preview/);
+  assert.equal((await enrolments(db)).find((e) => e.class === tag(MINI_JAZZ)).status, 'active');
+});
+
+test('second review: a place added by hand without a tag does not silence the whole-class warning', async () => {
+  const s = await studio();
+  const a = await household(s.db, 'c-100', 'alvarez@example.com', 'Alvarez');
+  const maya = await dancer(s.db, a, 'Maya', 'Alvarez', '2019-03-02');
+  const g = await household(s.db, 'c-500', 'gupta@example.com', 'Gupta');
+  const eli = await dancer(s.db, g, 'Eli', 'Gupta', '2018-01-01');
+  const h = await household(s.db, 'c-600', 'haddad@example.com', 'Haddad');
+  const omar = await dancer(s.db, h, 'Omar', 'Haddad', '2018-05-01');
+  for (const kid of [maya, eli, omar]) await enrol(s.db, kid, s.cls[TURNS]);
+  // Haddad was placed by hand and never tagged for Turns.
+  const haddad = contact({ id: 'c-600', email: 'haddad@example.com', tags: [tag(OPEN_TAP)] });
+  await recordStart(s.db, [ALVAREZ([tag(TURNS)]), contact({ id: 'c-500', email: 'gupta@example.com', tags: [tag(TURNS)] }), haddad]);
+
+  // Renamed in Enrolio: every tagged family loses the old title at once.
+  const renamed = 'petite turns & jumps (kai/th-4pm)';
+  const p = await preview(s.db, [ALVAREZ([renamed]), contact({ id: 'c-500', email: 'gupta@example.com', tags: [renamed] }), haddad]);
+  assert.equal(p.counts.drops, 2);
+  assert.deepEqual(p.whole_class_drops.map((w) => [w.class_name, w.dropping]), [['Petite Turns & Jumps', 2]]);
+});
+
+test('second review: a title shared by switched-off classes only is refused in words that fit', async () => {
+  const { db } = await oneDancerFamily();
+  await db.query(`insert into portal_classes (name, external_class_id, season, is_active)
+                  values ('Old Jazz', 'old jazz (x/m-5pm)', '2025-2026', false), ('Old Jazz', 'old jazz (x/m-5pm)', '2024-2025', false)`);
+  const file = [ALVAREZ([tag(MINI_JAZZ), 'old jazz (x/m-5pm)'])];
+  const p = await preview(db, file);
+  assert.deepEqual(p.blocked.map((b) => [b.reason, b.detail]), [['duplicate_class_title', 'old jazz (x/m-5pm)']]);
+  await assert.rejects(() => sync(db, file, 'baseline', p.baseline_hash),
+    (e) => !/two active|none is/i.test(e.message) && /keep exactly one of them switched on/.test(e.message));
+});
+
+test('third review: the name rule wants the whole first name, and no initial or particle as a surname', async () => {
+  const { db } = await studio();
+  const close = async (name, first, last) =>
+    (await db.query(`select public.portal_enrollment_name_close($1, $2, $3) as ok`, [name, first, last])).rows[0].ok;
+  assert.equal(await close('Mary Kate Smith', 'Mary-Kate', 'Smith'), true);   // the whole first name, spaced
+  assert.equal(await close('Mary-Kate Smyth', 'Mary-Kate', 'Smith'), true);
+  assert.equal(await close('Mary Smith', 'Mary-Kate', 'Smith'), false);       // a first word is not a first name
+  assert.equal(await close('Mary Anne Smith', 'Mary Kate', 'Smith'), false);  // ...nor a sibling's
+  assert.equal(await close('Ana L Garcia', 'Ana', 'Li'), false);              // an initial is not a surname
+  assert.equal(await close('Ana J Smith', 'Ana', 'L'), false);
+  assert.equal(await close('Ana De Leon', 'Ana', 'De La Cruz'), false);       // nor is a particle
+  assert.equal(await close('Ana Cruz', 'Ana', 'De La Cruz'), true);           // the surname's own part is
+  assert.equal(await close('Ana Delacruz', 'Ana', 'De La Cruz'), true);
+  const key = async (v) => (await db.query(`select public.portal_enrollment_name_key($1) as k`, [v])).rows[0].k;
+  assert.deepEqual([await key('Zoë  Núñez'), await key('ÉLODIE O&rsquo;Brien'), await key("Liam O'Brien*")],
+    ['zoenunez', 'elodieobrien', 'liamobrien']);
+});
+
+test('third review: a sister listed beside her sibling is not that sibling with a middle name', async () => {
+  const s = await studio();
+  const hh = await household(s.db, 'c-100', 'smith@example.com', 'Smith');
+  await dancer(s.db, hh, 'Mary', 'Smith', '2018-01-01'); // 8
+  const family = (students, tags) => contact({ id: 'c-100', email: 'smith@example.com', students, tags });
+  await recordStart(s.db, [family([], [tag(OPEN_TAP)])]);
+
+  const p = await preview(s.db, [family(['Mary Smith', 'Mary Kate Smith'], [tag(OPEN_TAP), tag(TURNS)])]);
+  assert.deepEqual(p.adds, []);
+  assert.deepEqual(p.spelling_matches, []);
+  assert.deepEqual(p.unassigned.map((u) => [u.reason, u.unknown_names]),
+    [['export_names_unknown_dancer', [{ name: 'Mary Kate Smith', likely: null }]]]);
+  // Alone, the same spelling is still Mary with a middle name.
+  const q = await preview(s.db, [family(['Mary Kate Smith'], [tag(OPEN_TAP), tag(TURNS)])]);
+  assert.deepEqual(names(q.adds), ['Mary Smith → Petite Turns & Jumps']);
+});
+
+test('third review: more particles are not surnames, and more letters are folded', async () => {
+  const { db } = await studio();
+  const close = async (name, first, last) =>
+    (await db.query(`select public.portal_enrollment_name_close($1, $2, $3) as ok`, [name, first, last])).rows[0].ok;
+  assert.equal(await close('Ana San Juan', 'Ana', 'San Martin'), false);
+  assert.equal(await close('Ana Della Rosa', 'Ana', 'Della Vecchia'), false);
+  const key = async (v) => (await db.query(`select public.portal_enrollment_name_key($1) as k`, [v])).rows[0].k;
+  assert.deepEqual([await key('Čeněk Novák'), await key('Łukasz Śmigły'), await key('Æsa Strauß'), await key('İlkay Ğüneş')],
+    ['ceneknovak', 'lukaszsmigly', 'aesastrauss', 'ilkaygunes']);
+});
+
+test('third review: an accent in one spelling and not the other is the same dancer', async () => {
+  const s = await studio();
+  const hh = await household(s.db, 'c-100', 'alvarez@example.com', 'Alvarez');
+  await dancer(s.db, hh, 'Zoë', 'Alvarez', '2019-03-02');
+  await recordStart(s.db, [ALVAREZ([tag(OPEN_TAP)])]);
+  const p = await preview(s.db, [ALVAREZ([tag(OPEN_TAP), tag(MINI_JAZZ)], { students: ['Zoe Alvarez'] })]);
+  assert.deepEqual(names(p.adds), ['Zoë Alvarez → Mini Jazz 1']);
+});
+
+test('third review: a likely match is never a dancer another name in the file already is', async () => {
+  const { db } = await oneDancerFamily(); // Maya Alvarez
+  await recordStart(db, [ALVAREZ([tag(OPEN_TAP)])]);
+  // Maya is listed rightly; Mya is a new sister, not a misspelling of her.
+  const p = await preview(db, [ALVAREZ([tag(OPEN_TAP), tag(TURNS)], { students: ['Maya Alvarez', 'Mya Alvarez'] })]);
+  assert.deepEqual(p.adds, []);
+  assert.deepEqual(p.unassigned.map((u) => u.unknown_names), [[{ name: 'Mya Alvarez', likely: null }]]);
+});
+
+test('third review: a mark before the start names the earliest one the place would have to cover', async () => {
+  const { db, maya, cls } = await oneDancerFamily();
+  await mark(db, maya, cls[TURNS], await session(db, cls[TURNS], '2026-09-10'));
+  await mark(db, maya, cls[TURNS], await session(db, cls[TURNS], '2026-09-24'));
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+  const p = await preview(db, [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)])]);
+  assert.deepEqual(p.conflicts.map((c) => [c.conflict, c.on]), [['marked_before_start', '2026-09-10']]);
+});
+
+test('third review: the whole-class warning is not raised for one ordinary leaver', async () => {
+  const s = await studio();
+  const a = await household(s.db, 'c-100', 'alvarez@example.com', 'Alvarez');
+  const maya = await dancer(s.db, a, 'Maya', 'Alvarez', '2019-03-02');
+  const h = await household(s.db, 'c-600', 'haddad@example.com', 'Haddad');
+  const omar = await dancer(s.db, h, 'Omar', 'Haddad', '2018-05-01');
+  await enrol(s.db, maya, s.cls[TURNS]);
+  await enrol(s.db, omar, s.cls[TURNS]); // placed by hand, never tagged
+  const haddad = contact({ id: 'c-600', email: 'haddad@example.com', tags: [tag(OPEN_TAP)] });
+  await recordStart(s.db, [ALVAREZ([tag(TURNS)]), haddad]);
+
+  const p = await preview(s.db, [ALVAREZ([tag(OPEN_TAP)]), haddad]);
+  assert.equal(p.counts.drops, 1);
+  assert.deepEqual(p.whole_class_drops, []);
+});
+
+test('third review: the whole-class warning counts dancers, with held places apart', async () => {
+  const s = await studio();
+  const a = await household(s.db, 'c-100', 'alvarez@example.com', 'Alvarez');
+  const maya = await dancer(s.db, a, 'Maya', 'Alvarez', '2019-03-02');
+  const g = await household(s.db, 'c-500', 'gupta@example.com', 'Gupta');
+  const eli = await dancer(s.db, g, 'Eli', 'Gupta', '2018-01-01');
+  await enrol(s.db, maya, s.cls[TURNS]);
+  await enrol(s.db, maya, s.cls[TURNS], { season: '2025-2026', on: '2025-09-01' }); // two places: held
+  await enrol(s.db, eli, s.cls[TURNS]);
+  const gupta = (tags) => contact({ id: 'c-500', email: 'gupta@example.com', tags });
+  await recordStart(s.db, [ALVAREZ([tag(TURNS)]), gupta([tag(TURNS)])]);
+
+  const renamed = 'petite turns & jumps (kai/th-4pm)';
+  const p = await preview(s.db, [ALVAREZ([renamed]), gupta([renamed])]);
+  assert.deepEqual(p.whole_class_drops.map((w) => [w.class_name, w.dropping, w.held, w.families]),
+    [['Petite Turns & Jumps', 1, 1, 2]]);
+});
+
+test('second review: running v69 again changes nothing', async () => {
+  const { db } = await oneDancerFamily();
+  const file = [ALVAREZ([tag(MINI_JAZZ), tag(TURNS)])];
+  await recordStart(db, file);
+  const before = await preview(db, file);
+  await db.exec(V69);
+  const after = await preview(db, file);
+  assert.equal(after.plan_hash, before.plan_hash);
+  assert.equal((await remembered(db)).length, 2);
 });
 
 // ------------------------------------------------ what must never move

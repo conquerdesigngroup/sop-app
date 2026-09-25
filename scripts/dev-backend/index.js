@@ -139,8 +139,8 @@ const handleAuth = (req, res, url, body) => {
  * is empty, the way re-syncing the same export is.
  *
  *   DEV_ROSTER_SYNC_FIRST=1    no starting point recorded yet
- *   DEV_ROSTER_SYNC_BLOCKED=1  a dancer marked today who is due to be dropped
- *   DEV_ROSTER_SYNC_CONFIRM=1  a drop large enough to need confirming
+ *   DEV_ROSTER_SYNC_BLOCKED=1  a class title two classes share, which stops the file
+ *   DEV_ROSTER_SYNC_CONFIRM=1  a drop and an addition large enough to need confirming
  */
 const rosterSync = {
   started: process.env.DEV_ROSTER_SYNC_FIRST !== '1',
@@ -188,13 +188,26 @@ const enrollmentImport = (body) => {
     email: household(student(0)).primary_email, age_min: null, age_max: null,
     reason: 'several_siblings_in_age_range',
     dancers: siblings.map((s, i) => ({ name: name(s), age: 7 + i * 3 })),
-    export_names: siblings.map(name), unknown_names: [], ...cls(8),
+    export_names: siblings.map(name), unknown_names: [], inactive_names: [], ...cls(8),
   }, {
     household_id: student(1).household_id, family: household(student(1)).display_name,
     email: household(student(1)).primary_email, age_min: 5, age_max: 7,
     reason: 'export_names_unknown_dancer',
     dancers: [{ name: name(student(1)), age: 12 }],
-    export_names: ['Tomas Boateng'], unknown_names: ['Tomas Boateng'], ...cls(3),
+    export_names: ['Tomas Boateng', 'Mya Boateng'],
+    unknown_names: [{ name: 'Mya Boateng', likely: name(student(1)) }, { name: 'Tomas Boateng', likely: null }],
+    inactive_names: [], ...cls(3),
+  }, {
+    household_id: student(2).household_id, family: household(student(2)).display_name,
+    email: household(student(2)).primary_email, age_min: 5, age_max: 7,
+    reason: 'only_dancer_outside_age_range',
+    dancers: [{ name: name(student(2)), age: 13 }], export_names: [], unknown_names: [], inactive_names: [], ...cls(4),
+  }, {
+    household_id: student(5).household_id, family: household(student(5)).display_name,
+    email: household(student(5)).primary_email, age_min: 8, age_max: 11,
+    reason: 'export_names_inactive_dancer',
+    dancers: [{ name: name(student(5)), age: 7 }], export_names: ['Tomas Duval'], unknown_names: [],
+    inactive_names: [{ name: 'Tomas Duval', dancer: 'Tomas Duval' }], ...cls(6),
   }];
   const wasDropped = db.portal_enrollments.find((e) => e.status === 'dropped');
   const conflicts = empty || !wasDropped ? [] : [{
@@ -203,11 +216,21 @@ const enrollmentImport = (body) => {
     family: null, conflict: 'already_dropped', on: wasDropped.dropped_on,
     ...cls(db.portal_classes.findIndex((c) => c.id === wasDropped.class_id)),
   }];
-  const blocked = process.env.DEV_ROSTER_SYNC_BLOCKED === '1' && drops.length ? [{
-    kind: 'drop', reason: 'marked_after_drop_day', on: today, detail: null,
-    student_name: drops[0].student_name, class_name: drops[0].class_name,
-    day_of_week: drops[0].day_of_week, start_time: drops[0].start_time,
+  const blocked = process.env.DEV_ROSTER_SYNC_BLOCKED === '1' ? [{
+    kind: 'class', reason: 'duplicate_class_title', on: null, detail: 'mini jazz 1 (dana/m-4pm)',
+    student_name: null, class_name: null, day_of_week: null, start_time: null,
   }] : [];
+  const heldDrops = empty ? [] : [{
+    student_id: student(3).id, student_name: name(student(3)), family: household(student(3)).display_name,
+    reason: 'marked_after_drop_day', on: today, ...cls(5),
+  }, {
+    student_id: student(4).id, student_name: name(student(4)), family: household(student(4)).display_name,
+    reason: 'starts_after_drop_day', on: new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10), ...cls(7),
+  }];
+  const spelling = empty ? [] : [{
+    family: household(student(0)).display_name, export_name: `${student(0).first_name} Maria ${student(0).last_name}`,
+    dancer: name(student(0)),
+  }];
   const newFamilies = [{
     row: 7, contact_id: 'dev-contact-7', email: 'haddad@localhost', contact_name: 'Sam Haddad',
     family: 'Haddad', dancers: ['Omar Haddad'],
@@ -219,8 +242,8 @@ const enrollmentImport = (body) => {
   const missing = db.portal_households.slice(-2).map((h, i) => ({
     household_id: h.id, family: h.display_name, email: h.primary_email, dancers: 1, active_enrollments: i,
   }));
-  const firstSeen = empty ? [] : db.portal_households.slice(2, 3).map((h) => ({
-    household_id: h.id, family: h.display_name, email: h.primary_email, tags: 3, active_enrollments: 1,
+  const firstSeen = empty ? [] : db.portal_households.slice(2, 4).map((h, i) => ({
+    household_id: h.id, family: h.display_name, email: h.primary_email, tags: i === 0 ? 3 : 0, active_enrollments: 1 - i,
   }));
   const unmatched = [
     { tag: 'mini jazz 1 (dana/m-5pm)', families: 4, looks_like_class: true },
@@ -242,8 +265,10 @@ const enrollmentImport = (body) => {
     plan_hash: `dev-plan-${rosterSync.applied ? 'done' : 'pending'}`,
     baseline_hash: 'dev-baseline',
     confirm_drops: process.env.DEV_ROSTER_SYNC_CONFIRM === '1' && drops.length > 0,
+    confirm_adds: process.env.DEV_ROSTER_SYNC_CONFIRM === '1' && adds.length > 0,
     adds: rosterSync.started ? adds : [],
     drops: rosterSync.started ? drops : [],
+    held_drops: rosterSync.started ? heldDrops : [],
     whole_class_drops: [],
     unassigned: rosterSync.started ? unassigned : [],
     conflicts: rosterSync.started ? conflicts : [],
@@ -257,17 +282,20 @@ const enrollmentImport = (body) => {
     held_untagged: heldUntagged,
     tagged_unheld: rosterSync.started ? sticky : [],
     unmatched_tags: unmatched,
-    memory_changes: { added: empty ? 0 : 3, removed: empty ? 0 : 1 },
+    spelling_matches: spelling,
+    memory_changes: { added: empty ? 0 : 3, removed: empty ? 0 : 1, families_seen: firstSeen.length },
     baseline_counts: { families: Math.max(contacts.length - 1, 0), tags: 42 },
   };
   plan.counts = {
     contacts: contacts.length, families: Math.max(contacts.length - 1, 0), adds: plan.adds.length,
-    drops: plan.drops.length, unassigned: plan.unassigned.length, conflicts: plan.conflicts.length,
+    drops: plan.drops.length, held_drops: plan.held_drops.length,
+    unassigned: plan.unassigned.length, conflicts: plan.conflicts.length,
     blocked: blocked.length, first_seen_families: firstSeen.length, new_families: newFamilies.length,
     new_dancers: newFamilies.length, not_imported: notImported.length, merged_contacts: 1,
     email_conflicts: plan.email_conflicts.length, missing_families: missing.length,
     held_untagged: heldUntagged.length, tagged_unheld: plan.tagged_unheld.length,
-    memory_changes: plan.memory_changes.added + plan.memory_changes.removed,
+    spelling_matches: spelling.length,
+    memory_changes: plan.memory_changes.added + plan.memory_changes.removed + plan.memory_changes.families_seen,
     unmatched_class_tags: unmatched.filter((t) => t.looks_like_class).length,
   };
 

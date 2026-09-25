@@ -306,15 +306,16 @@ screen, into both exports, and onto the parent's own card.
 
 ---
 
-# Roster sync (v67 + v68, 2026-09-24)
+# Roster sync (v67, v68, v69 — 2026-09-24)
 
 Class rosters (`portal_enrollments`) are synced from Enrolio's **Export
 Contacts → Current Families** CSV in Portal Manager → Classes → **Sync
 rosters**: choose the file, read the preview, apply. It replaces the
 hand-written SQL of 2026-09-11 and 2026-09-24. The rules, and why each one is
-there, are in the headers of `supabase-migration-v67-enrollment-import.sql`
-and `…-v68-enrollment-import-review-fixes.sql` (v68 is the review's
-corrections; read it second).
+there, are in the headers of `supabase-migration-v67-enrollment-import.sql`,
+`…-v68-enrollment-import-review-fixes.sql` and
+`…-v69-enrollment-import-second-review.sql` — v68 and v69 are two independent
+reviews' corrections; read them in order.
 
 What to know before touching it:
 
@@ -328,31 +329,60 @@ What to know before touching it:
 - **The first run records a starting point and changes nothing.** Apply is
   refused until then, and a starting point is refused once one exists. The
   right file is the one the rosters were last brought up to date with — the
-  24 Sep export, for this studio. The reset, if it was the wrong file, is three
-  `delete`s in v68's header.
+  24 Sep export, for this studio, recorded under v68. The reset, if it was the
+  wrong file, is three `delete`s in v68's header.
 - **Families the sync has never seen** (`portal_enrollment_import_seen`): one
   that already existed at the starting point has its tags recorded and nothing
   acted on, and is listed for a person; one created since (the roster import,
-  a hand entry) is new, and its tags are new.
+  a hand entry) is new, and its tags are new. Being seen is saved even in a
+  week with nothing else to save.
+- **Names** (v69, agreed with the studio): a name in All Students with the
+  same whole first name as one of the family's students ("Mary Kate" or
+  "Mary-Kate", never "Mary" alone), and a surname a middle name, a second
+  surname or a letter or two away, is that student; accents are folded, and
+  initials and particles like "De" are not surname evidence. A close match
+  never stands for a student the same contact lists by exact name ("Mary Kate
+  Smith" beside "Mary Smith" is a sister). The preview lists each name taken
+  that way. The rule is safe only because two children in one family do not
+  share a first name. Any other name the app does not have
+  stops the one-dancer and age rules for that family's new tags, shown with
+  the student it perhaps is when one is close and no other name already is. A
+  name that is only a student marked inactive holds them too: probably someone
+  coming back, whose class must not go to a sibling.
+- **One dancer, far out of range** (v69, agreed with the studio): a one-dancer
+  family's new class is held for a person when the dancer is 3 or more years
+  outside its age range — more likely a child the app does not have yet.
+  Nearer than that, or with no birthday on file, the dancer takes it.
 - **Past rosters cannot move.** New places start on the import date, drops end
   the day before (or keep an earlier end already on the place), and apply
   fingerprints attendance, sessions, history and every roster before today on
   both sides of its writes (`select portal_attendance_fingerprint(studio_today())`
   is the same check by hand). A teacher's mark waits for a sync in flight
-  (`staff_mark_attendance` takes the sync's lock, shared). A dancer marked in
-  today's class cannot be dropped as of yesterday — that sync says "sync again
-  tomorrow" — so it is best run in the morning.
-- **Guards:** a file with no class tag is refused; a drop of 20 or more places,
-  or a tenth of what the families in the file hold, must be confirmed; an
-  export older than the last sync must be confirmed.
+  (`staff_mark_attendance` takes the sync's lock, shared). A mark last season's
+  place covers is not in the way of a new place.
+- **One place, not the whole file:** a drop that cannot be written safely — a
+  dancer marked since the drop day, a place that has not started, two active
+  places in one class — is held and listed for a person, its tag still
+  remembered so the next sync looks again. Only a file with no class tag and a
+  class title nothing can tell apart stop the whole file. Best run in the
+  morning, before the day's marks.
+- **Guards:** a drop of 20 or more places, or 5 or more that are a tenth of
+  what the families in the file hold, must be confirmed; so must 20 or more
+  places added, or 10 or more new families (the wrong export looks like that);
+  and an export older than the last sync. The whole-class warning counts only
+  places the sync could drop, and needs two families in the file losing the
+  tag at once: from one family a rename cannot be told from a leaver, so a
+  class only one family in the file is tagged for is never called out.
 - **What waits for a person, and comes back every sync until sorted:** several
   siblings or none in a class's age range, a dancer with no birthday yet, a
-  name in All Students the app does not have, a dancer tagged again for a class
-  they were dropped from, a class switched off, a mark before a new place's
-  start, a family seen for the first time, an email on two families. The
-  roster import resolves the birthday and unknown-dancer cases on its own; the
-  rest need a place added or ended by hand — **there is no enrolment editor in
-  the app yet**. That, as an "assign to…" on the preview, is the next piece.
+  name in All Students the app does not have or has marked inactive, a
+  one-dancer family far outside a class's range, a dancer tagged again for a
+  class they were dropped from, a class switched off, a mark before a new place's start, a held drop, an email
+  on two families. A family seen for the first time is listed once. The roster
+  import resolves the birthday cases, and a genuinely new dancer, on its own; a
+  name spelled differently needs the two spellings made to agree; the rest
+  need a place added or ended by hand — **there is no enrolment editor in the
+  app yet**. That, as an "assign to…" on the preview, is the next piece.
 - **Known limits:** a place a dancer holds in a class the family was never
   tagged for is never dropped (there is no tag to disappear; the preview lists
   them). Rule 7's new dancers are split on the last space; the roster import

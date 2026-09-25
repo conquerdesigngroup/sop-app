@@ -12,7 +12,7 @@ describe('runEnrollmentImport', () => {
   const contacts = [{ row: 2, contact_id: 'c-1', email: 'a@example.com', first_name: '', last_name: '', tags: [], students: [] }];
 
   it('sends the rows, the mode, the hash the preview gave and any confirmation', async () => {
-    mockRpc.mockResolvedValue({ data: { counts: {} }, error: null });
+    mockRpc.mockResolvedValue({ data: { counts: {}, held_drops: [] }, error: null });
     await runEnrollmentImport('apply', contacts, 'hash-1', 'contacts.csv', true);
     expect(mockRpc).toHaveBeenCalledWith('admin_enrollment_import', {
       p_contacts: contacts, p_mode: 'apply', p_expect: 'hash-1', p_filename: 'contacts.csv', p_confirm: true,
@@ -30,7 +30,16 @@ describe('runEnrollmentImport', () => {
   it('says plainly when the database does not have the sync yet', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
     await expect(runEnrollmentImport('preview', contacts, null, null))
-      .rejects.toThrow('Roster sync is not set up in the database yet (migration v68). Nothing was changed.');
+      .rejects.toThrow('Roster sync is not set up in the database yet (migration v69). Nothing was changed.');
+  });
+
+  // v68 has the same signature, so it answers — without what this screen reads.
+  it('says plainly when the database is a version behind the screen, on a preview only', async () => {
+    mockRpc.mockResolvedValue({ data: { counts: {}, drops: [] }, error: null });
+    await expect(runEnrollmentImport('preview', contacts, null, null))
+      .rejects.toThrow('Roster sync needs the v69 database update first. Nothing was changed.');
+    // An apply's answer is shown as it came: "nothing was changed" would not be true of it.
+    await expect(runEnrollmentImport('apply', contacts, 'hash-1', null)).resolves.toEqual({ counts: {}, drops: [] });
   });
 });
 
@@ -205,15 +214,16 @@ describe('contactsCsvToImport', () => {
 });
 
 describe('changeCount / memoryChangeCount', () => {
-  it('counts roster changes apart from tag changes, and neither counts what is only reported', () => {
+  it('counts roster changes apart from what is remembered, and neither counts what is only reported', () => {
     const counts = {
-      contacts: 9, families: 8, adds: 2, drops: 3, unassigned: 4, conflicts: 1, blocked: 0,
+      contacts: 9, families: 8, adds: 2, drops: 3, held_drops: 2, unassigned: 4, conflicts: 1, blocked: 0,
       first_seen_families: 1, new_families: 1, new_dancers: 2, not_imported: 5, merged_contacts: 1,
-      email_conflicts: 0, missing_families: 7, held_untagged: 2, tagged_unheld: 40, memory_changes: 5,
-      unmatched_class_tags: 40,
+      email_conflicts: 0, missing_families: 7, held_untagged: 2, tagged_unheld: 40, spelling_matches: 3,
+      memory_changes: 6, unmatched_class_tags: 40,
     };
-    const r = { counts, memory_changes: { added: 3, removed: 2 } } as EnrollmentImportResult;
+    const r = { counts, memory_changes: { added: 3, removed: 2, families_seen: 1 } } as EnrollmentImportResult;
     expect(changeCount(r)).toBe(6);
-    expect(memoryChangeCount(r)).toBe(5);
+    // A family seen for the first time is worth saving too.
+    expect(memoryChangeCount(r)).toBe(6);
   });
 });

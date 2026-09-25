@@ -15,10 +15,13 @@ import { EnrollmentImportResult } from '../../lib/enrollmentImport';
  *   - Apply disables itself and a second tap starts nothing — including one
  *     landing before the re-render that disables it;
  *   - it ends on a sentence saying what happened, or what refused and why;
- *   - what the database says blocks a sync is shown, and Apply is not offered;
- *   - a large drop and an export older than the last sync wait for a
- *     confirmation in words;
- *   - a week with only tag changes still offers to save them;
+ *   - what the database says blocks a whole file is shown, and Apply is not
+ *     offered; a place that cannot be dropped yet is listed, and the rest goes;
+ *   - a large drop, a large addition and an export older than the last sync
+ *     wait for a confirmation in words;
+ *   - a week with only tag changes, or a family seen for the first time, still
+ *     offers to save them;
+ *   - an apply that does not answer says so, and then lets the dialog close;
  *   - the first sync can only record a starting point, and shows nothing to act on;
  *   - the preview re-checks itself on refresh, and says so when it changed.
  *
@@ -37,10 +40,10 @@ const CSV = `${HEADER}\n` +
   'c-200,Jo,Boateng,,boateng@example.com,Sep 23 2026 04:00 PM,"junior ballet 2 (lee/t-5pm)","Eli Boateng\nNoor Boateng",';
 
 const COUNTS: EnrollmentImportResult['counts'] = {
-  contacts: 2, families: 2, adds: 1, drops: 1, unassigned: 0, conflicts: 0, blocked: 0,
+  contacts: 2, families: 2, adds: 1, drops: 1, held_drops: 0, unassigned: 0, conflicts: 0, blocked: 0,
   first_seen_families: 0, new_families: 0, new_dancers: 0, not_imported: 0, merged_contacts: 0,
-  email_conflicts: 0, missing_families: 0, held_untagged: 0, tagged_unheld: 0, memory_changes: 1,
-  unmatched_class_tags: 0,
+  email_conflicts: 0, missing_families: 0, held_untagged: 0, tagged_unheld: 0, spelling_matches: 0,
+  memory_changes: 2, unmatched_class_tags: 0,
 };
 
 const plan = (over: Partial<EnrollmentImportResult> = {}): EnrollmentImportResult => ({
@@ -53,6 +56,7 @@ const plan = (over: Partial<EnrollmentImportResult> = {}): EnrollmentImportResul
   plan_hash: 'plan-hash-1',
   baseline_hash: 'baseline-hash-1',
   confirm_drops: false,
+  confirm_adds: false,
   counts: COUNTS,
   adds: [{
     student_id: 's-1', student_name: 'Maya Alvarez', new_dancer: false, household_id: 'h-1',
@@ -64,6 +68,7 @@ const plan = (over: Partial<EnrollmentImportResult> = {}): EnrollmentImportResul
     family: 'Boateng', email: 'boateng@example.com', class_id: 'k-2', class_name: 'Teen Hip Hop',
     day_of_week: 3, start_time: '18:00:00', enrolled_on: '2026-08-31', last_day: '2026-09-30',
   }],
+  held_drops: [],
   whole_class_drops: [],
   unassigned: [],
   conflicts: [],
@@ -77,7 +82,8 @@ const plan = (over: Partial<EnrollmentImportResult> = {}): EnrollmentImportResul
   held_untagged: [],
   tagged_unheld: [],
   unmatched_tags: [],
-  memory_changes: { added: 1, removed: 1 },
+  spelling_matches: [],
+  memory_changes: { added: 1, removed: 1, families_seen: 0 },
   baseline_counts: { families: 2, tags: 3 },
   ...over,
 });
@@ -214,35 +220,45 @@ it('says what refused an apply, that nothing changed, and offers only a fresh pr
   expect(mockRun.mock.calls.map(c => c[0])).toEqual(['preview', 'apply', 'preview']);
 });
 
-it('shows what blocks a sync and does not offer to apply it', async () => {
+it('shows what blocks a whole file and does not offer to apply it', async () => {
   mockRun.mockResolvedValueOnce(plan({
     counts: { ...COUNTS, blocked: 1 },
     blocked: [{
-      kind: 'drop', reason: 'marked_after_drop_day', on: '2026-10-01', detail: null,
-      student_name: 'Noor Boateng', class_name: 'Teen Hip Hop', day_of_week: 3, start_time: '18:00:00',
+      kind: 'class', reason: 'duplicate_class_title', on: null, detail: 'old jazz (x/m-5pm)',
+      student_name: null, class_name: null, day_of_week: null, start_time: null,
     }],
   }));
   renderModal();
   chooseFile();
 
   expect(await screen.findByText(
-    'Noor Boateng has an attendance mark in Teen Hip Hop · Wed 6:00 PM on Thu 1 Oct — after their last day ' +
-    'would be (Wed 30 Sep). Sync again tomorrow.')).toBeInTheDocument();
+    'More than one class has the Enrolio title "old jazz (x/m-5pm)", so its tag cannot be told apart. Keep ' +
+    'exactly one of them switched on in the app, or rename one in Enrolio and import classes again.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Can’t apply yet' })).toBeDisabled();
 });
 
-it('says when a place that has not started yet is what blocks, and from which day it clears', async () => {
+it('lists a place that cannot be dropped yet for a person, and still applies the rest', async () => {
   mockRun.mockResolvedValueOnce(plan({
-    counts: { ...COUNTS, blocked: 1 },
-    blocked: [{
-      kind: 'drop', reason: 'enrolled_after_drop_day', on: '2026-10-20', detail: null,
-      student_name: 'Noor Boateng', class_name: 'Teen Hip Hop', day_of_week: 3, start_time: '18:00:00',
+    counts: { ...COUNTS, held_drops: 2 },
+    held_drops: [{
+      student_id: 's-3', student_name: 'Noor Boateng', family: 'Boateng', reason: 'starts_after_drop_day',
+      on: '2026-10-20', class_id: 'k-2', class_name: 'Teen Hip Hop', day_of_week: 3, start_time: '18:00:00',
+    }, {
+      student_id: 's-2', student_name: 'Eli Boateng', family: 'Boateng', reason: 'marked_after_drop_day',
+      on: '2026-10-01', class_id: 'k-1', class_name: 'Mini Jazz 1', day_of_week: 1, start_time: '16:00:00',
     }],
   }));
   renderModal();
   chooseFile();
-  expect(await screen.findByText(/does not start until Tue 20 Oct, so it cannot end before it begins\. Sync again from Wed 21 Oct\./))
-    .toBeInTheDocument();
+
+  expect(await screen.findByText(
+    'the place starts Tue 20 Oct, but the tag is gone from Enrolio. If they are not coming, the place has to ' +
+    'be ended by hand; left alone, a sync from Wed 21 Oct drops it.')).toBeInTheDocument();
+  expect(screen.getByText(
+    'was marked in this class on Thu 1 Oct, after the tag went from Enrolio. If they have left, sync again ' +
+    'tomorrow and the place is dropped; if not, put the tag back in Enrolio.')).toBeInTheDocument();
+  expect(screen.getByText('1 to add · 1 to drop · 2 for a person to decide')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Apply 2 changes' })).toBeEnabled();
 });
 
 it('waits for the large-drop confirmation, and sends it', async () => {
@@ -252,6 +268,38 @@ it('waits for the large-drop confirmation, and sends it', async () => {
   const apply = await screen.findByRole('button', { name: 'Apply 2 changes' });
   expect(apply).toBeDisabled();
 
+  fireEvent.click(screen.getByLabelText(/really left/));
+  expect(apply).toBeEnabled();
+
+  mockRun.mockResolvedValueOnce(plan({ applied: true, fingerprint: { before: FP, after: FP } }));
+  fireEvent.click(apply);
+  await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(2));
+  expect(mockRun.mock.calls[1][4]).toBe(true);
+});
+
+it('says a whole class lost its tag in words that hold, held places apart', async () => {
+  mockRun.mockResolvedValueOnce(plan({
+    whole_class_drops: [{ class_id: 'k-2', class_name: 'Teen Hip Hop', day_of_week: 3, start_time: '18:00:00', dropping: 1, held: 1, families: 2 }],
+  }));
+  renderModal();
+  chooseFile();
+  expect(await screen.findByText('Teen Hip Hop · Wed 6:00 PM — the tag is gone from every family in this file tagged for it'))
+    .toBeInTheDocument();
+  expect(screen.getByText('1 dancer to drop · 1 held · 2 families')).toBeInTheDocument();
+});
+
+it('waits for both confirmations when a sync is large both ways, and sends them', async () => {
+  mockRun.mockResolvedValueOnce(plan({
+    confirm_drops: true, confirm_adds: true, counts: { ...COUNTS, adds: 1, new_families: 12 },
+  }));
+  renderModal();
+  chooseFile();
+  const apply = await screen.findByRole('button', { name: 'Apply 14 changes' });
+  expect(screen.getByText(/This adds 1 place and 12 new families at\s+once — more than a usual week\./)).toBeInTheDocument();
+  expect(apply).toBeDisabled();
+
+  fireEvent.click(screen.getByLabelText(/these places and families are right/));
+  expect(apply).toBeDisabled();
   fireEvent.click(screen.getByLabelText(/really left/));
   expect(apply).toBeEnabled();
 
@@ -277,7 +325,7 @@ it('waits for a confirmation before applying a file older than the last sync', a
 it('offers to save tag changes in a week with no roster change', async () => {
   mockRun.mockResolvedValueOnce(plan({
     counts: { ...COUNTS, adds: 0, drops: 0, memory_changes: 2 }, adds: [], drops: [],
-    memory_changes: { added: 1, removed: 1 },
+    memory_changes: { added: 1, removed: 1, families_seen: 0 },
   }));
   renderModal();
   chooseFile();
@@ -288,9 +336,36 @@ it('offers to save tag changes in a week with no roster change', async () => {
     counts: { ...COUNTS, adds: 0, drops: 0, memory_changes: 2 }, adds: [], drops: [],
     applied: true, fingerprint: { before: FP, after: FP },
   }));
-  fireEvent.click(screen.getByRole('button', { name: 'Save tag changes' }));
-  expect(await screen.findByText('Saved — 2 tag changes remembered, no roster changes.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save for the next sync' }));
+  expect(await screen.findByText('Saved for the next sync — no roster changes.')).toBeInTheDocument();
   expect(mockRun.mock.calls[1][0]).toBe('apply');
+});
+
+it('says a first-seen family\'s tags are its own, not tags that changed in Enrolio', async () => {
+  mockRun.mockResolvedValueOnce(plan({
+    counts: { ...COUNTS, adds: 0, drops: 0, first_seen_families: 1, memory_changes: 4 }, adds: [], drops: [],
+    memory_changes: { added: 3, removed: 0, families_seen: 1 },
+    first_seen_families: [{ household_id: 'h-7', family: 'Gupta', email: 'gupta@example.com', tags: 3, active_enrollments: 1 }],
+  }));
+  renderModal();
+  chooseFile();
+  expect(await screen.findByText(/No roster changes, but 1 family is in a sync for the first time, with 3 class tags to record\./))
+    .toBeInTheDocument();
+  expect(screen.queryByText(/changed in Enrolio/)).toBeNull();
+});
+
+it('offers to save a family seen for the first time with no class tag, and asks nobody to check it', async () => {
+  mockRun.mockResolvedValueOnce(plan({
+    counts: { ...COUNTS, adds: 0, drops: 0, first_seen_families: 1, memory_changes: 1 }, adds: [], drops: [],
+    memory_changes: { added: 0, removed: 0, families_seen: 1 },
+    first_seen_families: [{ household_id: 'h-7', family: 'Gupta', email: 'gupta@example.com', tags: 0, active_enrollments: 0 }],
+  }));
+  renderModal();
+  chooseFile();
+  expect(await screen.findByText(/1 family is in a sync for the first time\. Saving keeps the next sync right/)).toBeInTheDocument();
+  expect(screen.getByText(/1 family in a sync for the first time, with no class tags — nothing to check/)).toBeInTheDocument();
+  expect(screen.queryByText(/for a person/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'Save for the next sync' })).toBeEnabled();
 });
 
 it('offers only a starting point on the first sync, with nothing to act on shown', async () => {
@@ -302,7 +377,7 @@ it('offers only a starting point on the first sync, with nothing to act on shown
   chooseFile();
 
   expect(await screen.findByText('First sync — nothing will change on the rosters')).toBeInTheDocument();
-  expect(screen.getByText(/This records 3 class tags across 2 families/)).toBeInTheDocument();
+  expect(screen.getByText(/This records the 3 class tags in this file, and the\s+2 families it lists/)).toBeInTheDocument();
   expect(screen.getByText(/1 contact in this file is not in the app yet\. The first sync after this one adds it\./)).toBeInTheDocument();
   expect(screen.queryByText(/to add/i)).toBeNull();
   expect(screen.queryByText('Maya Alvarez')).toBeNull();
@@ -318,22 +393,36 @@ it('offers only a starting point on the first sync, with nothing to act on shown
 
 it('lists what needs a person, says what resolves it, and offers no Apply when nothing would change', async () => {
   mockRun.mockResolvedValueOnce(plan({
-    counts: { ...COUNTS, adds: 0, drops: 0, unassigned: 2, first_seen_families: 1, memory_changes: 0 },
+    counts: { ...COUNTS, adds: 0, drops: 0, unassigned: 4, first_seen_families: 1, memory_changes: 0 },
     adds: [],
     drops: [],
-    memory_changes: { added: 0, removed: 0 },
+    memory_changes: { added: 0, removed: 0, families_seen: 0 },
     unassigned: [{
       household_id: 'h-2', family: 'Boateng', email: 'boateng@example.com', class_id: 'k-5',
       class_name: 'Open Tap', day_of_week: 5, start_time: '19:00:00', age_min: null, age_max: null,
       reason: 'several_siblings_in_age_range',
       dancers: [{ name: 'Eli Boateng', age: 6 }, { name: 'Noor Boateng', age: 10 }],
-      export_names: ['Eli Boateng', 'Noor Boateng'], unknown_names: [],
+      export_names: ['Eli Boateng', 'Noor Boateng'], unknown_names: [], inactive_names: [],
     }, {
       household_id: 'h-1', family: 'Alvarez', email: 'alvarez@example.com', class_id: 'k-1',
       class_name: 'Mini Jazz 1', day_of_week: 1, start_time: '16:00:00', age_min: 5, age_max: 7,
       reason: 'export_names_unknown_dancer',
       dancers: [{ name: 'Maya Alvarez', age: 14 }],
-      export_names: ['Tomas Alvarez'], unknown_names: ['Tomas Alvarez'],
+      export_names: ['Tomas Alvarez', 'Mya Alvarez'],
+      unknown_names: [{ name: 'Mya Alvarez', likely: 'Maya Alvarez' }, { name: 'Tomas Alvarez', likely: null }],
+      inactive_names: [],
+    }, {
+      household_id: 'h-3', family: 'Eriksen', email: 'eriksen@example.com', class_id: 'k-1',
+      class_name: 'Mini Jazz 1', day_of_week: 1, start_time: '16:00:00', age_min: 5, age_max: 7,
+      reason: 'only_dancer_outside_age_range',
+      dancers: [{ name: 'Ingrid Eriksen', age: 13 }],
+      export_names: [], unknown_names: [], inactive_names: [],
+    }, {
+      household_id: 'h-4', family: 'Chen', email: 'chen@example.com', class_id: 'k-3',
+      class_name: 'Junior Ballet', day_of_week: 2, start_time: '17:00:00', age_min: 8, age_max: 11,
+      reason: 'export_names_inactive_dancer',
+      dancers: [{ name: 'Otis Chen', age: 7 }],
+      export_names: ['Tomas Chen'], unknown_names: [], inactive_names: [{ name: 'Tomas Chen', dancer: 'Tomas Chen' }],
     }],
     first_seen_families: [{ household_id: 'h-7', family: 'Gupta', email: 'gupta@example.com', tags: 3, active_enrollments: 1 }],
   }));
@@ -343,11 +432,64 @@ it('lists what needs a person, says what resolves it, and offers no Apply when n
   expect(await screen.findByText(
     'Eli Boateng (6), Noor Boateng (10) — the class has no age range, so it could be any of them. ' +
     'The app cannot choose for you: correct the tag in Enrolio, or have the place added by hand.')).toBeInTheDocument();
-  expect(screen.getByText(/Enrolio lists Tomas Alvarez, who is not in the app\. Add them with the roster import/)).toBeInTheDocument();
+  expect(screen.getByText(
+    'Enrolio lists Mya Alvarez — perhaps Maya Alvarez, spelled differently. If so, the two spellings need to ' +
+    'match — in Enrolio, or in the app by hand — and the next sync places this tag. If not, add them with the ' +
+    'roster import (with a birthday). Enrolio lists Tomas Alvarez, who is not in the app. If new, add them with ' +
+    'the roster import (with a birthday), and the next sync places this tag.')).toBeInTheDocument();
+  expect(screen.getByText(
+    'Enrolio lists Tomas Chen, marked inactive in the app — probably back. If so, have them set active by hand, ' +
+    'and the next sync places this tag.')).toBeInTheDocument();
+  expect(screen.getByText(/Ingrid Eriksen \(13\) is the family’s only dancer, and this class is for dancers aged 5–7 — 3 or more years off\./))
+    .toBeInTheDocument();
   expect(screen.getByText(/first time in a sync/)).toBeInTheDocument();
-  expect(screen.getByText('3 for a person to decide')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /^Apply|Save tag changes/ })).toBeNull();
+  expect(screen.getByText('5 for a person to decide')).toBeInTheDocument();
+  expect(screen.getByText(/except a family seen for the first time/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Apply|Save for the next sync/ })).toBeNull();
   expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
+});
+
+it('lists the names it took for a dancer the app spells differently', async () => {
+  mockRun.mockResolvedValueOnce(plan({
+    counts: { ...COUNTS, spelling_matches: 1 },
+    spelling_matches: [{ family: 'Alvarez', export_name: 'Maya Lucia Alvarez', dancer: 'Maya Alvarez' }],
+  }));
+  renderModal();
+  chooseFile();
+  const fold = await screen.findByText(/1 name in Enrolio spelled differently from the app — taken as the same dancer/);
+  fireEvent.click(fold);
+  expect(screen.getByText('Maya Lucia Alvarez → Maya Alvarez')).toBeInTheDocument();
+});
+
+it('says so when an apply does not answer, and then lets the dialog close', async () => {
+  mockRun.mockResolvedValueOnce(plan());
+  const { onClose } = renderModal();
+  chooseFile();
+  const apply = await screen.findByRole('button', { name: 'Apply 2 changes' });
+
+  jest.useFakeTimers();
+  try {
+    mockRun.mockReturnValueOnce(new Promise(() => {}));
+    fireEvent.click(apply);
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    act(() => { jest.advanceTimersByTime(44_000); });
+    expect(screen.getByRole('status')).not.toHaveTextContent('Still waiting');
+
+    act(() => { jest.advanceTimersByTime(1_000); });
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Still no answer — the connection may have dropped. You can close this now: the sync either went through ' +
+      'completely or changed nothing. Preview the file again to see which');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+
+  // Opened again, a new preview offers Cancel, not a leftover Close.
+  mockRun.mockResolvedValueOnce(plan());
+  chooseFile();
+  expect(await screen.findByRole('button', { name: 'Apply 2 changes' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
 });
 
 it('re-checks the preview on refresh, and says so — and asks again — when it changed', async () => {
