@@ -130,6 +130,163 @@ const handleAuth = (req, res, url, body) => {
 // --- rpc --------------------------------------------------------------------
 
 /**
+ * The roster sync (v67/v68), answered from the seed rather than computed.
+ *
+ * The rules are tested against a real Postgres in scripts/sql-tests; this only
+ * has to give the screen something of every kind to draw — adds, a drop, a new
+ * family, the lists for a person — so the preview can be looked at on a phone.
+ * Whatever file is uploaded gets the same diff; after an apply the next preview
+ * is empty, the way re-syncing the same export is.
+ *
+ *   DEV_ROSTER_SYNC_FIRST=1    no starting point recorded yet
+ *   DEV_ROSTER_SYNC_BLOCKED=1  a dancer marked today who is due to be dropped
+ *   DEV_ROSTER_SYNC_CONFIRM=1  a drop large enough to need confirming
+ */
+const rosterSync = {
+  started: process.env.DEV_ROSTER_SYNC_FIRST !== '1',
+  applied: false,
+};
+
+const enrollmentImport = (body) => {
+  const contacts = Array.isArray(body && body.p_contacts) ? body.p_contacts : [];
+  const mode = (body && body.p_mode) || 'preview';
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const cls = (i) => {
+    const c = db.portal_classes[i % db.portal_classes.length];
+    return { class_id: c.id, class_name: c.name, day_of_week: c.day_of_week, start_time: c.start_time };
+  };
+  const student = (i) => db.portal_students[i % db.portal_students.length];
+  const household = (s) => db.portal_households.find((h) => h.id === s.household_id) || {};
+  const name = (s) => `${s.first_name} ${s.last_name}`;
+  const empty = rosterSync.applied || !rosterSync.started;
+
+  const adds = empty ? [] : [0, 1].map((i) => {
+    const s = student(i);
+    return {
+      student_id: s.id, student_name: name(s), new_dancer: false, household_id: s.household_id,
+      family: household(s).display_name, email: household(s).primary_email, reason: 'only_dancer', ...cls(i + 9),
+    };
+  }).concat([{
+    student_id: null, student_name: 'Omar Haddad', new_dancer: true, household_id: null,
+    family: 'Haddad', email: 'haddad@localhost', reason: 'only_dancer', ...cls(12),
+  }]);
+  const dropped = db.portal_enrollments.find((e) => e.status === 'active');
+  const drops = empty || !dropped ? [] : [(() => {
+    const s = db.portal_students.find((x) => x.id === dropped.student_id);
+    const k = db.portal_classes.find((c) => c.id === dropped.class_id);
+    return {
+      enrollment_id: dropped.id, student_id: s.id, student_name: name(s), household_id: s.household_id,
+      family: household(s).display_name, email: household(s).primary_email, class_id: k.id,
+      class_name: k.name, day_of_week: k.day_of_week, start_time: k.start_time, enrolled_on: dropped.enrolled_on,
+      last_day: yesterday,
+    };
+  })()];
+  const siblings = db.portal_students.filter((s) => s.household_id === student(0).household_id);
+  const unassigned = empty ? [] : [{
+    household_id: student(0).household_id, family: household(student(0)).display_name,
+    email: household(student(0)).primary_email, age_min: null, age_max: null,
+    reason: 'several_siblings_in_age_range',
+    dancers: siblings.map((s, i) => ({ name: name(s), age: 7 + i * 3 })),
+    export_names: siblings.map(name), unknown_names: [], ...cls(8),
+  }, {
+    household_id: student(1).household_id, family: household(student(1)).display_name,
+    email: household(student(1)).primary_email, age_min: 5, age_max: 7,
+    reason: 'export_names_unknown_dancer',
+    dancers: [{ name: name(student(1)), age: 12 }],
+    export_names: ['Tomas Boateng'], unknown_names: ['Tomas Boateng'], ...cls(3),
+  }];
+  const wasDropped = db.portal_enrollments.find((e) => e.status === 'dropped');
+  const conflicts = empty || !wasDropped ? [] : [{
+    student_id: wasDropped.student_id,
+    student_name: name(db.portal_students.find((s) => s.id === wasDropped.student_id)),
+    family: null, conflict: 'already_dropped', on: wasDropped.dropped_on,
+    ...cls(db.portal_classes.findIndex((c) => c.id === wasDropped.class_id)),
+  }];
+  const blocked = process.env.DEV_ROSTER_SYNC_BLOCKED === '1' && drops.length ? [{
+    kind: 'drop', reason: 'marked_after_drop_day', on: today, detail: null,
+    student_name: drops[0].student_name, class_name: drops[0].class_name,
+    day_of_week: drops[0].day_of_week, start_time: drops[0].start_time,
+  }] : [];
+  const newFamilies = [{
+    row: 7, contact_id: 'dev-contact-7', email: 'haddad@localhost', contact_name: 'Sam Haddad',
+    family: 'Haddad', dancers: ['Omar Haddad'],
+  }].filter(() => !rosterSync.applied);
+  const notImported = [{
+    row: 12, contact_id: 'dev-contact-12', email: 'no-dancer@localhost', contact_name: 'Rene Okafor',
+    reason: 'no_dancer_name', names: [],
+  }];
+  const missing = db.portal_households.slice(-2).map((h, i) => ({
+    household_id: h.id, family: h.display_name, email: h.primary_email, dancers: 1, active_enrollments: i,
+  }));
+  const firstSeen = empty ? [] : db.portal_households.slice(2, 3).map((h) => ({
+    household_id: h.id, family: h.display_name, email: h.primary_email, tags: 3, active_enrollments: 1,
+  }));
+  const unmatched = [
+    { tag: 'mini jazz 1 (dana/m-5pm)', families: 4, looks_like_class: true },
+    { tag: 'all-star bb (jess/m-6pm) — a much older title that runs long', families: 1, looks_like_class: true },
+    { tag: 'current family', families: contacts.length, looks_like_class: false },
+  ];
+  const sticky = db.portal_households.slice(0, 2).map((h, i) => ({
+    family: h.display_name, email: h.primary_email, ...cls(i + 4),
+  }));
+  const heldUntagged = [{ student_name: name(student(2)), family: household(student(2)).display_name, enrolled_on: '2026-08-31', ...cls(6) }];
+
+  const plan = {
+    mode,
+    filename: (body && body.p_filename) || null,
+    as_of: today,
+    drop_day: yesterday,
+    first_import: !rosterSync.started,
+    last_sync_on: rosterSync.started ? yesterday : null,
+    plan_hash: `dev-plan-${rosterSync.applied ? 'done' : 'pending'}`,
+    baseline_hash: 'dev-baseline',
+    confirm_drops: process.env.DEV_ROSTER_SYNC_CONFIRM === '1' && drops.length > 0,
+    adds: rosterSync.started ? adds : [],
+    drops: rosterSync.started ? drops : [],
+    whole_class_drops: [],
+    unassigned: rosterSync.started ? unassigned : [],
+    conflicts: rosterSync.started ? conflicts : [],
+    blocked,
+    first_seen_families: firstSeen,
+    new_families: newFamilies,
+    not_imported: notImported,
+    merged_contacts: [{ household_id: db.portal_households[0].id, family: db.portal_households[0].display_name, email: db.portal_households[0].primary_email, contacts: 2 }],
+    email_conflicts: empty ? [] : [{ email: 'shared@localhost', families: ['Alvarez', 'Chen'] }],
+    missing_families: missing,
+    held_untagged: heldUntagged,
+    tagged_unheld: rosterSync.started ? sticky : [],
+    unmatched_tags: unmatched,
+    memory_changes: { added: empty ? 0 : 3, removed: empty ? 0 : 1 },
+    baseline_counts: { families: Math.max(contacts.length - 1, 0), tags: 42 },
+  };
+  plan.counts = {
+    contacts: contacts.length, families: Math.max(contacts.length - 1, 0), adds: plan.adds.length,
+    drops: plan.drops.length, unassigned: plan.unassigned.length, conflicts: plan.conflicts.length,
+    blocked: blocked.length, first_seen_families: firstSeen.length, new_families: newFamilies.length,
+    new_dancers: newFamilies.length, not_imported: notImported.length, merged_contacts: 1,
+    email_conflicts: plan.email_conflicts.length, missing_families: missing.length,
+    held_untagged: heldUntagged.length, tagged_unheld: plan.tagged_unheld.length,
+    memory_changes: plan.memory_changes.added + plan.memory_changes.removed,
+    unmatched_class_tags: unmatched.filter((t) => t.looks_like_class).length,
+  };
+
+  if (mode === 'baseline') {
+    rosterSync.started = true;
+    return { ...plan, recorded: true, tags_recorded: 42 };
+  }
+  if (mode === 'apply') {
+    rosterSync.applied = true;
+    const fingerprint = {
+      attendance: { rows: 128, md5: 'dev' }, sessions: { rows: 66, md5: 'dev' },
+      history: { rows: 131, md5: 'dev' }, past_rosters: { rows: 540, md5: 'dev', before: today },
+    };
+    return { ...plan, applied: true, fingerprint: { before: fingerprint, after: fingerprint } };
+  }
+  return plan;
+};
+
+/**
  * Answers for the functions the app calls.
  *
  * Permissive where the answer decides whether a control is offered — this login
@@ -152,6 +309,7 @@ const RPC = {
   admin_download_stats: () => [],
   admin_activity_search: () => [],
   admin_activity_facets: () => [],
+  admin_enrollment_import: enrollmentImport,
 };
 
 // --- rest -------------------------------------------------------------------

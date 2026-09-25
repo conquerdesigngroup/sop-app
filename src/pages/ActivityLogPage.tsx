@@ -64,6 +64,8 @@ const SENTENCES: Record<string, string> = {
   roster_row_deactivated: 'deactivated the roster row for {entity}',
   roster_row_reactivated: 'reactivated the roster row for {entity}',
   roster_row_unlinked: 'unlinked the roster row for {entity}',
+  enrollments_imported: 'synced class rosters from {entity}',
+  enrollment_import_baseline: 'recorded {entity} as the roster sync starting point',
   portal_admin_denied: 'was refused portal-admin access',
   admin_users_denied: 'was refused account-admin access',
   calendar_push_denied: 'was refused studio-calendar access',

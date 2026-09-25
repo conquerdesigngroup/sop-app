@@ -294,7 +294,8 @@ screen, into both exports, and onto the parent's own card.
   of this visible to a parent. **Do not flip it until the backfill is done** —
   143 sessions from the season's first week have no marks, so every dancer
   currently reads 0%.
-- **The Enrolio importer** (see 3 above).
+- **The Enrolio attendance importer** (see 3 above) — the marks. The rosters
+  have an importer since v67; see below.
 - **38 of 103 classes have no instructor grant.** Those teachers cannot see
   their class at all. Fixed in Portal Manager, not in code.
 - **`excused_counts_against` is still unread from `portal_settings`** — item 4
@@ -302,3 +303,62 @@ screen, into both exports, and onto the parent's own card.
 - **The roster screen has no URL.** It is a state inside `/attendance`, so
   `npm run audit:mobile` measures the day list and never the screen a teacher
   actually spends the class on. Check that one by hand on a phone.
+
+---
+
+# Roster sync (v67 + v68, 2026-09-24)
+
+Class rosters (`portal_enrollments`) are synced from Enrolio's **Export
+Contacts → Current Families** CSV in Portal Manager → Classes → **Sync
+rosters**: choose the file, read the preview, apply. It replaces the
+hand-written SQL of 2026-09-11 and 2026-09-24. The rules, and why each one is
+there, are in the headers of `supabase-migration-v67-enrollment-import.sql`
+and `…-v68-enrollment-import-review-fixes.sql` (v68 is the review's
+corrections; read it second).
+
+What to know before touching it:
+
+- **"New" and "gone" are relative to the last sync, not to the rosters.**
+  Enrolio adds a class tag when a family joins and does not reliably remove it
+  when they leave. `portal_enrollment_import_tags` remembers each family's tags
+  as of the last applied sync. A tag that has sat there all along is never
+  acted on — measured against the rosters instead, the 24 Sep export proposes
+  47 places, 44 of them in classes Enrolio's own students export shows nobody
+  in the family taking.
+- **The first run records a starting point and changes nothing.** Apply is
+  refused until then, and a starting point is refused once one exists. The
+  right file is the one the rosters were last brought up to date with — the
+  24 Sep export, for this studio. The reset, if it was the wrong file, is three
+  `delete`s in v68's header.
+- **Families the sync has never seen** (`portal_enrollment_import_seen`): one
+  that already existed at the starting point has its tags recorded and nothing
+  acted on, and is listed for a person; one created since (the roster import,
+  a hand entry) is new, and its tags are new.
+- **Past rosters cannot move.** New places start on the import date, drops end
+  the day before (or keep an earlier end already on the place), and apply
+  fingerprints attendance, sessions, history and every roster before today on
+  both sides of its writes (`select portal_attendance_fingerprint(studio_today())`
+  is the same check by hand). A teacher's mark waits for a sync in flight
+  (`staff_mark_attendance` takes the sync's lock, shared). A dancer marked in
+  today's class cannot be dropped as of yesterday — that sync says "sync again
+  tomorrow" — so it is best run in the morning.
+- **Guards:** a file with no class tag is refused; a drop of 20 or more places,
+  or a tenth of what the families in the file hold, must be confirmed; an
+  export older than the last sync must be confirmed.
+- **What waits for a person, and comes back every sync until sorted:** several
+  siblings or none in a class's age range, a dancer with no birthday yet, a
+  name in All Students the app does not have, a dancer tagged again for a class
+  they were dropped from, a class switched off, a mark before a new place's
+  start, a family seen for the first time, an email on two families. The
+  roster import resolves the birthday and unknown-dancer cases on its own; the
+  rest need a place added or ended by hand — **there is no enrolment editor in
+  the app yet**. That, as an "assign to…" on the preview, is the next piece.
+- **Known limits:** a place a dancer holds in a class the family was never
+  tagged for is never dropped (there is no tag to disappear; the preview lists
+  them). Rule 7's new dancers are split on the last space; the roster import
+  finds them when given the name in one column, but separate first/last
+  columns that split a several-word surname differently create a second
+  dancer (pinned by a test).
+
+The SQL is tested against a real Postgres, including the live
+`admin_roster_import`: `npm install --no-save @electric-sql/pglite && npm run test:sql`.
