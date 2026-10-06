@@ -17,6 +17,7 @@ import { CLASS_CATEGORY_LABEL, CLASS_CATEGORY_ORDER, dayName } from '../../lib/p
 import { ManagerList, RowActions, RowMeta, classSummary, FieldPair, useAutoFocus } from './shared';
 import { callPortalAdmin } from '../../lib/portalAdminApi';
 import { classesCsvToRows } from '../../lib/classImport';
+import EnrollmentImportModal from './EnrollmentImportModal';
 
 interface ClassImportResult {
   inserted: number;
@@ -335,6 +336,7 @@ const ClassesSection: React.FC<{
   const [importSkipped, setImportSkipped] = useState<{ row: number; title: string; reason: string }[]>([]);
   const [importResult, setImportResult] = useState<ClassImportResult | null>(null);
   const importFileRef = useRef<HTMLInputElement | null>(null);
+  const [showRosterSync, setShowRosterSync] = useState(false);
 
   const closeImport = () => {
     setShowImport(false);
@@ -375,6 +377,7 @@ const ClassesSection: React.FC<{
       {isAdmin ? (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
           <Button variant="outline" onClick={() => setShowImport(true)}>Import classes</Button>
+          <Button variant="outline" onClick={() => setShowRosterSync(true)}>Sync rosters</Button>
           <Button leftIcon={<PlusIcon />} onClick={startNew}>New class</Button>
         </div>
       ) : (
@@ -904,6 +907,14 @@ const ClassesSection: React.FC<{
           </div>
         )}
       </Modal>
+
+      {isAdmin && (
+        <EnrollmentImportModal
+          isOpen={showRosterSync}
+          onClose={() => setShowRosterSync(false)}
+          onApplied={reload}
+        />
+      )}
 
       {confirmDialog}
     </>

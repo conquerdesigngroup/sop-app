@@ -32,6 +32,7 @@
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "audit:mobile": "node scripts/audit-mobile-ui.js",
     "test": "react-scripts test",
+    "test:sql": "node --test \"scripts/sql-tests/*.test.mjs\"",
     "eject": "react-scripts eject",
     "deploy": "npx vercel --prod",
     "postbuild": "node scripts/stamp-service-worker.js"
