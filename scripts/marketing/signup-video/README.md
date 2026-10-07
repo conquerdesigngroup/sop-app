@@ -232,9 +232,12 @@ Editing:
   is read after the mode and aspect are applied and the viewport is set to
   match, so adding a shape is a row in `LAYOUT` rather than a flag in two
   places that can disagree.
-- **Fonts** — `assets/fonts.css` holds the latin subsets of Kanit, Barlow and
-  JetBrains Mono, base64'd. Embedded rather than fetched so a render is
-  identical offline and never races a webfont load.
+- **Fonts** — `../assets/fonts.css` holds the latin subsets of Kanit, Barlow
+  and JetBrains Mono, base64'd. Embedded rather than fetched so a render is
+  identical offline and never races a webfont load. It sits one level up
+  because the printed handout in `../signup-handout` uses the same subsets;
+  duplicating 284KB of base64 to keep each folder self-contained would be the
+  worse trade.
 
 ## Pacing: why the long cut is 60s and not a slower 30s
 

@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How to create your account — DIDC Parent Portal</title>
+<style>
+__FONT_CSS__
+
+/* US Letter. The page draws its own margins so the design controls the edge,
+   rather than leaving it to whatever the print dialog feels like doing. */
+@page { size: 8.5in 11in; margin: 0; }
+
+:root{
+  --void:#0B0B0D; --panel:#161618; --panel2:#1E1E21;
+  --chalk:#F4F4F5; --smoke:#9A9AA4; --second:#C9C9D1;
+  --bdr:#26262B; --bdr2:#36363D;
+  --electric:#E2144F;
+  --ink:#0B0B0D; --ink2:#44444D; --ink3:#7E7E88;
+  --rule:#E2E2E7; --wash:#F6F6F8;
+  --display:'Kanit','Barlow',sans-serif;
+  --body:'Barlow',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:816px;height:1056px;background:#FFFFFF}
+body{font-family:var(--body);-webkit-font-smoothing:antialiased;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact}
+#page{position:relative;width:816px;height:1056px;padding:40px 44px 34px;
+  display:flex;flex-direction:column;background:#FFFFFF}
+
+/* ---------------- header ---------------- */
+#hd{display:flex;align-items:center;gap:16px;padding-bottom:13px;border-bottom:2px solid var(--ink)}
+#hd img{height:30px;width:auto;display:block}
+#hd .rule{width:1px;height:20px;background:var(--rule)}
+#hd .who{font-family:var(--mono);font-weight:500;font-size:10.5px;letter-spacing:.2em;color:var(--ink3)}
+#hd .sp{flex:1}
+#hd .tag{font-family:var(--mono);font-weight:700;font-size:10.5px;letter-spacing:.2em;color:var(--electric)}
+
+/* ---------------- title ---------------- */
+#ttl{padding:16px 0 0}
+#ttl h1{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:46px;line-height:.98;letter-spacing:-.015em;color:var(--ink)}
+#ttl h1 .pk{color:var(--electric)}
+#ttl p{font-family:var(--body);font-size:14.5px;line-height:1.5;color:var(--ink2);
+  margin-top:11px;max-width:600px}
+
+/* ---------------- the one rule that matters ---------------- */
+#rule1{margin-top:15px;display:flex;gap:15px;padding:16px 19px;border-radius:9px;
+  background:rgba(226,20,79,.042);border:1.5px solid rgba(226,20,79,.30);
+  border-left:5px solid var(--electric)}
+#rule1 .ic{width:25px;height:25px;flex:0 0 25px;margin-top:1px}
+#rule1 h2{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:19px;letter-spacing:-.005em;color:var(--electric)}
+#rule1 p{font-family:var(--body);font-size:13.5px;line-height:1.5;color:var(--ink2);margin-top:5px}
+#rule1 p b{font-weight:700;color:var(--ink)}
+
+/* ---------------- steps ---------------- */
+#steps{margin-top:15px;display:grid;grid-template-columns:1fr 1fr;gap:14px 26px}
+.st{display:flex;gap:12px}
+.st .n{width:28px;height:28px;flex:0 0 28px;border-radius:50%;background:var(--ink);color:#FFFFFF;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-weight:700;font-size:13px}
+.st h3{font-family:var(--body);font-weight:700;font-size:14.5px;line-height:1.3;color:var(--ink);
+  padding-top:4px}
+.st p{font-family:var(--body);font-size:12.5px;line-height:1.45;color:var(--ink2);margin-top:3px}
+.st p b{font-weight:700;color:var(--ink)}
+
+/* ---------------- what you will see ---------------- */
+#shots{margin-top:15px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+.sh{display:flex;flex-direction:column;align-items:center}
+.sh .cap{font-family:var(--mono);font-weight:700;font-size:9.5px;letter-spacing:.16em;
+  color:var(--ink3);margin-bottom:8px;text-align:center}
+.shot{width:139px;height:288px;position:relative;overflow:hidden;border-radius:19px;
+  box-shadow:0 0 0 1.5px #C3C3CB,0 7px 18px rgba(40,40,52,.17)}
+.shot .dev{position:absolute;left:0;top:0;width:428px;height:888px;transform:scale(.3241);
+  transform-origin:0 0;border-radius:56px;background:#08080A}
+.screen{position:absolute;left:13px;top:13px;width:400px;height:860px;border-radius:44px;
+  overflow:hidden;background:var(--void)}
+.island{position:absolute;left:50%;top:22px;transform:translateX(-50%);width:104px;height:30px;
+  border-radius:16px;background:#000;z-index:60}
+
+/* ---------------- if nothing arrives ---------------- */
+#help{margin-top:auto;padding:15px 19px;border-radius:9px;background:var(--wash);
+  border:1.5px solid var(--rule)}
+#help h2{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:15px;color:var(--ink);margin-bottom:9px}
+#help .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
+#help .it b{display:block;font-family:var(--body);font-weight:700;font-size:12.5px;color:var(--ink);
+  margin-bottom:2px}
+#help .it span{font-family:var(--body);font-size:11.5px;line-height:1.42;color:var(--ink2)}
+
+/* ---------------- footer ---------------- */
+#ft{margin-top:10px;padding-top:9px;border-top:1.5px solid var(--rule);
+  display:flex;align-items:center;gap:14px}
+#ft .l{font-family:var(--mono);font-weight:500;font-size:10px;letter-spacing:.16em;color:var(--ink3)}
+#ft .sp{flex:1}
+#ft .r{font-family:var(--body);font-size:11.5px;color:var(--ink2)}
+#ft .r b{font-weight:700;color:var(--ink)}
+
+/* ---------------- the app's own screens, at the app's own scale ---------------- */
+.scr{position:absolute;inset:0;background:var(--void);display:flex;flex-direction:column}
+.ph-head{display:flex;align-items:center;gap:11px;padding:62px 16px 12px;
+  border-bottom:2px solid var(--bdr);flex:0 0 auto}
+.ph-head img{height:19px;width:auto;display:block}
+.ph-head .sp{flex:1}
+.ph-lab{font-family:var(--body);font-weight:600;font-size:13px;color:var(--smoke)}
+.ph-ic{width:26px;height:26px;border-radius:50%;background:var(--panel2);display:flex;
+  align-items:center;justify-content:center;color:var(--smoke);font-size:14px}
+.ph-back{font-size:26px;line-height:1;color:var(--smoke);font-family:var(--body);width:20px}
+.ph-body{flex:1;padding:22px 17px;overflow:hidden}
+.ph-h1{font-family:var(--display);font-weight:800;font-style:italic;text-transform:uppercase;
+  font-size:33px;line-height:1.16;color:var(--chalk)}
+.ph-sub{font-family:var(--body);font-size:15px;line-height:1.45;color:var(--smoke);margin-top:7px}
+.card{margin-top:22px;background:var(--panel);border:2px solid var(--bdr);border-radius:12px;
+  padding:17px;display:flex;flex-direction:column;gap:15px}
+.p{font-family:var(--body);font-size:15px;line-height:1.5;color:var(--second)}
+.p b{font-weight:700;color:var(--chalk)}
+.fld{display:flex;flex-direction:column;gap:7px}
+.fld .lb{font-family:var(--body);font-weight:600;font-size:13px;color:var(--smoke)}
+.fld .in{height:48px;border-radius:8px;background:var(--panel2);border:2px solid var(--bdr);
+  display:flex;align-items:center;padding:0 13px;font-family:var(--body);font-size:17px;
+  color:var(--chalk);white-space:nowrap;overflow:hidden}
+.fld .in.mono{font-family:var(--mono);letter-spacing:.3em;font-size:18px}
+.fld .in.focus{border-color:var(--electric);box-shadow:0 0 0 4px rgba(226,20,79,.16)}
+.btn{height:51px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--body);font-weight:600;font-size:17px}
+.btn.pri{background:var(--electric);color:#FFFFFF}
+.btn.gh{height:34px;color:var(--smoke);font-size:14px;font-weight:500}
+.door{padding:78px 22px 76px;align-items:center;justify-content:center}
+.door img.mark{width:252px;height:auto;display:block}
+.door .tiles{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;margin-top:40px}
+.tile{background:var(--panel);border:2px solid var(--bdr);border-radius:14px;min-height:198px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:17px}
+.tile .well{width:68px;height:68px;border-radius:50%;background:var(--panel2);display:flex;
+  align-items:center;justify-content:center}
+.tile .nm{font-family:var(--body);font-weight:700;font-size:20px;color:var(--chalk);text-align:center}
+.tile.acc{border-color:var(--electric);box-shadow:0 0 0 4px rgba(226,20,79,.20)}
+.tile.acc .well{background:rgba(226,20,79,.16)}
+.door .tag{position:absolute;left:0;right:0;bottom:34px;text-align:center;
+  font-family:var(--mono);font-size:13px;color:var(--smoke)}
+</style>
+</head>
+<body>
+<div id="page">
+
+  <div id="hd">
+    <img src="__LOGO__" alt="">
+    <div class="rule"></div>
+    <div class="who">DANCING IMAGES DANCE CENTER</div>
+    <div class="sp"></div>
+    <div class="tag">PARENT PORTAL</div>
+  </div>
+
+  <div id="ttl">
+    <h1>How to create<br>your <span class="pk">account</span></h1>
+    <p>For families enrolled at the studio. It takes about two minutes, and you only do it once.</p>
+  </div>
+
+  <div id="rule1">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#E2144F" stroke-width="2.1"
+      stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg>
+    <div>
+      <h2>Use your Enrollio email</h2>
+      <p>Sign up with <b>the same email address you signed up with in Enrollio</b> — the one the
+        studio already has for you. Any other address will not be recognised, and nothing on
+        screen will tell you so: the code simply never arrives. If you are not sure which address
+        that is, ask us before you start.</p>
+    </div>
+  </div>
+
+  <div id="steps">
+    <div class="st"><div class="n">1</div><div>
+      <h3>Open the app and tap Dancer Portal</h3>
+      <p>There are two doors. Families go through <b>Dancer Portal</b> — not Staff Portal.</p></div></div>
+    <div class="st"><div class="n">2</div><div>
+      <h3>Tap Sign up, then fill in your details</h3>
+      <p>First name, last name, and <b>your Enrollio email address</b>.</p></div></div>
+    <div class="st"><div class="n">3</div><div>
+      <h3>Choose a password</h3>
+      <p>At least <b>6 characters</b>. You will type it twice, to catch typos.</p></div></div>
+    <div class="st"><div class="n">4</div><div>
+      <h3>Enter the 6-digit code from your email</h3>
+      <p>It is sent the moment you tap Create account. Type it in and you are done.</p></div></div>
+  </div>
+
+  <div id="shots">
+    <div class="sh">
+      <div class="cap">1 &middot; DANCER PORTAL</div>
+      <div class="shot"><div class="dev"><div class="screen">
+        <div class="scr door">
+          <img class="mark" src="__LOGO__" alt="">
+          <div class="tiles">
+            <div class="tile">
+              <div class="well"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#9A9AA4"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/><path d="M9 7V5h6v2"/></svg></div>
+              <div class="nm">Staff Portal</div>
+            </div>
+            <div class="tile acc">
+              <div class="well"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#E2144F"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+              <div class="nm">Dancer Portal</div>
+            </div>
+          </div>
+          <div class="tag">You are your only limit</div>
+        </div>
+        <div class="island"></div></div></div></div>
+    </div>
+
+    <div class="sh">
+      <div class="cap">2 &middot; YOUR ENROLLIO EMAIL</div>
+      <div class="shot"><div class="dev"><div class="screen">
+        <div class="scr">
+          <div class="ph-head"><div class="ph-back">&lsaquo;</div><img src="__LOGO__" alt="">
+            <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+          <div class="ph-body">
+            <div class="ph-h1">Create account</div>
+            <div class="ph-sub">For families enrolled at the studio.</div>
+            <div class="card">
+              <div class="p">Use the same email address as your <b>Enrollio</b> account &mdash; the one
+                the studio already has for you.</div>
+              <div class="fld"><div class="lb">Your first name</div><div class="in">Sarah</div></div>
+              <div class="fld"><div class="lb">Your last name</div><div class="in">Mitchell</div></div>
+              <div class="fld"><div class="lb">Email</div>
+                <div class="in focus">sarah.mitchell@gmail.com</div></div>
+              <div class="btn pri">Continue</div>
+            </div>
+          </div>
+        </div>
+        <div class="island"></div></div></div></div>
+    </div>
+
+    <div class="sh">
+      <div class="cap">3 &middot; THE 6-DIGIT CODE</div>
+      <div class="shot"><div class="dev"><div class="screen">
+        <div class="scr">
+          <div class="ph-head"><div class="ph-back">&lsaquo;</div><img src="__LOGO__" alt="">
+            <div class="sp"></div><div class="ph-lab">Parent Portal</div><div class="ph-ic">&#8635;</div></div>
+          <div class="ph-body">
+            <div class="ph-h1">Create account</div>
+            <div class="ph-sub">For families enrolled at the studio.</div>
+            <div class="card">
+              <div class="p">A 6-digit code is on its way to <b>sarah.mitchell@gmail.com</b>.
+                Enter the code to finish.</div>
+              <div class="p"><b>Check your spam or junk folder.</b> The code often lands there the
+                first time.</div>
+              <div class="fld"><div class="lb">Code from your email</div>
+                <div class="in mono focus">482917</div></div>
+              <div class="btn pri">Verify and log in</div>
+              <div class="btn gh">Send a new code</div>
+            </div>
+          </div>
+        </div>
+        <div class="island"></div></div></div></div>
+    </div>
+  </div>
+
+  <div id="help">
+    <h2>If the code does not arrive</h2>
+    <div class="row">
+      <div class="it"><b>Check junk and spam.</b><span>It often lands there the first time. Mark it
+        as not spam so the next one reaches you.</span></div>
+      <div class="it"><b>The code lasts one hour.</b><span>After that it stops working. Tap
+        <i>Send a new code</i> and use the newest one.</span></div>
+      <div class="it"><b>Wrong address, no code.</b><span>If it was not your Enrollio email, nothing
+        arrives and nothing says why. Start again with the right one.</span></div>
+    </div>
+  </div>
+
+  <div id="ft">
+    <div class="l">YOU ARE YOUR ONLY LIMIT</div>
+    <div class="sp"></div>
+    <div class="r">Still stuck? <b>Ask the studio</b> and we will check the email address we have
+      on file for you.</div>
+  </div>
+
+</div>
+</body>
+</html>

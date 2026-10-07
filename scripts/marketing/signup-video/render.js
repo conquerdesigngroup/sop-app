@@ -85,7 +85,7 @@ const outFor = (name, dur) => path.resolve(namedOut
 /** Inline the fonts and the brand mark so the page renders with no network. */
 function buildHtml() {
   let html = fs.readFileSync(path.join(HERE, TEMPLATE), 'utf8');
-  const fontCss = fs.readFileSync(path.join(HERE, 'assets/fonts.css'), 'utf8');
+  const fontCss = fs.readFileSync(path.join(HERE, '../assets/fonts.css'), 'utf8');
   const logo = fs.readFileSync(path.join(REPO, 'public/brand/logos/didc-mark-3d.png'));
   html = html.replace('__FONT_CSS__', fontCss);
   html = html.split('__LOGO__').join('data:image/png;base64,' + logo.toString('base64'));
