@@ -104,22 +104,37 @@ describe('streamDownloadFilename', () => {
 
 describe('saveToPhotosSupport', () => {
   const probeOk = { share: async () => undefined, canShare: () => true };
+  // A touch device. Every 'share' expectation below needs it: the whole point
+  // of this function is that a capable browser is not on its own enough.
+  const coarse = (q: string) => q === '(pointer: coarse)';
+  const fine = () => false;
+
   it('is share only when the browser can share a video file', () => {
-    expect(saveToPhotosSupport(probeOk)).toBe('share');
-    expect(saveToPhotosSupport({ ...probeOk, canShare: () => false })).toBe('link');
-    expect(saveToPhotosSupport({ share: async () => undefined })).toBe('link');
-    expect(saveToPhotosSupport({})).toBe('link');
-    expect(saveToPhotosSupport(undefined)).toBe('link');
+    expect(saveToPhotosSupport(probeOk, 'video/mp4', coarse)).toBe('share');
+    expect(saveToPhotosSupport({ ...probeOk, canShare: () => false }, 'video/mp4', coarse)).toBe('link');
+    expect(saveToPhotosSupport({ share: async () => undefined }, 'video/mp4', coarse)).toBe('link');
+    expect(saveToPhotosSupport({}, 'video/mp4', coarse)).toBe('link');
+    expect(saveToPhotosSupport(undefined, 'video/mp4', coarse)).toBe('link');
   });
+
+  it('is link on a desktop however capable the browser claims to be', () => {
+    // Desktop Safari and desktop Chrome both answer canShare({files}) with
+    // true. Taking that as a yes is what made Save to Photos pull a whole
+    // MP4 into memory on a Mac to offer AirDrop.
+    expect(saveToPhotosSupport(probeOk, 'video/mp4', fine)).toBe('link');
+    expect(saveToPhotosSupport(probeOk, 'image/jpeg', fine)).toBe('link');
+  });
+
   it('probes with the type it will actually share', () => {
     const seen: string[] = [];
     const nav = { share: async () => undefined, canShare: (d: { files?: File[] }) => { seen.push(d.files?.[0]?.type ?? ''); return true; } };
-    saveToPhotosSupport(nav, 'image/jpeg');
-    saveToPhotosSupport(nav);
+    saveToPhotosSupport(nav, 'image/jpeg', coarse);
+    saveToPhotosSupport(nav, 'video/mp4', coarse);
     expect(seen).toEqual(['image/jpeg', 'video/mp4']);
   });
+
   it('treats a throwing canShare as no support', () => {
-    expect(saveToPhotosSupport({ ...probeOk, canShare: () => { throw new Error('x'); } })).toBe('link');
+    expect(saveToPhotosSupport({ ...probeOk, canShare: () => { throw new Error('x'); } }, 'video/mp4', coarse)).toBe('link');
   });
 });
 

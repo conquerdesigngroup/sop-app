@@ -413,6 +413,13 @@ describe('a class video on Cloudflare Stream', () => {
       mockResolveDownload.mockReset().mockResolvedValue(RESOLVED);
       Object.defineProperty(navigator, 'share', { value: shareSpy, configurable: true, writable: true });
       Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true, writable: true });
+      // "on a phone" is load-bearing, not scene-setting: a share-capable
+      // browser on a desktop must stay a plain download link, so the touch
+      // pointer has to be part of the fixture.
+      (window as any).matchMedia = (q: string) => ({
+        matches: q === '(pointer: coarse)', media: q,
+        addEventListener: () => {}, removeEventListener: () => {},
+      });
       (global as any).fetch = fetchSpy;
       shareSpy.mockReset().mockResolvedValue(undefined);
       fetchSpy.mockReset().mockImplementation(async (_url: string, init?: RequestInit) => fakeResponse(10, init?.signal ?? undefined));
@@ -420,7 +427,25 @@ describe('a class video on Cloudflare Stream', () => {
     afterEach(() => {
       delete (navigator as any).share;
       delete (navigator as any).canShare;
+      delete (window as any).matchMedia;
       delete (global as any).fetch;
+    });
+
+    it('stays a plain download link on a desktop that claims it can share', async () => {
+      // Desktop Safari answers canShare({files}) with true. Taking that as a
+      // phone made this button pull the whole MP4 into memory on a laptop to
+      // offer AirDrop, instead of just downloading it.
+      (window as any).matchMedia = (q: string) => ({
+        matches: false, media: q,
+        addEventListener: () => {}, removeEventListener: () => {},
+      });
+
+      render(<DocumentList documents={[streamDoc({})]} />);
+      await screen.findByTitle('Tuesday class recording');
+
+      expect(screen.getByRole('link', { name: /download/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /download/i })).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('is a Download button, not a link, and one tap fetches the MP4 with a progress line', async () => {

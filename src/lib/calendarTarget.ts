@@ -13,6 +13,8 @@
  * hundred classes, to service a button nobody has pressed, is work thrown away.
  */
 
+import { prefersShareSheet } from './shareTarget';
+
 // ---------------------------------------------------------------- descriptor
 
 export interface CalendarTarget {
@@ -119,27 +121,12 @@ export type AddOutcome = 'shared' | 'downloaded' | 'cancelled';
 /**
  * Whether the share sheet is the better route on this device.
  *
- * Both halves are needed. canShare({files}) alone is true in desktop Safari,
- * where the sheet offers AirDrop and Mail and no way at all to add a date —
- * a Mac wants the file, which opens Calendar on double-click. The coarse
- * pointer is what separates the phone, where the sheet lists "Add to
- * Calendar" directly and a download disappears into Files.
- *
- * Probed with an empty stand-in rather than the real file: the question is
- * whether this browser shares files of this type at all, and building the
- * .ics to ask is work thrown away on every desktop.
+ * The rule itself lives in lib/shareTarget — it is the same question the
+ * hours exports ask, and keeping two copies of it is how one of them came to
+ * be wrong. The probe name and type are what make it specific to calendars:
+ * the question is whether this browser shares .ics files at all.
  */
-const prefersShareSheet = (): boolean => {
-  try {
-    if (typeof File !== 'function' || !navigator.canShare) return false;
-    if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) return false;
-    return navigator.canShare({
-      files: [new File([''], 'probe.ics', { type: 'text/calendar' })],
-    });
-  } catch {
-    return false;
-  }
-};
+const prefersIcsShareSheet = (): boolean => prefersShareSheet('probe.ics', 'text/calendar');
 
 /** Save the .ics straight to the device, no sheet, no questions. */
 export const downloadIcsFile = (body: string, fileName: string): void => {
@@ -173,7 +160,7 @@ export const shareOrDownloadIcs = async (
   fileName: string,
   title: string
 ): Promise<AddOutcome> => {
-  if (prefersShareSheet()) {
+  if (prefersIcsShareSheet()) {
     try {
       const file = new File([body], fileName, { type: 'text/calendar' });
       await navigator.share({ files: [file], title });

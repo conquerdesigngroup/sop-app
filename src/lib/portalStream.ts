@@ -1,4 +1,5 @@
 import { mediaKindOf } from './portalMedia';
+import { prefersShareSheet } from './shareTarget';
 
 /**
  * Class videos live in Cloudflare Stream; everything else lives in the bucket.
@@ -91,22 +92,26 @@ export const SHARE_MAX_BYTES = 300 * 1024 * 1024;
 export type SaveToPhotosSupport = 'share' | 'link';
 
 /**
- * 'share' when this browser can hand a file of this type to the share sheet
- * (iOS 15+, Android Chrome, installed PWAs included); 'link' everywhere
- * else, where Save / Download stays a plain anchor.
+ * 'share' when this is a touch device whose browser can hand a file of this
+ * type to the share sheet (iOS 15+, Android Chrome, installed PWAs included);
+ * 'link' everywhere else, where Save / Download stays a plain anchor.
+ *
+ * The pointer half of the test matters more here than anywhere else in the
+ * app. canShare({files}) alone is true in desktop Safari and desktop Chrome,
+ * and the 'share' path fetches the ENTIRE MP4 into memory before it can offer
+ * it — so without it a parent on a laptop waits through a progress bar for a
+ * 200 MB download, just to be shown AirDrop. On a desktop the plain anchor is
+ * both the right affordance and the cheap one.
  */
 export const saveToPhotosSupport = (
   nav: Partial<Pick<Navigator, 'share' | 'canShare'>> | undefined,
   mime: string = 'video/mp4',
+  matcher?: (query: string) => boolean,
 ): SaveToPhotosSupport => {
-  if (!nav || typeof nav.share !== 'function' || typeof nav.canShare !== 'function') return 'link';
-  if (typeof File === 'undefined') return 'link';
-  try {
-    const ext = mime.startsWith('image/') ? 'jpg' : 'mp4';
-    return nav.canShare({ files: [new File([''], `probe.${ext}`, { type: mime })] }) ? 'share' : 'link';
-  } catch {
-    return 'link';
-  }
+  const ext = mime.startsWith('image/') ? 'jpg' : 'mp4';
+  return prefersShareSheet(`probe.${ext}`, mime, nav as Navigator | undefined, matcher)
+    ? 'share'
+    : 'link';
 };
 
 const mb = (bytes: number): string => {

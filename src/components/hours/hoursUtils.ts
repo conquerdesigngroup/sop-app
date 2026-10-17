@@ -9,6 +9,7 @@
  */
 
 import { WorkHoursEntry } from '../../types';
+import { prefersShareSheet } from '../../lib/shareTarget';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -230,8 +231,12 @@ export const downloadBlob = (filename: string, blob: Blob): void => {
  * A blob download is the desktop answer and a poor phone one: on iOS Safari
  * it lands in Files with no confirmation, which on a button whose whole job
  * is "produce a file" reads as a button that did nothing. Where the OS share
- * sheet can take a file, use it — the file goes straight to Mail, Messages or
- * Drive and the OS confirms it happened.
+ * sheet can take a file AND the device is a touch device, use it — the file
+ * goes straight to Mail, Messages or Drive and the OS confirms it happened.
+ *
+ * The device test is prefersShareSheet(), NOT canShare() on its own: desktop
+ * Chrome and desktop Safari both answer canShare({files}) with true, which is
+ * how this button came to open the macOS share sheet instead of downloading.
  *
  * Returns which route was taken so the caller can say the right thing.
  * 'cancelled' means the person dismissed the share sheet: that is a decision,
@@ -246,19 +251,14 @@ export const shareOrDownloadFile = async (
   blob: Blob,
   mimeType: string
 ): Promise<DeliveryResult> => {
-  // canShare({ files }) is the only honest test. Plenty of browsers define
-  // navigator.share and still reject a file payload.
-  if (typeof File !== 'undefined' && navigator.canShare && navigator.share) {
-    const file = new File([blob], filename, { type: mimeType });
-    if (navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: filename });
-        return 'shared';
-      } catch (error: any) {
-        if (error?.name === 'AbortError') return 'cancelled';
-        // Anything else — share unavailable, permission denied — falls
-        // through to the download so they still get the file.
-      }
+  if (prefersShareSheet(filename, mimeType)) {
+    try {
+      await navigator.share({ files: [new File([blob], filename, { type: mimeType })], title: filename });
+      return 'shared';
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return 'cancelled';
+      // Anything else — share unavailable, permission denied — falls
+      // through to the download so they still get the file.
     }
   }
 

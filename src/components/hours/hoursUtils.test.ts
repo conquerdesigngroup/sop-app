@@ -10,6 +10,20 @@ import { shareOrDownloadCSV, shareOrDownloadFile } from './hoursUtils';
 
 const CSV = 'a,b\r\n1,2';
 
+/**
+ * jsdom has no matchMedia at all, and the delivery rule asks it whether this
+ * is a touch device. Every share case has to say so explicitly — which is the
+ * point: a capable browser alone must never be read as a phone.
+ */
+const setPointer = (kind: 'coarse' | 'fine') => {
+  (window as any).matchMedia = (query: string) => ({
+    matches: query === `(pointer: ${kind})`,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  });
+};
+
 describe('shareOrDownloadCSV', () => {
   let clicks: number;
   let created: string[];
@@ -17,6 +31,7 @@ describe('shareOrDownloadCSV', () => {
   beforeEach(() => {
     clicks = 0;
     created = [];
+    setPointer('coarse');
     // jsdom implements neither, and downloadCSV needs both.
     (URL as any).createObjectURL = jest.fn(() => {
       created.push('blob:x');
@@ -30,6 +45,7 @@ describe('shareOrDownloadCSV', () => {
     jest.restoreAllMocks();
     delete (navigator as any).share;
     delete (navigator as any).canShare;
+    delete (window as any).matchMedia;
   });
 
   it('downloads when the device has no share sheet', async () => {
@@ -42,6 +58,19 @@ describe('shareOrDownloadCSV', () => {
     (navigator as any).canShare = jest.fn(() => false);
 
     await expect(shareOrDownloadCSV('t.csv', CSV)).resolves.toBe('downloaded');
+    expect(navigator.share).not.toHaveBeenCalled();
+    expect(clicks).toBe(1);
+  });
+
+  it('downloads on a desktop even though desktop Safari says it can share', async () => {
+    // The reported bug. Pressing Download PDF / Export CSV on a Mac opened
+    // the macOS share sheet — AirDrop, Messages, Notes — because
+    // canShare({files}) is true there and nothing asked what device it was.
+    setPointer('fine');
+    (navigator as any).canShare = jest.fn(() => true);
+    (navigator as any).share = jest.fn(async () => undefined);
+
+    await expect(shareOrDownloadCSV('payroll.csv', CSV)).resolves.toBe('downloaded');
     expect(navigator.share).not.toHaveBeenCalled();
     expect(clicks).toBe(1);
   });
@@ -83,7 +112,12 @@ describe('shareOrDownloadCSV', () => {
 });
 
 describe('shareOrDownloadFile', () => {
+  afterEach(() => {
+    delete (window as any).matchMedia;
+  });
+
   it('carries the mime type onto the shared file, so a PDF is offered as a PDF', async () => {
+    setPointer('coarse');
     (navigator as any).canShare = jest.fn(() => true);
     (navigator as any).share = jest.fn(async () => undefined);
 
