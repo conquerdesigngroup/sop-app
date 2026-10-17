@@ -212,6 +212,14 @@ const AUTH_ROUTES = [
   // the class on. That one has the widest row in the feature (five status
   // pills) and has to be checked by hand on a phone until it has a URL.
   '/attendance',
+  // A teacher's own classes, across programs. Its rows put a class name of
+  // arbitrary length beside an Open button in one wrapping flex row, which is
+  // the shape that overflows first on a 320px phone.
+  //
+  // Measured on a staff session that holds no class, it renders the empty
+  // state and proves nothing about the rows — so a run that matters needs
+  // AUDIT_EMAIL to name somebody with a grant in portal_class_instructors.
+  '/portal-admin/my-classes',
   // Admin-only client roster page. /portal/account is signed-in-CLIENT-only,
   // which the audit's staff session cannot reach (staff get redirected), so
   // it has no row here — check it by hand on a phone with a client login.

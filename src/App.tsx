@@ -68,6 +68,7 @@ const PortalProfile = lazy(() => import('./pages/portal/Profile'));
 // a class, which is why its route is a plain ProtectedRoute — see the page.
 const PortalManagerPage = lazy(() => import('./pages/portal-admin/PortalManagerPage'));
 const ClientAccountsPage = lazy(() => import('./pages/portal-admin/ClientAccountsPage'));
+const MyClassesPage = lazy(() => import('./pages/portal-admin/MyClassesPage'));
 const PortalViewerPage = lazy(() => import('./pages/portal-admin/PortalViewerPage'));
 
 // Page loading fallback - simple centered spinner.
@@ -400,6 +401,19 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <PortalManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* A teacher's own classes, across every program, as a way in to
+              each one's workspace. Not adminOnly, for the same reason
+              /portal-admin is not: the per-class grants exist for people who
+              are not admins, and the page turns away anyone can_edit_portal()
+              refuses. */}
+          <Route
+            path="/portal-admin/my-classes"
+            element={
+              <ProtectedRoute>
+                <MyClassesPage />
               </ProtectedRoute>
             }
           />

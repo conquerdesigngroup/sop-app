@@ -21,19 +21,20 @@ jest.mock('react-router-dom', () => ({
 }), { virtual: true });
 
 const mockAuth = { isAdmin: false, currentUser: { id: 'me' } };
-const mockPortal = { canEdit: false };
+const mockPortal = { canEdit: false, editableClassIds: [] as string[] };
 const mockCounts = { myOverdue: 0, allOverdue: 0 };
 
 jest.mock('../../contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
 jest.mock('../../contexts/PortalAdminContext', () => ({ usePortalAdmin: () => mockPortal }));
 jest.mock('../../hooks/useTaskCounts', () => ({ useTaskCounts: () => mockCounts }));
 
-const labels = (isAdmin: boolean, teaches: boolean) =>
-  shortcutsFor(isAdmin, teaches, 0).map(s => s.label);
+const labels = (isAdmin: boolean, teaches: boolean, holdsClasses = false) =>
+  shortcutsFor(isAdmin, teaches, 0, holdsClasses).map(s => s.label);
 
 beforeEach(() => {
   mockAuth.isAdmin = false;
   mockPortal.canEdit = false;
+  mockPortal.editableClassIds = [];
   mockCounts.myOverdue = 0;
 });
 
@@ -53,12 +54,39 @@ describe('shortcutsFor', () => {
     expect(labels(false, false)).toEqual(['Log hours', 'My tasks', 'Calendar', 'SOPs', 'My profile', 'Settings']);
   });
 
-  it.each([[true, true], [true, false], [false, true], [false, false]])(
+  it('swaps Portal manager for My classes once someone actually holds one', () => {
+    const held = ['Take attendance', 'My classes', 'Log hours', 'My tasks', 'Calendar', 'SOPs'];
+    expect(labels(false, true, true)).toEqual(held);
+    // An admin who also teaches is a teacher here too.
+    expect(labels(true, true, true)).toEqual(held);
+  });
+
+  it('leaves an admin who holds no class on Portal manager', () => {
+    // can_edit_portal() is true for every admin, so keying the tile off
+    // `teaches` would hand them an empty My classes page.
+    expect(labels(true, false, false)).toEqual(CLASS_HOLDER);
+  });
+
+  it.each([
+    [true, true], [true, false], [false, true], [false, false],
+  ])(
     'is six tiles for isAdmin=%s teaches=%s, so three across fills two whole rows',
     (isAdmin, teaches) => {
       expect(shortcutsFor(isAdmin, teaches, 0)).toHaveLength(6);
+      // A swap, never a seventh tile: seven is 3+3+1 and a lone third row.
+      expect(shortcutsFor(isAdmin, teaches, 0, true)).toHaveLength(6);
     },
   );
+
+  it('still leaves Portal one tap away when its tile gives way to My classes', () => {
+    // The tile is a swap, so the promise the grid makes is kept by the bar.
+    const reachable = new Set([
+      ...bottomNavPathsFor(false, true),
+      ...shortcutsFor(false, true, 0, true).map(s => s.to),
+    ]);
+    expect(reachable).toContain('/portal-admin');
+    expect(reachable).toContain('/portal-admin/my-classes');
+  });
 
   it.each([
     ['management', true, true],
@@ -103,6 +131,17 @@ describe('the grid', () => {
     expect(navigate).toHaveBeenCalledWith('/attendance');
     fireEvent.click(screen.getByRole('button', { name: /portal manager/i }));
     expect(navigate).toHaveBeenCalledWith('/portal-admin');
+  });
+
+  it('sends a teacher who holds a class to their own classes', () => {
+    mockPortal.canEdit = true;
+    mockPortal.editableClassIds = ['class-1'];
+    const navigate = jest.fn();
+    render(<Shortcuts navigate={navigate} />);
+
+    expect(screen.queryByRole('button', { name: /portal manager/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /my classes/i }));
+    expect(navigate).toHaveBeenCalledWith('/portal-admin/my-classes');
   });
 
   it('carries the overdue count on My tasks, and nothing when none are overdue', () => {

@@ -148,15 +148,38 @@ const portal_classes = CLASS_SPECS.map(([name, category, style, day, start, end,
 }));
 
 const TEACHERS = [STAFF.teacherJess, STAFF.teacherDevon, STAFF.teacherPriya];
-const portal_class_instructors = portal_classes.map((c, i) => ({
-  class_id: c.id,
-  profile_id: TEACHERS[i % TEACHERS.length],
+const grant = (class_id, profile_id) => ({
+  class_id,
+  profile_id,
   granted_by: STAFF.owner,
   is_paused: false,
   paused_at: null,
   paused_by: null,
   created_at: iso(-190),
-}));
+});
+
+const portal_class_instructors = [
+  ...portal_classes.map((c, i) => grant(c.id, TEACHERS[i % TEACHERS.length])),
+  /**
+   * The owner holds two classes as well, in BOTH programs.
+   *
+   * dev@localhost is the only account the audit and a click-through can sign
+   * in as, so anything keyed on holding a class — the dashboard's My classes
+   * tile, the page behind it, the "Yours" badge in the editor — is invisible
+   * to both unless this account has a grant. Without these two rows
+   * /portal-admin/my-classes renders its empty state and the audit calls the
+   * route clean having measured no rows at all.
+   *
+   * Two, and across programs, because one would never show the grouping.
+   */
+  ...(() => {
+    const byProgram = new Map();
+    for (const c of portal_classes) {
+      if (!byProgram.has(c.program_id)) byProgram.set(c.program_id, c.id);
+    }
+    return Array.from(byProgram.values()).map(id => grant(id, STAFF.owner));
+  })(),
+];
 
 // --- updates ----------------------------------------------------------------
 

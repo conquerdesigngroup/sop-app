@@ -22,10 +22,18 @@ import { CountBadge } from '../BottomNavigation';
  * Chosen on the same test the bar uses, so the two cannot disagree about who
  * teaches:
  *
- *   holds a class, or management
+ *   holds a class
+ *       Take attendance · My classes · Log hours · My tasks · Calendar · SOPs
+ *   management, holding none
  *       Take attendance · Portal manager · Log hours · My tasks · Calendar · SOPs
  *   neither
  *       Log hours · My tasks · Calendar · SOPs · My profile · Settings
+ *
+ * My classes REPLACES Portal manager rather than joining it, because six is
+ * the whole budget (see SIX, IN THREES) and a teacher loses nothing: Portal is
+ * already a tab in the bottom bar and a link in the desktop header for anyone
+ * can_edit_portal() allows. What they gain is their own classes without first
+ * picking a program and reading past everyone else's.
  *
  * SIX, IN THREES
  *
@@ -99,6 +107,14 @@ const icons = {
       <line x1="16" y1="17" x2="8" y2="17" />
     </svg>
   ),
+  myClasses: (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
+      <rect x="3" y="7" width="18" height="14" rx="2" />
+      <path d="M7 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2" />
+      <path d="M12 11v6" />
+      <path d="M9 14h6" />
+    </svg>
+  ),
   profile: (
     <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -113,7 +129,19 @@ const icons = {
   ),
 };
 
-export const shortcutsFor = (isAdmin: boolean, teaches: boolean, myOverdue: number): Shortcut[] => {
+/**
+ * `holdsClasses` is "has at least one unpaused grant in
+ * portal_class_instructors", NOT `teaches`. They are different questions:
+ * `teaches` mirrors can_edit_portal(), which is true for EVERY admin, so
+ * keying the tile off it would hand an empty My classes page to every admin
+ * who teaches nothing.
+ */
+export const shortcutsFor = (
+  isAdmin: boolean,
+  teaches: boolean,
+  myOverdue: number,
+  holdsClasses = false,
+): Shortcut[] => {
   const hours: Shortcut = { key: 'hours', label: 'Log hours', icon: icons.hours, to: '/hours-input' };
   const myTasks: Shortcut = { key: 'my-tasks', label: 'My tasks', icon: icons.tasks, to: '/my-tasks', badge: myOverdue };
   const calendar: Shortcut = { key: 'calendar', label: 'Calendar', icon: icons.calendar, to: '/calendar' };
@@ -124,7 +152,9 @@ export const shortcutsFor = (isAdmin: boolean, teaches: boolean, myOverdue: numb
   if (isAdmin || teaches) {
     return [
       { key: 'attendance', label: 'Take attendance', icon: icons.attendance, to: '/attendance' },
-      { key: 'portal', label: 'Portal manager', icon: icons.portal, to: '/portal-admin' },
+      holdsClasses
+        ? { key: 'my-classes', label: 'My classes', icon: icons.myClasses, to: '/portal-admin/my-classes' }
+        : { key: 'portal', label: 'Portal manager', icon: icons.portal, to: '/portal-admin' },
       hours,
       myTasks,
       calendar,
@@ -144,11 +174,11 @@ export const shortcutsFor = (isAdmin: boolean, teaches: boolean, myOverdue: numb
 const Shortcuts: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) => {
   const { isAdmin } = useAuth();
   // Mirrors can_edit_portal(), exactly as the bottom bar reads it.
-  const { canEdit: teaches } = usePortalAdmin();
+  const { canEdit: teaches, editableClassIds } = usePortalAdmin();
   const { myOverdue } = useTaskCounts();
   const { isMobileOrTablet } = useResponsive();
 
-  const shortcuts = shortcutsFor(isAdmin, teaches, myOverdue);
+  const shortcuts = shortcutsFor(isAdmin, teaches, myOverdue, editableClassIds.length > 0);
 
   // Three across on a phone (see SIX, IN THREES); one row on a laptop.
   const columns = isMobileOrTablet ? 3 : shortcuts.length;
