@@ -76,6 +76,51 @@ export const resolveRange = (preset: RangePreset, anchor: string = studioToday()
   return { from, to, label: `${MONTHS[m - 1]} ${y}` };
 };
 
+/**
+ * The ranges people actually ask for, by name.
+ *
+ * 'to-date' is the class history's "everything so far". It has no real start,
+ * so it reads from a floor well before the studio's first season and ends
+ * today — a future Tuesday is not history.
+ */
+export type QuickRange =
+  | 'today' | 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'last-30' | 'to-date';
+
+export const QUICK_RANGES: { key: QuickRange; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: 'this-week', label: 'This week' },
+  { key: 'last-week', label: 'Last week' },
+  { key: 'this-month', label: 'This month' },
+  { key: 'last-month', label: 'Last month' },
+  { key: 'last-30', label: 'Last 30 days' },
+];
+
+/** Earlier than any session the studio has. Only 'to-date' uses it. */
+export const HISTORY_FLOOR = '2000-01-01';
+
+/** Any two dates, in either order. A reversed pair is swapped, not refused. */
+export const customRange = (a: string, b: string): DateRange => {
+  const [from, to] = a <= b ? [a, b] : [b, a];
+  return {
+    from,
+    to,
+    label: from === to ? prettyDate(from) : `${prettyDate(from)} – ${prettyDate(to)}`,
+  };
+};
+
+export const quickRange = (key: QuickRange, today: string = studioToday()): DateRange => {
+  switch (key) {
+    case 'today': return resolveRange('day', today);
+    case 'this-week': return resolveRange('week', today);
+    case 'last-week': return resolveRange('week', shiftIsoDays(today, -7));
+    case 'this-month': return resolveRange('month', today);
+    // The day before the 1st is always in the previous month, whatever its length.
+    case 'last-month': return resolveRange('month', shiftIsoDays(`${today.slice(0, 8)}01`, -1));
+    case 'last-30': return customRange(shiftIsoDays(today, -29), today);
+    case 'to-date': return { from: HISTORY_FLOOR, to: today, label: `Everything up to ${prettyDate(today)}` };
+  }
+};
+
 export const statusLabel = (row: RecordRow): string =>
   row.status ? STATUS_LABELS[row.status] : 'Not marked';
 
@@ -176,4 +221,71 @@ export const tally = (rows: RecordRow[]): Tally => {
 
   t.percent = t.counted === 0 ? null : Math.round((t.attended / t.counted) * 100);
   return t;
+};
+
+export interface DancerHistory {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  /** Newest first. */
+  rows: RecordRow[];
+  tally: Tally;
+}
+
+/** One class's records, regrouped dancer by dancer, sorted by name. */
+export const byDancer = (rows: RecordRow[]): DancerHistory[] => {
+  const m = new Map<string, RecordRow[]>();
+  rows.forEach(r => {
+    const list = m.get(r.studentId) ?? [];
+    list.push(r);
+    m.set(r.studentId, list);
+  });
+  return Array.from(m.values())
+    .map(list => {
+      const sorted = [...list].sort((a, b) => b.sessionDate.localeCompare(a.sessionDate));
+      return {
+        studentId: sorted[0].studentId,
+        firstName: sorted[0].firstName,
+        lastName: sorted[0].lastName,
+        rows: sorted,
+        tally: tally(sorted),
+      };
+    })
+    .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+};
+
+export interface SessionSummary {
+  sessionId: string;
+  sessionDate: string;
+  sessionStatus: RecordRow['sessionStatus'];
+  sessionNote: string | null;
+  rows: RecordRow[];
+  tally: Tally;
+}
+
+/** One class's records, regrouped date by date, newest first. */
+export const bySession = (rows: RecordRow[]): SessionSummary[] => {
+  const m = new Map<string, RecordRow[]>();
+  rows.forEach(r => {
+    const list = m.get(r.sessionId) ?? [];
+    list.push(r);
+    m.set(r.sessionId, list);
+  });
+  return Array.from(m.values())
+    .map(list => ({
+      sessionId: list[0].sessionId,
+      sessionDate: list[0].sessionDate,
+      sessionStatus: list[0].sessionStatus,
+      sessionNote: list[0].sessionNote,
+      rows: list,
+      tally: tally(list),
+    }))
+    .sort((a, b) => b.sessionDate.localeCompare(a.sessionDate));
+};
+
+/** Free-text match on a dancer's name, the same way everywhere it is offered. */
+export const matchesDancer = (r: { firstName: string; lastName: string }, needle: string): boolean => {
+  const n = needle.trim().toLowerCase();
+  return !n || `${r.firstName} ${r.lastName}`.toLowerCase().includes(n)
+    || `${r.lastName}, ${r.firstName}`.toLowerCase().includes(n);
 };

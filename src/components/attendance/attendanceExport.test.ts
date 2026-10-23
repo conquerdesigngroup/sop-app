@@ -1,5 +1,10 @@
 import {
   buildAttendanceCSV,
+  byDancer,
+  bySession,
+  customRange,
+  matchesDancer,
+  quickRange,
   reasonLabel,
   resolveRange,
   slug,
@@ -52,6 +57,67 @@ describe('date ranges', () => {
 
   it('crosses a year boundary without drifting', () => {
     expect(resolveRange('week', '2027-01-01')).toMatchObject({ from: '2026-12-27', to: '2027-01-02' });
+  });
+});
+
+describe('quick ranges', () => {
+  // 2026-10-23 is a Friday.
+  const today = '2026-10-23';
+
+  it('last week is the whole Sunday-to-Saturday week before this one', () => {
+    expect(quickRange('this-week', today)).toMatchObject({ from: '2026-10-18', to: '2026-10-24' });
+    expect(quickRange('last-week', today)).toMatchObject({ from: '2026-10-11', to: '2026-10-17' });
+  });
+
+  it('last month is the previous calendar month, across a year boundary too', () => {
+    expect(quickRange('last-month', today)).toMatchObject({ from: '2026-09-01', to: '2026-09-30' });
+    expect(quickRange('last-month', '2027-01-31')).toMatchObject({ from: '2026-12-01', to: '2026-12-31' });
+    // March 31st minus a month is not "March 3rd" here, because it walks from the 1st.
+    expect(quickRange('last-month', '2027-03-31')).toMatchObject({ from: '2027-02-01', to: '2027-02-28' });
+  });
+
+  it('the last 30 days include today and are 30 days long, not 31', () => {
+    expect(quickRange('last-30', today)).toMatchObject({ from: '2026-09-24', to: '2026-10-23' });
+  });
+
+  it('history to date stops at today, so upcoming classes are not history', () => {
+    expect(quickRange('to-date', today).to).toBe(today);
+  });
+
+  it('a custom range typed backwards is swapped rather than empty', () => {
+    expect(customRange('2026-10-20', '2026-10-01')).toMatchObject({ from: '2026-10-01', to: '2026-10-20' });
+    expect(customRange('2026-10-20', '2026-10-20').label).toBe('October 20, 2026');
+  });
+});
+
+describe('class history groupings', () => {
+  const rows = [
+    row({ sessionId: 's1', sessionDate: '2026-10-06', studentId: 'a', firstName: 'Bo', lastName: 'Marsh', status: 'absent' }),
+    row({ sessionId: 's2', sessionDate: '2026-10-13', studentId: 'a', firstName: 'Bo', lastName: 'Marsh', status: 'present' }),
+    row({ sessionId: 's1', sessionDate: '2026-10-06', studentId: 'b', firstName: 'Ada', lastName: 'Lee', status: 'present' }),
+    row({ sessionId: 's2', sessionDate: '2026-10-13', studentId: 'b', firstName: 'Ada', lastName: 'Lee', status: null }),
+  ];
+
+  it('gives each dancer their own dates, newest first, and their own percentage', () => {
+    const dancers = byDancer(rows);
+    expect(dancers.map(d => d.lastName)).toEqual(['Lee', 'Marsh']);
+    expect(dancers[1].rows.map(r => r.sessionDate)).toEqual(['2026-10-13', '2026-10-06']);
+    expect(dancers[1].tally).toMatchObject({ attended: 1, counted: 2, percent: 50 });
+  });
+
+  it('gives each date its own tally, newest first', () => {
+    const dates = bySession(rows);
+    expect(dates.map(d => d.sessionDate)).toEqual(['2026-10-13', '2026-10-06']);
+    expect(dates[0].tally).toMatchObject({ present: 1, unmarked: 1 });
+  });
+
+  it('finds a dancer by either name, in either order', () => {
+    const bo = { firstName: 'Bo', lastName: 'Marsh' };
+    expect(matchesDancer(bo, 'marsh')).toBe(true);
+    expect(matchesDancer(bo, 'Bo Ma')).toBe(true);
+    expect(matchesDancer(bo, 'Marsh, B')).toBe(true);
+    expect(matchesDancer(bo, 'Ada')).toBe(false);
+    expect(matchesDancer(bo, '  ')).toBe(true);
   });
 });
 

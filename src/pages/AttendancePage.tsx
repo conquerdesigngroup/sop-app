@@ -64,6 +64,9 @@ const AttendancePage: React.FC = () => {
   // today's classes and so has no entry in `days`.
   const [fixing, setFixing] = useState<ClassDay | null>(null);
   const [tab, setTab] = useState<'take' | 'records'>('take');
+  // Bumped when a session opened from the records closes, so the records (which
+  // stay mounted underneath, filters and all) re-read what was just fixed.
+  const [recordsVersion, setRecordsVersion] = useState(0);
   /*
    * Whose classes the day shows.
    *
@@ -196,17 +199,33 @@ const AttendancePage: React.FC = () => {
         </div>
       )}
 
-      {open ? (
+      {open && (
         <Card>
           <RosterSheet
             day={open}
-            onBack={() => { setOpenClassId(null); setFixing(null); if (fixing) load(true).catch(() => {}); }}
+            onBack={() => {
+              setOpenClassId(null);
+              setFixing(null);
+              if (fixing) {
+                load(true).catch(() => {});
+                setRecordsVersion(v => v + 1);
+              }
+            }}
             onCountChange={n => setMarked(open.klass.id, n)}
             readOnly={open.session.status !== 'held'}
           />
         </Card>
-      ) : isAdmin && tab === 'records' ? (
+      )}
+
+      {/*
+        Hidden, not unmounted, while a session from it is open: the records hold
+        a range, a set of classes and perhaps a class's history, and coming back
+        from fixing one Tuesday to a reset screen loses all of it.
+      */}
+      {isAdmin && tab === 'records' && (
+        <div hidden={Boolean(open)}>
         <RecordsTab
+          refreshToken={recordsVersion}
           generatedBy={currentUser ? `${currentUser.firstName} ${currentUser.lastName}`.trim() : undefined}
           onFix={r => setFixing({
             klass: {
@@ -222,7 +241,10 @@ const AttendancePage: React.FC = () => {
             marked: 0,
           })}
         />
-      ) : (
+        </div>
+      )}
+
+      {!open && !(isAdmin && tab === 'records') && (
         <>
           {/*
             Date bar. Wraps, and centres nothing — a centred row that overflows

@@ -60,6 +60,10 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
   const pending = useRef<Map<string, AttendanceStatus>>(new Map());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
+  // The save currently on the wire, so leaving can wait for it.
+  const inFlight = useRef<Promise<unknown> | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const leavingRef = useRef(false);
 
   useEffect(() => () => {
     alive.current = false;
@@ -91,7 +95,10 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
     pending.current = new Map();
     setSave({ kind: 'saving' });
 
-    const { error } = await markAttendance(day.session.id, batch);
+    const request = markAttendance(day.session.id, batch);
+    inFlight.current = request;
+    const { error } = await request;
+    if (inFlight.current === request) inFlight.current = null;
     if (!alive.current) return;
 
     if (error) {
@@ -143,6 +150,28 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
     schedule();
   }, [onCountChange, schedule]);
 
+  /**
+   * Back, without losing the last few taps.
+   *
+   * Marks wait SAVE_DELAY_MS before they are sent, and unmounting clears that
+   * timer — so leaving straight away dropped whatever was tapped in the last
+   * moment, silently. Back now sends anything pending and waits for it (and for
+   * a save already on its way), and only then leaves. If that save fails it
+   * stays put: the error line says so and Retry has the marks.
+   */
+  const back = useCallback(async () => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    setLeaving(true);
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    await inFlight.current?.catch(() => {});
+    if (pending.current.size > 0) await flush().catch(() => {});
+    if (!alive.current) return;
+    leavingRef.current = false;
+    setLeaving(false);
+    if (pending.current.size === 0) onBack();
+  }, [flush, onBack]);
+
   const unmarked = rows.filter(r => r.status === null).length;
   const marked = rows.length - unmarked;
 
@@ -167,7 +196,9 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm, alignItems: 'center', marginBottom: theme.spacing.md }}>
-        <Button variant="secondary" size="sm" onClick={onBack}>← Classes</Button>
+        <Button variant="secondary" size="sm" onClick={() => { back().catch(() => {}); }} disabled={leaving}>
+          {leaving ? 'Saving…' : '← Classes'}
+        </Button>
         <div style={{ flex: '1 1 160px', minWidth: 0 }}>
           <div style={{
             fontWeight: 700,
