@@ -5,6 +5,7 @@ import {
   COMMENT_MAX,
   CRITERIA,
   Criterion,
+  EMPTY_DRAFT,
   EvaluationDraft,
   RATINGS,
   Rating,
@@ -50,6 +51,11 @@ interface Props {
   saving: boolean;
   /** Saves a draft (or changes to a submitted one). Never submits. */
   onSave: (draft: EvaluationDraft) => Promise<void>;
+  /**
+   * Removes the saved DRAFT so the dancer is Not started again. Only offered
+   * while nothing is submitted; the sheet confirms before calling it.
+   */
+  onClear: () => Promise<void>;
   onBack: () => void;
 }
 
@@ -107,7 +113,7 @@ const RatingRow: React.FC<{
   );
 };
 
-const EvaluationForm: React.FC<Props> = ({ entry, className, round, canSave, saving, onSave, onBack }) => {
+const EvaluationForm: React.FC<Props> = ({ entry, className, round, canSave, saving, onSave, onClear, onBack }) => {
   const saved = entry.evaluation;
   const [draft, setDraft] = useState<EvaluationDraft>(() => draftOf(saved));
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +143,25 @@ const EvaluationForm: React.FC<Props> = ({ entry, className, round, canSave, sav
       setError(e?.message || 'Could not save. Check your connection and try again.');
     }
   };
+
+  /**
+   * Clear. With nothing saved it just empties the form; with a saved draft it
+   * asks the sheet to remove the row (which confirms first) — either way the
+   * dancer ends up blank, which is what "start over" means.
+   */
+  const clear = async () => {
+    setError(null);
+    if (!saved) {
+      setDraft(EMPTY_DRAFT);
+      return;
+    }
+    try {
+      await onClear();
+    } catch (e: any) {
+      setError(e?.message || 'Could not clear. Check your connection and try again.');
+    }
+  };
+  const canClear = !submitted && (saved !== null || !sameDraft(draft, EMPTY_DRAFT));
 
   return (
     <div>
@@ -220,6 +245,11 @@ const EvaluationForm: React.FC<Props> = ({ entry, className, round, canSave, sav
           <Button variant="primary" onClick={attempt} disabled={saving || !dirty} loading={saving}>
             {submitted ? 'Save changes' : 'Save'}
           </Button>
+          {canClear && (
+            <Button variant="ghost" onClick={clear} disabled={saving}>
+              {saved ? 'Clear & start over' : 'Clear'}
+            </Button>
+          )}
           {!submitted && (
             <span
               role="status"

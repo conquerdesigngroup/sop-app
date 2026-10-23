@@ -354,6 +354,14 @@ const RPC = {
     if (body.p_submit || row.status === 'submitted') { row.status = 'submitted'; row.submitted_at = row.submitted_at || new Date().toISOString(); }
     return { id: row.id, status: row.status, season: row.season, round: row.round };
   },
+  staff_clear_evaluation: (body) => {
+    const round = body.p_round || db.portal_settings[0].evaluation_round;
+    const i = db.portal_evaluations.findIndex((r) => r.student_id === body.p_student_id && r.class_id === body.p_class_id && r.round === round);
+    if (i < 0) return { cleared: false };
+    if (db.portal_evaluations[i].status === 'submitted') throw new Error('A submitted evaluation cannot be cleared - edit it instead');
+    const [row] = db.portal_evaluations.splice(i, 1);
+    return { cleared: true, season: row.season, round: row.round };
+  },
   admin_set_evaluation_settings: (body) => {
     const s = db.portal_settings[0];
     s.evaluations_enabled = !!body.p_enabled;
