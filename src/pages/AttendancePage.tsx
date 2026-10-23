@@ -4,9 +4,13 @@ import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useRefreshable } from '../contexts/RefreshContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { PageHeader, Card, Button, Spinner, EmptyState } from '../components/ui';
+import { PageHeader, Card, Button, Spinner, EmptyState, Input, Select } from '../components/ui';
 import RosterSheet from '../components/attendance/RosterSheet';
 import RecordsTab from '../components/attendance/RecordsTab';
+import ClassHistory from '../components/attendance/ClassHistory';
+import { choose } from '../components/attendance/RecordsControls';
+import { ClassOption, loadClassOptions } from '../lib/attendanceRecords';
+import { SessionStatus } from '../types/attendance';
 import { shiftIsoDays, studioToday } from '../lib/studioDate';
 import {
   AttendanceGap,
@@ -78,7 +82,22 @@ const AttendancePage: React.FC = () => {
    * be an empty screen with no way out.
    */
   const [scope, setScope] = useState<Scope>('mine');
-  const [myClassCount, setMyClassCount] = useState(0);
+  const [myClassIds, setMyClassIds] = useState<string[]>([]);
+  const myClassCount = myClassIds.length;
+  // Every active class, for the "go to a class's history" picker.
+  const [classOptions, setClassOptions] = useState<ClassOption[]>([]);
+  // A class opened from that picker: its whole history, any date fillable.
+  const [historyFor, setHistoryFor] = useState<ClassOption | null>(null);
+
+  const loadClasses = useCallback(async () => {
+    const { rows, error } = await loadClassOptions();
+    if (error) throw new Error(error);
+    setClassOptions(rows);
+  }, []);
+  useEffect(() => { loadClasses().catch(() => {}); }, [loadClasses]);
+  // Registered, so a failed first load is one pull-to-refresh away, not a
+  // dropdown that says "No classes" until the app is reopened.
+  useRefreshable(loadClasses, true);
 
   const profileId = currentUser?.id ?? '';
 
@@ -90,7 +109,7 @@ const AttendancePage: React.FC = () => {
     // whether the toggle is worth drawing and what 'mine' means.
     const { ids: myIds } = await loadMyClassIds(profileId, isAdmin, 'mine');
     const holds = (myIds ?? []).length;
-    setMyClassCount(holds);
+    setMyClassIds(myIds ?? []);
 
     const effective: Scope = isAdmin && holds === 0 ? 'all' : scope;
 
@@ -142,9 +161,47 @@ const AttendancePage: React.FC = () => {
 
   const open = fixing ?? days.find(d => d.klass.id === openClassId) ?? null;
 
-  const setMarked = useCallback((classId: string, marked: number) => {
-    setDays(prev => prev.map(d => (d.klass.id === classId ? { ...d, marked } : d)));
+  // By SESSION, not class: a date opened from a class's history is the same
+  // class as one of today's rows, and must not rewrite today's "12 of 14".
+  const setMarked = useCallback((sessionId: string, marked: number) => {
+    setDays(prev => prev.map(d => (d.session.id === sessionId ? { ...d, marked } : d)));
   }, []);
+
+  /** A date cancelled or reopened from its register, reflected in the list behind it. */
+  const setSessionStatus = useCallback((sessionId: string, status: SessionStatus, note: string | null) => {
+    const apply = (d: ClassDay): ClassDay =>
+      (d.session.id === sessionId ? { ...d, session: { ...d.session, status, note } } : d);
+    setDays(prev => prev.map(apply));
+    setFixing(prev => (prev ? apply(prev) : prev));
+    // A cancelled date leaves the "still needs attendance" backlog; re-read it.
+    load(true).catch(() => {});
+  }, [load]);
+
+  /** Open any date's register — from the records or from a class's history. */
+  const openDate = useCallback((r: {
+    classId: string; className: string; sessionId: string;
+    sessionDate: string; sessionStatus: SessionStatus; sessionNote?: string | null;
+  }) => setFixing({
+    klass: {
+      id: r.classId, name: r.className,
+      dayOfWeek: null, startTime: null, endTime: null,
+      location: null, level: null, style: null,
+    },
+    session: {
+      id: r.sessionId, classId: r.classId, sessionDate: r.sessionDate,
+      status: r.sessionStatus, source: 'schedule', note: r.sessionNote ?? null,
+    },
+    expected: 0,
+    marked: 0,
+  }), []);
+
+  // Whose classes the history picker offers: the same scope as the day list.
+  const effectiveScope: Scope = isAdmin && myClassCount === 0 ? 'all' : scope;
+  const pickable = useMemo(() => {
+    if (effectiveScope === 'all') return classOptions;
+    const mine = new Set(myClassIds);
+    return classOptions.filter(c => mine.has(c.id));
+  }, [effectiveScope, classOptions, myClassIds]);
 
   return (
     <div style={{
@@ -202,6 +259,7 @@ const AttendancePage: React.FC = () => {
       {open && (
         <Card>
           <RosterSheet
+            key={open.session.id}
             day={open}
             onBack={() => {
               setOpenClassId(null);
@@ -211,8 +269,8 @@ const AttendancePage: React.FC = () => {
                 setRecordsVersion(v => v + 1);
               }
             }}
-            onCountChange={n => setMarked(open.klass.id, n)}
-            readOnly={open.session.status !== 'held'}
+            onCountChange={n => setMarked(open.session.id, n)}
+            onStatusChange={(status, note) => setSessionStatus(open.session.id, status, note)}
           />
         </Card>
       )}
@@ -227,24 +285,32 @@ const AttendancePage: React.FC = () => {
         <RecordsTab
           refreshToken={recordsVersion}
           generatedBy={currentUser ? `${currentUser.firstName} ${currentUser.lastName}`.trim() : undefined}
-          onFix={r => setFixing({
-            klass: {
-              id: r.classId, name: r.className,
-              dayOfWeek: null, startTime: null, endTime: null,
-              location: null, level: null, style: null,
-            },
-            session: {
-              id: r.sessionId, classId: r.classId, sessionDate: r.sessionDate,
-              status: r.sessionStatus, source: 'schedule', note: null,
-            },
-            expected: 0,
-            marked: 0,
-          })}
+          onFix={openDate}
         />
         </div>
       )}
 
-      {!open && !(isAdmin && tab === 'records') && (
+      {/*
+        Hidden rather than unmounted while a register is open, for the same
+        reason as the records: a teacher deep in a class's history, filling in
+        one date after another, comes back to where they were.
+      */}
+      {!(isAdmin && tab === 'records') && (
+        <div hidden={Boolean(open)}>
+        {historyFor ? (
+          <ClassHistory
+            key={historyFor.id}
+            klass={historyFor}
+            initial={choose('to-date', today)}
+            onBack={() => setHistoryFor(null)}
+            onFix={openDate}
+            refreshToken={recordsVersion}
+            backLabel="← Back to the day"
+            canExport={isAdmin}
+            initialView="dates"
+            generatedBy={currentUser ? `${currentUser.firstName} ${currentUser.lastName}`.trim() : undefined}
+          />
+        ) : (
         <>
           {/*
             Date bar. Wraps, and centres nothing — a centred row that overflows
@@ -271,6 +337,35 @@ const AttendancePage: React.FC = () => {
             {date !== today && (
               <Button variant="ghost" size="sm" onClick={() => setDate(today)}>Today</Button>
             )}
+          </div>
+
+          {/*
+            Two ways back into the past without tapping ← once a day: straight
+            to a date, or straight to a class and every date it has met.
+          */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
+            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+              <Input
+                label="Go to a date"
+                type="date"
+                value={date}
+                onChange={e => { if (e.target.value) setDate(e.target.value); }}
+              />
+            </div>
+            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+              <Select
+                label="Or open a class's history"
+                value=""
+                onChange={e => {
+                  const c = pickable.find(x => x.id === e.target.value);
+                  if (c) setHistoryFor(c);
+                }}
+                options={[
+                  { value: '', label: pickable.length ? 'Pick a class…' : 'No classes to show' },
+                  ...pickable.map(c => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
           </div>
 
           {/*
@@ -330,6 +425,8 @@ const AttendancePage: React.FC = () => {
             </div>
           )}
         </>
+        )}
+        </div>
       )}
     </div>
   );

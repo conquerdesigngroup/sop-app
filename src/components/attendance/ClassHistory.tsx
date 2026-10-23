@@ -57,7 +57,7 @@ import { useAttendanceExport } from './useAttendanceExport';
 
 type FixRow = {
   classId: string; className: string; sessionId: string;
-  sessionDate: string; sessionStatus: SessionStatus;
+  sessionDate: string; sessionStatus: SessionStatus; sessionNote?: string | null;
 };
 
 interface Props {
@@ -68,6 +68,10 @@ interface Props {
   generatedBy?: string;
   /** Bumped by the page when a session was fixed, so the history re-reads it. */
   refreshToken?: number;
+  backLabel?: string;
+  /** Exports are an admin tool; a teacher opens this to fill dates in. */
+  canExport?: boolean;
+  initialView?: 'dancers' | 'dates';
 }
 
 interface DancerLine extends Omit<DancerHistory, 'tally'> {
@@ -75,7 +79,10 @@ interface DancerLine extends Omit<DancerHistory, 'tally'> {
   onRoster: boolean;
 }
 
-const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generatedBy, refreshToken }) => {
+const ClassHistory: React.FC<Props> = ({
+  klass, initial, onBack, onFix, generatedBy, refreshToken,
+  backLabel = '← Back to records', canExport = true, initialView = 'dancers',
+}) => {
   const today = useMemo(() => studioToday(), []);
   const [choice, setChoice] = useState<RangeChoice>(initial);
   const [rows, setRows] = useState<RecordRow[]>([]);
@@ -84,7 +91,7 @@ const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generate
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'dancers' | 'dates'>('dancers');
+  const [view, setView] = useState<'dancers' | 'dates'>(initialView);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [openDancer, setOpenDancer] = useState<string | null>(null);
   const [openSession, setOpenSession] = useState<string | null>(null);
@@ -175,7 +182,7 @@ const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generate
 
   return (
     <div>
-      <Button variant="ghost" size="sm" onClick={onBack}>← Back to records</Button>
+      <Button variant="ghost" size="sm" onClick={onBack}>{backLabel}</Button>
 
       <div style={{ margin: `${theme.spacing.sm} 0 ${theme.spacing.md}` }}>
         <div style={{ fontSize: '1.3rem', fontWeight: 800, color: theme.colors.txt.primary, overflowWrap: 'anywhere' }}>
@@ -218,16 +225,20 @@ const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generate
             <div style={{ fontWeight: 700, color: theme.colors.txt.primary, marginBottom: theme.spacing.sm, overflowWrap: 'anywhere' }}>
               {sessions.length === 0
                 ? 'No class dates in this range'
-                : `${includedCount} of ${sessions.length} class ${sessions.length === 1 ? 'date' : 'dates'} included`}
+                : canExport
+                  ? `${includedCount} of ${sessions.length} class ${sessions.length === 1 ? 'date' : 'dates'} included`
+                  : `${sessions.length} class ${sessions.length === 1 ? 'date' : 'dates'}`}
               {search.trim() && ` · dancers matching “${search.trim()}”`}
             </div>
             <TallyStrip t={totals} />
-            <ExportButtons
-              delivery={delivery}
-              disabled={exportRows.length === 0}
-              onCSV={() => exportCSV(exportRows, exportMeta)}
-              onPDF={() => exportPDF(exportRows, exportMeta, truncated)}
-            />
+            {canExport && (
+              <ExportButtons
+                delivery={delivery}
+                disabled={exportRows.length === 0}
+                onCSV={() => exportCSV(exportRows, exportMeta)}
+                onPDF={() => exportPDF(exportRows, exportMeta, truncated)}
+              />
+            )}
           </Card>
 
           <SearchInput
@@ -325,10 +336,12 @@ const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generate
             <EmptyState title="No class dates in this range" description="Try a wider range, or All so far." />
           ) : (
             <>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.xs, marginBottom: theme.spacing.sm }}>
-                <Button size="sm" variant="ghost" onClick={() => setExcluded(new Set())}>Tick all dates</Button>
-                <Button size="sm" variant="ghost" onClick={() => setExcluded(new Set(sessions.map(s => s.sessionId)))}>Untick all</Button>
-              </div>
+              {canExport && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.xs, marginBottom: theme.spacing.sm }}>
+                  <Button size="sm" variant="ghost" onClick={() => setExcluded(new Set())}>Tick all dates</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setExcluded(new Set(sessions.map(s => s.sessionId)))}>Untick all</Button>
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
                 {sessions.map(s => {
                   const ticked = !excluded.has(s.sessionId);
@@ -339,7 +352,7 @@ const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generate
                   return (
                     <Card key={s.sessionId} padding="md" style={{ opacity: ticked ? 1 : 0.6 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
-                        <label
+                        {canExport && <label
                           aria-label={`Include ${shortDay(s.sessionDate)} in the export`}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44, cursor: 'pointer', flex: '0 0 auto' }}
                         >
@@ -349,7 +362,7 @@ const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generate
                             onChange={() => toggleDate(s.sessionId)}
                             style={{ width: 20, height: 20, accentColor: theme.colors.primary }}
                           />
-                        </label>
+                        </label>}
                         <button
                           type="button"
                           aria-expanded={open}
@@ -400,7 +413,7 @@ const ClassHistory: React.FC<Props> = ({ klass, initial, onBack, onFix, generate
                             style={{ marginTop: theme.spacing.sm }}
                             onClick={() => onFix({
                               classId: klass.id, className: klass.name, sessionId: s.sessionId,
-                              sessionDate: s.sessionDate, sessionStatus: s.sessionStatus,
+                              sessionDate: s.sessionDate, sessionStatus: s.sessionStatus, sessionNote: s.sessionNote,
                             })}
                           >
                             {s.tally.unmarked > 0 ? 'Take attendance' : 'Fix attendance'}
