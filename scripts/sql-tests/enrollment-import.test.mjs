@@ -1,5 +1,5 @@
 /**
- * admin_enrollment_import (v67, corrected by v68 and v69), run against a real Postgres.
+ * admin_enrollment_import (v67, corrected by v68 and v69, extended by v74), run against a real Postgres.
  *
  *   npm install --no-save @electric-sql/pglite
  *   npm run test:sql
@@ -12,7 +12,7 @@
  * of it. PGlite is Postgres compiled to WebAssembly — the same planner, the
  * same constraints, no server, no network — so each test gets a fresh database
  * in a few hundred milliseconds, built from the production-shaped schema in
- * schema.sql plus v67, v68 and v69 in the order production applies them.
+ * schema.sql plus v67, v68, v69 and v74 in the order production applies them.
  *
  * The tests marked "review:" are the independent review's findings, each kept
  * as the regression test that failed before v68; "second review:" and "third
@@ -43,6 +43,7 @@ const SCHEMA = read('scripts/sql-tests/schema.sql');
 const V67 = read('supabase-migration-v67-enrollment-import.sql');
 const V68 = read('supabase-migration-v68-enrollment-import-review-fixes.sql');
 const V69 = read('supabase-migration-v69-enrollment-import-second-review.sql');
+const V74 = read('supabase-migration-v74-enrollment-import-roster-rows.sql');
 const ROSTER_IMPORT = read('scripts/sql-tests/live-admin-roster-import.sql');
 
 const ADMIN = '00000000-0000-4000-8000-00000000a001';
@@ -65,6 +66,7 @@ const studio = async (today = '2026-10-01') => {
   await db.exec(V67);
   await db.exec(V68);
   await db.exec(V69);
+  await db.exec(V74);
   await db.exec(ROSTER_IMPORT);
   await db.query(
     `insert into profiles (id, email, role) values ($1, 'office@example.com', 'admin'), ($2, 'teacher@example.com', 'team')`,
@@ -743,6 +745,99 @@ test('a new family is created without a birthday, and the roster import later fi
   assert.equal(after[0].id, created.id);
   assert.equal(after[0].dob, '2020-02-02');
   assert.deepEqual((await remembered(db)).map((x) => x.family), ['alvarez@example.com', 'haddad@example.com']);
+});
+
+// ------------------------------------------- v74: a new family can sign up
+
+const signupRows = async (db, email) =>
+  (await db.query(
+    `select student_name, guardian_name, member_type, status, program_id, external_id
+       from portal_roster where lower(email) = $1 order by student_name`, [email])).rows;
+
+test('v74: a new family gets a sign-up roster row per dancer, and the roster import later finds it', async () => {
+  const { db } = await oneDancerFamily();
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+
+  const file = [ALVAREZ([tag(MINI_JAZZ)]), contact({
+    id: 'c-620', email: 'Okafor@Example.com', first: 'Ada', last: 'Okafor',
+    students: ['Chi Okafor', 'Obi Okafor'], tags: [tag(OPEN_TAP)], row: 3,
+  })];
+  const r = await apply(db, file);
+  assert.equal(r.applied, true);
+  assert.equal(r.roster_rows, 2);
+  const row = { guardian_name: 'Ada Okafor', member_type: 'guardian', status: 'active', program_id: null, external_id: null };
+  assert.deepEqual(await signupRows(db, 'okafor@example.com'),
+    [{ student_name: 'Chi Okafor', ...row }, { student_name: 'Obi Okafor', ...row }]);
+  const log = (await db.query(`select details from activity_logs where action = 'enrollments_imported'`)).rows;
+  assert.equal(log[0].details.roster_rows, 2);
+
+  // The students export, later, with birthdays: no second row, no second dancer.
+  const ri = (await db.query(`select public.admin_roster_import($1::jsonb) as r`, [JSON.stringify([
+    { email: 'okafor@example.com', student_name: 'Chi Okafor', guardian_name: 'Ada Okafor', date_of_birth: '2019-05-05' },
+  ])])).rows[0].r;
+  assert.equal(ri.inserted, 0);
+  assert.equal(ri.students_created, 0);
+  assert.equal(ri.students_updated, 1);
+  assert.equal((await signupRows(db, 'okafor@example.com')).length, 2);
+});
+
+test('v74: a row already on the roster for that address and dancer is left as it is', async () => {
+  const { db } = await oneDancerFamily();
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+  await db.query(
+    `insert into portal_roster (email, student_name, guardian_name, notes) values ('reid@example.com', 'Ivy Reid', 'Jo Reid', 'added by the office')`);
+
+  const r = await apply(db, [ALVAREZ([tag(MINI_JAZZ)]), contact({
+    id: 'c-630', email: 'reid@example.com', first: 'Jo', last: 'Reid', students: ['Ivy Reid'], tags: [tag(OPEN_TAP)], row: 3,
+  })]);
+  assert.equal(r.counts.new_families, 1);
+  assert.equal(r.roster_rows, 0);
+  const rows = (await db.query(`select student_name, notes from portal_roster where email = 'reid@example.com'`)).rows;
+  assert.deepEqual(rows, [{ student_name: 'Ivy Reid', notes: 'added by the office' }]);
+});
+
+test('v74: an address that is already a dancer\'s own login is never given a guardian row', async () => {
+  const { db, maya } = await oneDancerFamily();
+  await recordStart(db, [ALVAREZ([tag(MINI_JAZZ)])]);
+  await db.query(
+    `insert into portal_roster (email, student_name, member_type, student_id) values ('maya.dances@example.com', 'Maya Alvarez', 'student', $1)`,
+    [maya]);
+
+  const r = await apply(db, [ALVAREZ([tag(MINI_JAZZ)]), contact({
+    id: 'c-640', email: 'maya.dances@example.com', first: 'Maya', last: 'Alvarez', students: ['Rio Alvarez'], tags: [tag(OPEN_TAP)], row: 3,
+  })]);
+  assert.equal(r.roster_rows, 0);
+  assert.deepEqual((await signupRows(db, 'maya.dances@example.com')).map((x) => x.member_type), ['student']);
+});
+
+test('v74: preview and the plan hash are exactly as under v69, and an apply with no new family writes no roster row', async () => {
+  const db = new PGlite();
+  await db.exec(SCHEMA);
+  await db.exec(V67);
+  await db.exec(V68);
+  await db.exec(V69);
+  await db.exec(ROSTER_IMPORT);
+  await db.query(`insert into profiles (id, email, role) values ($1, 'office@example.com', 'admin')`, [ADMIN]);
+  await signIn(db, ADMIN);
+  await setToday(db, '2026-10-01');
+  const { rows: [k] } = await db.query(
+    `insert into portal_classes (name, external_class_id, age_min_years, age_max_years, season, season_start, season_end, day_of_week, start_time)
+     values ('Open Tap', lower($1), null, null, '2026-2027', '2026-08-31', '2027-06-20', 5, '19:00') returning id`, [OPEN_TAP]);
+  const hh = await household(db, 'c-100', 'alvarez@example.com', 'Alvarez');
+  await enrol(db, await dancer(db, hh, 'Maya', 'Alvarez', '2019-03-02'), k.id);
+  const start = [contact({ id: 'c-100', email: 'alvarez@example.com', tags: [tag(OPEN_TAP)] })];
+  await recordStart(db, start);
+  const file = [...start, contact({ id: 'c-650', email: 'sato@example.com', last: 'Sato', students: ['Ren Sato'], tags: [tag(OPEN_TAP)], row: 3 })];
+
+  const before = await preview(db, file);
+  await db.exec(V74);
+  const after = await preview(db, file);
+  assert.deepEqual(after, before);
+
+  // An apply that creates no family writes no roster row.
+  const quiet = await apply(db, start);
+  assert.equal(quiet.roster_rows, 0);
+  assert.equal((await db.query(`select count(*)::int as n from portal_roster`)).rows[0].n, 0);
 });
 
 test('known limit, pinned: the roster import given separate columns that split a surname differently makes a second dancer', async () => {
