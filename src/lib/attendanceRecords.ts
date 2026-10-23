@@ -46,7 +46,11 @@ export interface RecordRow {
 export interface RecordFilters {
   from: string;
   to: string;
-  classId?: string;
+  /**
+   * The classes to read. Undefined means every class; an empty array means
+   * none, and returns nothing rather than widening to the whole studio.
+   */
+  classIds?: string[];
   teacherId?: string;
   /** Free text against the dancer's name. Applied client-side over the page. */
   student?: string;
@@ -73,14 +77,25 @@ const CEILING = 20000;
 
 const LOAD_FAILED = "Couldn't load those records. Check your connection and try again.";
 
-export interface TeacherOption { id: string; name: string; }
-export interface ClassOption { id: string; name: string; }
+export interface TeacherOption {
+  id: string;
+  name: string;
+  /** Every class this instructor is granted, so a picker can select them in one tap. */
+  classIds: string[];
+}
+export interface ClassOption {
+  id: string;
+  name: string;
+  /** 0 = Sunday, matching portal_classes.day_of_week. Null when unscheduled. */
+  dayOfWeek: number | null;
+  startTime: string | null;
+}
 
-/** Instructors who hold at least one class, for the filter. */
+/** Instructors who hold at least one class, with the classes they hold. */
 export const loadTeacherOptions = async (): Promise<{ rows: TeacherOption[]; error: RecordError }> => {
   const { data, error } = await supabase
     .from('portal_class_instructors')
-    .select('profile_id, profiles(id, first_name, last_name, is_active)');
+    .select('class_id, profile_id, profiles(id, first_name, last_name, is_active)');
 
   if (error) return { rows: [], error: LOAD_FAILED };
 
@@ -91,7 +106,10 @@ export const loadTeacherOptions = async (): Promise<{ rows: TeacherOption[]; err
     // rather than crashing on whichever this project's version does today.
     const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
     if (!p || p.is_active === false) return;
-    byId.set(p.id, { id: p.id, name: `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || 'Unnamed' });
+    const t: TeacherOption = byId.get(p.id)
+      ?? { id: p.id, name: `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || 'Unnamed', classIds: [] };
+    if (row.class_id && !t.classIds.includes(row.class_id)) t.classIds.push(row.class_id);
+    byId.set(p.id, t);
   });
 
   return {
@@ -103,12 +121,17 @@ export const loadTeacherOptions = async (): Promise<{ rows: TeacherOption[]; err
 export const loadClassOptions = async (): Promise<{ rows: ClassOption[]; error: RecordError }> => {
   const { data, error } = await supabase
     .from('portal_classes')
-    .select('id, name')
+    .select('id, name, day_of_week, start_time')
     .eq('is_active', true)
     .order('name');
 
   if (error) return { rows: [], error: LOAD_FAILED };
-  return { rows: (data ?? []).map((c: any) => ({ id: c.id, name: c.name })), error: null };
+  return {
+    rows: (data ?? []).map((c: any) => ({
+      id: c.id, name: c.name, dayOfWeek: c.day_of_week ?? null, startTime: c.start_time ?? null,
+    })),
+    error: null,
+  };
 };
 
 /** class_id -> "Ada Nunez, Bo Marsh" */
@@ -154,8 +177,9 @@ export const loadRecords = async (filters: RecordFilters): Promise<RecordsResult
     // empty filter that would quietly widen to the whole studio.
     if (classIds.length === 0) return { rows: [], error: null, truncated: false };
   }
-  if (filters.classId) {
-    classIds = classIds ? classIds.filter(id => id === filters.classId) : [filters.classId];
+  if (filters.classIds) {
+    const wanted = new Set(filters.classIds);
+    classIds = classIds ? classIds.filter(id => wanted.has(id)) : Array.from(wanted);
     if (classIds.length === 0) return { rows: [], error: null, truncated: false };
   }
 
@@ -235,6 +259,46 @@ export const loadRecords = async (filters: RecordFilters): Promise<RecordsResult
     a.firstName.localeCompare(b.firstName));
 
   return { rows, error: null, truncated };
+};
+
+export interface RosterDancer {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+}
+
+/**
+ * Who is on a class's roster on a date — usually today.
+ *
+ * The history screen needs this as well as the records because the records only
+ * hold dancers who had a session in the range. A child who joined yesterday, or
+ * a range that holds no sessions at all, would otherwise make a full class look
+ * empty.
+ */
+export const loadCurrentRoster = async (
+  classId: string,
+  date: string,
+): Promise<{ rows: RosterDancer[]; error: RecordError }> => {
+  const { data, error } = await supabase
+    .from('portal_enrollments')
+    .select('student_id')
+    .eq('class_id', classId)
+    .lte('enrolled_on', date)
+    .or(`dropped_on.is.null,dropped_on.gte.${date}`);
+
+  if (error) return { rows: [], error: LOAD_FAILED };
+  const ids: string[] = Array.from(new Set((data ?? []).map((e: any) => e.student_id as string)));
+  if (ids.length === 0) return { rows: [], error: null };
+
+  const students = await fetchStudents(ids);
+  if (students.error) return { rows: [], error: LOAD_FAILED };
+
+  return {
+    rows: students.data
+      .map((s: any) => ({ studentId: s.id, firstName: s.first_name ?? '', lastName: s.last_name ?? '' }))
+      .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)),
+    error: null,
+  };
 };
 
 const STUDENT_CHUNK = 200;
