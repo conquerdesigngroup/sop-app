@@ -869,3 +869,56 @@ export const loadClassProgress = async (
   });
   return { progress, error: null };
 };
+
+// ----------------------------------------------------------------- submit all
+
+/**
+ * What "Submit all" would do to this roster.
+ *
+ * The form itself only saves drafts; the class is submitted in one go from the
+ * roster, so a teacher fills in fifteen dancers between classes and sends them
+ * together. Only a COMPLETE draft (all three ratings) can go — the function
+ * refuses anything else — so the split below is what the confirmation shows:
+ * who goes, who is left as a draft, who has not been started at all.
+ */
+export interface SubmitPlan {
+  /** Complete drafts: these will be submitted. */
+  ready: RosterEntry[];
+  /** Drafts missing a rating: stay as drafts, named in the confirmation. */
+  incomplete: RosterEntry[];
+  /** No row yet. */
+  notStarted: RosterEntry[];
+  /** Already visible to the family; untouched. */
+  submitted: RosterEntry[];
+}
+
+export const planSubmitAll = (rows: RosterEntry[]): SubmitPlan => {
+  const plan: SubmitPlan = { ready: [], incomplete: [], notStarted: [], submitted: [] };
+  rows.forEach(r => {
+    if (!r.evaluation) plan.notStarted.push(r);
+    else if (r.evaluation.status === 'submitted') plan.submitted.push(r);
+    else if (isComplete(draftOf(r.evaluation))) plan.ready.push(r);
+    else plan.incomplete.push(r);
+  });
+  return plan;
+};
+
+/** The sentence under the Submit all button, and the confirmation's body. */
+export const submitAllSummary = (plan: SubmitPlan): string => {
+  const left = plan.incomplete.length + plan.notStarted.length;
+  const name = (r: RosterEntry) => `${r.firstName} ${r.lastName}`;
+  const parts: string[] = [];
+  if (plan.ready.length > 0) {
+    parts.push(`${plan.ready.length} ${plan.ready.length === 1 ? 'evaluation is' : 'evaluations are'} complete and will be sent to families.`);
+  }
+  if (plan.incomplete.length > 0) {
+    parts.push(`Still missing a rating, left as drafts: ${plan.incomplete.map(name).join(', ')}.`);
+  }
+  if (plan.notStarted.length > 0) {
+    parts.push(`Not started: ${plan.notStarted.map(name).join(', ')}.`);
+  }
+  if (plan.ready.length === 0) {
+    parts.unshift(left > 0 ? 'Nothing is ready to submit yet.' : 'Everything is already submitted.');
+  }
+  return parts.join(' ');
+};

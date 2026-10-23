@@ -6,7 +6,9 @@ import {
   isComplete,
   lockReason,
   missingNotice,
+  planSubmitAll,
   progressText,
+  submitAllSummary,
   ratingLabel,
   rosterProgress,
   toExportResult,
@@ -197,5 +199,35 @@ describe('the default season for a filter', () => {
     expect(currentSeason([{ season: '2026-2027' }, { season: '2026-2027' }, { season: '2025-2026' }])).toBe('2026-2027');
     expect(currentSeason([{ season: '2025-2026' }, { season: '2026-2027' }])).toBe('2026-2027');
     expect(currentSeason([{ season: null }])).toBeNull();
+  });
+});
+
+describe('submit all, from the roster', () => {
+  const row = (id: string, first: string, ev: any) => ({ studentId: id, firstName: first, lastName: 'Chen', evaluation: ev });
+  const ev = (status: 'draft' | 'submitted', over: any = {}) => ({
+    id: `ev-${status}`, studentId: 'x', classId: 'c', season: 's', round: 'r',
+    performance: 4, attendance: 5, showmanship: 3, comment: '', moveUp: false, status,
+    submittedAt: null, updatedAt: null, ...over,
+  });
+
+  it('sends only complete drafts, and names everyone it leaves behind', () => {
+    const plan = planSubmitAll([
+      row('a', 'Ada', ev('draft')),
+      row('b', 'Bo', ev('draft', { showmanship: null })),
+      row('c', 'Cy', null),
+      row('d', 'Di', ev('submitted')),
+    ]);
+    expect(plan.ready.map((r: any) => r.firstName)).toEqual(['Ada']);
+    expect(plan.incomplete.map((r: any) => r.firstName)).toEqual(['Bo']);
+    expect(plan.notStarted.map((r: any) => r.firstName)).toEqual(['Cy']);
+    expect(plan.submitted.map((r: any) => r.firstName)).toEqual(['Di']);
+    expect(submitAllSummary(plan)).toBe(
+      '1 evaluation is complete and will be sent to families. Still missing a rating, left as drafts: Bo Chen. Not started: Cy Chen.',
+    );
+  });
+
+  it('says so when nothing is ready, and when everything is already in', () => {
+    expect(submitAllSummary(planSubmitAll([row('c', 'Cy', null)]))).toMatch(/^Nothing is ready to submit yet\./);
+    expect(submitAllSummary(planSubmitAll([row('d', 'Di', ev('submitted'))]))).toBe('Everything is already submitted.');
   });
 });
