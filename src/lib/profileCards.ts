@@ -6,6 +6,7 @@ import UpNextCard from '../components/profile/UpNextCard';
 import HouseholdCard from '../components/profile/HouseholdCard';
 import SeasonStatsCard from '../components/profile/SeasonStatsCard';
 import AttendanceCardHost from '../components/profile/AttendanceCardHost';
+import EvaluationsCard from '../components/profile/EvaluationsCard';
 import UpdatesCard from '../components/profile/UpdatesCard';
 import DocumentsCard from '../components/profile/DocumentsCard';
 import ClassCalendarCard from '../components/profile/ClassCalendarCard';
@@ -200,6 +201,20 @@ export const PROFILE_CARDS: ProfileCard[] = [
     surface: 'dashboard',
     visible: showsAFamily,
     defaultOrder: 22,
+  },
+  {
+    // Directly under attendance: both are the studio's record of a dancer, read
+    // on the same visit. Submitted evaluations only — the function decides.
+    //
+    // Guardians only (v72). A dancer's own login is refused by the policy and
+    // by family_evaluations(), so for them this card could only ever be empty;
+    // not drawing it is the courtesy, the database is the lock.
+    id: 'evaluations',
+    title: 'Evaluations',
+    component: EvaluationsCard,
+    surface: 'dashboard',
+    visible: ctx => showsAFamily(ctx) && ctx.memberType === 'guardian',
+    defaultOrder: 23,
   },
   {
     // Second on the dashboard, above the roster and the numbers.

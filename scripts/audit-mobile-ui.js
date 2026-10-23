@@ -118,6 +118,9 @@ const PUBLIC_ROUTES = [
   // measures that redirect instead of the pages. Run the audit against a
   // flag-on build before shipping changes to them.
   '/portal/login', '/portal/signup', '/portal/update-password',
+  // "Email me my evaluations" — public, outside ProtectedRoute, same enumeration
+  // silence as signup. Renders with or without the client-auth flag.
+  '/portal/evaluations',
   // The parent portal's program pages. Left out until the calendar grew a month
   // view and it turned out nothing here had ever been measured on a phone — the
   // portal is the half of this app that is ONLY ever opened on one.
@@ -212,6 +215,10 @@ const AUTH_ROUTES = [
   // the class on. That one has the widest row in the feature (five status
   // pills) and has to be checked by hand on a phone until it has a URL.
   '/attendance',
+  // Evaluations. The class list only, like attendance: the roster and the
+  // 1–5 form are states inside the route. The form's five rating buttons in
+  // one row are the widest thing in the feature — check them by hand at 320px.
+  '/evaluations',
   // A teacher's own classes, across programs. Its rows put a class name of
   // arbitrary length beside an Open button in one wrapping flex row, which is
   // the shape that overflows first on a 320px phone.

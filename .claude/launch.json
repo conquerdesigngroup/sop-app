@@ -21,6 +21,28 @@
         "3004"
       ],
       "port": 3004
+    },
+    {
+      "name": "dev-backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/dev-backend"
+      ],
+      "port": 3099
+    },
+    {
+      "name": "sop-app-devbackend",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "REACT_APP_SUPABASE_URL=http://localhost:3099",
+        "REACT_APP_SUPABASE_ANON_KEY=dev-backend-anon-key",
+        "REACT_APP_CLIENT_AUTH=true",
+        "PORT=3005",
+        "BROWSER=none",
+        "npm",
+        "start"
+      ],
+      "port": 3005
     }
   ]
 }
