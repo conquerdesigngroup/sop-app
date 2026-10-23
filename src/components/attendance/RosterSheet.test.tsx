@@ -1,11 +1,13 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import RosterSheet from './RosterSheet';
-import { loadRoster, markAttendance } from '../../lib/attendanceStaff';
+import { cancelSession, loadRoster, markAttendance, restoreSession } from '../../lib/attendanceStaff';
 
 jest.mock('../../lib/attendanceStaff', () => ({
   loadRoster: jest.fn(),
   markAttendance: jest.fn(),
+  cancelSession: jest.fn(),
+  restoreSession: jest.fn(),
 }));
 
 /**
@@ -60,4 +62,74 @@ it('stays on the register when that save fails, so the marks are not abandoned',
   expect(await screen.findByText("Couldn't save. Try again.")).toBeInTheDocument();
   expect(onBack).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: '← Classes' })).toBeEnabled();
+});
+
+describe('cancelling the class', () => {
+  it('confirms, sends the reason, excuses everyone and says so — then undo reopens it', async () => {
+    (cancelSession as jest.Mock).mockResolvedValue({ result: { excused: 1, replaced: 0, already: 0 }, error: null });
+    (restoreSession as jest.Mock).mockResolvedValue({ restored: 1, error: null });
+    const onStatusChange = jest.fn();
+
+    render(<RosterSheet day={day as any} onBack={() => {}} onCountChange={() => {}} onStatusChange={onStatusChange} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel class' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Cancel this class?' });
+    expect(dialog).toHaveTextContent('will be marked Excused');
+    fireEvent.change(screen.getByLabelText('Reason (optional)'), { target: { value: 'Power out' } });
+    (loadRoster as jest.Mock).mockResolvedValue({
+      rows: [{ studentId: 'stu', firstName: 'Bo', lastName: 'Marsh', status: 'excused' }], error: null,
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel class' }));
+
+    expect(await screen.findByText('Class cancelled — Power out')).toBeInTheDocument();
+    expect(cancelSession).toHaveBeenCalledWith('ses', 'Power out');
+    expect(onStatusChange).toHaveBeenCalledWith('cancelled', 'Power out');
+    // Locked: the bulk-mark button is gone while the class is cancelled.
+    expect(screen.queryByRole('button', { name: /Mark the remaining/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo cancellation' }));
+    await waitFor(() => expect(onStatusChange).toHaveBeenLastCalledWith('held', null));
+    expect(restoreSession).toHaveBeenCalledWith('ses');
+    expect(await screen.findByRole('button', { name: 'Cancel class' })).toBeInTheDocument();
+  });
+
+  it('a failed cancel keeps the dialog open, says nothing changed, and leaves the class held', async () => {
+    (cancelSession as jest.Mock).mockResolvedValue({ result: null, error: 'You do not teach this class' });
+    const onStatusChange = jest.fn();
+
+    render(<RosterSheet day={day as any} onBack={() => {}} onCountChange={() => {}} onStatusChange={onStatusChange} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel class' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancel this class?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel class' }));
+
+    expect(await within(dialog).findByText(/You do not teach this class\. Nothing was changed/)).toBeInTheDocument();
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it('sends a mark made a moment ago before cancelling, so the order on the server is right', async () => {
+    const order: string[] = [];
+    (markAttendance as jest.Mock).mockImplementation(async () => { order.push('mark'); return { error: null }; });
+    (cancelSession as jest.Mock).mockImplementation(async () => { order.push('cancel'); return { result: { excused: 1, replaced: 1, already: 0 }, error: null }; });
+
+    render(<RosterSheet day={day as any} onBack={() => {}} onCountChange={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Mark the remaining 1 present/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel class' }));
+
+    await waitFor(() => expect(order).toEqual(['mark', 'cancel']));
+  });
+});
+
+it('review: does not cancel over marks that failed to save, so the teacher is never stuck', async () => {
+  (markAttendance as jest.Mock).mockResolvedValue({ error: "Couldn't save. Try again." });
+  (cancelSession as jest.Mock).mockClear();
+
+  render(<RosterSheet day={day as any} onBack={() => {}} onCountChange={() => {}} />);
+  fireEvent.click(await screen.findByRole('button', { name: /Mark the remaining 1 present/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+  const dialog = screen.getByRole('dialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel class' }));
+
+  expect(await within(dialog).findByText(/the class was not cancelled/)).toBeInTheDocument();
+  expect(cancelSession).not.toHaveBeenCalled();
 });

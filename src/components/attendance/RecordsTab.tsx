@@ -46,7 +46,7 @@ import { useAttendanceExport } from './useAttendanceExport';
 
 type FixRow = {
   classId: string; className: string; sessionId: string;
-  sessionDate: string; sessionStatus: SessionStatus;
+  sessionDate: string; sessionStatus: SessionStatus; sessionNote?: string | null;
 };
 
 interface Props {
@@ -351,6 +351,7 @@ const RecordsTab: React.FC<Props> = ({ onFix, generatedBy, refreshToken }) => {
                           sessionId: head.sessionId,
                           sessionDate: head.sessionDate,
                           sessionStatus: head.sessionStatus,
+                          sessionNote: head.sessionNote,
                         })}
                       >
                         {/* This group's own tally, not the page's — a filled class

@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
-import { AttendanceStatus } from '../../types/attendance';
-import { ClassDay, RosterEntry, loadRoster, markAttendance } from '../../lib/attendanceStaff';
+import { AttendanceStatus, SessionStatus } from '../../types/attendance';
+import {
+  ClassDay, RosterEntry, cancelSession, loadRoster, markAttendance, restoreSession,
+} from '../../lib/attendanceStaff';
 import { useRefreshable } from '../../contexts/RefreshContext';
-import { Button, Spinner } from '../ui';
+import { Button, Input, Modal, Spinner } from '../ui';
 import { StatusChip, StatusPills } from './StatusControl';
+import { shortDay } from './RecordsControls';
 
 /**
  * Taking attendance for one class on one date.
@@ -39,7 +42,8 @@ interface Props {
   onBack: () => void;
   /** So the day list can update its "12 of 14" chip without a full reload. */
   onCountChange: (marked: number) => void;
-  readOnly?: boolean;
+  /** Told when the date is cancelled or un-cancelled, so the list behind can say so. */
+  onStatusChange?: (status: SessionStatus, note: string | null) => void;
 }
 
 type SaveState =
@@ -48,7 +52,25 @@ type SaveState =
   | { kind: 'saved'; at: number }
   | { kind: 'error'; message: string };
 
-const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) => {
+/** The RPC's messages carry no full stop; the sentence after them needs one. */
+const sentence = (s: string): string => (/[.!?]$/.test(s.trim()) ? s.trim() : `${s.trim()}.`);
+
+type Pending =
+  | { kind: 'idle' }
+  | { kind: 'busy'; what: string }
+  | { kind: 'error'; message: string };
+
+const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, onStatusChange }) => {
+  // The sheet owns the date's status once open: cancelling here must lock the
+  // marks at once, and undoing must unlock them, without waiting on the page.
+  const [status, setStatus] = useState<SessionStatus>(day.session.status);
+  const [note, setNote] = useState<string | null>(day.session.note);
+  const readOnly = status !== 'held';
+  const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState('');
+  const [change, setChange] = useState<Pending>({ kind: 'idle' });
+  const [cancelSummary, setCancelSummary] = useState<string | null>(null);
+  const changing = useRef(false);
   const [rows, setRows] = useState<RosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -70,10 +92,15 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  // Stale-response guard: cancel and undo each re-read the roster, and the two
+  // answers can arrive in either order.
+  const loadRequest = useRef(0);
+
   const load = useCallback(async (silent = false) => {
+    const mine = ++loadRequest.current;
     if (!silent) setLoading(true);
     const { rows: fetched, error } = await loadRoster(day.klass.id, day.session.id, day.session.sessionDate);
-    if (!alive.current) return;
+    if (!alive.current || mine !== loadRequest.current) return;
     setLoadError(error);
     if (!error) setRows(fetched);
     setLoading(false);
@@ -172,8 +199,80 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
     if (pending.current.size === 0) onBack();
   }, [flush, onBack]);
 
+  /**
+   * Cancel the class: everyone on the roster for this date becomes Excused and
+   * the date stops counting (v75). Pending marks go first, so a tap made a
+   * moment ago is not silently overwritten by — or lost under — the cancel.
+   */
+  const confirmCancel = useCallback(async () => {
+    if (changing.current) return;
+    changing.current = true;
+    setChange({ kind: 'busy', what: 'Cancelling the class and excusing everyone…' });
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    await inFlight.current?.catch(() => {});
+    if (pending.current.size > 0) await flush().catch(() => {});
+    if (!alive.current) return;
+    // Marks that could not be saved would be refused for ever once the date is
+    // cancelled, and Back waits for them — so do not cancel over them.
+    if (pending.current.size > 0) {
+      changing.current = false;
+      setChange({
+        kind: 'error',
+        message: "Your last marks haven't saved, so the class was not cancelled. Check your connection and try again.",
+      });
+      return;
+    }
+
+    const { result, error } = await cancelSession(day.session.id, reason);
+    changing.current = false;
+    if (!alive.current) return;
+    if (error || !result) {
+      setChange({ kind: 'error', message: `${sentence(error ?? "Couldn't cancel the class")} Nothing was changed — try again.` });
+      return;
+    }
+    const kept = reason.trim() || note;
+    setStatus('cancelled');
+    setNote(kept);
+    onStatusChange?.('cancelled', kept);
+    setRows(prev => prev.map(r => ({ ...r, status: 'excused' })));
+    setCancelSummary(
+      result.replaced > 0
+        ? `${result.replaced} earlier ${result.replaced === 1 ? 'mark was' : 'marks were'} replaced. Undo puts them back.`
+        : null,
+    );
+    setConfirming(false);
+    setReason('');
+    setChange({ kind: 'idle' });
+    load(true).catch(() => {});
+  }, [day.session.id, reason, note, flush, onStatusChange, load]);
+
+  const undoCancel = useCallback(async () => {
+    if (changing.current) return;
+    changing.current = true;
+    setChange({ kind: 'busy', what: 'Putting the class back and restoring the marks…' });
+    const { error } = await restoreSession(day.session.id);
+    changing.current = false;
+    if (!alive.current) return;
+    if (error) {
+      setChange({ kind: 'error', message: `${sentence(error)} The class is still cancelled — try again.` });
+      return;
+    }
+    setStatus('held');
+    setNote(null);
+    setCancelSummary(null);
+    onStatusChange?.('held', null);
+    setChange({ kind: 'idle' });
+    load(true).catch(() => {});
+  }, [day.session.id, onStatusChange, load]);
+
+  // Keep the page's "12 of 14" chip honest after a reload changes the marks.
+  useEffect(() => {
+    if (!loading) onCountChange(rows.filter(r => r.status !== null).length);
+  }, [rows, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const unmarked = rows.filter(r => r.status === null).length;
   const marked = rows.length - unmarked;
+  const busyChanging = change.kind === 'busy';
 
   const saveLine = (): { text: string; tone: string } => {
     switch (save.kind) {
@@ -208,10 +307,92 @@ const RosterSheet: React.FC<Props> = ({ day, onBack, onCountChange, readOnly }) 
             {day.klass.name}
           </div>
           <div style={{ fontSize: '0.8rem', color: theme.colors.txt.tertiary }}>
-            {marked} of {rows.length} marked
+            {shortDay(day.session.sessionDate)} · {marked} of {rows.length} marked
           </div>
         </div>
+        {status === 'held' && (
+          <Button variant="outline" size="sm" onClick={() => { setChange({ kind: 'idle' }); setConfirming(true); }}>
+            Cancel class
+          </Button>
+        )}
       </div>
+
+      {status !== 'held' && (
+        <div style={{
+          padding: theme.spacing.md,
+          borderRadius: theme.borderRadius.lg,
+          border: `2px solid ${theme.colors.bdr.secondary}`,
+          background: theme.colors.bg.tertiary,
+          marginBottom: theme.spacing.md,
+        }}>
+          <div style={{ fontWeight: 700, color: theme.colors.txt.primary, overflowWrap: 'anywhere' }}>
+            {status === 'cancelled' ? 'Class cancelled' : 'Studio closed'}{note ? ` — ${note}` : ''}
+          </div>
+          <div style={{ fontSize: '0.85rem', color: theme.colors.txt.secondary, marginTop: 4, overflowWrap: 'anywhere' }}>
+            {status === 'cancelled'
+              ? 'Everyone on the roster is excused, and this date does not count toward anyone\'s attendance.'
+              : 'This date does not count toward anyone\'s attendance.'}
+            {cancelSummary ? ` ${cancelSummary}` : ''}
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            style={{ marginTop: theme.spacing.sm }}
+            onClick={() => { undoCancel().catch(() => {}); }}
+            disabled={busyChanging}
+          >
+            {busyChanging ? 'Undoing…' : status === 'cancelled' ? 'Undo cancellation' : 'Reopen this date'}
+          </Button>
+          <div role="status" aria-live="polite" style={{
+            minHeight: 20, marginTop: theme.spacing.xs, fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'anywhere',
+            color: change.kind === 'error' ? theme.colors.status.error : theme.colors.txt.tertiary,
+          }}>
+            {!confirming && change.kind === 'busy' && change.what}
+            {!confirming && change.kind === 'error' && change.message}
+          </div>
+        </div>
+      )}
+
+      <Modal
+        isOpen={confirming}
+        onClose={() => { if (!busyChanging) setConfirming(false); }}
+        title="Cancel this class?"
+        size="sm"
+        footer={
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm, justifyContent: 'flex-end', width: '100%' }}>
+            <Button variant="secondary" onClick={() => setConfirming(false)} disabled={busyChanging}>Keep class</Button>
+            <Button variant="danger" onClick={() => { confirmCancel().catch(() => {}); }} loading={busyChanging} disabled={busyChanging}>
+              {busyChanging ? 'Cancelling…' : 'Cancel class'}
+            </Button>
+          </div>
+        }
+      >
+        <p style={{ marginTop: 0, color: theme.colors.txt.primary, overflowWrap: 'anywhere' }}>
+          <strong>{day.klass.name}</strong> on {shortDay(day.session.sessionDate)}.
+        </p>
+        <p style={{ color: theme.colors.txt.secondary, overflowWrap: 'anywhere', marginBottom: theme.spacing.md }}>
+          {rows.length === 1 ? 'The 1 dancer' : `All ${rows.length} dancers`} on the roster will be marked
+          {' '}<strong>Excused</strong>, and this date won't count toward anyone's attendance.
+          {rows.some(r => r.status !== null && r.status !== 'excused') && (
+            <> {rows.filter(r => r.status !== null && r.status !== 'excused').length} already have a mark — it will be
+            replaced, and Undo puts it back.</>
+          )}
+        </p>
+        <Input
+          label="Reason (optional)"
+          placeholder="e.g. Studio closed — power outage"
+          value={reason}
+          maxLength={200}
+          onChange={e => setReason(e.target.value)}
+        />
+        <div role="status" aria-live="polite" style={{
+          minHeight: 20, marginTop: theme.spacing.sm, fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'anywhere',
+          color: change.kind === 'error' ? theme.colors.status.error : theme.colors.txt.tertiary,
+        }}>
+          {confirming && change.kind === 'busy' && change.what}
+          {confirming && change.kind === 'error' && change.message}
+        </div>
+      </Modal>
 
       {loadError && (
         <div role="alert" style={{

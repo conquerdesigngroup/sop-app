@@ -397,3 +397,44 @@ export const setSessionStatus = async (
   if (error) return { marksKept: null, error: error.message || LOAD_FAILED };
   return { marksKept: data?.marks_kept ?? 0, error: null };
 };
+
+export interface CancelResult {
+  /** Dancers whose mark this cancellation wrote. */
+  excused: number;
+  /** Of those, how many had a different mark before (kept in the history). */
+  replaced: number;
+  /** Already excused, so left alone. */
+  already: number;
+}
+
+/**
+ * The class did not run: cancel the date and excuse everyone on its roster
+ * (v75). One transaction, so a dropped connection leaves either the class held
+ * with its marks, or cancelled with everyone excused — never half of each.
+ */
+export const cancelSession = async (
+  sessionId: string,
+  note?: string,
+): Promise<{ result: CancelResult | null; error: LoadError }> => {
+  const { data, error } = await supabase.rpc('staff_cancel_session', {
+    p_session_id: sessionId,
+    p_note: note?.trim() || null,
+  });
+  if (error) return { result: null, error: error.message || LOAD_FAILED };
+  return {
+    result: { excused: data?.excused ?? 0, replaced: data?.replaced ?? 0, already: data?.already ?? 0 },
+    error: null,
+  };
+};
+
+/**
+ * Undo a cancellation: the date is held again, and each dancer gets back the
+ * mark they had before it. A mark someone changed since is left alone.
+ */
+export const restoreSession = async (
+  sessionId: string,
+): Promise<{ restored: number | null; error: LoadError }> => {
+  const { data, error } = await supabase.rpc('staff_restore_session', { p_session_id: sessionId });
+  if (error) return { restored: null, error: error.message || LOAD_FAILED };
+  return { restored: data?.restored ?? 0, error: null };
+};
