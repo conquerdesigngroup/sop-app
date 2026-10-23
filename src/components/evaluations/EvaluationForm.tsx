@@ -18,7 +18,13 @@ import {
 
 /**
  * The form for one dancer: three 1–5 controls, a comment, the move-up switch,
- * and Save draft / Submit.
+ * and one Save button. SUBMITTING IS NOT DONE HERE.
+ *
+ * The owner's rule: a teacher fills in the whole class, then sends it in one
+ * go from the roster ("Submit all"). So this form only ever saves a draft, and
+ * tells the teacher whether the dancer is complete enough to go when the class
+ * is sent. A dancer already visible to the family keeps a "Save changes"
+ * button, which keeps them visible (the function never un-submits).
  *
  * THE SAME FORM IN EVERY ROUND — that is the owner's spec, and it is why the
  * criteria are a constant and not a per-round configuration.
@@ -42,7 +48,8 @@ interface Props {
   /** False when the switch is off for this person; the form renders read-only. */
   canSave: boolean;
   saving: boolean;
-  onSave: (draft: EvaluationDraft, submit: boolean) => Promise<void>;
+  /** Saves a draft (or changes to a submitted one). Never submits. */
+  onSave: (draft: EvaluationDraft) => Promise<void>;
   onBack: () => void;
 }
 
@@ -120,14 +127,12 @@ const EvaluationForm: React.FC<Props> = ({ entry, className, round, canSave, sav
   const complete = isComplete(draft);
   const disabled = !canSave || saving;
 
-  const attempt = async (submit: boolean) => {
+  const missing = CRITERIA.filter(c => draft[c.key] === null).length;
+
+  const attempt = async () => {
     setError(null);
-    if (submit && !complete) {
-      setError('Fill in all three ratings before submitting.');
-      return;
-    }
     try {
-      await onSave(draft, submit);
+      await onSave(draft);
     } catch (e: any) {
       setError(e?.message || 'Could not save. Check your connection and try again.');
     }
@@ -211,27 +216,24 @@ const EvaluationForm: React.FC<Props> = ({ entry, className, round, canSave, sav
       )}
 
       {canSave && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-          {submitted ? (
-            <Button variant="primary" onClick={() => attempt(true)} disabled={saving || !dirty} loading={saving}>
-              Save changes
-            </Button>
-          ) : (
-            <>
-              <Button variant="secondary" onClick={() => attempt(false)} disabled={saving || !dirty} loading={saving}>
-                Save draft
-              </Button>
-              <Button variant="primary" onClick={() => attempt(true)} disabled={saving || !complete} loading={saving}>
-                Submit to family
-              </Button>
-            </>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: theme.spacing.sm }}>
+          <Button variant="primary" onClick={attempt} disabled={saving || !dirty} loading={saving}>
+            {submitted ? 'Save changes' : 'Save'}
+          </Button>
+          {!submitted && (
+            <span
+              role="status"
+              style={{ fontSize: '0.85rem', fontWeight: 600, color: complete ? theme.colors.status.success : theme.colors.txt.tertiary }}
+            >
+              {complete ? 'Complete — goes out with Submit all' : `${missing} of 3 ratings still to pick`}
+            </span>
           )}
         </div>
       )}
       <p style={{ marginTop: theme.spacing.sm, fontSize: '0.78rem', color: theme.colors.txt.tertiary }}>
         {submitted
           ? 'This evaluation is visible to the family. Changes you save are logged and stay visible.'
-          : 'A draft is private to teachers and the office. Submit when it is ready for the family to read.'}
+          : 'Saved as a draft, private to teachers and the office. When the whole class is done, use Submit all on the roster to send them to families together.'}
       </p>
     </div>
   );
