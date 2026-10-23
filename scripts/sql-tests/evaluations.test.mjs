@@ -45,6 +45,7 @@ const SCHEMA = read('scripts/sql-tests/schema.sql');
 const V70 = read('supabase-migration-v70-portal-evaluations.sql');
 const V71 = read('supabase-migration-v71-family-evaluations.sql');
 const V72 = read('supabase-migration-v72-evaluations-guardians-only.sql');
+const V73 = read('supabase-migration-v73-clear-evaluation-draft.sql');
 
 const ADMIN = '00000000-0000-4000-8000-00000000a001';
 const TEACHER = '00000000-0000-4000-8000-00000000a002';
@@ -116,6 +117,7 @@ const AFTER = `
   grant execute on function public.admin_evaluation_export(uuid[], uuid[], text, text, boolean) to app_user;
   grant execute on function public.family_evaluations() to app_user;
   grant execute on function public.is_guardian_of(uuid) to app_user;
+  grant execute on function public.staff_clear_evaluation(uuid, uuid, text, text) to app_user;
   -- v70's policies, as v72 narrows the family one, name "authenticated";
   -- mirror them for the test role.
   create policy test_family on public.portal_evaluations for select to app_user
@@ -144,6 +146,7 @@ const studio = async () => {
   await db.exec(V70);
   await db.exec(V71);
   await db.exec(V72);
+  await db.exec(V73);
   await db.exec(AFTER);
 
   await db.query(
@@ -201,11 +204,12 @@ const logs = async (db, action) =>
 
 // -------------------------------------------------------------------- tests
 
-test('v70, v71 and v72 run twice without change', async () => {
+test('v70 to v73 run twice without change', async () => {
   const { db } = await studio();
   await db.exec(V70);
   await db.exec(V71);
   await db.exec(V72);
+  await db.exec(V73);
   const { rows } = await db.query(`select count(*)::int as n from pg_policies where tablename = 'portal_evaluations' and policyname like 'portal_%'`);
   assert.equal(rows[0].n, 2);
 });
@@ -401,4 +405,46 @@ test('the export starts from the roster and names who is missing, legal names on
   assert.ok(withDrafts.summary.by_class.some((c) => c.class_id === otherCls && c.missing[0].state === 'not_started'));
 
   await refuses(db.query(`select public.admin_evaluation_export(null, null)`), /Pick at least one/);
+});
+
+const clear = (db, student, klass, { season = null, round = null } = {}) =>
+  db.query(`select public.staff_clear_evaluation($1, $2, $3, $4) as r`, [student, klass, season, round]).then((x) => x.rows[0].r);
+
+test('clear (v73): a draft goes back to Not started and is logged; a submitted one is refused', async () => {
+  const { db, cls, otherCls, maya, eli } = await studio();
+  await openRound(db);
+  await signIn(db, TEACHER);
+
+  // Nothing saved yet: not an error, nothing happens.
+  assert.deepEqual(await clear(db, maya, cls), { cleared: false });
+
+  await save(db, maya, cls, { comment: 'half done', s: null });
+  const r = await clear(db, maya, cls);
+  assert.equal(r.cleared, true);
+  assert.equal((await db.query(`select count(*)::int as n from portal_evaluations`)).rows[0].n, 0);
+  const logged = await logs(db, 'evaluation_cleared');
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0].before.comment, 'half done');
+  assert.equal(logged[0].by_admin, false);
+
+  // Submitted: refused, row untouched.
+  await save(db, maya, cls, { submit: true });
+  await refuses(clear(db, maya, cls), /cannot be cleared/);
+  assert.equal((await db.query(`select status from portal_evaluations`)).rows[0].status, 'submitted');
+
+  // Same gates as save: not my class, not the open round, switch off.
+  await save(db, eli, cls);
+  await signIn(db, OTHER_TEACHER);
+  await refuses(clear(db, eli, cls), /do not teach/);
+  await signIn(db, TEACHER);
+  await refuses(clear(db, eli, cls, { round: 'Final' }), /not open/);
+  await signIn(db, ADMIN);
+  await db.query(`select public.admin_set_evaluation_settings(false, null)`);
+  await signIn(db, TEACHER);
+  await refuses(clear(db, eli, cls), /closed right now/);
+  // An admin may clear with the switch off, and it is logged as by_admin.
+  await signIn(db, ADMIN);
+  assert.equal((await clear(db, eli, cls)).cleared, true);
+  assert.equal((await logs(db, 'evaluation_cleared'))[1].by_admin, true);
+  void otherCls;
 });

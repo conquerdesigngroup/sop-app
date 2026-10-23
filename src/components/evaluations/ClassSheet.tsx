@@ -8,6 +8,7 @@ import {
   EvaluationClass,
   EvaluationDraft,
   RosterEntry,
+  clearEvaluation,
   draftOf,
   isComplete,
   loadClassRoster,
@@ -136,6 +137,36 @@ const ClassSheet: React.FC<Props> = ({ klass, round, season = null, canSave, adm
     setOpenId(null);
   };
 
+  /** Remove a saved draft so the dancer is Not started again. Confirms first. */
+  const clear = async (entry: RosterEntry) => {
+    const ok = await confirm({
+      title: `Clear ${entry.firstName}'s evaluation?`,
+      message: 'The saved ratings and comment are removed and the dancer goes back to Not started. Nothing has gone to the family.',
+      confirmLabel: 'Clear',
+      variant: 'warning',
+    });
+    if (!ok) return;
+
+    setSaving(true);
+    const { cleared, error: err } = await clearEvaluation({
+      studentId: entry.studentId,
+      classId: klass.id,
+      season: adminOverride ? effectiveSeason : null,
+      round: adminOverride ? round : null,
+    });
+    setSaving(false);
+
+    if (err || cleared === null) {
+      toast.error(err || 'Could not clear.');
+      throw new Error(err || 'Could not clear.');
+    }
+
+    setRows(prev => prev.map(r => r.studentId === entry.studentId ? { ...r, evaluation: null } : r));
+    toast.success(`${entry.firstName} cleared.`);
+    load(true).catch(() => {});
+    setOpenId(null);
+  };
+
   /** Submit every complete draft, one call each, in roster order. */
   const submitAll = async () => {
     if (busyRef.current || plan.ready.length === 0) return;
@@ -196,6 +227,7 @@ const ClassSheet: React.FC<Props> = ({ klass, round, season = null, canSave, adm
           canSave={canSave}
           saving={saving}
           onSave={draft => save(open, draft)}
+          onClear={() => clear(open)}
           onBack={() => setOpenId(null)}
         />
         {confirmDialog}

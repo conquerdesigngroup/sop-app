@@ -697,6 +697,30 @@ export const saveEvaluation = async (input: SaveInput): Promise<{ result: SaveRe
   };
 };
 
+export interface ClearInput {
+  studentId: string;
+  classId: string;
+  season?: string | null;
+  round?: string | null;
+}
+
+/**
+ * Start a dancer over: removes their DRAFT for the round (v73). A submitted
+ * evaluation is refused by the function — the family has seen it — and the
+ * form does not offer Clear for one. `cleared: false` means there was nothing
+ * saved, which is not an error.
+ */
+export const clearEvaluation = async (input: ClearInput): Promise<{ cleared: boolean | null; error: LoadError }> => {
+  const { data, error } = await supabase.rpc('staff_clear_evaluation', {
+    p_student_id: input.studentId,
+    p_class_id: input.classId,
+    p_season: input.season ?? null,
+    p_round: input.round ?? null,
+  });
+  if (error) return { cleared: null, error: error.message || LOAD_FAILED };
+  return { cleared: Boolean(data?.cleared), error: null };
+};
+
 /** Flip the switch, name the round. Admin only; the RPC says so otherwise. */
 export const saveEvaluationSettings = async (
   enabled: boolean,
