@@ -620,8 +620,47 @@ const portal_attendance_gaps = portal_class_sessions.slice(0, 4).map((s) => ({
  * A table absent from here is served as [] rather than an error — see the
  * header of pgrest.js for why that is the honest answer.
  */
+/**
+ * Evaluations (v70). The switch is open with a named round so the teacher
+ * screen draws forms rather than the lock; two saved rows give the class list
+ * a "1 of N" and the family card a submitted evaluation to render.
+ */
+const portal_settings = [{
+  id: true,
+  excused_counts_against: false,
+  attendance_capture_enabled: true,
+  evaluations_enabled: true,
+  evaluation_round: 'Fall midterm',
+  updated_at: iso(-3),
+}];
+
+const portal_evaluations = portal_enrollments.slice(0, 2).map((e, i) => ({
+  id: `00000000-0000-4000-e000-${String(i + 1).padStart(12, '0')}`,
+  student_id: e.student_id,
+  class_id: e.class_id,
+  // The class's own season, which is what staff_save_evaluation() writes.
+  season: (portal_classes.find((c) => c.id === e.class_id) || {}).season || '2026-2027',
+  round: 'Fall midterm',
+  performance: 4,
+  attendance: 5,
+  showmanship: 3 + i,
+  comment: i === 0
+    ? 'Strong, musical and generous in class. Keep working on spotting in turns.'
+    : '',
+  move_up: i === 0,
+  status: i === 0 ? 'submitted' : 'draft',
+  submitted_at: i === 0 ? iso(-2) : null,
+  submitted_by: i === 0 ? STAFF.teacherJess : null,
+  created_by: STAFF.teacherJess,
+  updated_by: STAFF.teacherJess,
+  created_at: iso(-2),
+  updated_at: iso(-2),
+}));
+
 const tables = {
   profiles,
+  portal_settings,
+  portal_evaluations,
   portal_programs,
   portal_classes,
   portal_class_instructors,

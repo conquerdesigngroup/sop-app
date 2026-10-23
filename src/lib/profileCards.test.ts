@@ -49,7 +49,7 @@ const idsFor = (c: ProfileContext, surface?: PortalSurface) =>
  * same set of enrolments — the glance, the classes, the attendance — then run
  * together rather than with the class list stranded at the bottom.
  */
-const FAMILY_CARDS = ['up-next', 'updates', 'household', 'season-stats', 'calendar', 'teachers', 'attendance', 'closures', 'documents'];
+const FAMILY_CARDS = ['up-next', 'updates', 'household', 'season-stats', 'calendar', 'teachers', 'attendance', 'evaluations', 'closures', 'documents'];
 
 describe('who sees the family cards', () => {
   it('shows them to a client immediately, without waiting for the household read', () => {
@@ -78,6 +78,9 @@ describe('who sees the family cards', () => {
   it('keeps "Your dancers" to guardians — a student login sees only itself', () => {
     expect(idsFor(ctx({ memberType: 'student' }))).not.toContain('household');
     expect(idsFor(ctx({ memberType: 'guardian' }))).toContain('household');
+    // Evaluations are for parents (v72): a dancer's login gets no card at all.
+    expect(idsFor(ctx({ memberType: 'student' }))).not.toContain('evaluations');
+    expect(idsFor(ctx({ memberType: 'guardian' }))).toContain('evaluations');
   });
 
   it('always shows identity and account, to everybody', () => {

@@ -39,6 +39,7 @@ const ArchivePage = lazy(() => import('./pages/ArchivePage'));
 const ActivityLogPage = lazy(() => import('./pages/ActivityLogPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const AttendancePage = lazy(() => import('./pages/AttendancePage'));
+const EvaluationsPage = lazy(() => import('./pages/EvaluationsPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
@@ -63,6 +64,7 @@ const PortalLogin = lazy(() => import('./pages/portal/PortalLogin'));
 const PortalSignUp = lazy(() => import('./pages/portal/PortalSignUp'));
 const PortalUpdatePassword = lazy(() => import('./pages/portal/PortalUpdatePassword'));
 const PortalProfile = lazy(() => import('./pages/portal/Profile'));
+const EvaluationsRequest = lazy(() => import('./pages/portal/EvaluationsRequest'));
 
 // The staff side of the portal. Reachable by admins and by any employee holding
 // a class, which is why its route is a plain ProtectedRoute — see the page.
@@ -236,6 +238,12 @@ const AppContent: React.FC = () => {
                 registered inside a section below, where it keeps the tab bar. */}
             <Route path="/portal/policies" element={<ProgramPolicies />} />
 
+            {/* "Email me my evaluations" for families without an account. Public
+                on purpose and outside the CLIENT_AUTH block: the page itself
+                reveals nothing — the function answers identically for every
+                address — and a static segment, so it wins over :program. */}
+            <Route path="/portal/evaluations" element={<EvaluationsRequest />} />
+
             {/* The client login build. Static segments, so they win over the
                 /portal/:program matcher regardless of order — but they are
                 only registered at all when the flag is on. */}
@@ -391,6 +399,17 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <AttendancePage />
+              </ProtectedRoute>
+            }
+          />
+          {/* Same gate as attendance, for the same reason: a teacher evaluates
+              the classes they hold, and v70's RLS plus staff_save_evaluation()
+              decide which those are. Admin tabs inside gate themselves. */}
+          <Route
+            path="/evaluations"
+            element={
+              <ProtectedRoute>
+                <EvaluationsPage />
               </ProtectedRoute>
             }
           />

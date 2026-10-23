@@ -338,6 +338,65 @@ const RPC = {
   admin_activity_search: () => [],
   admin_activity_facets: () => [],
   admin_enrollment_import: enrollmentImport,
+  // Evaluations (v70/v71). The rules live in Postgres and are tested in
+  // scripts/sql-tests/evaluations.test.mjs; these only let the screens draw.
+  staff_save_evaluation: (body) => {
+    const key = (r) => r.student_id === body.p_student_id && r.class_id === body.p_class_id && r.round === (body.p_round || db.portal_settings[0].evaluation_round);
+    let row = db.portal_evaluations.find(key);
+    if (!row) {
+      row = { id: `dev-eval-${db.portal_evaluations.length + 1}`, student_id: body.p_student_id, class_id: body.p_class_id,
+        season: body.p_season || (db.portal_classes.find((c) => c.id === body.p_class_id) || {}).season || '2026-2027',
+        round: body.p_round || db.portal_settings[0].evaluation_round, status: 'draft', submitted_at: null };
+      db.portal_evaluations.push(row);
+    }
+    Object.assign(row, { performance: body.p_performance, attendance: body.p_attendance, showmanship: body.p_showmanship,
+      comment: body.p_comment || '', move_up: !!body.p_move_up, updated_at: new Date().toISOString() });
+    if (body.p_submit || row.status === 'submitted') { row.status = 'submitted'; row.submitted_at = row.submitted_at || new Date().toISOString(); }
+    return { id: row.id, status: row.status, season: row.season, round: row.round };
+  },
+  admin_set_evaluation_settings: (body) => {
+    const s = db.portal_settings[0];
+    s.evaluations_enabled = !!body.p_enabled;
+    if (body.p_round !== null && body.p_round !== undefined) s.evaluation_round = String(body.p_round).trim();
+    return { evaluations_enabled: s.evaluations_enabled, evaluation_round: s.evaluation_round };
+  },
+  admin_evaluation_export: (body) => {
+    const round = body.p_round || db.portal_settings[0].evaluation_round;
+    const inScope = db.portal_enrollments.filter((e) => e.status === 'active'
+      && (!body.p_class_ids || body.p_class_ids.includes(e.class_id))
+      && (!body.p_student_ids || body.p_student_ids.includes(e.student_id)));
+    const rows = inScope.map((e) => {
+      const s = db.portal_students.find((x) => x.id === e.student_id) || {};
+      const c = db.portal_classes.find((x) => x.id === e.class_id) || {};
+      const ev = db.portal_evaluations.find((x) => x.student_id === e.student_id && x.class_id === e.class_id && x.round === round);
+      return { student_id: e.student_id, class_id: e.class_id, season: c.season || '2026-2027', first_name: s.first_name, last_name: s.last_name,
+        class_name: c.name, category: c.category, instructor_name: c.instructor_name || null, evaluation_id: ev ? ev.id : null, round,
+        performance: ev ? ev.performance : null, attendance: ev ? ev.attendance : null, showmanship: ev ? ev.showmanship : null,
+        comment: ev ? ev.comment : null, move_up: ev ? ev.move_up : null, submitted_at: ev ? ev.submitted_at : null,
+        state: ev ? ev.status : 'not_started' };
+    });
+    const byClass = {};
+    rows.forEach((r) => {
+      const g = byClass[r.class_id] || (byClass[r.class_id] = { class_id: r.class_id, class_name: r.class_name, total: 0, submitted: 0, missing: [] });
+      g.total += 1;
+      if (r.state === 'submitted') g.submitted += 1;
+      else g.missing.push({ student_id: r.student_id, name: `${r.first_name} ${r.last_name}`, state: r.state });
+    });
+    return {
+      summary: { round, total: rows.length, submitted: rows.filter((r) => r.state === 'submitted').length,
+        draft: rows.filter((r) => r.state === 'draft').length, not_started: rows.filter((r) => r.state === 'not_started').length,
+        by_class: Object.values(byClass) },
+      evaluations: rows.filter((r) => r.state === 'submitted' || (body.p_include_drafts && r.state === 'draft')),
+    };
+  },
+  family_evaluations: () => db.portal_evaluations.filter((e) => e.status === 'submitted').map((e) => {
+    const s = db.portal_students.find((x) => x.id === e.student_id) || {};
+    const c = db.portal_classes.find((x) => x.id === e.class_id) || {};
+    return { id: e.id, student_id: e.student_id, first_name: s.first_name, last_name: s.last_name, class_id: e.class_id,
+      class_name: c.name, instructor_name: c.instructor_name || null, season: e.season, round: e.round,
+      performance: e.performance, attendance: e.attendance, showmanship: e.showmanship, comment: e.comment,
+      move_up: e.move_up, submitted_at: e.submitted_at };
+  }),
 };
 
 // --- rest -------------------------------------------------------------------
