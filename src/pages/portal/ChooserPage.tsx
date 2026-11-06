@@ -6,7 +6,7 @@ import { useResponsive } from '../../hooks/useResponsive';
 import { portalRoutes } from '../../lib/portal';
 import InstallAppGuide from '../../components/InstallAppGuide';
 import ThemeToggle from '../../components/ThemeToggle';
-import RefractedGlassField from '../../components/RefractedGlassField';
+import { ChooserScene } from '../../components/HomeScene';
 
 /**
  * The front door.
@@ -197,7 +197,7 @@ const ChooserPage: React.FC = () => {
         gap: isMobileOrTablet ? '32px' : '48px',
       }}
     >
-      <RefractedGlassField />
+      <ChooserScene />
 
       {/* Logo and toggle are one group with their own tighter gap, rather than
           two children of the page. As siblings they would each take the page's

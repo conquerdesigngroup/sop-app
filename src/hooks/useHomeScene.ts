@@ -24,6 +24,8 @@ export interface HomeSceneSetting {
   endsOn: string | null;
   /** Also draw it behind the parent portal (v79). */
   showOnPortal?: boolean;
+  /** Also draw it behind the front door, the Staff / Parent page at "/" (v80). */
+  showOnChooser?: boolean;
 }
 
 const CACHE_KEY = 'didc_home_scene';
@@ -57,7 +59,8 @@ const isMissingTable = (message: string) =>
 
 /**
  * `portal` reads the setting with no staff session: parents, and anyone who
- * is not signed in, can read it since v79 (it is only the name of a scene).
+ * is not signed in (the front door too), can read it since v79 (it is only
+ * the name of a scene).
  */
 export const useHomeScene = (audience: 'staff' | 'portal' = 'staff') => {
   const { isAuthenticated } = useAuth();
@@ -78,7 +81,7 @@ export const useHomeScene = (audience: 'staff' | 'portal' = 'staff') => {
       if (isMissingTable(error.message || '')) { publish(null); return; }
       throw error;
     }
-    publish(data ? { scene: data.scene || DEFAULT_SCENE_ID, endsOn: data.ends_on || null, showOnPortal: !!data.show_on_portal } : null);
+    publish(data ? { scene: data.scene || DEFAULT_SCENE_ID, endsOn: data.ends_on || null, showOnPortal: !!data.show_on_portal, showOnChooser: !!data.show_on_chooser } : null);
   }, []);
 
   useEffect(() => {
@@ -90,11 +93,13 @@ export const useHomeScene = (audience: 'staff' | 'portal' = 'staff') => {
   /** Super admin only; the database refuses anyone else (v78). */
   const save = useCallback(async (next: HomeSceneSetting) => {
     const row: Record<string, unknown> = { id: 1, scene: next.scene, ends_on: next.endsOn, updated_at: new Date().toISOString() };
-    // Only sent when set, so a save still works on a database without v79.
+    // Only sent when set, so a save still works on a database without v79/v80.
     if (next.showOnPortal !== undefined) row.show_on_portal = next.showOnPortal;
+    if (next.showOnChooser !== undefined) row.show_on_chooser = next.showOnChooser;
     const { error } = await supabase.from(TABLE).upsert(row, { onConflict: 'id' });
     if (error) throw error;
-    publish(next);
+    // A flag left out of the save keeps its saved value, here as in the row.
+    publish({ showOnPortal: memory?.showOnPortal, showOnChooser: memory?.showOnChooser, ...next });
   }, []);
 
   return {
