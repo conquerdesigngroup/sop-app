@@ -151,6 +151,29 @@ describe('classesCsvToRows', () => {
     expect(error).toMatch(/Title/);
   });
 
+  // Enrolio renamed "Max Size" to "Capacity" in October 2026. Missing the rename
+  // left capacity blank on every row, and the import writes blanks as NULL.
+  it('reads capacity from the current "Capacity" header', () => {
+    const current = header.replace('Max Size', 'Capacity');
+    const { rows, error } = classesCsvToRows(`${current}\n${row}`);
+    expect(error).toBeUndefined();
+    expect(rows[0].capacity).toBe('20');
+  });
+
+  it('still reads capacity from an older "Max Size" file', () => {
+    const { rows, error } = classesCsvToRows(`${header}\n${row}`);
+    expect(error).toBeUndefined();
+    expect(rows[0].capacity).toBe('20');
+  });
+
+  it('refuses a file with no capacity column instead of blanking every class', () => {
+    const noCap = header.replace('Max Size,', '');
+    const shorter = row.replace(',77.5,20,', ',77.5,');
+    const { rows, error } = classesCsvToRows(`${noCap}\n${shorter}`);
+    expect(rows).toEqual([]);
+    expect(error).toMatch(/Capacity/);
+  });
+
   it('tolerates a BOM on the first header', () => {
     const { rows, error } = classesCsvToRows(`﻿${header}\n${row}`);
     expect(error).toBeUndefined();

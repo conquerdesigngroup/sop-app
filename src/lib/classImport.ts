@@ -26,6 +26,8 @@ export const CLASS_HEADER_MAP: Record<string, string> = {
   group: 'group',
   'tuition fee': 'tuition_fee',
   'registration fee amount': 'registration_fee',
+  capacity: 'capacity',
+  // What the export called it before October 2026; older files still say this.
   'max size': 'capacity',
   'tuition billing cycle': 'billing_cycle',
   'start age': 'age_min_years',
@@ -147,6 +149,16 @@ export const classesCsvToRows = (text: string): ClassCsvParse => {
       rows: [],
       skipped: [],
       error: 'The header row must include "Title", "Days" and "Start Time" — this looks like a different export.',
+    };
+  }
+  // admin_class_import writes capacity on every matched class, blank or not. A
+  // file with no capacity column — Enrolio renaming it again — would empty every
+  // class's capacity, so it is refused rather than read as "no limit".
+  if (!headers.includes('capacity')) {
+    return {
+      rows: [],
+      skipped: [],
+      error: 'The header row has no "Capacity" (or "Max Size") column, so importing would erase every class\'s capacity.',
     };
   }
 
