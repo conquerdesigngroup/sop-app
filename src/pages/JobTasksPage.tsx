@@ -16,6 +16,7 @@ import CalendarTaskModal from '../components/CalendarTaskModal';
 import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
 import { Modal, Button, Input } from '../components/ui';
 import StaffAvatar from '../components/StaffAvatar';
+import RecurringTasksTab from '../components/RecurringTasksTab';
 
 // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight. Bare
 // `new Date('YYYY-MM-DD')` parses as UTC midnight, which renders as the
@@ -24,7 +25,7 @@ const parseLocalDate = (dateString: string) =>
   new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
 
 const JobTasksPage: React.FC = () => {
-  const { jobTasks, taskTemplates, createJobTaskUnified, updateJobTask, deleteJobTask, archiveJobTask, addTaskTemplate } = useTask();
+  const { jobTasks, recurringSeries, taskTemplates, createJobTaskUnified, updateJobTask, updateRecurringSeries, deleteJobTask, archiveJobTask, addTaskTemplate } = useTask();
   const { currentUser, users } = useAuth();
   const { sops } = useSOPs();
   const { isMobile, isMobileOrTablet } = useResponsive();
@@ -33,7 +34,8 @@ const JobTasksPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState<'tasks' | 'library'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'recurring' | 'library'>('tasks');
+  const [createRecurring, setCreateRecurring] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [initialTemplateId, setInitialTemplateId] = useState<string | null>(null);
@@ -186,8 +188,12 @@ const JobTasksPage: React.FC = () => {
   ) => {
     try {
       if (editingTask) {
-        // Update existing task
-        await updateJobTask(editingTask.id, {
+        // Update existing task. A recurring series also redoes its
+        // not-yet-started days from today, so the change reaches them.
+        const save = editingTask.isRecurring
+          ? (id: string, patch: Partial<JobTask>) => updateRecurringSeries(id, patch, studioToday())
+          : updateJobTask;
+        await save(editingTask.id, {
           title: taskData.title,
           description: taskData.description,
           category: taskData.category,
@@ -251,6 +257,7 @@ const JobTasksPage: React.FC = () => {
       setShowCreateModal(false);
       setInitialTemplateId(null);
       setEditingTask(null);
+      setCreateRecurring(false);
     } catch (error) {
       console.error('Error creating/updating job task:', error);
       showToast(editingTask ? 'Failed to update job task' : 'Failed to create job task', 'error');
@@ -296,6 +303,7 @@ const JobTasksPage: React.FC = () => {
     setInitialTemplateId(null);
     setInitialScheduledDate(null);
     setEditingTask(null);
+    setCreateRecurring(false);
   };
 
   const handleEditTask = (task: JobTask) => {
@@ -485,7 +493,11 @@ const JobTasksPage: React.FC = () => {
             Job Tasks
           </h1>
           <p style={{...styles.subtitle, ...(isMobile && styles.subtitleMobile)}}>
-            {activeTab === 'tasks' ? 'Create and assign tasks to team members' : 'Browse and use saved task templates'}
+            {activeTab === 'tasks'
+              ? 'Create and assign tasks to team members'
+              : activeTab === 'recurring'
+                ? 'Tasks that repeat on a schedule'
+                : 'Browse and use saved task templates'}
           </p>
         </div>
         <div style={styles.headerActions}>
@@ -504,7 +516,10 @@ const JobTasksPage: React.FC = () => {
           )}
           <button
             style={{...styles.createButton, ...(isMobile && styles.createButtonMobile)}}
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              setCreateRecurring(activeTab === 'recurring');
+              setShowCreateModal(true);
+            }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -525,11 +540,31 @@ const JobTasksPage: React.FC = () => {
             ...(activeTab === 'tasks' && styles.tabButtonActive),
           }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
-            <path d="M9 11l3 3L22 4" />
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-          </svg>
-          Assigned Tasks
+          {!isMobile && (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          )}
+          {isMobile ? 'Assigned' : 'Assigned Tasks'}
+        </button>
+        <button
+          onClick={() => setActiveTab('recurring')}
+          style={{
+            ...styles.tabButton,
+            ...(isMobile && styles.tabButtonMobile),
+            ...(activeTab === 'recurring' && styles.tabButtonActive),
+          }}
+        >
+          {!isMobile && (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+          )}
+          Recurring{!isMobile && recurringSeries.length > 0 ? ` (${recurringSeries.filter(s => s.status !== 'archived').length})` : ''}
         </button>
         <button
           onClick={() => setActiveTab('library')}
@@ -539,11 +574,13 @@ const JobTasksPage: React.FC = () => {
             ...(activeTab === 'library' && styles.tabButtonActive),
           }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
-            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-          </svg>
-          Task Library
+          {!isMobile && (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}>
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+            </svg>
+          )}
+          {isMobile ? 'Library' : 'Task Library'}
         </button>
       </div>
 
@@ -802,6 +839,18 @@ const JobTasksPage: React.FC = () => {
             )}
           </div>
         </>
+      ) : activeTab === 'recurring' ? (
+        <RecurringTasksTab
+          users={users}
+          onEdit={(series) => {
+            setEditingTask(series);
+            setShowCreateModal(true);
+          }}
+          onCreate={() => {
+            setCreateRecurring(true);
+            setShowCreateModal(true);
+          }}
+        />
       ) : (
         <TaskLibraryTab
           taskTemplates={taskTemplates}
@@ -836,6 +885,7 @@ const JobTasksPage: React.FC = () => {
         currentUserId={currentUser?.id || ''}
         initialTemplateId={initialTemplateId}
         initialScheduledDate={initialScheduledDate}
+        initialRecurring={createRecurring}
       />
 
       {/* Task Library Import Modal */}
@@ -3130,9 +3180,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '-2px',
   } as React.CSSProperties,
   tabButtonMobile: {
-    padding: '12px 16px',
+    padding: '12px 8px',
     fontSize: '14px',
     flex: 1,
+    minWidth: 0,
   },
   tabButtonActive: {
     background: theme.colors.cardBackground,

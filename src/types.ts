@@ -80,9 +80,15 @@ export interface TaskTemplateStep {
 
 export interface RecurrencePattern {
   frequency: 'daily' | 'weekly' | 'monthly';
+  /** Every N days / weeks / months. Missing means 1. */
+  interval?: number;
   daysOfWeek?: number[]; // 0-6 (Sunday-Saturday)
-  dayOfMonth?: number; // 1-31
-  endDate?: string; // When to stop recurring
+  dayOfMonth?: number; // 1-31; the 31st lands on the last day of shorter months
+  endDate?: string; // YYYY-MM-DD, last day it may land on
+  /** A paused series creates no new tasks until resumed. */
+  paused?: boolean;
+  /** Bookkeeping for job-task series: occurrences exist up to this date. See src/lib/recurrence.ts. */
+  generatedThrough?: string;
 }
 
 export interface TaskTemplate {
@@ -143,9 +149,11 @@ export interface JobTask {
   dueTime?: string; // e.g., "14:00"
   estimatedDuration: number; // minutes
 
-  // Recurrence
+  // Recurrence. isRecurring marks a SERIES (the rule, hidden from task
+  // lists); an occurrence it created carries seriesId instead.
   isRecurring?: boolean;
   recurrencePattern?: RecurrencePattern;
+  seriesId?: string;
 
   // Status
   status: TaskStatus;

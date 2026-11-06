@@ -450,6 +450,21 @@ const handleRest = (req, res, url, body) => {
 
     let written;
     if (req.method === 'POST') {
+      // supabase-js upsert({ ignoreDuplicates: true }) — the recurring-task
+      // generator relies on a repeated id being dropped, not duplicated.
+      const prefer = req.headers.prefer || '';
+      if (prefer.includes('resolution=ignore-duplicates') || prefer.includes('resolution=merge-duplicates')) {
+        const merge = prefer.includes('resolution=merge-duplicates');
+        const byId = new Map(db[table].map((r) => [r.id, r]));
+        const fresh = [];
+        for (const row of incoming) {
+          const existing = row.id && byId.get(row.id);
+          if (!existing) fresh.push(row);
+          else if (merge) Object.assign(existing, row, { updated_at: new Date().toISOString() });
+        }
+        incoming.length = 0;
+        incoming.push(...fresh);
+      }
       written = incoming.map((row) => ({
         id: row.id || `dev-${Math.random().toString(36).slice(2, 10)}`,
         created_at: new Date().toISOString(),

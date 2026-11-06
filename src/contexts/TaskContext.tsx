@@ -1,9 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { TaskTemplate, JobTask, TaskTemplateStep, TaskStep, TaskStatus, TaskPriority } from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { TaskTemplate, JobTask, TaskTemplateStep, TaskStep, TaskStatus, TaskPriority, RecurrencePattern } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logActivity } from '../utils/activityLogger';
 import { useRefreshable } from './RefreshContext';
+import { isManagementRole } from '../lib/roles';
+import { studioToday, shiftIsoDays } from '../lib/studioDate';
+import { GENERATE_AHEAD_DAYS, occurrenceDates, occurrenceId, seriesState } from '../lib/recurrence';
 
 interface TaskContextType {
   // Task Templates (Library)
@@ -14,8 +17,18 @@ interface TaskContextType {
   getTaskTemplateById: (id: string) => TaskTemplate | undefined;
   getTaskTemplatesByDepartment: (department: string) => TaskTemplate[];
 
-  // Job Tasks (Assigned Tasks)
+  // Job Tasks (Assigned Tasks). Recurring SERIES rows are not in here —
+  // only the occurrences they create. See src/lib/recurrence.ts.
   jobTasks: JobTask[];
+  /** The rules behind recurring tasks, for the Recurring tab. */
+  recurringSeries: JobTask[];
+  /**
+   * Change a series and redo its not-yet-started occurrences from
+   * `regenerateFrom` on, so the edit (or pause, or end date) reaches them.
+   */
+  updateRecurringSeries: (id: string, patch: Partial<JobTask>, regenerateFrom: string) => Promise<void>;
+  /** Delete a series and its not-yet-started occurrences. Done ones stay as history. */
+  deleteRecurringSeries: (id: string) => Promise<void>;
   addJobTask: (task: Omit<JobTask, 'id' | 'createdAt' | 'progressPercentage'>) => Promise<void>;
   updateJobTask: (id: string, task: Partial<JobTask>) => Promise<void>;
   deleteJobTask: (id: string) => Promise<void>;
@@ -99,9 +112,18 @@ const mapSupabaseJobTask = (dbTask: any): JobTask => {
     createdAt: dbTask.created_at,
     updatedAt: dbTask.updated_at,
     isRecurring: dbTask.is_recurring || false,
-    recurrencePattern: dbTask.recurrence_pattern,
+    // On a series this is the rule; on an occurrence it only carries the link
+    // back to its series, which is not a pattern and must not look like one.
+    recurrencePattern: dbTask.is_recurring ? dbTask.recurrence_pattern || undefined : undefined,
+    seriesId: !dbTask.is_recurring ? dbTask.recurrence_pattern?.seriesId || undefined : undefined,
   };
 };
+
+/** Nobody has touched it yet, so regenerating it loses nothing. */
+const isUntouchedOccurrence = (t: JobTask): boolean =>
+  (t.status === 'pending' || t.status === 'overdue') &&
+  !t.startedAt &&
+  (t.completedSteps || []).length === 0;
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
@@ -267,10 +289,23 @@ interface TaskProviderProps {
 
 export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
-  const [jobTasks, setJobTasks] = useState<JobTask[]>([]);
+  // Every job_tasks row, series included. Components get the split below.
+  const [allTasks, setJobTasks] = useState<JobTask[]>([]);
   const [loading, setLoading] = useState(true);
   const { currentUser, isAuthenticated, loading: authLoading } = useAuth();
   const useSupabase = isSupabaseConfigured();
+  const canManage = isManagementRole(currentUser?.role);
+
+  const jobTasks = useMemo(() => allTasks.filter(t => !t.isRecurring), [allTasks]);
+  const recurringSeries = useMemo(() => allTasks.filter(t => t.isRecurring), [allTasks]);
+
+  const allTasksRef = useRef<JobTask[]>([]);
+  allTasksRef.current = allTasks;
+  // loadJobTasks and generateOccurrences call each other; refs break the
+  // useCallback dependency cycle.
+  const generateRef = useRef<(tasks: JobTask[]) => Promise<void>>(async () => {});
+  const reloadRef = useRef<() => Promise<void>>(async () => {});
+  const generatingRef = useRef(false);
 
   // Load task templates from database
   const loadTaskTemplates = useCallback(async () => {
@@ -304,11 +339,100 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (tasks && !error) {
         const mappedTasks = tasks.map((t: any) => mapSupabaseJobTask(t));
         setJobTasks(mappedTasks);
+        void generateRef.current(mappedTasks);
       }
     } catch (error) {
       console.error('Error loading job tasks:', error);
     }
   }, [useSupabase]);
+
+  reloadRef.current = loadJobTasks;
+
+  /**
+   * Create the occurrences every live series owes for the next
+   * GENERATE_AHEAD_DAYS days. Management only: RLS lets only is_admin()
+   * insert job_tasks. Safe to run on several devices at once — occurrence ids
+   * are derived from (series, date), so a second insert of the same day is
+   * ignored by the primary key.
+   */
+  const generateOccurrences = useCallback(async (tasks: JobTask[]) => {
+    if (!useSupabase || !canManage || generatingRef.current) return;
+    const today = studioToday();
+    const horizon = shiftIsoDays(today, GENERATE_AHEAD_DAYS - 1);
+
+    const work: { series: JobTask; pattern: RecurrencePattern; dates: string[] }[] = [];
+    for (const series of tasks) {
+      const pattern = series.recurrencePattern;
+      if (!series.isRecurring || !pattern) continue;
+      const state = seriesState(pattern, series.status, series.scheduledDate, today);
+      if (state === 'ended' || state === 'paused') continue;
+      let from = today;
+      if (pattern.generatedThrough) {
+        const next = shiftIsoDays(pattern.generatedThrough, 1);
+        if (next > from) from = next;
+      }
+      if (from > horizon) continue;
+      work.push({ series, pattern, dates: occurrenceDates(pattern, series.scheduledDate, from, horizon) });
+    }
+    if (work.length === 0) return;
+
+    generatingRef.current = true;
+    try {
+      const rows = work.flatMap(({ series, dates }) =>
+        dates.map(date => ({
+          id: occurrenceId(series.id, date),
+          template_id: series.templateId || null,
+          title: series.title,
+          description: series.description,
+          assigned_to: series.assignedTo,
+          assigned_by: series.assignedBy,
+          department: series.department,
+          category: series.category,
+          scheduled_date: date,
+          due_time: series.dueTime || null,
+          estimated_duration: series.estimatedDuration,
+          status: 'pending',
+          priority: series.priority,
+          steps: (series.steps || []).map(step => ({ ...step, isCompleted: false, completedAt: undefined, photoUrl: undefined })),
+          completed_steps: [],
+          progress_percentage: 0,
+          sop_ids: series.sopIds,
+          comments: [],
+          is_recurring: false,
+          recurrence_pattern: { seriesId: series.id, occurrenceDate: date },
+        }))
+      );
+
+      if (rows.length > 0) {
+        const { error } = await supabase
+          .from('job_tasks')
+          .upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
+        if (error) throw error;
+      }
+
+      // Only after the rows exist: a failed insert leaves the series to try again.
+      for (const { series, pattern } of work) {
+        const { error } = await supabase
+          .from('job_tasks')
+          .update({ recurrence_pattern: { ...pattern, generatedThrough: horizon } })
+          .eq('id', series.id);
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Error creating recurring task occurrences:', error);
+      return;
+    } finally {
+      generatingRef.current = false;
+    }
+    await reloadRef.current();
+  }, [useSupabase, canManage]);
+
+  generateRef.current = generateOccurrences;
+
+  // The role can arrive after the first task load; catch up once it does.
+  useEffect(() => {
+    if (canManage && !loading) void generateRef.current(allTasksRef.current);
+  }, [canManage, loading]);
 
   // Manual refresh (e.g. pull-to-refresh) — reloads templates and tasks
   const refreshTasks = useCallback(async () => {
@@ -430,10 +554,10 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
 
   // Save job tasks to localStorage (fallback mode only)
   useEffect(() => {
-    if (!useSupabase && jobTasks.length > 0) {
-      localStorage.setItem('mediamaple_job_tasks', JSON.stringify(jobTasks));
+    if (!useSupabase && allTasks.length > 0) {
+      localStorage.setItem('mediamaple_job_tasks', JSON.stringify(allTasks));
     }
-  }, [jobTasks, useSupabase]);
+  }, [allTasks, useSupabase]);
 
   // Part of every app-wide refresh: the header button, pull-to-refresh, and
   // coming back to the foreground. RefreshContext owns the visibility
@@ -746,7 +870,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   };
 
   const updateJobTask = async (id: string, taskData: Partial<JobTask>) => {
-    const existingTask = jobTasks.find(t => t.id === id);
+    const existingTask = allTasks.find(t => t.id === id);
 
     // Determine the action type based on what changed
     const getActionType = (): 'task_updated' | 'task_completed' | 'task_step_completed' | 'task_assigned' | 'task_started' => {
@@ -828,9 +952,13 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (taskData.completionNotes !== undefined) updateData.completion_notes = taskData.completionNotes;
       if (taskData.completionPhotos !== undefined) updateData.completion_photos = taskData.completionPhotos;
       if (taskData.comments !== undefined) updateData.comments = taskData.comments;
+      // Was never written, so an edit to a task's recurrence silently did nothing.
+      if (taskData.isRecurring !== undefined) updateData.is_recurring = taskData.isRecurring;
+      if (taskData.isRecurring === false && !currentTaskIsOccurrence(id)) updateData.recurrence_pattern = null;
+      else if (taskData.recurrencePattern !== undefined) updateData.recurrence_pattern = taskData.recurrencePattern;
 
       // Calculate progress if steps or completedSteps changed
-      const currentTask = jobTasks.find(t => t.id === id);
+      const currentTask = allTasks.find(t => t.id === id);
       if (currentTask && (taskData.steps || taskData.completedSteps)) {
         const steps = taskData.steps || currentTask.steps;
         const completedSteps = taskData.completedSteps || currentTask.completedSteps;
@@ -905,7 +1033,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
   };
 
   const deleteJobTask = async (id: string) => {
-    const taskToDelete = jobTasks.find((task) => task.id === id);
+    const taskToDelete = allTasks.find((task) => task.id === id);
 
     if (!useSupabase) {
       // Fallback to localStorage mode
@@ -958,8 +1086,43 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     }
   };
 
+  // An occurrence's recurrence_pattern holds its series link; an edit that
+  // sends isRecurring: false must not wipe it.
+  const currentTaskIsOccurrence = (id: string): boolean =>
+    !!allTasksRef.current.find(t => t.id === id)?.seriesId;
+
+  const deleteUntouchedOccurrences = async (seriesId: string, fromDate: string) => {
+    const doomed = allTasksRef.current.filter(
+      t => t.seriesId === seriesId && t.scheduledDate >= fromDate && isUntouchedOccurrence(t)
+    );
+    if (doomed.length === 0) return;
+    const ids = doomed.map(t => t.id);
+    if (useSupabase) {
+      const { error } = await supabase.from('job_tasks').delete().in('id', ids);
+      if (error) throw error;
+    }
+    setJobTasks(prev => prev.filter(t => !ids.includes(t.id)));
+  };
+
+  const updateRecurringSeries = async (id: string, patch: Partial<JobTask>, regenerateFrom: string) => {
+    const series = allTasksRef.current.find(t => t.id === id);
+    if (!series) throw new Error('Recurring task not found');
+    const base = patch.recurrencePattern || series.recurrencePattern;
+    const recurrencePattern: RecurrencePattern | undefined = base
+      ? { ...base, generatedThrough: shiftIsoDays(regenerateFrom, -1) }
+      : undefined;
+    await updateJobTask(id, { ...patch, isRecurring: true, recurrencePattern });
+    await deleteUntouchedOccurrences(id, regenerateFrom);
+    await loadJobTasks();
+  };
+
+  const deleteRecurringSeries = async (id: string) => {
+    await deleteUntouchedOccurrences(id, studioToday());
+    await deleteJobTask(id);
+  };
+
   const getJobTaskById = (id: string): JobTask | undefined => {
-    return jobTasks.find((task) => task.id === id);
+    return allTasks.find((task) => task.id === id);
   };
 
   const getJobTasksByUser = (userId: string): JobTask[] => {
@@ -1166,6 +1329,9 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
     getTaskTemplateById,
     getTaskTemplatesByDepartment,
     jobTasks,
+    recurringSeries,
+    updateRecurringSeries,
+    deleteRecurringSeries,
     addJobTask,
     updateJobTask,
     deleteJobTask,
