@@ -34,7 +34,6 @@ const TaskLibraryPage = lazy(() => import('./pages/TaskLibraryPage'));
 const MyTasksPage = lazy(() => import('./pages/MyTasksPage'));
 const TeamManagementPage = lazy(() => import('./pages/TeamManagementPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ArchivePage = lazy(() => import('./pages/ArchivePage'));
 const ActivityLogPage = lazy(() => import('./pages/ActivityLogPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -336,14 +335,8 @@ const AppContent: React.FC = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <SettingsPage />
-              </ProtectedRoute>
-            }
-          />
+          {/* Settings lives at the foot of My account now. */}
+          <Route path="/settings" element={<Navigate to="/profile" replace />} />
           <Route
             path="/archive"
             element={

@@ -5,7 +5,7 @@ import { usePortalAdmin } from '../../contexts/PortalAdminContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useTaskCounts } from '../../hooks/useTaskCounts';
 import { theme } from '../../theme';
-import { CountBadge } from '../BottomNavigation';
+import { CountBadge, bottomNavPathsFor } from '../BottomNavigation';
 
 /**
  * The dashboard's grid of big buttons: the pages each person actually uses,
@@ -27,7 +27,16 @@ import { CountBadge } from '../BottomNavigation';
  *   management, holding none
  *       Take attendance · Portal manager · Log hours · My tasks · Calendar · SOPs
  *   neither
- *       Log hours · My tasks · Calendar · SOPs · My profile · Settings
+ *       Log hours · My tasks · Calendar · SOPs · Shift reports · My account
+ *
+ * ON A PHONE, ONLY WHAT THE BAR DOES NOT HAVE
+ *
+ * On a phone the bottom bar sits right under this grid, and four of a team
+ * member's six tiles were the same pages as the tabs below them. So on a
+ * phone the grid leaves out whatever the bar already carries for this role
+ * (bottomNavPathsFor, the bar's own list) and offers only what it pushed off:
+ * a team member with no class is left SOPs and My account. On a laptop there
+ * is no bar, and the full set is shown.
  *
  * My classes REPLACES Portal manager rather than joining it, because six is
  * the whole budget (see SIX, IN THREES) and a teacher loses nothing: Portal is
@@ -121,10 +130,12 @@ const icons = {
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
-  settings: (
+  reports: (
     <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
     </svg>
   ),
 };
@@ -166,8 +177,8 @@ export const shortcutsFor = (
     myTasks,
     calendar,
     sops,
-    { key: 'profile', label: 'My profile', icon: icons.profile, to: '/profile' },
-    { key: 'settings', label: 'Settings', icon: icons.settings, to: '/settings' },
+    { key: 'reports', label: 'Shift reports', icon: icons.reports, to: '/reports' },
+    { key: 'account', label: 'My account', icon: icons.profile, to: '/profile' },
   ];
 };
 
@@ -178,7 +189,12 @@ const Shortcuts: React.FC<{ navigate: NavigateFunction }> = ({ navigate }) => {
   const { myOverdue } = useTaskCounts();
   const { isMobileOrTablet } = useResponsive();
 
-  const shortcuts = shortcutsFor(isAdmin, teaches, myOverdue, editableClassIds.length > 0);
+  const all = shortcutsFor(isAdmin, teaches, myOverdue, editableClassIds.length > 0);
+  // The bar is drawn on exactly this test (App.tsx), so the two agree.
+  const onBar = isMobileOrTablet ? bottomNavPathsFor(isAdmin, teaches) : [];
+  const shortcuts = all.filter(s => !onBar.includes(s.to));
+
+  if (shortcuts.length === 0) return null;
 
   // Three across on a phone (see SIX, IN THREES); one row on a laptop.
   const columns = isMobileOrTablet ? 3 : shortcuts.length;

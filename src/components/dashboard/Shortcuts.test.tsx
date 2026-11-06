@@ -51,7 +51,7 @@ describe('shortcutsFor', () => {
   });
 
   it('gives a team member with no class the pages of their day, and no class pages', () => {
-    expect(labels(false, false)).toEqual(['Log hours', 'My tasks', 'Calendar', 'SOPs', 'My profile', 'Settings']);
+    expect(labels(false, false)).toEqual(['Log hours', 'My tasks', 'Calendar', 'SOPs', 'Shift reports', 'My account']);
   });
 
   it('swaps Portal manager for My classes once someone actually holds one', () => {
@@ -142,6 +142,26 @@ describe('the grid', () => {
     expect(screen.queryByRole('button', { name: /portal manager/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /my classes/i }));
     expect(navigate).toHaveBeenCalledWith('/portal-admin/my-classes');
+  });
+
+  describe('on a phone', () => {
+    const desktopWidth = window.innerWidth;
+    beforeEach(() => { (window as any).innerWidth = 375; });
+    afterEach(() => { (window as any).innerWidth = desktopWidth; });
+
+    it('leaves out the pages already on the bottom bar under it', () => {
+      render(<Shortcuts navigate={jest.fn()} />);
+      const shown = screen.getAllByRole('button').map(b => b.textContent);
+      expect(shown).toEqual(['SOPs', 'My account']);
+    });
+
+    it('offers a teacher only the pages their bar pushed off', () => {
+      mockPortal.canEdit = true;
+      mockPortal.editableClassIds = ['class-1'];
+      render(<Shortcuts navigate={jest.fn()} />);
+      const shown = screen.getAllByRole('button').map(b => b.textContent);
+      expect(shown).toEqual(['My classes', 'Calendar', 'SOPs']);
+    });
   });
 
   it('carries the overdue count on My tasks, and nothing when none are overdue', () => {

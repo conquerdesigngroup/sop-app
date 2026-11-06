@@ -58,25 +58,31 @@ const STORAGE_KEY = 'sop_app_dashboard_settings';
  * modal was saved and then ignored: the setting existed and did nothing.
  *
  * One list serves both pages because, filtered by audience, it comes out in
- * each page's own order — a team member's runs shortcuts, stats, classes, their
- * tasks, calendar; a manager's runs shortcuts, stats, the three manager cards,
+ * each page's own order — a team member's runs shortcuts, shift reports,
+ * classes, Today; a manager's runs shortcuts, stats, the three manager cards,
  * classes, departments, SOPs, schedule, calendar.
+ *
+ * A team member's dashboard used to show their own tasks five ways: the
+ * status tiles, Today, Upcoming, Overdue and a month calendar, one under the
+ * other on a phone. They are one card now ("Today", still keyed todayTasks so
+ * a saved switch carries over). The tiles and the month grid stay on the
+ * manager's page, where they count everyone's work; a team member has the
+ * Calendar page one tap away. upcomingTasks and overdueTasks are gone, and a
+ * stored switch for either is simply never read back.
  */
 const defaultWidgets: DashboardWidget[] = ([
   { id: 'shortcuts', name: 'Shortcuts', description: 'Big buttons for the pages you use most', audience: 'everyone' },
   { id: 'shiftReports', name: 'Shift Reports', description: 'Write your shift report, and see reports you have been tagged on', audience: 'everyone' },
-  { id: 'stats', name: 'Task Stats', description: 'Overview of pending, in-progress, and completed tasks', audience: 'everyone' },
+  { id: 'stats', name: 'Task Stats', description: 'Overview of pending, in-progress, and completed tasks', audience: 'admin' },
   { id: 'overdueByPerson', name: 'Overdue by Person', description: 'Who is behind, and on how many tasks', audience: 'admin' },
   { id: 'hoursReview', name: 'Hours Awaiting Review', description: 'Logged hours waiting for your approval', audience: 'superAdmin' },
   { id: 'latestActivity', name: 'Latest Activity', description: 'The last few things that happened in the app', audience: 'superAdmin' },
   { id: 'classesToday', name: 'Your Classes Today', description: 'The classes you teach today, and where each register stands', audience: 'classHolder' },
-  { id: 'todayTasks', name: "Today's Tasks", description: 'Tasks due today', audience: 'team' },
-  { id: 'upcomingTasks', name: 'Upcoming Tasks', description: 'Tasks coming up this week', audience: 'team' },
-  { id: 'overdueTasks', name: 'Overdue Tasks', description: 'Tasks past their due date', audience: 'team' },
+  { id: 'todayTasks', name: 'Today', description: 'What is due today and anything overdue, with what is coming this week', audience: 'team' },
   { id: 'departments', name: 'Departments', description: 'Quick access to department SOPs', audience: 'admin' },
   { id: 'recentSops', name: 'Recent SOPs', description: 'Recently created or updated SOPs', audience: 'admin' },
   { id: 'schedule', name: 'Work Schedule', description: 'Upcoming work schedule snapshot', audience: 'admin' },
-  { id: 'calendar', name: 'Tasks & Events', description: 'Monthly calendar view with tasks and events', audience: 'everyone' },
+  { id: 'calendar', name: 'Tasks & Events', description: 'Monthly calendar view with tasks and events', audience: 'admin' },
 ] as Omit<DashboardWidget, 'enabled' | 'order'>[]).map((widget, order) => ({ ...widget, enabled: true, order }));
 
 export const DashboardSettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

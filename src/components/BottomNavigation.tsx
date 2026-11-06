@@ -5,6 +5,8 @@ import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { useTaskCounts, TaskCounts } from '../hooks/useTaskCounts';
+import { useShiftReports } from '../contexts/ShiftReportContext';
+import { unseenTaggedReports } from '../lib/shiftReports';
 import { theme } from '../theme';
 
 /**
@@ -19,6 +21,8 @@ interface NavTab {
   onPress?: () => void;
   /** Count shown as a pill on the icon. Hidden when zero. */
   badge?: number;
+  /** What the count is of, for a screen reader. Defaults to overdue. */
+  badgeLabel?: string;
 }
 
 const stroke = {
@@ -66,12 +70,12 @@ const icons = {
       <line x1="16" y1="6" x2="22" y2="6" />
     </svg>
   ),
-  sop: (
+  reports: (
     <svg width="22" height="22" viewBox="0 0 24 24" {...stroke}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
     </svg>
   ),
   attendance: (
@@ -116,7 +120,12 @@ const icons = {
  *
  *   management   Home · Job Tasks · Attendance · Portal · More
  *   teaches      Home · Tasks     · Attendance · Portal · Hours
- *   neither      Home · Tasks     · Calendar   · Hours  · SOPs
+ *   neither      Home · Tasks     · Calendar   · Hours  · Reports
+ *
+ * Reports took SOPs' slot on the last bar. Everyone writes a shift report
+ * every shift, and for someone without a class it was otherwise only in a
+ * menu sheet holding nothing else, or on the dashboard card. SOPs are looked
+ * up now and then; they moved to the sheet and to the dashboard shortcuts.
  *
  * Management keeps Job Tasks, whose badge counts everyone's overdue including
  * their own, and More; My Tasks and Calendar move into the sheet. A teacher
@@ -132,7 +141,13 @@ const icons = {
  * Management does not wait for it. can_edit_portal() is true for every admin,
  * and reading the async answer would redraw the admin bar a beat after load.
  */
-const tabsFor = (isAdmin: boolean, teaches: boolean, counts: TaskCounts, onMore: () => void): NavTab[] => {
+const tabsFor = (
+  isAdmin: boolean,
+  teaches: boolean,
+  counts: TaskCounts,
+  onMore: () => void,
+  unseenReports = 0,
+): NavTab[] => {
   const home: NavTab = { key: 'home', path: '/dashboard', label: 'Home', icon: icons.home };
   const myTasks: NavTab = { key: 'my-tasks', path: '/my-tasks', label: 'Tasks', icon: icons.tasks, badge: counts.myOverdue };
   const attendance: NavTab = { key: 'attendance', path: '/attendance', label: 'Attendance', icon: icons.attendance };
@@ -157,7 +172,14 @@ const tabsFor = (isAdmin: boolean, teaches: boolean, counts: TaskCounts, onMore:
     myTasks,
     { key: 'calendar', path: '/calendar', label: 'Calendar', icon: icons.calendar },
     hours,
-    { key: 'sop', path: '/sop', label: 'SOPs', icon: icons.sop },
+    {
+      key: 'reports',
+      path: '/reports',
+      label: 'Reports',
+      icon: icons.reports,
+      badge: unseenReports,
+      badgeLabel: 'new reports you are tagged on',
+    },
   ];
 };
 
@@ -213,15 +235,17 @@ export const CountBadge: React.FC<{ count: number; label: string }> = ({ count, 
 const BottomNavigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, currentUser } = useAuth();
   const { isDark } = useTheme();
   const colors = useThemeColors();
   const menu = useMobileMenu();
   const counts = useTaskCounts();
   // Mirrors can_edit_portal(): admin, or holds at least one class.
   const { canEdit: teaches } = usePortalAdmin();
+  const { reports } = useShiftReports();
+  const unseenReports = unseenTaggedReports(reports, currentUser?.id).length;
 
-  const tabs = tabsFor(isAdmin, teaches, counts, menu.toggle);
+  const tabs = tabsFor(isAdmin, teaches, counts, menu.toggle, unseenReports);
 
   const isActive = (tab: NavTab) => {
     if (!tab.path) return menu.isOpen;
@@ -317,7 +341,7 @@ const BottomNavigation: React.FC = () => {
                 {/* Sits on the icon's top-right corner so the label underneath
                     keeps its width — the label must never be what widens the
                     column. */}
-                {tab.badge !== undefined && <CountBadge count={tab.badge} label="overdue" />}
+                {tab.badge !== undefined && <CountBadge count={tab.badge} label={tab.badgeLabel ?? 'overdue'} />}
               </span>
               <span
                 style={{

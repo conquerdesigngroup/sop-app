@@ -118,13 +118,13 @@ describe('refresh button', () => {
 describe('mobile menu sheet', () => {
   beforeEach(() => { mockMobile = true; });
 
-  it('gives a team member a sheet holding only Reports: everything else they reach is on the bottom bar', () => {
+  it('gives a team member a sheet holding only SOPs: everything else they reach is on the bottom bar', () => {
     renderAt();
-    // Shift reports are the one page of theirs the five-slot bar has no room
-    // for, so the sheet exists again — holding that and nothing the bar has.
+    // Reports took SOPs' slot on their bar, so SOPs is the one page of theirs
+    // the five-slot bar has no room for — the sheet holds that and nothing else.
     fireEvent.click(screen.getByRole('button', { name: /more pages/i }));
     const sheet = screen.getByRole('dialog', { name: 'More pages' });
-    expect(within(sheet).getAllByRole('link').map(a => a.textContent)).toEqual(['Reports']);
+    expect(within(sheet).getAllByRole('link').map(a => a.textContent)).toEqual(['SOPs']);
     // The account menu is still there — the bar does not cover it.
     expect(screen.getByRole('button', { name: /account menu/i })).toBeInTheDocument();
   });
@@ -261,14 +261,14 @@ describe('desktop header', () => {
     expect(screen.getByRole('link', { name: 'Task Library' })).toHaveAttribute('href', '/task-library');
   });
 
-  it('puts Profile, Settings and Logout on real buttons that Escape can leave', () => {
+  it('puts My account and Logout on real buttons that Escape can leave', () => {
     renderAt();
     const account = screen.getByRole('button', { name: /ada lovelace/i });
     expect(account).toHaveAttribute('aria-haspopup', 'true');
     fireEvent.click(account);
 
-    expect(screen.getByRole('button', { name: /profile/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /my account/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /settings/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /back to menu/i })).toBeInTheDocument();
 

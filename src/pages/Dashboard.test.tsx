@@ -70,7 +70,7 @@ const switchOff = (...ids: string[]) =>
 
 const ALL = [
   'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday', 'shortcuts', 'shiftReports',
-  'todayTasks', 'upcomingTasks', 'overdueTasks', 'departments', 'recentSops', 'schedule', 'calendar',
+  'todayTasks', 'departments', 'recentSops', 'schedule', 'calendar',
 ];
 
 const draw = () => render(<DashboardSettingsProvider><Dashboard /></DashboardSettingsProvider>);
@@ -87,22 +87,25 @@ beforeEach(() => {
 describe("a team member's dashboard", () => {
   it('draws every section while nothing is switched off', () => {
     draw();
-    expect(screen.getByText('Pending')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Shortcuts' })).toBeInTheDocument();
-    expect(screen.getByText('Today (0)')).toBeInTheDocument();
-    expect(screen.getByText('Upcoming (0)')).toBeInTheDocument();
-    expect(screen.getByText('Tasks & Events')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Today' })).toBeInTheDocument();
+  });
+
+  it('shows their tasks once, in Today, with no status tiles or month grid', () => {
+    // These were five sections showing slices of one list. The tiles and
+    // the month grid stay on the manager's page, where they count everyone.
+    draw();
+    expect(screen.getByText('0 due today')).toBeInTheDocument();
+    expect(screen.queryByText('Pending')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tasks & Events')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Upcoming/)).not.toBeInTheDocument();
   });
 
   it('leaves out exactly the sections switched off', () => {
-    switchOff('shortcuts', 'todayTasks', 'calendar');
+    switchOff('shortcuts', 'todayTasks');
     draw();
     expect(screen.queryByRole('region', { name: 'Shortcuts' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Today (0)')).not.toBeInTheDocument();
-    expect(screen.queryByText('Tasks & Events')).not.toBeInTheDocument();
-    // And nothing else went with them.
-    expect(screen.getByText('Pending')).toBeInTheDocument();
-    expect(screen.getByText('Upcoming (0)')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Today' })).not.toBeInTheDocument();
   });
 
   it('hides the classes card for a teacher who switched it off', () => {
@@ -165,7 +168,7 @@ describe('with everything switched off', () => {
   });
 
   it('says nothing while anything at all is still shown', () => {
-    switchOff(...ALL.filter(id => id !== 'calendar'));
+    switchOff(...ALL.filter(id => id !== 'todayTasks'));
     draw();
     expect(screen.queryByText('Every section of your dashboard is switched off.')).not.toBeInTheDocument();
   });

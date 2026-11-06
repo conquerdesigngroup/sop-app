@@ -7,15 +7,25 @@ import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { theme } from '../theme';
 import { APP_VERSION } from '../version';
 import { useResponsive } from '../hooks/useResponsive';
-import { FormButton } from '../components/FormComponents';
-import { Toggle } from '../components/ui';
+import { Button, Toggle } from '../components/ui';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription } from '../lib/push';
 
-const SettingsPage: React.FC = () => {
+/**
+ * Notifications, integrations, the dashboard switches and the admin tools.
+ *
+ * Rendered at the foot of My account (ProfilePage) with `embedded`, and no
+ * longer a page of its own: /settings redirects there. Profile and Settings
+ * were two entries in the account menu, each with its own security card, and
+ * nobody could say which held what. The "Session & Security" card here only
+ * restated the sign-out rule, and the cache card was a support fix shown as
+ * a feature; the reload now sits quietly at the foot of About for the day it
+ * is needed.
+ */
+const SettingsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { currentUser, updateUser, isAdmin } = useAuth();
   const { sops } = useSOPs();
   const { jobTasks, taskTemplates } = useTask();
@@ -372,18 +382,8 @@ const SettingsPage: React.FC = () => {
     return null;
   }
 
-  return (
-    <div className="page-enter" style={styles.container}>
-      <div style={{
-        ...styles.content,
-        padding: isMobileOrTablet ? '20px 16px' : '40px',
-        maxWidth: isMobileOrTablet ? '100%' : '800px',
-      }}>
-        {/* Header */}
-        <div style={styles.header}>
-          <h1 style={styles.title}>Settings</h1>
-          <p style={styles.subtitle}>Customize your experience</p>
-        </div>
+  const cards = (
+      <>
 
         {/* Notifications Card */}
         <div className="card-hover-subtle" style={styles.card}>
@@ -426,9 +426,9 @@ const SettingsPage: React.FC = () => {
             </div>
             {isAdmin && support === 'ok' && pushOnThisDevice && (
               <div style={{ padding: '0 0 8px' }}>
-                <FormButton variant="secondary" size="sm" onClick={handleTestPush} loading={pushBusy}>
+                <Button variant="secondary" size="sm" onClick={handleTestPush} loading={pushBusy}>
                   Send a test notification
-                </FormButton>
+                </Button>
               </div>
             )}
 
@@ -485,13 +485,13 @@ const SettingsPage: React.FC = () => {
           </div>
 
           <div style={styles.cardFooter}>
-            <FormButton
+            <Button
               variant="primary"
               onClick={handleSaveNotifications}
               loading={loading}
             >
               Save Notification Settings
-            </FormButton>
+            </Button>
           </div>
         </div>
 
@@ -648,82 +648,6 @@ const SettingsPage: React.FC = () => {
           onClose={() => setShowDashboardSettings(false)}
         />
 
-        {/* Session Card */}
-        <div className="card-hover-subtle" style={styles.card}>
-          <div style={styles.cardHeader}>
-            <h3 style={styles.cardTitle}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              Session & Security
-            </h3>
-          </div>
-
-          <div style={styles.sessionInfo}>
-            <div style={styles.sessionItem}>
-              <span style={styles.sessionLabel}>Session Timeout</span>
-              <span style={styles.sessionValue}>30 minutes of inactivity</span>
-            </div>
-            <div style={styles.sessionItem}>
-              <span style={styles.sessionLabel}>Last Login</span>
-              <span style={styles.sessionValue}>Current session</span>
-            </div>
-          </div>
-
-          <div style={styles.securityNote}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            <span>Your session will automatically end after 30 minutes of inactivity for security.</span>
-          </div>
-        </div>
-
-        {/* Cache Management Card */}
-        <div className="card-hover-subtle" style={styles.card}>
-          <div style={styles.cardHeader}>
-            <h3 style={styles.cardTitle}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-              </svg>
-              Cache & Data
-            </h3>
-          </div>
-
-          <div style={styles.aboutInfo}>
-            <div style={styles.aboutItem}>
-              <span style={styles.aboutLabel}>Cache Version</span>
-              <span style={styles.aboutValue}>{APP_VERSION}</span>
-            </div>
-            <div style={styles.aboutItem}>
-              <span style={styles.aboutLabel}>Service Worker</span>
-              <span style={styles.aboutValue}>
-                {('serviceWorker' in navigator) ? 'Active' : 'Not Available'}
-              </span>
-            </div>
-          </div>
-
-          <div style={styles.securityNote}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={theme.colors.status.warning} strokeWidth="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            <span>If you see old data or logos, clear the cache to force a refresh.</span>
-          </div>
-
-          <div style={styles.cardFooter}>
-            <FormButton
-              variant="danger"
-              onClick={handleClearCache}
-              loading={cacheClearing}
-            >
-              Clear All Cache & Reload
-            </FormButton>
-          </div>
-        </div>
-
         {/* About Card */}
         <div className="card-hover-subtle" style={styles.card}>
           <div style={styles.cardHeader}>
@@ -742,11 +666,14 @@ const SettingsPage: React.FC = () => {
               <span style={styles.aboutLabel}>App Version</span>
               <span style={styles.aboutValue}>{APP_VERSION}</span>
             </div>
-            <div style={styles.aboutItem}>
-              <span style={styles.aboutLabel}>Build Date</span>
-              <span style={styles.aboutValue}>{new Date().toLocaleDateString()}</span>
-            </div>
           </div>
+
+          <p style={styles.reloadNote}>
+            Seeing old data or an old logo after an update?
+          </p>
+          <Button variant="secondary" size="sm" onClick={handleClearCache} loading={cacheClearing}>
+            Reload the app
+          </Button>
         </div>
 
         {/* Admin Tools - Data Integrity Agent (Admin Only) */}
@@ -792,7 +719,7 @@ const SettingsPage: React.FC = () => {
               </div>
 
               <div style={{ ...styles.cardFooter, gap: '12px' }}>
-                <FormButton
+                <Button
                   variant="secondary"
                   onClick={handleExportCSV}
                   loading={exportingCSV}
@@ -804,8 +731,8 @@ const SettingsPage: React.FC = () => {
                     <line x1="16" y1="17" x2="8" y2="17" />
                   </svg>
                   Export CSV
-                </FormButton>
-                <FormButton
+                </Button>
+                <Button
                   variant="primary"
                   onClick={handleExportJSON}
                   loading={exportingJSON}
@@ -816,7 +743,7 @@ const SettingsPage: React.FC = () => {
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                   Export JSON
-                </FormButton>
+                </Button>
               </div>
             </div>
 
@@ -862,7 +789,7 @@ const SettingsPage: React.FC = () => {
 
               {!showClearConfirm ? (
                 <div style={styles.cardFooter}>
-                  <FormButton
+                  <Button
                     variant="danger"
                     onClick={() => setShowClearConfirm(true)}
                   >
@@ -871,7 +798,7 @@ const SettingsPage: React.FC = () => {
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
                     Clear All SOPs & Tasks
-                  </FormButton>
+                  </Button>
                 </div>
               ) : (
                 <div style={{ ...styles.cardFooter, flexDirection: 'column', gap: '12px', alignItems: 'stretch' }}>
@@ -879,19 +806,19 @@ const SettingsPage: React.FC = () => {
                     Are you sure? This will delete {sops.length} SOPs and {jobTasks.length} Tasks!
                   </p>
                   <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                    <FormButton
+                    <Button
                       variant="secondary"
                       onClick={() => setShowClearConfirm(false)}
                     >
                       Cancel
-                    </FormButton>
-                    <FormButton
+                    </Button>
+                    <Button
                       variant="danger"
                       onClick={handleClearAllData}
                       loading={clearingData}
                     >
                       Yes, Delete Everything
-                    </FormButton>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -900,12 +827,33 @@ const SettingsPage: React.FC = () => {
             <DataIntegrityPanel />
           </div>
         )}
+      </>
+  );
+
+  if (embedded) return cards;
+
+  return (
+    <div className="page-enter" style={styles.container}>
+      <div style={{
+        ...styles.content,
+        padding: isMobileOrTablet ? '20px 16px' : '40px',
+        maxWidth: isMobileOrTablet ? '100%' : '800px',
+      }}>
+        <div style={styles.header}>
+          <h1 style={styles.title}>Settings</h1>
+        </div>
+        {cards}
       </div>
     </div>
   );
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
+  reloadNote: {
+    fontSize: '13px',
+    color: theme.colors.txt.tertiary,
+    margin: `${theme.spacing.md} 0 ${theme.spacing.sm}`,
+  },
   container: {
     minHeight: 'calc(100dvh - 80px)',
     backgroundColor: theme.colors.background,

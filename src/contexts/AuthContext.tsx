@@ -99,7 +99,12 @@ const mapProfileToUser = (profile: any, authUser?: SupabaseUser): User => {
 };
 
 // Session timeout settings (in milliseconds)
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+// Twelve hours, not thirty minutes. Staff use this on their own phones, and
+// a phone app sits in the background for most of a shift: its timers do not
+// run there, they fire the moment it comes back, so a half-hour limit meant
+// signing in again almost every time someone opened it mid-shift. Twelve
+// hours still signs out a phone left alone overnight.
+const SESSION_TIMEOUT = 12 * 60 * 60 * 1000;
 const WARNING_BEFORE_TIMEOUT = 5 * 60 * 1000; // Show warning 5 minutes before timeout
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {

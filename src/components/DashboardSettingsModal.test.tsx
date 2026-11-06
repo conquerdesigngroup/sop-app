@@ -49,7 +49,7 @@ describe('what it offers', () => {
   it('gives a team member with no class their own dashboard, and nothing of the manager one', () => {
     open();
     expect(offered()).toEqual([
-      'Shortcuts', 'Shift Reports', 'Task Stats', "Today's Tasks", 'Upcoming Tasks', 'Overdue Tasks', 'Tasks & Events',
+      'Shortcuts', 'Shift Reports', 'Today',
     ]);
   });
 
@@ -57,7 +57,7 @@ describe('what it offers', () => {
     mockPortal.editableClassIds = ['cls-1'];
     const { unmount } = open();
     expect(offered()).toEqual([
-      'Shortcuts', 'Shift Reports', 'Task Stats', 'Your Classes Today', "Today's Tasks", 'Upcoming Tasks', 'Overdue Tasks', 'Tasks & Events',
+      'Shortcuts', 'Shift Reports', 'Your Classes Today', 'Today',
     ]);
     unmount();
 
@@ -108,9 +108,9 @@ describe('switching', () => {
 
   it('saves the choice, and puts everything back on with Reset to Defaults', () => {
     open();
-    fireEvent.click(screen.getByRole('switch', { name: 'Tasks & Events' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Today' }));
     const stored = JSON.parse(localStorage.getItem('sop_app_dashboard_settings') || '[]');
-    expect(stored.find((w: { id: string }) => w.id === 'calendar').enabled).toBe(false);
+    expect(stored.find((w: { id: string }) => w.id === 'todayTasks').enabled).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset to Defaults' }));
     expect(screen.getAllByRole('switch').every(s => s.getAttribute('aria-checked') === 'true')).toBe(true);
