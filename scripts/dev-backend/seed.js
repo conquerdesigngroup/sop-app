@@ -726,7 +726,7 @@ const SR = (n) => `00000000-0000-4000-c000-${String(n).padStart(12, '0')}`;
 // v78: one row, the background on staff Home. 'contours' is the everyday
 // field; switch it in Settings -> Home background (dev@localhost is a super
 // admin) to see a seasonal scene.
-const home_scene_setting = [{ id: 1, scene: 'contours', ends_on: null }];
+const home_scene_setting = [{ id: 1, scene: 'contours', ends_on: null, show_on_portal: false }];
 
 const shift_reports = [
   { id: SR(1), author_id: STAFF.teacherJess, shift_type: 'closing', shift_date: dateOnly(-1), body: 'Closed studios A and B. Mopped B after Jr Hip Hop — the floor was sticky by the barre.\nFront door lock is sticking again; it needs a hard pull to latch. Lost and found: two water bottles, one blue hoodie (size YM), left in the office.\nRegister balanced. Lights and heaters off at 9:42.', archived_at: null, archived_by: null, created_at: iso(-1, 21, 48), updated_at: iso(-1, 21, 48) },

@@ -9,6 +9,7 @@ import { CLIENT_AUTH_ENABLED } from '../../lib/clientAuth';
 import { recordInstallPing } from '../../lib/displayMode';
 import PortalBottomNav from './PortalBottomNav';
 import RefreshButton from '../RefreshButton';
+import { PortalScene } from '../HomeScene';
 
 /**
  * Shell for every parent-portal page.
@@ -114,8 +115,14 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
         flexDirection: 'column',
         // Undo .App { text-align: center } from App.css.
         textAlign: 'left',
+        // A stacking context, so the seasonal scene's z-index of -1 sits
+        // above the App background and below everything on the page.
+        position: 'relative',
+        isolation: 'isolate',
       }}
     >
+      {/* The holiday scene, when a super admin has put it on the portal too. */}
+      <PortalScene />
       <header
         ref={headerRef}
         style={{
