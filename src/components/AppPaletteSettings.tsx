@@ -11,6 +11,7 @@ import {
   effectivePaletteId,
 } from '../lib/appPalettes';
 import { Badge, Button, Input } from './ui';
+import { Ornament } from './HolidayGarland';
 
 /**
  * Settings → App colors. Super admin only (the caller decides; v78 refuses the
@@ -84,7 +85,7 @@ const AppPaletteSettings: React.FC = () => {
     <div>
       <p style={styles.lede}>
         Change the accent color of the whole app for a holiday: buttons, tabs, links and highlights, for staff,
-        parents and the front door. Backgrounds and text stay the same, in light and dark mode.
+        parents and the front door. Most palettes also hang a little garland under the top bar. Backgrounds and text stay the same, in light and dark mode.
       </p>
       <p style={styles.now} role="status" aria-live="polite">
         On now for everyone: <strong style={{ color: theme.colors.txt.primary }}>{live?.name}</strong>
@@ -164,12 +165,16 @@ const PaletteOption: React.FC<{
         </>
       )}
     </span>
-    {p.lights && (
-      <span style={styles.swatchRow} aria-hidden="true">
-        {Array.from({ length: 7 }, (_, i) => (
-          <span key={i} style={{ ...styles.bulb, backgroundColor: p.lights![i % p.lights!.length] }} />
+    {p.garland && (
+      // A still sample of the garland this palette hangs under the top bar.
+      <svg width="132" height="24" viewBox="0 0 132 24" aria-hidden="true" style={{ display: 'block', maxWidth: '100%' }}>
+        <path d="M0 3 Q11 9 22 3 Q33 9 44 3 Q55 9 66 3 Q77 9 88 3 Q99 9 110 3 Q121 9 132 3" style={{ fill: 'none', stroke: theme.colors.txt.tertiary, strokeWidth: 1, opacity: 0.6 }} />
+        {Array.from({ length: 6 }, (_, i) => (
+          <g key={i} className="holiday-still">
+            <Ornament item={p.garland![i % p.garland!.length]} x={11 + i * 22} />
+          </g>
         ))}
-      </span>
+      </svg>
     )}
     <span style={styles.optionName}>
       {p.name}
@@ -211,7 +216,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     fontWeight: 700,
   },
-  bulb: { width: '8px', height: '11px', borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%' },
   dot: { width: '16px', height: '16px', borderRadius: theme.borderRadius.full },
   optionName: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', fontWeight: 600, fontSize: '14px' },
   optionBlurb: { fontSize: '12px', lineHeight: 1.4, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' },

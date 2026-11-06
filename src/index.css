@@ -817,7 +817,8 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="backg
   }
 }
 
-/* Holiday lights along the top bar (src/components/HolidayLights.tsx).
+/* Holiday garland along the top bar (src/components/HolidayGarland.tsx).
+   Bulbs:
    Dims each bulb briefly, staggered per bulb. Frozen by the reduced-motion
    rule like every other animation, which leaves them simply lit. */
 @keyframes holiday-twinkle {
@@ -828,4 +829,21 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="backg
 }
 .holiday-bulb {
   animation: holiday-twinkle 4s ease-in-out infinite;
+}
+/* Everything else on a garland (leaves, pumpkins, hearts, ...) sways a
+   little from where it hangs. */
+@keyframes holiday-sway {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(7deg); }
+}
+.holiday-sway {
+  /* Pivot on the hanging point: (0, 5) in the ornament's own coordinates. */
+  transform-box: view-box;
+  transform-origin: 0 5px;
+  animation: holiday-sway 3.2s ease-in-out infinite;
+}
+/* The Settings previews are still pictures: twelve swaying swatches would be noise. */
+.holiday-still .holiday-bulb,
+.holiday-still .holiday-sway {
+  animation: none;
 }

@@ -49,36 +49,83 @@ export interface AppPalette {
    */
   accent2?: string;
   /**
-   * Optional string of holiday lights hung along the bottom edge of the top
-   * bar (HolidayLights). Purely decorative bulb colours, in order.
+   * Optional garland hung along the bottom edge of the top bar
+   * (HolidayGarland): the ornaments in order, repeated across the width.
+   * Purely decorative; colours are literal hex.
    */
-  lights?: string[];
+  garland?: GarlandItem[];
 }
+
+/** The small drawings a garland can hang. Drawn in src/components/HolidayGarland.tsx. */
+export type GarlandShape =
+  | 'bulb' | 'leaf' | 'oakLeaf' | 'acorn' | 'pumpkin' | 'bat' | 'heart' | 'shamrock'
+  | 'snowflake' | 'star' | 'star6' | 'flower' | 'holly' | 'ornament';
+
+export interface GarlandItem {
+  shape: GarlandShape;
+  color: string;
+}
+
+const g = (...items: Array<[GarlandShape, string]>): GarlandItem[] =>
+  items.map(([shape, color]) => ({ shape, color }));
 
 export const DEFAULT_PALETTE_ID = 'electric';
 
 export const APP_PALETTES: AppPalette[] = [
   { id: DEFAULT_PALETTE_ID, name: 'DIDC Electric', blurb: 'The everyday brand pink.', accent: '#E2144F', hover: '#FF2D6B', dark: '#C40E45' },
-  { id: 'christmas', name: 'Christmas Red', blurb: 'Candy-cane red for December.', accent: '#D42A3A', hover: '#F0566A', dark: '#B01F2E' },
+  {
+    id: 'christmas', name: 'Christmas Red', blurb: 'Candy-cane red, with red and gold ornaments.', accent: '#D42A3A', hover: '#F0566A', dark: '#B01F2E',
+    garland: g(['ornament', '#D42A3A'], ['ornament', '#E0A526'], ['ornament', '#D42A3A'], ['star', '#E0A526']),
+  },
   {
     id: 'christmas_duo', name: 'Christmas Red & Green', blurb: 'Red buttons, green tabs, red and green lights.',
     accent: '#D42A3A', hover: '#F0566A', dark: '#B01F2E', accent2: '#15803D',
-    lights: ['#E5383B', '#22A05A'],
+    garland: g(['bulb', '#E5383B'], ['bulb', '#22A05A']),
   },
   {
     id: 'tree_lights', name: 'Christmas Lights', blurb: 'Multicolour tree lights along the top bar.',
     accent: '#D42A3A', hover: '#F0566A', dark: '#B01F2E', accent2: '#2563EB',
-    lights: ['#E5383B', '#22A05A', '#F5B700', '#2F7BF5', '#F07C1E'],
+    garland: g(['bulb', '#E5383B'], ['bulb', '#22A05A'], ['bulb', '#F5B700'], ['bulb', '#2F7BF5'], ['bulb', '#F07C1E']),
   },
-  { id: 'evergreen', name: 'Evergreen', blurb: 'Christmas-tree pine.', accent: '#1D7A55', hover: '#2E9E70', dark: '#145C40' },
-  { id: 'winter', name: 'Winter Frost', blurb: 'Icy blue for January and February.', accent: '#0E7490', hover: '#1A9BC0', dark: '#0B5A70' },
-  { id: 'hanukkah', name: 'Hanukkah Blue', blurb: 'Deep blue for the Festival of Lights.', accent: '#2563EB', hover: '#3B82F6', dark: '#1D4ED8' },
-  { id: 'new_year', name: 'New Year Gold', blurb: 'Old gold for the countdown.', accent: '#A16207', hover: '#C98A1C', dark: '#7F4D05' },
-  { id: 'valentines', name: "Valentine's", blurb: 'Rose pink for February.', accent: '#DB2777', hover: '#EC4899', dark: '#B81E63' },
-  { id: 'st_patricks', name: "St. Patrick's", blurb: 'Kelly green for March.', accent: '#0E8048', hover: '#22A05A', dark: '#0A6638' },
-  { id: 'spring', name: 'Spring Violet', blurb: 'Easter and spring recital season.', accent: '#9333EA', hover: '#A855F7', dark: '#7A22CC' },
-  { id: 'halloween', name: 'Halloween', blurb: 'Pumpkin orange for October.', accent: '#C4440E', hover: '#EE6A2E', dark: '#A0370B' },
-  { id: 'thanksgiving', name: 'Thanksgiving', blurb: 'Harvest amber for November.', accent: '#B45309', hover: '#D97A2B', dark: '#8F4207' },
+  {
+    id: 'evergreen', name: 'Evergreen', blurb: 'Christmas-tree pine, with sprigs of holly.', accent: '#1D7A55', hover: '#2E9E70', dark: '#145C40',
+    garland: g(['holly', '#1D7A55'], ['bulb', '#E5383B'], ['holly', '#1D7A55'], ['bulb', '#F5B700']),
+  },
+  {
+    id: 'winter', name: 'Winter Frost', blurb: 'Icy blue, with snowflakes.', accent: '#0E7490', hover: '#1A9BC0', dark: '#0B5A70',
+    garland: g(['snowflake', '#38BDF8'], ['snowflake', '#7DD3FC'], ['snowflake', '#0EA5E9']),
+  },
+  {
+    id: 'hanukkah', name: 'Hanukkah Blue', blurb: 'Deep blue, with blue and silver stars.', accent: '#2563EB', hover: '#3B82F6', dark: '#1D4ED8',
+    garland: g(['star6', '#2563EB'], ['star6', '#9CA3AF'], ['star6', '#60A5FA']),
+  },
+  {
+    id: 'new_year', name: 'New Year Gold', blurb: 'Old gold, with gold and silver stars.', accent: '#A16207', hover: '#C98A1C', dark: '#7F4D05',
+    garland: g(['star', '#E0A526'], ['star', '#9CA3AF'], ['star', '#F5C542'], ['star', '#C0C4CC']),
+  },
+  {
+    id: 'valentines', name: "Valentine's", blurb: 'Rose pink, with a string of hearts.', accent: '#DB2777', hover: '#EC4899', dark: '#B81E63',
+    garland: g(['heart', '#DB2777'], ['heart', '#F472B6'], ['heart', '#E11D48']),
+  },
+  {
+    id: 'st_patricks', name: "St. Patrick's", blurb: 'Kelly green, with shamrocks.', accent: '#0E8048', hover: '#22A05A', dark: '#0A6638',
+    garland: g(['shamrock', '#16A34A'], ['shamrock', '#0E8048'], ['star', '#E0A526']),
+  },
+  {
+    id: 'spring', name: 'Spring Violet', blurb: 'Easter and spring recitals, with flowers.', accent: '#9333EA', hover: '#A855F7', dark: '#7A22CC',
+    garland: g(['flower', '#A855F7'], ['flower', '#F472B6'], ['flower', '#FACC15'], ['flower', '#60A5FA']),
+  },
+  {
+    id: 'halloween', name: 'Halloween', blurb: 'Pumpkin orange, with pumpkins and bats.', accent: '#C4440E', hover: '#EE6A2E', dark: '#A0370B',
+    garland: g(['pumpkin', '#EA580C'], ['bat', '#6D28D9'], ['pumpkin', '#F97316'], ['bat', '#6D28D9']),
+  },
+  {
+    id: 'thanksgiving', name: 'Thanksgiving', blurb: 'Harvest amber, with fall leaves, acorns and pumpkins.', accent: '#B45309', hover: '#D97A2B', dark: '#8F4207',
+    garland: g(
+      ['leaf', '#C2410C'], ['oakLeaf', '#CA8A04'], ['acorn', '#92400E'], ['leaf', '#B91C1C'],
+      ['pumpkin', '#EA580C'], ['oakLeaf', '#D97706'], ['leaf', '#A16207'], ['acorn', '#92400E'],
+    ),
+  },
 ];
 
 export const findPalette = (id: string | null | undefined): AppPalette | undefined =>
