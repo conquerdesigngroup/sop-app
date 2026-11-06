@@ -41,6 +41,7 @@ const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const AttendancePage = lazy(() => import('./pages/AttendancePage'));
 const EvaluationsPage = lazy(() => import('./pages/EvaluationsPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const WorkHoursPage = lazy(() => import('./pages/WorkHoursPage'));
 const HoursInputPage = lazy(() => import('./pages/HoursInputPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
@@ -364,6 +365,16 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute>
                 <CalendarPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* Shift reports. Every member of staff writes and reads them; the
+              archive control inside is management-only, as is v77's RPC. */}
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <ReportsPage />
               </ProtectedRoute>
             }
           />

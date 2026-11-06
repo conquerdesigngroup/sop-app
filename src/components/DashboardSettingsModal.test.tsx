@@ -49,7 +49,7 @@ describe('what it offers', () => {
   it('gives a team member with no class their own dashboard, and nothing of the manager one', () => {
     open();
     expect(offered()).toEqual([
-      'Shortcuts', 'Task Stats', "Today's Tasks", 'Upcoming Tasks', 'Overdue Tasks', 'Tasks & Events',
+      'Shortcuts', 'Shift Reports', 'Task Stats', "Today's Tasks", 'Upcoming Tasks', 'Overdue Tasks', 'Tasks & Events',
     ]);
   });
 
@@ -57,7 +57,7 @@ describe('what it offers', () => {
     mockPortal.editableClassIds = ['cls-1'];
     const { unmount } = open();
     expect(offered()).toEqual([
-      'Shortcuts', 'Task Stats', 'Your Classes Today', "Today's Tasks", 'Upcoming Tasks', 'Overdue Tasks', 'Tasks & Events',
+      'Shortcuts', 'Shift Reports', 'Task Stats', 'Your Classes Today', "Today's Tasks", 'Upcoming Tasks', 'Overdue Tasks', 'Tasks & Events',
     ]);
     unmount();
 
@@ -71,7 +71,7 @@ describe('what it offers', () => {
     mockPortal.editableClassIds = ['cls-1'];
     open();
     expect(offered()).toEqual([
-      'Shortcuts', 'Task Stats', 'Overdue by Person', 'Your Classes Today',
+      'Shortcuts', 'Shift Reports', 'Task Stats', 'Overdue by Person', 'Your Classes Today',
       'Departments', 'Recent SOPs', 'Work Schedule', 'Tasks & Events',
     ]);
   });
@@ -81,7 +81,7 @@ describe('what it offers', () => {
     mockAuth.isSuperAdmin = true;
     open();
     expect(offered()).toEqual([
-      'Shortcuts', 'Task Stats', 'Overdue by Person', 'Hours Awaiting Review', 'Latest Activity',
+      'Shortcuts', 'Shift Reports', 'Task Stats', 'Overdue by Person', 'Hours Awaiting Review', 'Latest Activity',
       'Departments', 'Recent SOPs', 'Work Schedule', 'Tasks & Events',
     ]);
   });

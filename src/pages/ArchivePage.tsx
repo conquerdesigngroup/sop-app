@@ -4,8 +4,13 @@ import { useTask } from '../contexts/TaskContext';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { SOP, JobTask } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { useShiftReports } from '../contexts/ShiftReportContext';
+import ShiftReportCard, { personName } from '../components/reports/ShiftReportCard';
+import ShiftReportDetail from '../components/reports/ShiftReportDetail';
+import { ShiftReport, SHIFT_TYPE_LABEL } from '../lib/shiftReports';
 
-type TabType = 'sops' | 'tasks';
+type TabType = 'sops' | 'tasks' | 'reports';
 
 const ArchivePage: React.FC = () => {
   const { sops, updateSOPStatus } = useSOPs();
@@ -14,10 +19,18 @@ const ArchivePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('sops');
   const [restoring, setRestoring] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const { users } = useAuth();
+  const { reports } = useShiftReports();
+  const [openReportId, setOpenReportId] = useState<string | null>(null);
 
   // Get archived items
   const archivedSOPs = sops.filter(sop => sop.status === 'archived');
   const archivedTasks = jobTasks.filter(task => task.status === 'archived');
+  // Newest archived first: the one just put away is the one most likely to
+  // be looked for.
+  const archivedReports = reports
+    .filter(r => !!r.archivedAt)
+    .sort((a, b) => (b.archivedAt || '').localeCompare(a.archivedAt || ''));
 
   // Filter by search
   const filteredSOPs = archivedSOPs.filter(sop =>
@@ -30,6 +43,16 @@ const ArchivePage: React.FC = () => {
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     task.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const reportQuery = searchQuery.toLowerCase();
+  const filteredReports = archivedReports.filter((r: ShiftReport) =>
+    r.body.toLowerCase().includes(reportQuery) ||
+    personName(users, r.authorId).toLowerCase().includes(reportQuery) ||
+    SHIFT_TYPE_LABEL[r.shiftType].toLowerCase().includes(reportQuery)
+  );
+  const openReport = archivedReports.find(r => r.id === openReportId) || null;
+
+  const tabNoun = activeTab === 'sops' ? 'SOPs' : activeTab === 'tasks' ? 'tasks' : 'shift reports';
 
   const handleRestoreSOP = async (sop: SOP) => {
     setRestoring(sop.id);
@@ -60,6 +83,7 @@ const ArchivePage: React.FC = () => {
   };
 
   const getActiveItems = () => {
+    if (activeTab === 'reports') return filteredReports;
     return activeTab === 'sops' ? filteredSOPs : filteredTasks;
   };
 
@@ -82,7 +106,7 @@ const ArchivePage: React.FC = () => {
               fontSize: isMobile ? '24px' : '28px',
             }}>Archive</h1>
             <p style={styles.subtitle}>
-              View and restore archived SOPs and Tasks
+              View and restore archived SOPs, tasks and shift reports
             </p>
           </div>
           <div style={styles.stats}>
@@ -94,6 +118,11 @@ const ArchivePage: React.FC = () => {
             <div style={styles.statItem}>
               <span style={styles.statNumber}>{archivedTasks.length}</span>
               <span style={styles.statLabel}>Tasks</span>
+            </div>
+            <div style={styles.statDivider} />
+            <div style={styles.statItem}>
+              <span style={styles.statNumber}>{archivedReports.length}</span>
+              <span style={styles.statLabel}>Reports</span>
             </div>
           </div>
         </div>
@@ -131,6 +160,21 @@ const ArchivePage: React.FC = () => {
               </svg>
               Tasks ({archivedTasks.length})
             </button>
+            <button
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'reports' ? styles.tabActive : {}),
+              }}
+              onClick={() => setActiveTab('reports')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <path d="M8 13h8" />
+                <path d="M8 17h5" />
+              </svg>
+              Shift Reports ({archivedReports.length})
+            </button>
           </div>
 
           {/* Search */}
@@ -152,7 +196,7 @@ const ArchivePage: React.FC = () => {
             </svg>
             <input
               type="text"
-              placeholder={`Search archived ${activeTab}...`}
+              placeholder={`Search archived ${tabNoun}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={styles.searchInput}
@@ -177,12 +221,12 @@ const ArchivePage: React.FC = () => {
                 <path d="M10 12h4" />
               </svg>
               <h3 style={styles.emptyTitle}>
-                {searchQuery ? 'No results found' : `No archived ${activeTab}`}
+                {searchQuery ? 'No results found' : `No archived ${tabNoun}`}
               </h3>
               <p style={styles.emptyText}>
                 {searchQuery
                   ? 'Try adjusting your search terms'
-                  : `When you archive ${activeTab === 'sops' ? 'SOPs' : 'Tasks'}, they will appear here`}
+                  : `When you archive ${tabNoun}, they will appear here`}
               </p>
             </div>
           ) : (
@@ -190,7 +234,16 @@ const ArchivePage: React.FC = () => {
               ...styles.grid,
               gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : isTablet ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
             }}>
-              {activeTab === 'sops'
+              {activeTab === 'reports'
+                ? filteredReports.map((report) => (
+                    <ShiftReportCard
+                      key={report.id}
+                      report={report}
+                      users={users}
+                      onOpen={() => setOpenReportId(report.id)}
+                    />
+                  ))
+                : activeTab === 'sops'
                 ? filteredSOPs.map((sop) => (
                     <div key={sop.id} style={styles.card}>
                       <div style={styles.cardHeader}>
@@ -300,6 +353,13 @@ const ArchivePage: React.FC = () => {
         </div>
       </div>
 
+      {/* Restore lives in the report itself, beside its chat. */}
+      <ShiftReportDetail
+        report={openReport}
+        onClose={() => setOpenReportId(null)}
+        onEdit={() => setOpenReportId(null)}
+      />
+
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -389,6 +449,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   tabs: {
     display: 'flex',
+    // Three tabs do not fit a 320px phone on one line.
+    flexWrap: 'wrap',
     gap: '8px',
     padding: '4px',
     backgroundColor: theme.colors.bg.secondary,

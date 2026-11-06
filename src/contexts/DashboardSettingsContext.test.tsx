@@ -38,7 +38,7 @@ describe('the section list', () => {
   it('holds every section either dashboard draws, in the order they are drawn, all on', () => {
     mount();
     expect(api.widgets.map(w => w.id)).toEqual([
-      'shortcuts', 'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday',
+      'shortcuts', 'shiftReports', 'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday',
       'todayTasks', 'upcomingTasks', 'overdueTasks', 'departments', 'recentSops', 'schedule', 'calendar',
     ]);
     expect(api.widgets.every(w => w.enabled)).toBe(true);

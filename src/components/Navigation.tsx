@@ -13,6 +13,8 @@ import { roleLabel } from '../lib/roles';
 import { portalRoutes } from '../lib/portal';
 import { useResponsive } from '../hooks/useResponsive';
 import { useTaskCounts } from '../hooks/useTaskCounts';
+import { useShiftReports } from '../contexts/ShiftReportContext';
+import { unseenTaggedReports } from '../lib/shiftReports';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useSheetDrag } from '../hooks/useSheetDrag';
 import { bottomNavPathsFor } from './BottomNavigation';
@@ -62,6 +64,14 @@ const icons = {
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  reports: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
     </svg>
   ),
   archive: (
@@ -144,6 +154,8 @@ interface NavItem {
   icon: React.ReactNode;
   /** A count shown beside the label. Nothing is drawn for zero. */
   badge?: number;
+  /** What the count is of, for a screen reader. Defaults to overdue. */
+  badgeLabel?: string;
 }
 
 interface NavGroup {
@@ -220,6 +232,8 @@ const Navigation: React.FC = () => {
   const { isMobileOrTablet, windowWidth } = useResponsive();
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const { myOverdue, allOverdue } = useTaskCounts();
+  const { reports: shiftReports } = useShiftReports();
+  const unseenReports = unseenTaggedReports(shiftReports, currentUser?.id).length;
   const reducedMotion = useReducedMotion();
 
   // The grabber at the top of the sheet is a drag handle now, not a decal.
@@ -351,6 +365,9 @@ const Navigation: React.FC = () => {
 
     elements.push(collapseGroup(tasksGroup));
     elements.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
+    // Shift reports: everyone writes one at the end of a shift, and the badge
+    // is how many they have been tagged on and not opened.
+    elements.push({ path: '/reports', label: 'Reports', icon: icons.reports, badge: unseenReports || undefined, badgeLabel: 'new reports you are tagged on' });
     // Only for someone who actually holds a class. A team member with no
     // classes would get an empty screen and no way to fix it themselves.
     if (canEditPortal) elements.push({ path: '/attendance', label: 'Attendance', icon: icons.attendance });
@@ -413,6 +430,7 @@ const Navigation: React.FC = () => {
       work.push({ path: '/job-tasks', label: 'Job Tasks', icon: icons.tasks, badge: allOverdue });
     }
     work.push({ path: '/sop', label: 'SOPs', icon: icons.sop });
+    work.push({ path: '/reports', label: 'Reports', icon: icons.reports, badge: unseenReports || undefined, badgeLabel: 'new reports you are tagged on' });
     if (canEditPortal) work.push({ path: '/attendance', label: 'Attendance', icon: icons.attendance });
     if (canEditPortal) work.push({ path: '/evaluations', label: 'Evaluations', icon: icons.evaluations });
     work.push({ path: '/calendar', label: 'Calendar', icon: icons.calendar });
@@ -469,10 +487,10 @@ const Navigation: React.FC = () => {
   };
 
   // Inverted on an active (pink) row, where a pink pill would vanish.
-  const renderBadge = (count: number | undefined, onActive: boolean) =>
+  const renderBadge = (count: number | undefined, onActive: boolean, label = 'overdue') =>
     count ? (
       <span
-        aria-label={`${count} overdue`}
+        aria-label={`${count} ${label}`}
         style={{
           ...styles.countPill,
           backgroundColor: onActive ? '#FFFFFF' : theme.colors.primary,
@@ -584,7 +602,7 @@ const Navigation: React.FC = () => {
     >
       <span style={styles.navIcon}>{item.icon}</span>
       {item.label}
-      {renderBadge(item.badge, isPathActive(item.path))}
+      {renderBadge(item.badge, isPathActive(item.path), item.badgeLabel)}
     </Link>
   );
 
@@ -639,7 +657,7 @@ const Navigation: React.FC = () => {
               >
                 <span style={styles.dropdownIcon}>{item.icon}</span>
                 {item.label}
-                {renderBadge(item.badge, isPathActive(item.path))}
+                {renderBadge(item.badge, isPathActive(item.path), item.badgeLabel)}
               </Link>
             ))}
           </div>
@@ -678,7 +696,7 @@ const Navigation: React.FC = () => {
         <span style={styles.navIcon}>{item.icon}</span>
         {item.label}
         {item.badge ? (
-          <span style={{ marginLeft: 'auto', display: 'flex' }}>{renderBadge(item.badge, active)}</span>
+          <span style={{ marginLeft: 'auto', display: 'flex' }}>{renderBadge(item.badge, active, item.badgeLabel)}</span>
         ) : null}
         {active && (
           <span style={{...styles.activeIndicator, ...(item.badge ? { marginLeft: '8px' } : {})}}>

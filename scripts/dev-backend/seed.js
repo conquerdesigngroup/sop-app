@@ -718,6 +718,24 @@ const portal_evaluations = portal_enrollments.slice(0, 2).map((e, i) => ({
   updated_at: iso(-2),
 }));
 
+
+// Shift reports (v77). A long closing report so the clamp and the detail's
+// wrapping are measured, one tagging the dev login (so the dashboard's tagged
+// card and the header badge draw), and one archived for the Archive tab.
+const SR = (n) => `00000000-0000-4000-c000-${String(n).padStart(12, '0')}`;
+const shift_reports = [
+  { id: SR(1), author_id: STAFF.teacherJess, shift_type: 'closing', shift_date: dateOnly(-1), body: 'Closed studios A and B. Mopped B after Jr Hip Hop — the floor was sticky by the barre.\nFront door lock is sticking again; it needs a hard pull to latch. Lost and found: two water bottles, one blue hoodie (size YM), left in the office.\nRegister balanced. Lights and heaters off at 9:42.', archived_at: null, archived_by: null, created_at: iso(-1, 21, 48), updated_at: iso(-1, 21, 48) },
+  { id: SR(2), author_id: STAFF.teacherDevon, shift_type: 'opening', shift_date: dateOnly(0), body: 'Opened at 3:15. Studio C speaker is crackling on the left channel — @Dev can you take a look before the 5pm class?', archived_at: null, archived_by: null, created_at: iso(0, 15, 20), updated_at: iso(0, 15, 20) },
+  { id: SR(3), author_id: STAFF.teacherPriya, shift_type: 'closing', shift_date: dateOnly(-6), body: 'All good tonight. Restocked the first aid kit.', archived_at: iso(-4), archived_by: STAFF.owner, created_at: iso(-6, 21, 30), updated_at: iso(-6, 21, 30) },
+];
+const shift_report_tags = [
+  { report_id: SR(2), user_id: STAFF.owner, tagged_by: STAFF.teacherDevon, created_at: iso(0, 15, 20), seen_at: null },
+  { report_id: SR(1), user_id: STAFF.admin, tagged_by: STAFF.teacherJess, created_at: iso(-1, 21, 48), seen_at: iso(0, 9) },
+];
+const shift_report_comments = [
+  { id: SR(101), report_id: SR(1), author_id: STAFF.admin, body: 'Thanks Jess — I\'ll call the locksmith tomorrow.', created_at: iso(0, 9, 5) },
+];
+
 const tables = {
   profiles,
   portal_settings,
@@ -747,6 +765,9 @@ const tables = {
   portal_students,
   portal_enrollments,
   portal_attendance_gaps,
+  shift_reports,
+  shift_report_tags,
+  shift_report_comments,
 };
 
 module.exports = { tables, LOGIN_EMAIL, STAFF, PROG_ALLSTARS, PROG_ACADEMY };

@@ -64,6 +64,7 @@ const STORAGE_KEY = 'sop_app_dashboard_settings';
  */
 const defaultWidgets: DashboardWidget[] = ([
   { id: 'shortcuts', name: 'Shortcuts', description: 'Big buttons for the pages you use most', audience: 'everyone' },
+  { id: 'shiftReports', name: 'Shift Reports', description: 'Write your shift report, and see reports you have been tagged on', audience: 'everyone' },
   { id: 'stats', name: 'Task Stats', description: 'Overview of pending, in-progress, and completed tasks', audience: 'everyone' },
   { id: 'overdueByPerson', name: 'Overdue by Person', description: 'Who is behind, and on how many tasks', audience: 'admin' },
   { id: 'hoursReview', name: 'Hours Awaiting Review', description: 'Logged hours waiting for your approval', audience: 'superAdmin' },
