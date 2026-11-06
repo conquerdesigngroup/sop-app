@@ -436,6 +436,7 @@ theme.colors.status.info     // #3B82F6 - Blue
 
 // Brand
 theme.colors.primary       // var(--c-accent) — #E2144F "electric" unless a holiday palette is on (keep to ~5% of any view)
+theme.colors.secondary     // var(--c-accent-2) — the selected nav item; same as primary unless a two-colour holiday palette is on
 theme.colors.brand         // #E2144F literal — identity colours that must not follow a holiday palette
 ```
 

@@ -5,6 +5,7 @@ import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { theme, BRAND_MARK } from '../theme';
+import HolidayLights from './HolidayLights';
 import RefreshButton from './RefreshButton';
 import StaffAvatar from './StaffAvatar';
 import GlobalSearch from './GlobalSearch';
@@ -494,7 +495,7 @@ const Navigation: React.FC = () => {
         style={{
           ...styles.countPill,
           backgroundColor: onActive ? '#FFFFFF' : theme.colors.primary,
-          color: onActive ? theme.colors.primary : '#FFFFFF',
+          color: onActive ? theme.colors.secondary : '#FFFFFF',
         }}
       >
         {count > 99 ? '99+' : count}
@@ -994,6 +995,8 @@ const Navigation: React.FC = () => {
           </>
         )}
       </div>
+      {/* Only drawn for a palette with lights (Christmas Red & Green, Christmas Lights). */}
+      <HolidayLights />
     </nav>
     {/* Outside the <nav>: index.css forces every `nav button` transparent,
         which turned the highlighted result row white-on-white. */}
@@ -1227,9 +1230,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'left',
   },
   mobileNavLinkActive: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.secondary,
     color: '#FFFFFF',
-    border: `2px solid ${theme.colors.primary}`,
+    border: `2px solid ${theme.colors.secondary}`,
   },
   userMenuMobile: {
     position: 'absolute',
@@ -1303,9 +1306,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     whiteSpace: 'nowrap',
   },
   navLinkActive: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.secondary,
     color: '#FFFFFF',
-    border: `2px solid ${theme.colors.primary}`,
+    border: `2px solid ${theme.colors.secondary}`,
   },
   navIcon: {
     display: 'flex',
@@ -1353,7 +1356,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.15s',
   },
   dropdownItemActive: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.secondary,
     color: '#FFFFFF',
   },
   dropdownIcon: {

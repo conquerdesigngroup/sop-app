@@ -36,12 +36,23 @@ describe('app palettes', () => {
   // The rule that keeps a holiday palette from making anything unreadable:
   // white text on the accent, and the accent on both modes' grounds.
   it.each(APP_PALETTES.map(p => [p.name, p] as const))('%s keeps the accent legible in both modes', (_, p) => {
-    expect(contrast(p.accent, '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(p.accent, darkColors.bg.primary)).toBeGreaterThanOrEqual(3.5);
-    expect(contrast(p.accent, darkColors.bg.secondary)).toBeGreaterThanOrEqual(3.3);
-    expect(contrast(p.accent, lightColors.bg.primary)).toBeGreaterThanOrEqual(4);
-    expect(contrast(p.accent, lightColors.bg.secondary)).toBeGreaterThanOrEqual(4.5);
-    [p.accent, p.hover, p.dark].forEach(c => expect(c).toMatch(/^#[0-9A-F]{6}$/));
+    // accent2 fills the selected nav item under white text, and is the
+    // phone tab bar's active label on the page: the same two jobs.
+    [p.accent, ...(p.accent2 ? [p.accent2] : [])].forEach(a => {
+      expect(contrast(a, '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(a, darkColors.bg.primary)).toBeGreaterThanOrEqual(3.5);
+      expect(contrast(a, darkColors.bg.secondary)).toBeGreaterThanOrEqual(3.3);
+      expect(contrast(a, lightColors.bg.primary)).toBeGreaterThanOrEqual(4);
+      expect(contrast(a, lightColors.bg.secondary)).toBeGreaterThanOrEqual(4.5);
+    });
+    [p.accent, p.hover, p.dark, ...(p.accent2 ? [p.accent2] : []), ...(p.lights || [])]
+      .forEach(c => expect(c).toMatch(/^#[0-9A-F]{6}$/));
+  });
+
+  it('gives the navigation its own colour only on two-colour palettes', () => {
+    const duo = APP_PALETTES.find(p => p.id === 'christmas_duo')!;
+    expect(paletteVariables(duo)['--c-accent-2']).toBe('#15803D');
+    expect(paletteVariables(APP_PALETTES[0])['--c-accent-2']).toBe('#E2144F');
   });
 
   it('falls back to the default after the end date, and for an unknown id', () => {

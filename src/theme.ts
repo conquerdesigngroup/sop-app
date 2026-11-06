@@ -178,6 +178,10 @@ export const theme = {
     primaryHover: 'var(--c-accent-hover, #FF2D6B)', // Electric2 — pink hover / tint
     primaryDark: 'var(--c-accent-dark, #C40E45)',   // Pressed state (derived shade)
 
+    // The selected item in the navigation. Same as primary unless a
+    // two-colour holiday palette gives it its own (Christmas Red & Green).
+    secondary: 'var(--c-accent-2, var(--c-accent, #E2144F))',
+
     // The literal DIDC electric, for things whose colour is an identity and
     // must not follow a holiday palette (the All-Stars program, for one).
     brand: '#E2144F',
