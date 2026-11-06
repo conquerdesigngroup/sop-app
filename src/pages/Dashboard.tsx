@@ -330,6 +330,106 @@ const TaskCalendar: React.FC<{
   );
 };
 
+/**
+ * A team member's tasks, once. This replaces four sections that each showed
+ * a slice of the same list — status tiles, Today, Upcoming and Overdue — and
+ * a month grid under them, which on a phone was most of the page.
+ *
+ * The two counts link to My Tasks. They pass a filter in navigation state,
+ * which the filtered My Tasks applies and the day-view My Tasks can ignore:
+ * its today already shows overdue tasks first.
+ */
+const TodayCard: React.FC<{
+  dueToday: JobTask[];
+  overdue: JobTask[];
+  upcomingCount: number;
+  onOpenTask: (task: JobTask) => void;
+  navigate: ReturnType<typeof useNavigate>;
+}> = ({ dueToday, overdue, upcomingCount, onOpenTask, navigate }) => {
+  const doneToday = dueToday.filter(t => t.status === 'completed').length;
+  const leftToday = dueToday.filter(t => t.status !== 'completed');
+  // Overdue first: those are the ones somebody is already waiting on.
+  const rows = [...overdue, ...leftToday];
+  const shown = rows.slice(0, 5);
+  const shortDate = (iso: string) =>
+    parseLocalDate(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  return (
+    <section className="glass-panel" style={styles.section} aria-label="Today">
+      <div style={styles.sectionHeader}>
+        <h3 style={styles.sectionTitle}>Today</h3>
+        <button onClick={() => navigate('/my-tasks')} style={styles.viewAllBtn}>All tasks</button>
+      </div>
+
+      <div style={styles.todaySummary}>
+        <button
+          type="button"
+          style={styles.todayCount}
+          onClick={() => navigate('/my-tasks', { state: { filterDate: 'today' } })}
+        >
+          {leftToday.length} due today{doneToday > 0 ? ` · ${doneToday} done` : ''}
+        </button>
+        {overdue.length > 0 && (
+          <button
+            type="button"
+            style={{ ...styles.todayCount, color: theme.colors.status.overdue }}
+            onClick={() => navigate('/my-tasks', { state: { filterStatus: 'overdue' } })}
+          >
+            {overdue.length} overdue
+          </button>
+        )}
+      </div>
+
+      {shown.length === 0 ? (
+        <p style={styles.emptyText}>
+          {doneToday > 0 ? 'All done for today.' : 'Nothing due today.'}
+        </p>
+      ) : (
+        <div style={styles.tasksList}>
+          {shown.map(task => {
+            const late = overdue.includes(task);
+            return (
+              <div
+                key={task.id}
+                role="button"
+                tabIndex={0}
+                className="glass-well"
+                style={styles.taskCard}
+                onClick={() => onOpenTask(task)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenTask(task); } }}
+              >
+                <div style={styles.taskCardHeader}>
+                  <span style={styles.taskCardTitle}>{task.title}</span>
+                  {late && (
+                    <span style={{ ...styles.taskCardDate, color: theme.colors.status.overdue }}>
+                      Due {shortDate(task.scheduledDate)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {rows.length > shown.length && (
+            <button onClick={() => navigate('/my-tasks')} style={styles.viewAllBtn}>
+              +{rows.length - shown.length} more
+            </button>
+          )}
+        </div>
+      )}
+
+      {upcomingCount > 0 && (
+        <button
+          type="button"
+          style={{ ...styles.todayCount, marginTop: theme.spacing.md, color: theme.colors.txt.tertiary }}
+          onClick={() => navigate('/my-tasks', { state: { filterDate: 'upcoming' } })}
+        >
+          {upcomingCount} more coming up this week
+        </button>
+      )}
+    </section>
+  );
+};
+
 // Team Member Dashboard
 const TeamMemberDashboard: React.FC<{
   currentUser: User;
@@ -347,15 +447,16 @@ const TeamMemberDashboard: React.FC<{
   const { isMobileOrTablet } = useResponsive();
   const { isWidgetEnabled } = useDashboardSettings();
   const anySectionShown = useAnySectionShown();
-  const myTasks = jobTasks.filter(task => task.assignedTo.includes(currentUser.id));
+  // Archived and draft tasks are not on anyone's list, as on My Tasks.
+  const myTasks = jobTasks.filter(task =>
+    task.assignedTo.includes(currentUser.id) &&
+    task.status !== 'archived' &&
+    task.status !== 'draft'
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Stats
-  const pendingTasks = myTasks.filter(t => t.status === 'pending').length;
-  const inProgressTasks = myTasks.filter(t => t.status === 'in-progress').length;
-  const completedTasks = myTasks.filter(t => t.status === 'completed').length;
   const overdueTasks = myTasks.filter(task => {
     const taskDate = parseLocalDate(task.scheduledDate);
     taskDate.setHours(0, 0, 0, 0);
@@ -374,7 +475,7 @@ const TeamMemberDashboard: React.FC<{
   nextWeek.setDate(nextWeek.getDate() + 7);
   const upcomingTasks = myTasks.filter(task => {
     const taskDate = parseLocalDate(task.scheduledDate);
-    return taskDate > today && taskDate <= nextWeek;
+    return taskDate > today && taskDate <= nextWeek && task.status !== 'completed';
   });
 
   return (
@@ -393,132 +494,17 @@ const TeamMemberDashboard: React.FC<{
       {/* Reports someone tagged you on, and the button to write yours. */}
       {isWidgetEnabled('shiftReports') && <ShiftReportsCard navigate={navigate} />}
 
-      {/* Stats Row - Compact */}
-      {isWidgetEnabled('stats') && (
-        <div className="glass-panel" style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
-          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'pending' } })}>
-            <span style={{ ...styles.statNumber, color: theme.colors.status.pending }}>{pendingTasks}</span>
-            <span style={styles.statLabel}>Pending</span>
-          </div>
-          <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'in-progress' } })}>
-            <span style={{ ...styles.statNumber, color: theme.colors.status.inProgress }}>{inProgressTasks}</span>
-            <span style={styles.statLabel}>In Progress</span>
-          </div>
-          <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-          <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks', { state: { filterStatus: 'completed' } })}>
-            <span style={{ ...styles.statNumber, color: theme.colors.status.completed }}>{completedTasks}</span>
-            <span style={styles.statLabel}>Completed</span>
-          </div>
-          {overdueTasks.length > 0 && (
-            <>
-              <div style={isMobileOrTablet ? styles.statDividerMobile : styles.statDivider} />
-              <div style={isMobileOrTablet ? styles.statItemMobile : styles.statItem} onClick={() => navigate('/my-tasks')}>
-                <span style={{ ...styles.statNumber, color: theme.colors.status.overdue }}>{overdueTasks.length}</span>
-                <span style={styles.statLabel}>Overdue</span>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
       {/* A teacher's classes. Draws nothing for someone who holds none. */}
       {isWidgetEnabled('classesToday') && <ClassesToday navigate={navigate} />}
 
-      {/* Task Lists */}
-      {(isWidgetEnabled('todayTasks') || isWidgetEnabled('upcomingTasks')) && (
-        <div style={isMobileOrTablet ? styles.contentGridMobile : styles.contentGrid}>
-          {/* Today's Tasks */}
-          {isWidgetEnabled('todayTasks') && (
-            <div className="glass-panel" style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <h3 style={styles.sectionTitle}>Today ({todayTasks.length})</h3>
-                <button onClick={() => navigate('/my-tasks')} style={styles.viewAllBtn}>View All</button>
-              </div>
-              {todayTasks.length === 0 ? (
-                <p style={styles.emptyText}>No tasks due today</p>
-              ) : (
-                <div style={styles.tasksList}>
-                  {todayTasks.slice(0, 4).map(task => (
-                    <div key={task.id} className="glass-well" style={styles.taskCard} onClick={() => setSelectedTask(task)}>
-                      <div style={styles.taskCardHeader}>
-                        <span style={styles.taskCardTitle}>{task.title}</span>
-                        <span style={{ ...styles.taskCardStatus, backgroundColor: getStatusColor(task.status) }}>
-                          {task.status.replace('-', ' ')}
-                        </span>
-                      </div>
-                      <div style={styles.taskCardProgress}>
-                        <div style={styles.progressBar}>
-                          <div style={{ ...styles.progressFill, width: `${task.progressPercentage}%` }} />
-                        </div>
-                        <span style={styles.progressText}>{task.progressPercentage}%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Upcoming Tasks */}
-          {isWidgetEnabled('upcomingTasks') && (
-            <div className="glass-panel" style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <h3 style={styles.sectionTitle}>Upcoming ({upcomingTasks.length})</h3>
-              </div>
-              {upcomingTasks.length === 0 ? (
-                <p style={styles.emptyText}>No upcoming tasks</p>
-              ) : (
-                <div style={styles.tasksList}>
-                  {upcomingTasks.slice(0, 4).map(task => (
-                    <div key={task.id} className="glass-well" style={styles.taskCard} onClick={() => setSelectedTask(task)}>
-                      <div style={styles.taskCardHeader}>
-                        <span style={styles.taskCardTitle}>{task.title}</span>
-                        <span style={styles.taskCardDate}>
-                          {parseLocalDate(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Overdue Tasks */}
-      {isWidgetEnabled('overdueTasks') && overdueTasks.length > 0 && (
-        <div className="glass-panel glass-own-edge" style={{ ...styles.section, borderColor: theme.colors.status.overdue }}>
-          <div style={styles.sectionHeader}>
-            <h3 style={{ ...styles.sectionTitle, color: theme.colors.status.overdue }}>Overdue ({overdueTasks.length})</h3>
-          </div>
-          <div style={styles.tasksList}>
-            {overdueTasks.slice(0, 3).map(task => (
-              <div key={task.id} className="glass-well" style={styles.taskCard} onClick={() => setSelectedTask(task)}>
-                <div style={styles.taskCardHeader}>
-                  <span style={styles.taskCardTitle}>{task.title}</span>
-                  <span style={{ ...styles.taskCardDate, color: theme.colors.status.overdue }}>
-                    Due: {parseLocalDate(task.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Calendar */}
-      {isWidgetEnabled('calendar') && (
-        <TaskCalendar
-          tasks={myTasks}
-          events={events}
-          users={users}
-          currentMonth={currentMonth}
-          setCurrentMonth={setCurrentMonth}
-          onTaskClick={setSelectedTask}
-          onEventClick={setSelectedEvent}
-          showAllUsers={false}
+      {/* Today: what is due and anything overdue, in one card. */}
+      {isWidgetEnabled('todayTasks') && (
+        <TodayCard
+          dueToday={todayTasks}
+          overdue={overdueTasks}
+          upcomingCount={upcomingTasks.length}
+          onOpenTask={setSelectedTask}
+          navigate={navigate}
         />
       )}
 
@@ -1141,6 +1127,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 700,
     color: theme.colors.textPrimary,
     margin: 0,
+  },
+  todaySummary: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  todayCount: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    minHeight: '32px',
+    cursor: 'pointer',
+    fontFamily: theme.fonts.primary,
+    fontSize: '15px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    textAlign: 'left',
   },
   viewAllBtn: {
     fontSize: '14px',

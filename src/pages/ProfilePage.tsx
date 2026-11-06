@@ -4,7 +4,8 @@ import { useToast } from '../contexts/ToastContext';
 import { theme } from '../theme';
 import { isManagementRole, roleLabel } from '../lib/roles';
 import { useResponsive } from '../hooks/useResponsive';
-import { FormInput, FormButton, FormGroup } from '../components/FormComponents';
+import { Button, Input } from '../components/ui';
+import SettingsPage from './SettingsPage';
 import {
   STAFF_PHOTO_MIME,
   describePhotoProblem,
@@ -195,8 +196,8 @@ const ProfilePage: React.FC = () => {
       }}>
         {/* Header */}
         <div style={styles.header}>
-          <h1 style={styles.title}>Profile</h1>
-          <p style={styles.subtitle}>Manage your account information</p>
+          <h1 style={styles.title}>My account</h1>
+          <p style={styles.subtitle}>Your details, password, notifications and app settings</p>
         </div>
 
         {/* Avatar Section */}
@@ -243,17 +244,17 @@ const ProfilePage: React.FC = () => {
                 style={{ display: 'none' }}
                 onChange={e => onPickPhoto(e.target.files?.[0])}
               />
-              <FormButton
+              <Button
                 variant="secondary"
                 disabled={photoBusy}
                 onClick={() => fileInput.current?.click()}
               >
                 {photoUrl ? 'Replace photo' : 'Choose photo'}
-              </FormButton>
+              </Button>
               {photoUrl && (
-                <FormButton variant="secondary" disabled={photoBusy} onClick={onRemovePhoto}>
+                <Button variant="secondary" disabled={photoBusy} onClick={onRemovePhoto}>
                   Remove
-                </FormButton>
+                </Button>
               )}
             </div>
 
@@ -300,7 +301,7 @@ const ProfilePage: React.FC = () => {
               Personal Information
             </h3>
             {!isEditing && (
-              <FormButton
+              <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setIsEditing(true)}
@@ -312,51 +313,51 @@ const ProfilePage: React.FC = () => {
                 }
               >
                 Edit
-              </FormButton>
+              </Button>
             )}
           </div>
 
           {isEditing ? (
-            <FormGroup gap={theme.spacing.lg}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
               <div style={styles.fieldRow}>
-                <FormInput
+                <Input
                   label="First Name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="Enter first name"
                 />
-                <FormInput
+                <Input
                   label="Last Name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Enter last name"
                 />
               </div>
-              <FormInput
+              <Input
                 label="Email"
                 value={currentUser.email}
                 disabled
                 helperText="Email cannot be changed"
               />
-              <FormInput
+              <Input
                 label="Department"
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 placeholder="Enter department"
               />
               <div style={styles.buttonRow}>
-                <FormButton variant="secondary" onClick={handleCancelEdit}>
+                <Button variant="secondary" onClick={handleCancelEdit}>
                   Cancel
-                </FormButton>
-                <FormButton
+                </Button>
+                <Button
                   variant="primary"
                   onClick={handleSaveProfile}
                   loading={loading}
                 >
                   Save Changes
-                </FormButton>
+                </Button>
               </div>
-            </FormGroup>
+            </div>
           ) : (
             <div style={styles.infoGrid}>
               <div style={styles.infoItem}>
@@ -424,26 +425,26 @@ const ProfilePage: React.FC = () => {
               Security
             </h3>
             {!showPasswordForm && (
-              <FormButton
+              <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setShowPasswordForm(true)}
               >
                 Change Password
-              </FormButton>
+              </Button>
             )}
           </div>
 
           {showPasswordForm ? (
-            <FormGroup gap={theme.spacing.lg}>
-              <FormInput
+            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.lg }}>
+              <Input
                 type="password"
                 label="Current Password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password"
               />
-              <FormInput
+              <Input
                 type="password"
                 label="New Password"
                 value={newPassword}
@@ -451,7 +452,7 @@ const ProfilePage: React.FC = () => {
                 placeholder="Enter new password"
                 helperText="Must be at least 6 characters"
               />
-              <FormInput
+              <Input
                 type="password"
                 label="Confirm New Password"
                 value={confirmPassword}
@@ -459,7 +460,7 @@ const ProfilePage: React.FC = () => {
                 placeholder="Confirm new password"
               />
               <div style={styles.buttonRow}>
-                <FormButton
+                <Button
                   variant="secondary"
                   onClick={() => {
                     setShowPasswordForm(false);
@@ -469,23 +470,26 @@ const ProfilePage: React.FC = () => {
                   }}
                 >
                   Cancel
-                </FormButton>
-                <FormButton
+                </Button>
+                <Button
                   variant="primary"
                   onClick={handleChangePassword}
                   loading={loading}
                   disabled={!currentPassword || !newPassword || !confirmPassword}
                 >
                   Update Password
-                </FormButton>
+                </Button>
               </div>
-            </FormGroup>
+            </div>
           ) : (
             <p style={styles.securityNote}>
               Keep your account secure by using a strong, unique password.
             </p>
           )}
         </div>
+
+        {/* What used to be the separate Settings page. */}
+        <SettingsPage embedded />
       </div>
     </div>
   );
@@ -494,7 +498,7 @@ const ProfilePage: React.FC = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: 'calc(100dvh - 80px)',
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.bg.primary,
   },
   content: {
     margin: '0 auto',

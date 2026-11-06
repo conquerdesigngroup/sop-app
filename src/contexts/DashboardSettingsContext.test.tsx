@@ -39,7 +39,7 @@ describe('the section list', () => {
     mount();
     expect(api.widgets.map(w => w.id)).toEqual([
       'shortcuts', 'shiftReports', 'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday',
-      'todayTasks', 'upcomingTasks', 'overdueTasks', 'departments', 'recentSops', 'schedule', 'calendar',
+      'todayTasks', 'departments', 'recentSops', 'schedule', 'calendar',
     ]);
     expect(api.widgets.every(w => w.enabled)).toBe(true);
   });

@@ -41,6 +41,11 @@ jest.mock('../contexts/PortalAdminContext', () => ({
   usePortalAdmin: () => mockPortal,
 }));
 
+const mockReports: { reports: any[] } = { reports: [] };
+jest.mock('../contexts/ShiftReportContext', () => ({
+  useShiftReports: () => mockReports,
+}));
+
 jest.mock('../contexts/TaskContext', () => ({
   useTask: () => mockTasks,
 }));
@@ -95,13 +100,26 @@ beforeEach(() => {
   mockAuth.isAdmin = false;
   mockPortal.canEdit = false;
   mockTasks.jobTasks = [];
+  mockReports.reports = [];
   mockNavigate.mockClear();
 });
 
-describe('BottomNavigation', () => {
-  it('gives a team member Home, Tasks, Calendar, Hours and SOPs', () => {
+describe('the Reports tab', () => {
+  it('counts the reports I am tagged on and have not opened', () => {
+    mockReports.reports = [
+      { id: 'a', createdAt: '2026-11-01', archivedAt: null, tags: [{ userId: 'me', seenAt: null }] },
+      { id: 'b', createdAt: '2026-11-02', archivedAt: null, tags: [{ userId: 'me', seenAt: '2026-11-02' }] },
+      { id: 'c', createdAt: '2026-11-03', archivedAt: null, tags: [{ userId: 'someone-else', seenAt: null }] },
+    ];
     renderBar();
-    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'SOPs']);
+    expect(screen.getByRole('status', { name: '1 new reports you are tagged on' })).toBeInTheDocument();
+  });
+});
+
+describe('BottomNavigation', () => {
+  it('gives a team member Home, Tasks, Calendar, Hours and Reports', () => {
+    renderBar();
+    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'Reports']);
   });
 
   it('gives management Attendance and Portal in the middle, with Job Tasks and More', () => {
@@ -135,7 +153,7 @@ describe('BottomNavigation', () => {
     // permanent dead ends — and adding them would also hand them a hamburger
     // they have never needed.
     renderBar();
-    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'SOPs']);
+    expect(tabLabels()).toEqual(['Home', 'Tasks', 'Calendar', 'Hours', 'Reports']);
   });
 
   it('keeps Portal lit on its sub-pages', () => {

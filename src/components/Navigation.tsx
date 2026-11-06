@@ -514,15 +514,7 @@ const Navigation: React.FC = () => {
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
         </svg>
-        Profile
-      </button>
-      <button
-        type="button"
-        style={{...styles.userMenuItem, color: colors.txt.secondary}}
-        onClick={() => navigate('/settings')}
-      >
-        <span style={styles.navIcon}>{React.cloneElement(icons.admin, { width: 16, height: 16 })}</span>
-        Settings
+        My account
       </button>
       <div style={{...styles.menuDivider, backgroundColor: colors.bdr.primary}} />
       <button

@@ -34,7 +34,10 @@ const CalendarPage: React.FC = () => {
   const location = useLocation();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+  // A phone opens on today. The month grid at 375px is seven 50px columns
+  // with room for a dot per day, so the first tap was always "Day" anyway;
+  // month and week are still one tap away.
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>(() => (isMobileOrTablet ? 'day' : 'month'));
   const [selectedDayDate, setSelectedDayDate] = useState<Date>(new Date());
 
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
