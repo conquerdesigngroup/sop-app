@@ -6,6 +6,7 @@ import { useRefreshable } from './RefreshContext';
 import { queueWorkHoursOffline, getQueuedWorkHours } from '../lib/indexedDB';
 import { isNetworkFailure } from '../lib/networkErrors';
 import { logActivity } from '../lib/activityLog';
+import { ShiftTimes, normalizeTime, hasShiftTimes } from '../components/hours/workDayHours';
 
 interface WorkHoursContextType {
   workHours: WorkHoursEntry[];
@@ -31,7 +32,11 @@ interface WorkHoursContextType {
   // Working Days (simple day marking)
   workDays: WorkDay[];
   addWorkDay: (employeeId: string, date: string, notes?: string) => Promise<void>;
-  addWorkDays: (employeeId: string, dates: string[], notes?: string) => Promise<void>;
+  /**
+   * `hoursByDate` sets planned start/end times per date. A date that is not
+   * in the map, or maps to blank times, is added with no set hours.
+   */
+  addWorkDays: (employeeId: string, dates: string[], notes?: string, hoursByDate?: Record<string, ShiftTimes>) => Promise<void>;
   updateWorkDay: (id: string, updates: Partial<WorkDay>) => Promise<void>;
   deleteWorkDay: (id: string) => Promise<void>;
   getWorkDaysByEmployee: (employeeId: string) => WorkDay[];
@@ -118,6 +123,8 @@ const mapSupabaseWorkDay = (dbEntry: any): WorkDay => {
     employeeId: dbEntry.employee_id,
     workDate: dbEntry.work_date,
     status: dbEntry.status,
+    startTime: normalizeTime(dbEntry.start_time),
+    endTime: normalizeTime(dbEntry.end_time),
     notes: dbEntry.notes,
     createdBy: dbEntry.created_by,
     createdAt: dbEntry.created_at,
@@ -851,7 +858,7 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   }, [currentUser, useSupabase]);
 
-  const addWorkDays = useCallback(async (employeeId: string, dates: string[], notes?: string) => {
+  const addWorkDays = useCallback(async (employeeId: string, dates: string[], notes?: string, hoursByDate?: Record<string, ShiftTimes>) => {
     if (!currentUser) {
       throw new Error('No current user');
     }
@@ -859,23 +866,35 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
     // Remove duplicates from the dates array
     const uniqueDates = Array.from(new Set(dates));
 
-    const newWorkDays: WorkDay[] = uniqueDates.map(date => ({
+    const newWorkDays: WorkDay[] = uniqueDates.map(date => {
+      const hours = hoursByDate?.[date];
+      const timed = hasShiftTimes(hours);
+      return {
       id: generateId('wd'),
       employeeId,
       workDate: date,
       status: 'scheduled' as const,
+      startTime: timed ? hours!.startTime : undefined,
+      endTime: timed ? hours!.endTime : undefined,
       notes,
       createdBy: currentUser.id,
       createdAt: new Date().toISOString(),
-    }));
+      };
+    });
 
     if (useSupabase) {
+      // The time columns are only sent when at least one day has hours. A
+      // schedule saved without hours must keep working on a database where
+      // migration v77 has not been run yet — PostgREST rejects an unknown
+      // column outright, even with a null value.
+      const anyTimed = newWorkDays.some(wd => wd.startTime && wd.endTime);
       const insertData = newWorkDays.map(wd => ({
         employee_id: wd.employeeId,
         work_date: wd.workDate,
         status: wd.status,
         notes: wd.notes,
         created_by: wd.createdBy,
+        ...(anyTimed ? { start_time: wd.startTime ?? null, end_time: wd.endTime ?? null } : {}),
       }));
 
       // Use upsert with onConflict to ignore duplicates instead of throwing errors
@@ -914,6 +933,11 @@ export const WorkHoursProvider: React.FC<{ children: ReactNode }> = ({ children 
       const mapped: any = {};
       if (updates.status !== undefined) mapped.status = updates.status;
       if (updates.notes !== undefined) mapped.notes = updates.notes;
+      // `'startTime' in updates` rather than `!== undefined`: clearing the
+      // hours is passed as { startTime: undefined, endTime: undefined } and
+      // has to write NULL, not be skipped.
+      if ('startTime' in updates) mapped.start_time = updates.startTime || null;
+      if ('endTime' in updates) mapped.end_time = updates.endTime || null;
       mapped.updated_at = new Date().toISOString();
 
       const { data, error } = await supabase

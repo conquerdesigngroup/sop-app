@@ -474,6 +474,10 @@ const work_days = [];
       employee_id,
       work_date: dateOnly(d),
       status: WORK_STATUSES[(d + 21 + person * 2) % WORK_STATUSES.length],
+      // Most days carry planned hours (migration v77); every fourth is left
+      // blank so the "no set hours" rendering is exercised too.
+      start_time: (d + person) % 4 === 0 ? null : ['09:00:00', '13:30:00', '16:00:00'][person],
+      end_time: (d + person) % 4 === 0 ? null : ['17:00:00', '18:00:00', '21:15:00'][person],
       notes: null,
       created_by: STAFF.admin,
       created_at: iso(-30),
