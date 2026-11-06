@@ -1,0 +1,222 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { theme } from '../theme';
+import { useToast } from '../contexts/ToastContext';
+import { useHomeScene } from '../hooks/useHomeScene';
+import { DEFAULT_SCENE_ID, HOME_SCENES, effectiveSceneId, localDayKey } from '../lib/homeScenes';
+import { Badge, Button, Input } from './ui';
+import { SceneCanvas } from './HomeScene';
+
+/**
+ * Settings → Home background. Super admin only (the caller decides; v78 refuses
+ * the save for anyone else anyway).
+ *
+ * Picks one background for every staff member's Home: the everyday contour
+ * lines, or one of the seasonal scenes in src/lib/homeScenes.ts, optionally
+ * until a date, after which Home goes back to the contour lines by itself.
+ *
+ * Every preview is a still frame except the one that is selected, which
+ * animates: eight live canvases on a phone would cost more than the page.
+ */
+
+/** The day after Twelfth Night of the coming season: a sensible "until". */
+const suggestedEnd = (today = new Date()): string => {
+  const year = today.getMonth() === 0 ? today.getFullYear() : today.getFullYear() + 1;
+  return `${year}-01-06`;
+};
+
+const HomeSceneSettings: React.FC = () => {
+  const { setting, save } = useHomeScene();
+  const { showToast } = useToast();
+  const [scene, setScene] = useState<string>(setting?.scene || DEFAULT_SCENE_ID);
+  const [endsOn, setEndsOn] = useState<string>(setting?.endsOn || '');
+  const [saving, setSaving] = useState(false);
+  const busy = useRef(false);
+
+  // When the saved value arrives (or changes from a refresh), show it.
+  useEffect(() => {
+    setScene(setting?.scene || DEFAULT_SCENE_ID);
+    setEndsOn(setting?.endsOn || '');
+  }, [setting?.scene, setting?.endsOn]);
+
+  const live = effectiveSceneId(setting);
+  const savedScene = setting?.scene || DEFAULT_SCENE_ID;
+  const dirty = scene !== savedScene || (scene !== DEFAULT_SCENE_ID && endsOn !== (setting?.endsOn || ''));
+  const endInPast = !!endsOn && endsOn < localDayKey();
+
+  const choose = (id: string) => {
+    setScene(id);
+    if (id !== DEFAULT_SCENE_ID && !endsOn) setEndsOn(suggestedEnd());
+  };
+
+  const onSave = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setSaving(true);
+    try {
+      const next = { scene, endsOn: scene === DEFAULT_SCENE_ID ? null : endsOn || null };
+      await save(next);
+      const name = HOME_SCENES.find(s => s.id === scene)?.name;
+      showToast(name ? `${name} is now on everyone's Home.` : 'Home is back to the everyday background.', 'success');
+    } catch (e) {
+      const message = (e as { message?: string })?.message || '';
+      showToast(
+        /home_scene_setting/.test(message)
+          ? 'Holiday backgrounds are not set up on the server yet (migration v78).'
+          : "Couldn't save the Home background. Check your connection and try again.",
+        'error',
+      );
+    } finally {
+      busy.current = false;
+      setSaving(false);
+    }
+  };
+
+  const liveName = live === DEFAULT_SCENE_ID ? 'Everyday contour lines' : HOME_SCENES.find(s => s.id === live)?.name;
+
+  return (
+    <div>
+      <p style={styles.lede}>
+        Choose the background behind everyone&apos;s Home screen. Seasonal scenes switch back to the everyday
+        contour lines by themselves after the date you set.
+      </p>
+      <p style={styles.now} role="status" aria-live="polite">
+        Showing now: <strong style={{ color: theme.colors.txt.primary }}>{liveName}</strong>
+        {live !== DEFAULT_SCENE_ID && setting?.endsOn && <> until {formatDay(setting.endsOn)}</>}
+      </p>
+
+      <div style={styles.grid} role="radiogroup" aria-label="Home background">
+        <SceneOption
+          id={DEFAULT_SCENE_ID}
+          name="Everyday"
+          blurb="The contour lines Home always has."
+          selected={scene === DEFAULT_SCENE_ID}
+          live={live === DEFAULT_SCENE_ID}
+          onChoose={choose}
+        />
+        {HOME_SCENES.map(s => (
+          <SceneOption
+            key={s.id}
+            id={s.id}
+            name={s.name}
+            blurb={s.blurb}
+            selected={scene === s.id}
+            live={live === s.id}
+            onChoose={choose}
+          />
+        ))}
+      </div>
+
+      {scene !== DEFAULT_SCENE_ID && (
+        <div style={styles.until}>
+          <Input
+            id="home-scene-until"
+            type="date"
+            label="Show until (last day)"
+            value={endsOn}
+            min={localDayKey()}
+            onChange={e => setEndsOn(e.target.value)}
+            helperText={endsOn ? undefined : 'Leave empty to keep it on until you switch it off.'}
+            error={endInPast ? 'That day has passed, so Home would go straight back to everyday.' : undefined}
+          />
+        </div>
+      )}
+
+      <div style={styles.footer}>
+        <Button variant="primary" onClick={onSave} loading={saving} disabled={!dirty || saving}>
+          {saving ? 'Saving…' : 'Save for everyone'}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const formatDay = (key: string) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const SceneOption: React.FC<{
+  id: string;
+  name: string;
+  blurb: string;
+  selected: boolean;
+  live: boolean;
+  onChoose: (id: string) => void;
+}> = ({ id, name, blurb, selected, live, onChoose }) => {
+  const scene = HOME_SCENES.find(s => s.id === id);
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={() => onChoose(id)}
+      style={{
+        ...styles.option,
+        borderColor: selected ? theme.colors.primary : theme.colors.bdr.primary,
+      }}
+    >
+      <span style={styles.preview}>
+        {scene ? <SceneCanvas scene={scene} contained still={!selected} /> : <EverydayPreview />}
+      </span>
+      <span style={styles.optionText}>
+        <span style={styles.optionName}>
+          {name}
+          {live && <Badge variant="success">On now</Badge>}
+        </span>
+        <span style={styles.optionBlurb}>{blurb}</span>
+      </span>
+    </button>
+  );
+};
+
+/** A drawn hint of the contour field; TopoField itself is page-sized and fixed. */
+const EverydayPreview: React.FC = () => (
+  <svg viewBox="0 0 120 90" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
+    {Array.from({ length: 9 }, (_, i) => (
+      <path
+        key={i}
+        d={`M0 ${8 + i * 10} C30 ${2 + i * 10}, 60 ${16 + i * 10}, 120 ${6 + i * 10}`}
+        style={{ fill: 'none', stroke: i === 3 ? theme.colors.primary : theme.colors.txt.tertiary, strokeOpacity: i === 3 ? 0.8 : 0.35, strokeWidth: 0.8 }}
+      />
+    ))}
+  </svg>
+);
+
+const styles: Record<string, React.CSSProperties> = {
+  lede: { margin: `0 0 ${theme.spacing.sm}`, color: theme.colors.txt.secondary, fontSize: '14px', lineHeight: 1.5 },
+  now: { margin: `0 0 ${theme.spacing.md}`, color: theme.colors.txt.tertiary, fontSize: '13px' },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+    gap: theme.spacing.sm,
+  },
+  option: {
+    display: 'flex',
+    flexDirection: 'column',
+    textAlign: 'left',
+    padding: 0,
+    minWidth: 0,
+    overflow: 'hidden',
+    cursor: 'pointer',
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 2,
+    borderStyle: 'solid',
+    backgroundColor: theme.colors.bg.tertiary,
+    color: theme.colors.txt.primary,
+    font: 'inherit',
+  },
+  preview: {
+    position: 'relative',
+    display: 'block',
+    height: '110px',
+    backgroundColor: theme.colors.bg.primary,
+    overflow: 'hidden',
+  },
+  optionText: { display: 'flex', flexDirection: 'column', gap: '4px', padding: theme.spacing.sm, minWidth: 0 },
+  optionName: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', fontWeight: 600, fontSize: '14px' },
+  optionBlurb: { fontSize: '12px', lineHeight: 1.4, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' },
+  until: { marginTop: theme.spacing.md, maxWidth: '260px' },
+  footer: { marginTop: theme.spacing.lg, display: 'flex', justifyContent: 'flex-end' },
+};
+
+export default HomeSceneSettings;

@@ -18,7 +18,7 @@ import AdminAttention from '../components/dashboard/AdminAttention';
 import ClassesToday from '../components/dashboard/ClassesToday';
 import Shortcuts from '../components/dashboard/Shortcuts';
 import ShiftReportsCard from '../components/dashboard/ShiftReportsCard';
-import TopoField from '../components/TopoField';
+import HomeScene from '../components/HomeScene';
 import { Button, Card } from '../components/ui';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
 
@@ -86,8 +86,10 @@ const DashboardContent: React.FC = () => {
 };
 
 /**
- * The contour field sits behind every state of the page — skeleton, team
- * member and admin — so it mounts once and is not rebuilt when the data lands.
+ * The background sits behind every state of the page — skeleton, team member
+ * and admin — so it mounts once and is not rebuilt when the data lands. It is
+ * the contour field, or the seasonal scene a super admin has switched on in
+ * Settings (see HomeScene).
  * The wrapper is a stacking context, which is what puts the field's z-index of
  * -1 above the App background and below everything on the page.
  *
@@ -97,7 +99,7 @@ const DashboardContent: React.FC = () => {
  */
 const Dashboard: React.FC = () => (
   <div className="glass-scope" style={{ position: 'relative', isolation: 'isolate' }}>
-    <TopoField />
+    <HomeScene />
     <DashboardContent />
   </div>
 );

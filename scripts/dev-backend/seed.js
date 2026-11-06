@@ -723,6 +723,11 @@ const portal_evaluations = portal_enrollments.slice(0, 2).map((e, i) => ({
 // wrapping are measured, one tagging the dev login (so the dashboard's tagged
 // card and the header badge draw), and one archived for the Archive tab.
 const SR = (n) => `00000000-0000-4000-c000-${String(n).padStart(12, '0')}`;
+// v78: one row, the background on staff Home. 'contours' is the everyday
+// field; switch it in Settings -> Home background (dev@localhost is a super
+// admin) to see a seasonal scene.
+const home_scene_setting = [{ id: 1, scene: 'contours', ends_on: null }];
+
 const shift_reports = [
   { id: SR(1), author_id: STAFF.teacherJess, shift_type: 'closing', shift_date: dateOnly(-1), body: 'Closed studios A and B. Mopped B after Jr Hip Hop — the floor was sticky by the barre.\nFront door lock is sticking again; it needs a hard pull to latch. Lost and found: two water bottles, one blue hoodie (size YM), left in the office.\nRegister balanced. Lights and heaters off at 9:42.', archived_at: null, archived_by: null, created_at: iso(-1, 21, 48), updated_at: iso(-1, 21, 48) },
   { id: SR(2), author_id: STAFF.teacherDevon, shift_type: 'opening', shift_date: dateOnly(0), body: 'Opened at 3:15. Studio C speaker is crackling on the left channel — @Dev can you take a look before the 5pm class?', archived_at: null, archived_by: null, created_at: iso(0, 15, 20), updated_at: iso(0, 15, 20) },
@@ -768,6 +773,7 @@ const tables = {
   shift_reports,
   shift_report_tags,
   shift_report_comments,
+  home_scene_setting,
 };
 
 module.exports = { tables, LOGIN_EMAIL, STAFF, PROG_ALLSTARS, PROG_ACADEMY };
