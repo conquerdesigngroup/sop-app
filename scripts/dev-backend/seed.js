@@ -335,6 +335,37 @@ const job_tasks = TASK_SPECS.map(([title, department, status, priority, dayOffse
   updated_at: iso(-1),
 }));
 
+// Recurring series: the rules behind repeating tasks. They are hidden from
+// task lists; a manager's session creates their occurrences on load. One of
+// each state the Recurring tab draws.
+const SERIES_SPECS = [
+  ['Open the studio', { frequency: 'weekly', daysOfWeek: [1, 2, 3, 4, 5] }, 'pending', -30, [STAFF.frontDesk]],
+  ['Sanitise the barres', { frequency: 'daily', interval: 2 }, 'pending', -10, [STAFF.teacherJess, STAFF.frontDesk]],
+  ['Mop Studio A', { frequency: 'weekly', daysOfWeek: [6], paused: true }, 'pending', -40, [STAFF.frontDesk]],
+  ['Monthly fire-extinguisher check', { frequency: 'monthly', dayOfMonth: 1, endDate: dateOnly(200) }, 'pending', -60, [STAFF.admin]],
+  ['Summer camp sign-in sheets', { frequency: 'weekly', daysOfWeek: [1], endDate: dateOnly(-20) }, 'pending', -90, [STAFF.frontDesk]],
+];
+SERIES_SPECS.forEach(([title, pattern, status, dayOffset, assignees], i) => {
+  job_tasks.push({
+    ...job_tasks[0],
+    id: `00000000-0000-4000-3100-${String(i + 1).padStart(12, '0')}`,
+    title,
+    description: '',
+    assigned_to: assignees,
+    department: 'Operations',
+    scheduled_date: dateOnly(dayOffset),
+    due_time: '09:00',
+    status,
+    priority: 'medium',
+    progress_percentage: 0,
+    started_at: null,
+    completed_at: null,
+    completed_by: null,
+    is_recurring: true,
+    recurrence_pattern: pattern,
+  });
+});
+
 const calendar_events = portal_events.slice(0, 5).map((e, i) => ({
   id: `00000000-0000-4000-4000-${String(i + 1).padStart(12, '0')}`,
   title: e.title,

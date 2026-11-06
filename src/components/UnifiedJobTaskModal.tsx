@@ -8,6 +8,7 @@ import TemplateSelector from './TemplateSelector';
 import { CustomCheckbox } from './CustomCheckbox';
 import { studioToday } from '../lib/studioDate';
 import StaffAvatar from './StaffAvatar';
+import { RecurrenceFields, defaultRecurrence, recurrenceProblems } from './RecurrenceFields';
 
 interface ChecklistItem {
   id: string;
@@ -46,6 +47,8 @@ interface UnifiedJobTaskModalProps {
   currentUserId: string;
   initialTemplateId?: string | null;
   initialScheduledDate?: string | null;
+  /** Open a new task with "repeats" already switched on (the Recurring tab's button). */
+  initialRecurring?: boolean;
 }
 
 export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
@@ -60,6 +63,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   currentUserId,
   initialTemplateId = null,
   initialScheduledDate = null,
+  initialRecurring = false,
 }) => {
   const { isMobile } = useResponsive();
   const { error: showError } = useToast();
@@ -79,8 +83,11 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
 
   // Recurrence
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceFrequency, setRecurrenceFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]);
+  const [recurrence, setRecurrence] = useState<RecurrencePattern>(() => defaultRecurrence(studioToday()));
+  // A series' rule is edited here; an occurrence of one is not (it would turn
+  // that single day into a second series).
+  const isSeries = !!editingTask?.isRecurring;
+  const isOccurrence = !!editingTask?.seriesId;
 
   // Assignment
   const [assignedTo, setAssignedTo] = useState<string[]>([]);
@@ -109,7 +116,6 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
 
   // Get unique departments for user filtering
   const departments = Array.from(new Set(users.map((u: any) => u.department)));
-  const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   // Filter users by department
   const filteredUsers = filterDepartment === 'all'
@@ -127,9 +133,8 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setEstimatedDuration(30);
       setLinkedSopId('');
       setChecklistItems([]);
-      setIsRecurring(false);
-      setRecurrenceFrequency('weekly');
-      setRecurrenceDays([]);
+      setIsRecurring(initialRecurring);
+      setRecurrence(defaultRecurrence(initialScheduledDate || studioToday()));
       setAssignedTo([]);
       setDueTime('');
       setFilterDepartment('all');
@@ -139,6 +144,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setNewCategoryName('');
       setIsSubmitting(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editingTask, initialTemplateId]);
 
   // Initialize with editing task or initial template
@@ -155,8 +161,8 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setLinkedSopId(editingTask.sopIds?.[0] || '');
       setCategory(editingTask.category || 'General');
       if (editingTask.recurrencePattern) {
-        setRecurrenceFrequency(editingTask.recurrencePattern.frequency);
-        setRecurrenceDays(editingTask.recurrencePattern.daysOfWeek || []);
+        const { generatedThrough, paused, ...rule } = editingTask.recurrencePattern;
+        setRecurrence({ interval: 1, ...rule, paused });
       }
 
       // Convert task steps to checklist items
@@ -199,8 +205,8 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setCategory(template.category || 'General');
 
       if (template.recurrencePattern) {
-        setRecurrenceFrequency(template.recurrencePattern.frequency);
-        setRecurrenceDays(template.recurrencePattern.daysOfWeek || []);
+        const { generatedThrough, paused, ...rule } = template.recurrencePattern;
+        setRecurrence({ interval: 1, ...rule });
       }
 
       // Convert template steps to checklist items
@@ -260,14 +266,6 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     ));
   };
 
-  const handleDayToggle = (dayIndex: number) => {
-    setRecurrenceDays(prev =>
-      prev.includes(dayIndex)
-        ? prev.filter(d => d !== dayIndex)
-        : [...prev, dayIndex].sort()
-    );
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -298,18 +296,26 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     }
 
     // Validate recurrence
-    if (isRecurring && recurrenceFrequency !== 'daily' && recurrenceDays.length === 0) {
-      showError('Please select at least one day for recurring tasks');
+    const repeats = isRecurring && !isOccurrence;
+    const recurrenceProblem = repeats ? recurrenceProblems(recurrence, scheduledDate) : null;
+    if (recurrenceProblem) {
+      showError(recurrenceProblem);
       return;
     }
 
     // Set submitting state to prevent duplicates
     setIsSubmitting(true);
 
-    const recurrencePattern: RecurrencePattern | undefined = isRecurring
+    // Only the fields the chosen frequency uses, so a rule switched from
+    // weekly to monthly does not carry stale weekdays around.
+    const recurrencePattern: RecurrencePattern | undefined = repeats
       ? {
-          frequency: recurrenceFrequency,
-          daysOfWeek: recurrenceFrequency === 'daily' ? [] : recurrenceDays,
+          frequency: recurrence.frequency,
+          interval: recurrence.interval || 1,
+          ...(recurrence.frequency === 'weekly' ? { daysOfWeek: recurrence.daysOfWeek || [] } : {}),
+          ...(recurrence.frequency === 'monthly' ? { dayOfMonth: recurrence.dayOfMonth } : {}),
+          ...(recurrence.endDate ? { endDate: recurrence.endDate } : {}),
+          ...(recurrence.paused ? { paused: true } : {}),
         }
       : undefined;
 
@@ -329,7 +335,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
           assignedTo,
           scheduledDate,
           dueTime: dueTime || undefined,
-          isRecurring,
+          isRecurring: repeats,
           recurrencePattern,
           templateId: selectedTemplate?.id,
           sopId: linkedSopId || undefined,
@@ -474,7 +480,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
             {/* Scheduled Date & Due Time */}
             <div style={{...styles.formRow, ...(isMobile && styles.formRowMobile)}}>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Scheduled Date *</label>
+                <label style={styles.label}>{isRecurring && !isOccurrence ? 'Starts on *' : 'Scheduled Date *'}</label>
                 <input
                   type="date"
                   value={scheduledDate}
@@ -684,74 +690,35 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
 
           {/* Recurrence Section */}
           <div style={{...styles.section, ...(isMobile && styles.sectionMobile)}}>
-            <h3 style={styles.sectionTitle}>Recurrence (Optional)</h3>
+            <h3 style={styles.sectionTitle}>Repeat</h3>
 
-            <CustomCheckbox
-              checked={isRecurring}
-              onChange={setIsRecurring}
-              label="Make this a recurring task"
-            />
-
-            {isRecurring && (
-              <div style={styles.recurrenceOptions}>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Frequency *</label>
-                  <div style={styles.radioGroup}>
-                    <label style={styles.radioLabel}>
-                      <input
-                        type="radio"
-                        value="daily"
-                        checked={recurrenceFrequency === 'daily'}
-                        onChange={(e) => setRecurrenceFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
-                        style={styles.radio}
-                      />
-                      Daily
-                    </label>
-                    <label style={styles.radioLabel}>
-                      <input
-                        type="radio"
-                        value="weekly"
-                        checked={recurrenceFrequency === 'weekly'}
-                        onChange={(e) => setRecurrenceFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
-                        style={styles.radio}
-                      />
-                      Weekly
-                    </label>
-                    <label style={styles.radioLabel}>
-                      <input
-                        type="radio"
-                        value="monthly"
-                        checked={recurrenceFrequency === 'monthly'}
-                        onChange={(e) => setRecurrenceFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
-                        style={styles.radio}
-                      />
-                      Monthly
-                    </label>
-                  </div>
-                </div>
-
-                {recurrenceFrequency !== 'daily' && (
-                  <div style={styles.formGroup}>
-                    <label style={styles.label}>
-                      Select Days {recurrenceFrequency === 'weekly' && '*'}
-                    </label>
-                    <div style={styles.daysGrid}>
-                      {weekDays.map((day, index) => {
-                        // Map Monday=0 to Sunday=6 -> 1-6,0 for RecurrencePattern (Sunday=0)
-                        const dayIndex = index === 6 ? 0 : index + 1;
-                        return (
-                          <CustomCheckbox
-                            key={day}
-                            checked={recurrenceDays.includes(dayIndex)}
-                            onChange={() => handleDayToggle(dayIndex)}
-                            label={day.substring(0, 3)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
+            {isOccurrence ? (
+              <p style={styles.emptyStepsText}>
+                This is one day of a recurring task. Changes here apply to this day only. To change
+                every day it repeats, edit it on the Recurring tab.
+              </p>
+            ) : (
+              <>
+                {isSeries ? (
+                  <p style={{ ...styles.emptyStepsText, margin: 0, textAlign: 'left' }}>
+                    Changes apply from today. Days already started or done keep what they had.
+                    To stop it, use Pause or End on the Recurring tab.
+                  </p>
+                ) : (
+                  <CustomCheckbox
+                    checked={isRecurring}
+                    onChange={(on) => {
+                      setIsRecurring(on);
+                      if (on) setRecurrence(r => (r.frequency === 'weekly' && scheduledDate ? defaultRecurrence(scheduledDate) : r));
+                    }}
+                    label="Repeat this task"
+                  />
                 )}
-              </div>
+
+                {isRecurring && (
+                  <RecurrenceFields value={recurrence} onChange={setRecurrence} startDate={scheduledDate} />
+                )}
+              </>
             )}
           </div>
 
