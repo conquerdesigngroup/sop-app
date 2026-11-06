@@ -69,7 +69,7 @@ const switchOff = (...ids: string[]) =>
   localStorage.setItem(STORAGE_KEY, JSON.stringify(ids.map(id => ({ id, enabled: false }))));
 
 const ALL = [
-  'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday', 'shortcuts',
+  'stats', 'overdueByPerson', 'hoursReview', 'latestActivity', 'classesToday', 'shortcuts', 'shiftReports',
   'todayTasks', 'upcomingTasks', 'overdueTasks', 'departments', 'recentSops', 'schedule', 'calendar',
 ];
 

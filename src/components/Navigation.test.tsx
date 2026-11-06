@@ -118,24 +118,27 @@ describe('refresh button', () => {
 describe('mobile menu sheet', () => {
   beforeEach(() => { mockMobile = true; });
 
-  it('draws no hamburger for a team member: everything they can reach is on the bottom bar', () => {
+  it('gives a team member a sheet holding only Reports: everything else they reach is on the bottom bar', () => {
     renderAt();
-    expect(screen.queryByRole('button', { name: /more pages/i })).not.toBeInTheDocument();
-    // Search takes the hamburger's slot, and the account menu is still
-    // there — the bar does not cover either.
-    expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
+    // Shift reports are the one page of theirs the five-slot bar has no room
+    // for, so the sheet exists again — holding that and nothing the bar has.
+    fireEvent.click(screen.getByRole('button', { name: /more pages/i }));
+    const sheet = screen.getByRole('dialog', { name: 'More pages' });
+    expect(within(sheet).getAllByRole('link').map(a => a.textContent)).toEqual(['Reports']);
+    // The account menu is still there — the bar does not cover it.
     expect(screen.getByRole('button', { name: /account menu/i })).toBeInTheDocument();
   });
 
   it('gives a teacher with a class a sheet holding what the bar displaced', () => {
     // Their bar carries Attendance and Portal, so SOPs and Calendar are the
-    // two things that moved off it — the sheet holds exactly those.
+    // two things that moved off it — the sheet holds those, Evaluations and
+    // Reports.
     mockCanEditPortal = true;
     renderAt();
     fireEvent.click(screen.getByRole('button', { name: /more pages/i }));
     const sheet = screen.getByRole('dialog', { name: 'More pages' });
     expect(within(sheet).getAllByRole('link').map(a => a.textContent))
-      .toEqual(['SOPs', 'Evaluations', 'Calendar']);
+      .toEqual(['SOPs', 'Reports', 'Evaluations', 'Calendar']);
 
     // And neither class page is in the sheet, because both are under their thumb.
     expect(within(sheet).queryByText('Attendance')).not.toBeInTheDocument();
@@ -155,7 +158,7 @@ describe('mobile menu sheet', () => {
     // remembered yet), so it is opened here to read its rows.
     fireEvent.click(within(sheet).getByRole('button', { name: /management/i }));
     const labels = within(sheet).getAllByRole('link').map(a => a.textContent);
-    expect(labels).toEqual(['My Tasks', 'SOPs', 'Evaluations', 'Calendar', 'Hours Input', 'Team', 'Task Library']);
+    expect(labels).toEqual(['My Tasks', 'SOPs', 'Reports', 'Evaluations', 'Calendar', 'Hours Input', 'Team', 'Task Library']);
 
     // Nothing in the sheet duplicates the admin bar, which carries Job Tasks,
     // Attendance and Portal.

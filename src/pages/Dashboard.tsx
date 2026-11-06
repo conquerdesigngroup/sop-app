@@ -17,6 +17,7 @@ import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import AdminAttention from '../components/dashboard/AdminAttention';
 import ClassesToday from '../components/dashboard/ClassesToday';
 import Shortcuts from '../components/dashboard/Shortcuts';
+import ShiftReportsCard from '../components/dashboard/ShiftReportsCard';
 import TopoField from '../components/TopoField';
 import { Button, Card } from '../components/ui';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
@@ -389,6 +390,9 @@ const TeamMemberDashboard: React.FC<{
           for, one tap each, before anything to read. */}
       {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
 
+      {/* Reports someone tagged you on, and the button to write yours. */}
+      {isWidgetEnabled('shiftReports') && <ShiftReportsCard navigate={navigate} />}
+
       {/* Stats Row - Compact */}
       {isWidgetEnabled('stats') && (
         <div className="glass-panel" style={isMobileOrTablet ? styles.statsRowMobile : styles.statsRow}>
@@ -731,6 +735,9 @@ const AdminDashboard: React.FC<{
 
       {/* First, straight under the heading, as on the team dashboard. */}
       {isWidgetEnabled('shortcuts') && <Shortcuts navigate={navigate} />}
+
+      {/* Reports someone tagged you on, and the button to write yours. */}
+      {isWidgetEnabled('shiftReports') && <ShiftReportsCard navigate={navigate} />}
 
       {/* Task Stats Row */}
       {isWidgetEnabled('stats') && (

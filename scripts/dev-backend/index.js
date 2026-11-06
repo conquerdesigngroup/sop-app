@@ -338,6 +338,16 @@ const RPC = {
   admin_activity_search: () => [],
   admin_activity_facets: () => [],
   admin_enrollment_import: enrollmentImport,
+  // Shift reports (v77). Tested against Postgres in scripts/sql-tests.
+  set_shift_report_archived: (body) => {
+    const row = db.shift_reports.find((r) => r.id === body.p_report);
+    if (row) Object.assign(row, { archived_at: body.p_archived ? new Date().toISOString() : null, archived_by: body.p_archived ? db.profiles[0].id : null });
+    return null;
+  },
+  mark_shift_report_seen: (body) => {
+    db.shift_report_tags.forEach((t) => { if (t.report_id === body.p_report && t.user_id === db.profiles[0].id && !t.seen_at) t.seen_at = new Date().toISOString(); });
+    return null;
+  },
   // Evaluations (v70/v71). The rules live in Postgres and are tested in
   // scripts/sql-tests/evaluations.test.mjs; these only let the screens draw.
   staff_save_evaluation: (body) => {

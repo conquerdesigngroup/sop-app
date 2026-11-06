@@ -3,6 +3,7 @@ import { SOPProvider } from './SOPContext';
 import { TaskProvider } from './TaskContext';
 import { EventProvider } from './EventContext';
 import { WorkHoursProvider } from './WorkHoursContext';
+import { ShiftReportProvider } from './ShiftReportContext';
 
 /**
  * DataProvider - Combines all data-related context providers
@@ -31,7 +32,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       <TaskProvider>
         <EventProvider>
           <WorkHoursProvider>
-            {children}
+            <ShiftReportProvider>
+              {children}
+            </ShiftReportProvider>
           </WorkHoursProvider>
         </EventProvider>
       </TaskProvider>
