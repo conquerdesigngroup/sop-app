@@ -205,6 +205,7 @@ const JobTasksPage: React.FC = () => {
           isRecurring: taskData.isRecurring,
           recurrencePattern: taskData.recurrencePattern,
           sopIds: taskData.sopId ? [taskData.sopId] : [],
+          files: taskData.files || [],
           steps: taskData.steps.map((step: any, index: number) => ({
             id: `step_${Date.now()}_${index}`,
             order: index + 1,
@@ -212,6 +213,7 @@ const JobTasksPage: React.FC = () => {
             description: step.description || '',
             isCompleted: false,
             requiresPhoto: step.requiresPhoto,
+            ...(step.images?.length ? { images: step.images } : {}),
           })),
         });
 
@@ -230,11 +232,13 @@ const JobTasksPage: React.FC = () => {
               title: step.title,
               description: step.description || '',
               requiresPhoto: step.requiresPhoto,
+              ...(step.images?.length ? { images: step.images } : {}),
             })),
             sopIds: taskData.sopId ? [taskData.sopId] : [],
             createdBy: currentUser.id,
             isRecurring: taskData.isRecurring || false,
             recurrencePattern: taskData.recurrencePattern,
+            files: taskData.files || [],
           });
         }
 

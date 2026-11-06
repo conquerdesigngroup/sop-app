@@ -493,7 +493,27 @@ const handleRest = (req, res, url, body) => {
 
 // --- storage and edge functions --------------------------------------------
 
-const handleStorage = (req, res, url) => {
+// A grey square, so a page that draws a photo has something the size of a photo
+// to lay out around. Real objects do not exist here; this stands in for all.
+const PLACEHOLDER_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">' +
+  '<rect width="800" height="600" fill="#3a3a40"/><text x="400" y="310" font-family="sans-serif" ' +
+  'font-size="48" fill="#c9c9d1" text-anchor="middle">dev-backend photo</text></svg>';
+
+const handleStorage = (req, res, url, body) => {
+  // createSignedUrls: POST /object/sign/<bucket> with { paths } -> one row each.
+  if (req.method === 'POST' && /\/object\/sign\/[^/]+$/.test(url.pathname) && Array.isArray(body?.paths)) {
+    const bucket = url.pathname.split('/object/sign/')[1];
+    return json(res, 200, body.paths.map((p) => ({
+      path: p,
+      error: null,
+      signedURL: `/storage/v1/object/public/${bucket}/${p}?token=dev-backend`,
+    })));
+  }
+  if (req.method === 'GET' && url.pathname.includes('/object/public/') && /\.(jpe?g|png|webp|gif)$/i.test(url.pathname)) {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Access-Control-Allow-Origin': '*' });
+    return res.end(PLACEHOLDER_SVG);
+  }
   if (url.pathname.includes('/object/sign/')) {
     // A URL shaped like the real one. It 404s if followed, which is the truth:
     // there are no files behind this fixture.
@@ -532,7 +552,7 @@ const server = http.createServer((req, res) => {
     try {
       if (url.pathname.startsWith('/auth/v1')) return handleAuth(req, res, url, body);
       if (url.pathname.startsWith('/rest/v1')) return handleRest(req, res, url, body);
-      if (url.pathname.startsWith('/storage/v1')) return handleStorage(req, res, url);
+      if (url.pathname.startsWith('/storage/v1')) return handleStorage(req, res, url, body);
       if (url.pathname.startsWith('/functions/v1')) return handleFunctions(req, res, url);
       return json(res, 404, { message: `dev-backend: no route ${url.pathname}` });
     } catch (e) {
