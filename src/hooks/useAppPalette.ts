@@ -3,6 +3,7 @@ import type { FC } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useRefreshable } from '../contexts/RefreshContext';
 import {
+  AppPalette,
   DEFAULT_PALETTE_ID,
   applyPalette,
   currentPalette,
@@ -120,15 +121,18 @@ export const useAppPalette = () => {
   };
 };
 
+/** The palette currently applied on <html>. Re-renders when it changes. */
+export const useCurrentPalette = (): AppPalette => {
+  const [p, setP] = useState(currentPalette);
+  useEffect(() => onPaletteChange(setP), []);
+  return p;
+};
+
 /**
  * The applied accent as a literal hex, for canvas and WebGL, which cannot
  * resolve var(--c-accent). Re-renders when the palette changes.
  */
-export const useAccentHex = (): string => {
-  const [hex, setHex] = useState(() => currentPalette().accent);
-  useEffect(() => onPaletteChange(p => setHex(p.accent)), []);
-  return hex;
-};
+export const useAccentHex = (): string => useCurrentPalette().accent;
 
 /** Mounted once in App: keeps the palette current for every visitor. */
 export const AppPaletteSync: FC = () => {

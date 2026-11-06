@@ -41,6 +41,18 @@ export interface AppPalette {
   hover: string;
   /** Pressed. */
   dark: string;
+  /**
+   * Optional second accent, for the two-colour palettes. It fills the
+   * selected item in the navigation (the top bar's active page, the phone
+   * tab bar's active tab) while buttons keep `accent`. Held to the same
+   * contrast rule. Without it the navigation uses `accent`.
+   */
+  accent2?: string;
+  /**
+   * Optional string of holiday lights hung along the bottom edge of the top
+   * bar (HolidayLights). Purely decorative bulb colours, in order.
+   */
+  lights?: string[];
 }
 
 export const DEFAULT_PALETTE_ID = 'electric';
@@ -48,6 +60,16 @@ export const DEFAULT_PALETTE_ID = 'electric';
 export const APP_PALETTES: AppPalette[] = [
   { id: DEFAULT_PALETTE_ID, name: 'DIDC Electric', blurb: 'The everyday brand pink.', accent: '#E2144F', hover: '#FF2D6B', dark: '#C40E45' },
   { id: 'christmas', name: 'Christmas Red', blurb: 'Candy-cane red for December.', accent: '#D42A3A', hover: '#F0566A', dark: '#B01F2E' },
+  {
+    id: 'christmas_duo', name: 'Christmas Red & Green', blurb: 'Red buttons, green tabs, red and green lights.',
+    accent: '#D42A3A', hover: '#F0566A', dark: '#B01F2E', accent2: '#15803D',
+    lights: ['#E5383B', '#22A05A'],
+  },
+  {
+    id: 'tree_lights', name: 'Christmas Lights', blurb: 'Multicolour tree lights along the top bar.',
+    accent: '#D42A3A', hover: '#F0566A', dark: '#B01F2E', accent2: '#2563EB',
+    lights: ['#E5383B', '#22A05A', '#F5B700', '#2F7BF5', '#F07C1E'],
+  },
   { id: 'evergreen', name: 'Evergreen', blurb: 'Christmas-tree pine.', accent: '#1D7A55', hover: '#2E9E70', dark: '#145C40' },
   { id: 'winter', name: 'Winter Frost', blurb: 'Icy blue for January and February.', accent: '#0E7490', hover: '#1A9BC0', dark: '#0B5A70' },
   { id: 'hanukkah', name: 'Hanukkah Blue', blurb: 'Deep blue for the Festival of Lights.', accent: '#2563EB', hover: '#3B82F6', dark: '#1D4ED8' },
@@ -87,6 +109,7 @@ export const paletteVariables = (p: AppPalette): Record<string, string> => ({
   '--c-accent-hover': p.hover,
   '--c-accent-dark': p.dark,
   '--c-accent-rgb': hexToRgbTriple(p.accent),
+  '--c-accent-2': p.accent2 || p.accent,
   // index.css's own names for the same two colours.
   '--c-electric': p.accent,
   '--c-electric-2': p.hover,

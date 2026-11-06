@@ -107,7 +107,7 @@ const PortalBottomNav: React.FC<Props> = ({ slug }) => {
                 justifyContent: 'center',
                 gap: '3px',
                 textDecoration: 'none',
-                color: active ? theme.colors.primary : theme.colors.txt.tertiary,
+                color: active ? theme.colors.secondary : theme.colors.txt.tertiary,
                 transition: 'color 0.15s ease',
               }}
             >

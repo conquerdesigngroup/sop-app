@@ -155,9 +155,22 @@ const PaletteOption: React.FC<{
   >
     <span style={styles.swatchRow} aria-hidden="true">
       <span style={{ ...styles.pill, backgroundColor: p.accent }}>Save</span>
-      <span style={{ ...styles.dot, backgroundColor: p.hover }} />
-      <span style={{ ...styles.dot, backgroundColor: p.dark }} />
+      {p.accent2 ? (
+        <span style={{ ...styles.pill, backgroundColor: p.accent2 }}>Tab</span>
+      ) : (
+        <>
+          <span style={{ ...styles.dot, backgroundColor: p.hover }} />
+          <span style={{ ...styles.dot, backgroundColor: p.dark }} />
+        </>
+      )}
     </span>
+    {p.lights && (
+      <span style={styles.swatchRow} aria-hidden="true">
+        {Array.from({ length: 7 }, (_, i) => (
+          <span key={i} style={{ ...styles.bulb, backgroundColor: p.lights![i % p.lights!.length] }} />
+        ))}
+      </span>
+    )}
     <span style={styles.optionName}>
       {p.name}
       {live && <Badge variant="success">On now</Badge>}
@@ -190,7 +203,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.txt.primary,
     font: 'inherit',
   },
-  swatchRow: { display: 'flex', alignItems: 'center', gap: '6px' },
+  swatchRow: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' },
   pill: {
     padding: '4px 12px',
     borderRadius: theme.borderRadius.full,
@@ -198,6 +211,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     fontWeight: 700,
   },
+  bulb: { width: '8px', height: '11px', borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%' },
   dot: { width: '16px', height: '16px', borderRadius: theme.borderRadius.full },
   optionName: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', fontWeight: 600, fontSize: '14px' },
   optionBlurb: { fontSize: '12px', lineHeight: 1.4, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' },

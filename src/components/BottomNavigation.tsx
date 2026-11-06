@@ -311,7 +311,7 @@ const BottomNavigation: React.FC = () => {
                 backgroundColor: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                color: active ? theme.colors.primary : colors.txt.tertiary,
+                color: active ? theme.colors.secondary : colors.txt.tertiary,
                 transition: 'all 0.2s ease',
                 position: 'relative',
               }}
@@ -325,7 +325,7 @@ const BottomNavigation: React.FC = () => {
                     width: '4px',
                     height: '4px',
                     borderRadius: '50%',
-                    backgroundColor: theme.colors.primary,
+                    backgroundColor: theme.colors.secondary,
                   }}
                 />
               )}

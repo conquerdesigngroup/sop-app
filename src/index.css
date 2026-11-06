@@ -12,6 +12,7 @@
   --c-accent-hover: #FF2D6B;
   --c-accent-dark: #C40E45;
   --c-accent-rgb: 226, 20, 79;
+  --c-accent-2: #E2144F;
   --c-bg-primary: #0B0B0D;
   --c-bg-secondary: #161618;
   --c-bg-tertiary: #1E1E21;
@@ -269,9 +270,9 @@ nav button {
 /* An active nav button is the one filled with the accent: since the accent
    became a variable (holiday palettes) its inline style reads
    "background-color: var(--c-accent, ...)", not rgb(226, 20, 79). */
-nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="background-color: var(--c-accent,"]):hover,
-nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="background-color: var(--c-accent,"]):focus,
-nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="background-color: var(--c-accent,"]):active {
+nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="background-color: var(--c-accent,"]):not([style*="background-color: var(--c-accent-2,"]):hover,
+nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="background-color: var(--c-accent,"]):not([style*="background-color: var(--c-accent-2,"]):focus,
+nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="background-color: var(--c-accent,"]):not([style*="background-color: var(--c-accent-2,"]):active {
   background-color: transparent !important;
   filter: var(--btn-hover-filter, brightness(1.1));
 }
@@ -814,4 +815,17 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="backg
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Holiday lights along the top bar (src/components/HolidayLights.tsx).
+   Dims each bulb briefly, staggered per bulb. Frozen by the reduced-motion
+   rule like every other animation, which leaves them simply lit. */
+@keyframes holiday-twinkle {
+  0%, 100% { opacity: 1; }
+  45% { opacity: 1; }
+  55% { opacity: 0.35; }
+  65% { opacity: 1; }
+}
+.holiday-bulb {
+  animation: holiday-twinkle 4s ease-in-out infinite;
 }
