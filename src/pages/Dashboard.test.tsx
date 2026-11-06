@@ -56,7 +56,7 @@ jest.mock('../contexts/ThemeContext', () => ({
 jest.mock('../components/CalendarTaskModal', () => () => null);
 jest.mock('../components/EventDetailModal', () => () => null);
 // jsdom has no WebGL, and the background is not what is under test.
-jest.mock('../components/TopoField', () => () => null);
+jest.mock('../components/HomeScene', () => () => null);
 jest.mock('../lib/attendanceStaff', () => ({
   loadDay: () => Promise.resolve({ days: [], error: null }),
   loadGaps: () => Promise.resolve({ rows: [], error: null }),

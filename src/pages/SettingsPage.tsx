@@ -10,6 +10,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import { Button, Toggle } from '../components/ui';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
+import HomeSceneSettings from '../components/HomeSceneSettings';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription } from '../lib/push';
@@ -26,7 +27,7 @@ import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription
  * is needed.
  */
 const SettingsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
-  const { currentUser, updateUser, isAdmin } = useAuth();
+  const { currentUser, updateUser, isAdmin, isSuperAdmin } = useAuth();
   const { sops } = useSOPs();
   const { jobTasks, taskTemplates } = useTask();
   const { showToast } = useToast();
@@ -688,6 +689,21 @@ const SettingsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =>
               </h2>
               <span style={styles.adminBadge}>Admin Only</span>
             </div>
+
+            {/* Home background: the seasonal scenes. Super admin only. */}
+            {isSuperAdmin && (
+              <div className="card-hover-subtle" style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9 4.9 19.1" />
+                    </svg>
+                    Home background
+                  </h3>
+                </div>
+                <HomeSceneSettings />
+              </div>
+            )}
 
             {/* Data Export Card */}
             <div className="card-hover-subtle" style={styles.card}>
