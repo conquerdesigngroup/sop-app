@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkHours } from '../contexts/WorkHoursContext';
@@ -6,13 +6,39 @@ import { useResponsive } from '../hooks/useResponsive';
 import { WorkDay } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
+import { Select, Button } from '../components/ui';
+import { TIME_OPTIONS } from '../components/hours/hoursUtils';
+import {
+  ShiftTimes,
+  formatShiftRange,
+  formatShiftShort,
+  formatShiftLength,
+  validateShift,
+} from '../components/hours/workDayHours';
+
+/** The time pickers start with a "no set time" row so hours stay optional. */
+const SHIFT_TIME_OPTIONS = [{ value: '', label: 'No set time' }, ...TIME_OPTIONS];
+
+/**
+ * Tighter side padding than the stock Select: two of them share a row on a
+ * 320px phone inside the day panel, and the stock 36px chevron gutter cut
+ * "9:00 AM" down to "9:00 AI".
+ */
+const SHIFT_SELECT_STYLE: React.CSSProperties = {
+  paddingLeft: '10px',
+  paddingRight: '26px',
+  backgroundPosition: 'right 8px center',
+};
+
+const sameShift = (a: ShiftTimes | undefined, b: ShiftTimes | undefined) =>
+  (a?.startTime || '') === (b?.startTime || '') && (a?.endTime || '') === (b?.endTime || '');
 
 const WorkHoursPage: React.FC = () => {
   const { currentUser, users, isAdmin } = useAuth();
   // Deliberately only the work_days half of this context. Team Schedule shows
   // who is rostered on which day and nothing else — submitted hours belong to
   // Hours Input and must not leak back in here.
-  const { workDays, addWorkDays, deleteWorkDay, getWorkDaysByDateRange } = useWorkHours();
+  const { workDays, addWorkDays, updateWorkDay, deleteWorkDay, getWorkDaysByDateRange } = useWorkHours();
   const { showToast } = useToast();
   const { isMobileOrTablet } = useResponsive();
   const { confirm, confirmDialog } = useConfirm();
@@ -43,6 +69,19 @@ const WorkHoursPage: React.FC = () => {
   const [scheduleModalMonth, setScheduleModalMonth] = useState(new Date());
   const [recurringDays, setRecurringDays] = useState<number[]>([]); // 0=Sun, 1=Mon, etc.
   const [multiSelectRemoveMode, setMultiSelectRemoveMode] = useState(false); // Multi-select mode for removing days
+  // Work hours. scheduleStart/End are the default for every newly added day;
+  // dayHours overrides one date (a new day or one already on the schedule).
+  const [scheduleStart, setScheduleStart] = useState('');
+  const [scheduleEnd, setScheduleEnd] = useState('');
+  const [dayHours, setDayHours] = useState<Record<string, ShiftTimes>>({});
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const savingScheduleRef = useRef(false);
+
+  // Editing hours from the day detail modal on the main calendar
+  const [detailStart, setDetailStart] = useState('');
+  const [detailEnd, setDetailEnd] = useState('');
+  const [savingDetailHours, setSavingDetailHours] = useState(false);
+  const savingDetailHoursRef = useRef(false);
 
   // Schedule templates
   const scheduleTemplates = [
@@ -341,6 +380,9 @@ const WorkHoursPage: React.FC = () => {
     setSelectedDayForDetail(null);
     setRecurringDays([]);
     setMultiSelectRemoveMode(false);
+    setScheduleStart('');
+    setScheduleEnd('');
+    setDayHours({});
   };
 
   // Apply schedule template - selects all matching days in current month view
@@ -486,8 +528,42 @@ const WorkHoursPage: React.FC = () => {
     } else {
       setSelectedDates(prev => prev.filter(d => d !== date));
     }
+    setDayHours(prev => {
+      if (!(date in prev)) return prev;
+      const next = { ...prev };
+      delete next[date];
+      return next;
+    });
     setSelectedDayForDetail(null);
   };
+
+  /** The saved row for one date of the employee being scheduled, if any. */
+  const getExistingDayFor = (date: string) =>
+    getExistingWorkDaysForEmployee(scheduleEmployee).find(wd => wd.workDate === date);
+
+  /** Hours shown for a date in the Manage Schedule modal. */
+  const getHoursForDate = (date: string): ShiftTimes => {
+    if (dayHours[date]) return dayHours[date];
+    const existing = getExistingDayFor(date);
+    if (existing) return { startTime: existing.startTime, endTime: existing.endTime };
+    return { startTime: scheduleStart, endTime: scheduleEnd };
+  };
+
+  const setHoursForDate = (date: string, field: 'startTime' | 'endTime', value: string) => {
+    setDayHours(prev => ({ ...prev, [date]: { ...getHoursForDate(date), [field]: value } }));
+  };
+
+  /** Days already on the schedule whose hours were changed in the modal. */
+  const changedExistingHours = useMemo(() => {
+    if (!scheduleEmployee) return [];
+    return Object.entries(dayHours)
+      .map(([date, hours]) => ({ date, hours, day: workDays.find(
+        wd => wd.employeeId === scheduleEmployee && wd.workDate === date && wd.status !== 'cancelled'
+      ) }))
+      .filter((c): c is { date: string; hours: ShiftTimes; day: WorkDay } =>
+        !!c.day && !datesToRemove.includes(c.date)
+        && !sameShift(c.hours, { startTime: c.day.startTime, endTime: c.day.endTime }));
+  }, [dayHours, workDays, scheduleEmployee, datesToRemove]);
 
   // Close day detail panel
   const closeDayDetail = () => {
@@ -505,18 +581,39 @@ const WorkHoursPage: React.FC = () => {
   };
 
   const handleAddSchedule = async () => {
+    if (savingScheduleRef.current) return;
     if (!scheduleEmployee) {
       showToast('Please select an employee', 'error');
       return;
     }
-    if (selectedDates.length === 0 && datesToRemove.length === 0) {
+    if (selectedDates.length === 0 && datesToRemove.length === 0 && changedExistingHours.length === 0) {
       showToast('Please select days to add or remove', 'error');
       return;
     }
 
+    // Check every set of hours that is about to be saved, and point at the
+    // first bad one rather than saving half the schedule.
+    const defaultError = selectedDates.some(d => !dayHours[d])
+      ? validateShift({ startTime: scheduleStart, endTime: scheduleEnd })
+      : null;
+    if (defaultError) {
+      showToast(`Work hours: ${defaultError}`, 'error');
+      return;
+    }
+    const badDate = [...selectedDates, ...changedExistingHours.map(c => c.date)]
+      .find(d => validateShift(getHoursForDate(d)));
+    if (badDate) {
+      setSelectedDayForDetail(badDate);
+      showToast(`${formatDate(badDate)}: ${validateShift(getHoursForDate(badDate))}`, 'error');
+      return;
+    }
+
+    savingScheduleRef.current = true;
+    setSavingSchedule(true);
     try {
       let addedCount = 0;
       let removedCount = 0;
+      let retimedCount = 0;
 
       // Remove days marked for removal
       if (datesToRemove.length > 0) {
@@ -539,7 +636,9 @@ const WorkHoursPage: React.FC = () => {
         const datesToAdd = selectedDates.filter(date => !currentExistingDates.includes(date));
 
         if (datesToAdd.length > 0) {
-          await addWorkDays(scheduleEmployee, datesToAdd, scheduleNotes || undefined);
+          const hoursByDate: Record<string, ShiftTimes> = {};
+          datesToAdd.forEach(d => { hoursByDate[d] = getHoursForDate(d); });
+          await addWorkDays(scheduleEmployee, datesToAdd, scheduleNotes || undefined, hoursByDate);
           addedCount = datesToAdd.length;
         }
 
@@ -550,10 +649,20 @@ const WorkHoursPage: React.FC = () => {
         }
       }
 
+      // New hours on days that were already scheduled
+      for (const change of changedExistingHours) {
+        await updateWorkDay(change.day.id, {
+          startTime: change.hours.startTime || undefined,
+          endTime: change.hours.endTime || undefined,
+        });
+        retimedCount++;
+      }
+
       // Show appropriate message
       const messages: string[] = [];
       if (addedCount > 0) messages.push(`${addedCount} day${addedCount !== 1 ? 's' : ''} added`);
       if (removedCount > 0) messages.push(`${removedCount} day${removedCount !== 1 ? 's' : ''} removed`);
+      if (retimedCount > 0) messages.push(`hours updated on ${retimedCount} day${retimedCount !== 1 ? 's' : ''}`);
       showToast(messages.join(', '), 'success');
 
       setShowScheduleModal(false);
@@ -563,8 +672,57 @@ const WorkHoursPage: React.FC = () => {
     } catch (error: any) {
       console.error('Failed to update schedule:', error);
       showToast(`Failed to update schedule: ${error?.message || 'Unknown error'}`, 'error');
+    } finally {
+      savingScheduleRef.current = false;
+      setSavingSchedule(false);
     }
   };
+
+  // The day open in the detail modal on the main calendar, and its hours.
+  const detailDay = calendarDetailModal
+    ? workDays.find(
+        wd => wd.employeeId === calendarDetailModal.employeeId
+          && wd.workDate === calendarDetailModal.date
+          && wd.status !== 'cancelled'
+      )
+    : undefined;
+
+  useEffect(() => {
+    setDetailStart(detailDay?.startTime || '');
+    setDetailEnd(detailDay?.endTime || '');
+    // Only when a different day opens — not on every realtime refresh, which
+    // would wipe out what the person is in the middle of picking.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailDay?.id]);
+
+  const detailHoursError = validateShift({ startTime: detailStart, endTime: detailEnd });
+  const detailHoursChanged = !!detailDay && !sameShift(
+    { startTime: detailStart, endTime: detailEnd },
+    { startTime: detailDay.startTime, endTime: detailDay.endTime },
+  );
+
+  const handleSaveDetailHours = async () => {
+    if (!detailDay || savingDetailHoursRef.current || detailHoursError) return;
+    savingDetailHoursRef.current = true;
+    setSavingDetailHours(true);
+    try {
+      await updateWorkDay(detailDay.id, {
+        startTime: detailStart || undefined,
+        endTime: detailEnd || undefined,
+      });
+      showToast(detailStart ? 'Work hours saved' : 'Work hours cleared', 'success');
+    } catch (error: any) {
+      console.error('Failed to save work hours:', error);
+      showToast(`Couldn't save the hours: ${error?.message || 'Unknown error'}. Check your connection and try again.`, 'error');
+    } finally {
+      savingDetailHoursRef.current = false;
+      setSavingDetailHours(false);
+    }
+  };
+
+  /** "Jess Smith · 9:00 AM – 5:00 PM · note" for tooltips. */
+  const describeDay = (wd: WorkDay) =>
+    [getUserName(wd.employeeId), formatShiftRange(wd), wd.notes].filter(Boolean).join(' · ');
 
   const handleDeleteWorkDay = async (id: string) => {
     const confirmed = await confirm({
@@ -706,6 +864,11 @@ const WorkHoursPage: React.FC = () => {
                       <div key={day.id} style={styles.scheduleEmployeeCard}>
                         <div style={styles.scheduleEmployeeInfo}>
                           <div style={styles.scheduleEmployeeName}>{getUserName(day.employeeId)}</div>
+                          {formatShiftRange(day) && (
+                            <div style={styles.scheduleHours}>
+                              {formatShiftRange(day)} <span style={styles.scheduleHoursLength}>({formatShiftLength(day)})</span>
+                            </div>
+                          )}
                           {day.notes && <div style={styles.scheduleNotes}>{day.notes}</div>}
                         </div>
                         <div style={styles.scheduleActions}>
@@ -837,9 +1000,14 @@ const WorkHoursPage: React.FC = () => {
                                   <span style={styles.dayViewEntryName}>{getUserName(wd.employeeId)}</span>
                                 </div>
                               </div>
-                              {wd.notes && (
+                              {(formatShiftRange(wd) || wd.notes) && (
                                 <div style={styles.dayViewEntryDetails}>
-                                  <div style={styles.dayViewEntryTime}>{wd.notes}</div>
+                                  {formatShiftRange(wd) && (
+                                    <div style={styles.dayViewEntryHours}>
+                                      {formatShiftRange(wd)} · {formatShiftLength(wd)}
+                                    </div>
+                                  )}
+                                  {wd.notes && <div style={styles.dayViewEntryTime}>{wd.notes}</div>}
                                 </div>
                               )}
                             </div>
@@ -886,11 +1054,16 @@ const WorkHoursPage: React.FC = () => {
                                   ...(isMobileOrTablet ? styles.weekViewEntryMobile : styles.weekViewEntry),
                                   backgroundColor: getUserColor(wd.employeeId),
                                 }}
-                                title={wd.notes ? `${getUserName(wd.employeeId)} - ${wd.notes}` : getUserName(wd.employeeId)}
+                                title={describeDay(wd)}
                               >
                                 <span style={isMobileOrTablet ? styles.weekViewEntryNameMobile : styles.weekViewEntryName}>
                                   {isMobileOrTablet ? getUserName(wd.employeeId).split(' ')[0].charAt(0) + '.' : getUserName(wd.employeeId).split(' ')[0]}
                                 </span>
+                                {formatShiftShort(wd) && (
+                                  <span style={isMobileOrTablet ? styles.weekViewEntryHoursMobile : styles.weekViewEntryHours}>
+                                    {formatShiftShort(wd)}
+                                  </span>
+                                )}
                               </div>
                             );
                           })
@@ -947,9 +1120,11 @@ const WorkHoursPage: React.FC = () => {
                               backgroundColor: getUserColor(wd.employeeId),
                               cursor: 'pointer',
                             }}
-                            title={wd.notes ? `${getUserName(wd.employeeId)} - ${wd.notes}` : getUserName(wd.employeeId)}
+                            title={describeDay(wd)}
                           >
-                            {isMobileOrTablet ? getUserName(wd.employeeId).split(' ')[0].substring(0, 4) : getUserName(wd.employeeId).split(' ')[0]}
+                            {isMobileOrTablet
+                              ? getUserName(wd.employeeId).split(' ')[0].substring(0, 4)
+                              : [getUserName(wd.employeeId).split(' ')[0], formatShiftShort(wd)].filter(Boolean).join(' ')}
                           </div>
                         );
                       })}
@@ -1233,6 +1408,39 @@ const WorkHoursPage: React.FC = () => {
                     </button>
                   </div>
 
+                  {(() => {
+                    const hours = getHoursForDate(selectedDayForDetail);
+                    const error = validateShift(hours);
+                    return (
+                      <div style={{ marginBottom: theme.spacing.md }}>
+                        <div style={styles.hoursGrid}>
+                          <Select
+                            label="Start"
+                            aria-label={`Start time on ${formatDate(selectedDayForDetail)}`}
+                            size="sm"
+                            options={SHIFT_TIME_OPTIONS}
+                            style={SHIFT_SELECT_STYLE}
+                            value={hours.startTime || ''}
+                            onChange={e => setHoursForDate(selectedDayForDetail, 'startTime', e.target.value)}
+                          />
+                          <Select
+                            label="End"
+                            aria-label={`End time on ${formatDate(selectedDayForDetail)}`}
+                            size="sm"
+                            options={SHIFT_TIME_OPTIONS}
+                            style={SHIFT_SELECT_STYLE}
+                            value={hours.endTime || ''}
+                            error={error || undefined}
+                            onChange={e => setHoursForDate(selectedDayForDetail, 'endTime', e.target.value)}
+                          />
+                        </div>
+                        {!error && formatShiftLength(hours) && (
+                          <div style={styles.hoursHint}>{formatShiftLength(hours)} on this day</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <div style={styles.dayDetailActions}>
                     <button
                       onClick={() => handleRemoveDay(selectedDayForDetail)}
@@ -1249,7 +1457,7 @@ const WorkHoursPage: React.FC = () => {
               )}
 
               {/* Summary of Changes */}
-              {(selectedDates.length > 0 || datesToRemove.length > 0) && (
+              {(selectedDates.length > 0 || datesToRemove.length > 0 || changedExistingHours.length > 0) && (
                 <div style={styles.changesSummary}>
                   {selectedDates.length > 0 && (
                     <span style={styles.addingSummary}>
@@ -1261,8 +1469,40 @@ const WorkHoursPage: React.FC = () => {
                       -{datesToRemove.length} day{datesToRemove.length !== 1 ? 's' : ''} to remove
                     </span>
                   )}
+                  {changedExistingHours.length > 0 && (
+                    <span style={styles.retimingSummary}>
+                      New hours on {changedExistingHours.length} day{changedExistingHours.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
                 </div>
               )}
+
+              {/* Work hours for the newly added days */}
+              <div style={styles.formGroup}>
+                <span style={styles.label}>Work hours for new days (optional)</span>
+                <div style={styles.hoursGrid}>
+                  <Select
+                    label="Start"
+                    aria-label="Start time for new days"
+                    options={SHIFT_TIME_OPTIONS}
+                            style={SHIFT_SELECT_STYLE}
+                    value={scheduleStart}
+                    onChange={e => setScheduleStart(e.target.value)}
+                  />
+                  <Select
+                    label="End"
+                    aria-label="End time for new days"
+                    options={SHIFT_TIME_OPTIONS}
+                            style={SHIFT_SELECT_STYLE}
+                    value={scheduleEnd}
+                    error={validateShift({ startTime: scheduleStart, endTime: scheduleEnd }) || undefined}
+                    onChange={e => setScheduleEnd(e.target.value)}
+                  />
+                </div>
+                <span style={styles.hoursHint}>
+                  Applies to every day you add. Tap a day on the calendar to give just that day different hours.
+                </span>
+              </div>
 
               {/* Notes */}
               <div style={styles.formGroup}>
@@ -1281,16 +1521,21 @@ const WorkHoursPage: React.FC = () => {
               <button onClick={() => { setShowScheduleModal(false); resetScheduleForm(); }} style={styles.cancelButton}>
                 Cancel
               </button>
-              <button
-                onClick={handleAddSchedule}
-                style={{
-                  ...styles.saveButton,
-                  opacity: (selectedDates.length === 0 && datesToRemove.length === 0) ? 0.5 : 1,
-                }}
-                disabled={selectedDates.length === 0 && datesToRemove.length === 0}
-              >
-                Save Changes
-              </button>
+              {(() => {
+                const nothingToSave = selectedDates.length === 0 && datesToRemove.length === 0 && changedExistingHours.length === 0;
+                return (
+                  <button
+                    onClick={handleAddSchedule}
+                    style={{
+                      ...styles.saveButton,
+                      opacity: (nothingToSave || savingSchedule) ? 0.5 : 1,
+                    }}
+                    disabled={nothingToSave || savingSchedule}
+                  >
+                    {savingSchedule ? 'Saving…' : 'Save Changes'}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1298,11 +1543,8 @@ const WorkHoursPage: React.FC = () => {
 
       {/* Scheduled Day Detail Modal */}
       {calendarDetailModal && (() => {
-        const day = workDays.find(
-          wd => wd.employeeId === calendarDetailModal.employeeId
-            && wd.workDate === calendarDetailModal.date
-            && wd.status !== 'cancelled'
-        );
+        const day = detailDay;
+        const canEditHours = !!day && (isAdmin || day.employeeId === currentUser?.id);
         return (
           <div style={styles.modalOverlay} onClick={() => setCalendarDetailModal(null)}>
             <div style={{ ...styles.modal, maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
@@ -1320,9 +1562,50 @@ const WorkHoursPage: React.FC = () => {
                 <div style={styles.calendarDetailDate}>
                   {formatDate(calendarDetailModal.date)}
                 </div>
+                <div style={styles.calendarDetailHours}>
+                  {day && formatShiftRange(day)
+                    ? <>{formatShiftRange(day)} <span style={styles.scheduleHoursLength}>({formatShiftLength(day)})</span></>
+                    : <span style={{ color: theme.colors.txt.tertiary }}>No set hours</span>}
+                </div>
                 {day?.notes
                   ? <p style={styles.calendarDetailNote}>{day.notes}</p>
                   : <p style={styles.calendarDetailNoteEmpty}>Scheduled to work. No note for this day.</p>}
+
+                {canEditHours && (
+                  <div style={styles.calendarDetailEdit}>
+                    <div style={styles.hoursGrid}>
+                      <Select
+                        label="Start"
+                        size="sm"
+                        options={SHIFT_TIME_OPTIONS}
+                            style={SHIFT_SELECT_STYLE}
+                        value={detailStart}
+                        disabled={savingDetailHours}
+                        onChange={e => setDetailStart(e.target.value)}
+                      />
+                      <Select
+                        label="End"
+                        size="sm"
+                        options={SHIFT_TIME_OPTIONS}
+                            style={SHIFT_SELECT_STYLE}
+                        value={detailEnd}
+                        disabled={savingDetailHours}
+                        error={detailHoursError || undefined}
+                        onChange={e => setDetailEnd(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveDetailHours}
+                      disabled={!detailHoursChanged || !!detailHoursError || savingDetailHours}
+                      loading={savingDetailHours}
+                      style={{ marginTop: theme.spacing.sm }}
+                    >
+                      {savingDetailHours ? 'Saving hours…' : 'Save hours'}
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div style={styles.modalFooter}>
@@ -1777,6 +2060,61 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '13px',
     color: theme.colors.txt.tertiary,
   },
+  scheduleHours: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: theme.colors.txt.secondary,
+    marginTop: '2px',
+  },
+  scheduleHoursLength: {
+    fontWeight: 400,
+    color: theme.colors.txt.tertiary,
+  },
+  hoursGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+    gap: theme.spacing.sm,
+  },
+  hoursHint: {
+    fontSize: '12px',
+    color: theme.colors.txt.tertiary,
+    marginTop: '4px',
+  },
+  retimingSummary: {
+    color: theme.colors.status.info,
+    fontWeight: 600,
+  },
+  calendarDetailHours: {
+    fontSize: '15px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+    textAlign: 'center',
+  },
+  calendarDetailEdit: {
+    marginTop: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    borderTop: `1px solid ${theme.colors.bdr.primary}`,
+  },
+  dayViewEntryHours: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
+  weekViewEntryHours: {
+    fontSize: '11px',
+    fontWeight: 500,
+    opacity: 0.9,
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+  weekViewEntryHoursMobile: {
+    fontSize: '9px',
+    opacity: 0.9,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    minWidth: 0,
+  },
   scheduleActions: {
     display: 'flex',
     alignItems: 'center',
@@ -2143,7 +2481,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   changesSummary: {
     display: 'flex',
     justifyContent: 'center',
-    gap: '16px',
+    flexWrap: 'wrap',
+    gap: '4px 16px',
     marginBottom: '16px',
     fontSize: '14px',
     fontWeight: 500,
@@ -2608,6 +2947,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 500,
     color: '#FFFFFF',
     display: 'flex',
+    flexWrap: 'wrap',
+    gap: '2px 6px',
     justifyContent: 'space-between',
     alignItems: 'center',
     cursor: 'pointer',
@@ -2620,6 +2961,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 500,
     color: '#FFFFFF',
     display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
     justifyContent: 'space-between',
     alignItems: 'center',
     cursor: 'pointer',

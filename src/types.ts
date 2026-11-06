@@ -391,6 +391,10 @@ export interface WorkDay {
   employeeId: string;
   workDate: string; // ISO date format (YYYY-MM-DD)
   status: WorkDayStatus;
+  /** Planned start, "HH:MM" 24-hour. Unset = no set hours (migration v77). */
+  startTime?: string;
+  /** Planned end, "HH:MM" 24-hour. Only meaningful alongside startTime. */
+  endTime?: string;
   notes?: string;
   createdBy: string;
   createdAt: string;

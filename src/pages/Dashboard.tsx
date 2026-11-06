@@ -20,6 +20,7 @@ import Shortcuts from '../components/dashboard/Shortcuts';
 import TopoField from '../components/TopoField';
 import { Button, Card } from '../components/ui';
 import { JobTask, User, CalendarEvent, WorkDay } from '../types';
+import { formatShiftRange, formatShiftShort } from '../components/hours/workDayHours';
 
 // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight — bare new Date()
 // parses it as UTC and shifts the day back in US timezones.
@@ -637,12 +638,15 @@ const ScheduleSnapshot: React.FC<{
                         ...styles.scheduleUserPill,
                         backgroundColor: getUserColor(item.employeeId),
                       }}
-                      title={`${item.user.firstName} ${item.user.lastName}`}
+                      title={[`${item.user.firstName} ${item.user.lastName}`, formatShiftRange(item)].filter(Boolean).join(' · ')}
                     >
                       {isMobileOrTablet
                         ? `${item.user.firstName.charAt(0)}.`
                         : item.user.firstName.split(' ')[0]
                       }
+                      {!isMobileOrTablet && formatShiftShort(item) && (
+                        <div style={styles.scheduleUserHours}>{formatShiftShort(item)}</div>
+                      )}
                     </div>
                   ))
                 )}
@@ -1667,6 +1671,13 @@ const styles: { [key: string]: React.CSSProperties } = {
   scheduleNoOne: {
     color: theme.colors.txt.tertiary,
     fontSize: '12px',
+  },
+  scheduleUserHours: {
+    fontSize: '10px',
+    fontWeight: 400,
+    opacity: 0.9,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   scheduleUserPill: {
     padding: '3px 8px',
