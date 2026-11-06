@@ -49,6 +49,12 @@ export interface HomeSceneDef {
 const TAU = Math.PI * 2;
 const PINK = '226,20,79';
 /**
+ * Snow on a light page. White snow vanishes on white, and grey reads as ash;
+ * a cold winter blue reads as snow in shadow, which is what it is against a
+ * bright sky.
+ */
+const LIGHT_SNOW = '150,172,210';
+/**
  * Scenes draw their randomness from here rather than Math.random, so the
  * runner can rebuild a scene from the same seed. A resize (a phone rotating,
  * a desktop window dragged) then redraws the SAME village at the new size
@@ -199,12 +205,12 @@ const firstSnow: HomeSceneDef = {
   fps: 30,
   create(w, h, { dark }) {
     const flakes = makeSnow(w, h);
-    const snow = dark ? '244,244,245' : '120,124,140';
+    const snow = dark ? '244,244,245' : LIGHT_SNOW;
     return {
       draw(ctx, t, dt) {
         ctx.clearRect(0, 0, w, h);
         const g = ctx.createLinearGradient(0, 0, 0, h * 0.6);
-        g.addColorStop(0, dark ? 'rgba(160,170,200,.07)' : 'rgba(90,100,130,.06)');
+        g.addColorStop(0, dark ? 'rgba(160,170,200,.07)' : 'rgba(150,180,230,.16)');
         g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
@@ -230,14 +236,17 @@ const holidayVillage: HomeSceneDef = {
   fps: 30,
   create(w, h, { dark, floor = 0 }) {
     const flakes = makeSnow(w, h, 0.8, 0);
-    const snow = dark ? '244,244,245' : '150,156,172';
+    const snow = dark ? '244,244,245' : LIGHT_SNOW;
     const ground = h - floor - Math.min(floor ? 24 : 70, h * 0.07);
     // Houses scale a little with the screen but stay house-sized on a desktop.
     const u = Math.min(1.5, Math.max(0.85, w / 390));
 
     const pal = dark
       ? { far: '#131318', near: '#1B1B21', edge: 'rgba(255,255,255,.05)', roofSnow: 'rgba(240,242,248,.88)', bank: 'rgba(225,230,242,', hill: '#101015' }
-      : { far: '#B9BAC4', near: '#4A4A55', edge: 'rgba(0,0,0,.08)', roofSnow: 'rgba(255,255,255,.98)', bank: 'rgba(255,255,255,', hill: '#D2D3DB' };
+      : // Light mode is winter dusk, not a grey day: slate-blue houses against a
+        // peach horizon, deep green pines, and the windows doing the warm work.
+        { far: '#9AA8C2', near: '#34405C', edge: 'rgba(255,255,255,.18)', roofSnow: 'rgba(255,255,255,1)', bank: 'rgba(250,252,255,', hill: '#CBD6EA' };
+    const pineCol = dark ? { far: pal.far, near: pal.near } : { far: '#93B0A8', near: '#24503F' };
 
     type Win = { x: number; y: number; w: number; h: number; ph: number; lit: boolean; far: boolean };
     const windows: Win[] = [];
@@ -323,7 +332,7 @@ const holidayVillage: HomeSceneDef = {
       if (opts.door && !far) {
         const dw = 8 * u, dh = 13 * u;
         const dx = x + bw / 2 - dw / 2;
-        c.fillStyle = dark ? '#0E0E12' : '#2A2A32';
+        c.fillStyle = dark ? '#0E0E12' : '#222A3E';
         c.fillRect(dx, base - dh, dw, dh);
         if (!wreath && rand() < 0.5) wreath = { x: x + bw / 2, y: base - dh - 6 * u };
         else windows.push({ x: dx + 1.5 * u, y: base - dh + 1.5 * u, w: dw - 3 * u, h: 3 * u, ph: rnd(0, TAU), lit: true, far: false });
@@ -332,7 +341,7 @@ const holidayVillage: HomeSceneDef = {
 
     const pine = (c: CanvasRenderingContext2D, x: number, size: number, far: boolean) => {
       const base = far ? ground - 14 * u : ground;
-      c.fillStyle = far ? pal.far : pal.near;
+      c.fillStyle = far ? pineCol.far : pineCol.near;
       for (let i = 0; i < 3; i++) {
         const tw = size * (1 - i * 0.25);
         const ty = base - i * size * 0.38;
@@ -349,7 +358,7 @@ const holidayVillage: HomeSceneDef = {
         c.lineTo(x + tw * 0.18, ty - size * 0.4);
         c.closePath();
         c.fill();
-        c.fillStyle = far ? pal.far : pal.near;
+        c.fillStyle = far ? pineCol.far : pineCol.near;
       }
     };
 
@@ -409,11 +418,22 @@ const holidayVillage: HomeSceneDef = {
       draw(ctx, t, dt, still) {
         ctx.clearRect(0, 0, w, h);
         // Warm town glow on the horizon, a cold sky above.
-        const sky = ctx.createLinearGradient(0, ground - 220 * u, 0, ground);
-        sky.addColorStop(0, 'rgba(0,0,0,0)');
-        sky.addColorStop(1, dark ? 'rgba(255,160,80,.10)' : 'rgba(255,170,90,.12)');
-        ctx.fillStyle = sky;
-        ctx.fillRect(0, ground - 220 * u, w, 220 * u);
+        if (dark) {
+          const sky = ctx.createLinearGradient(0, ground - 220 * u, 0, ground);
+          sky.addColorStop(0, 'rgba(0,0,0,0)');
+          sky.addColorStop(1, 'rgba(255,160,80,.10)');
+          ctx.fillStyle = sky;
+          ctx.fillRect(0, ground - 220 * u, w, 220 * u);
+        } else {
+          // Dusk: an icy blue sky that warms to peach and rose at the rooftops.
+          const sky = ctx.createLinearGradient(0, 0, 0, ground);
+          sky.addColorStop(0, 'rgba(176,198,236,.22)');
+          sky.addColorStop(0.45, 'rgba(214,224,244,.10)');
+          sky.addColorStop(0.78, 'rgba(255,214,190,.30)');
+          sky.addColorStop(1, 'rgba(255,184,140,.55)');
+          ctx.fillStyle = sky;
+          ctx.fillRect(0, 0, w, ground);
+        }
 
         drawSnow(ctx, flakes, w, h, t, dt, snow, 0.9);
         ctx.drawImage(stat, 0, 0, w, h);
@@ -425,27 +445,27 @@ const holidayVillage: HomeSceneDef = {
           const rise = p.age * 70 * u;
           const r = (5 + p.age * 16) * u;
           const x = p.c.x + Math.sin(p.age * 4 + p.ph + t * 0.3) * 5 * u + p.age * 14 * u;
-          ctx.globalAlpha = (dark ? 0.1 : 0.16) * Math.sin(p.age * Math.PI);
-          ctx.drawImage(softDisc(dark ? '200,200,210' : '140,140,150', 0.3), x - r, p.c.y - rise - r, r * 2, r * 2);
+          ctx.globalAlpha = (dark ? 0.1 : 0.32) * Math.sin(p.age * Math.PI);
+          ctx.drawImage(softDisc(dark ? '200,200,210' : '255,255,255', 0.3), x - r, p.c.y - rise - r, r * 2, r * 2);
         }
 
         // Windows: a warm glow behind a lit pane, flickering like a fire inside.
         for (const win of windows) {
           if (!win.lit) {
             ctx.globalAlpha = 1;
-            ctx.fillStyle = dark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.18)';
+            ctx.fillStyle = dark ? 'rgba(255,255,255,.04)' : 'rgba(20,28,48,.35)';
             ctx.fillRect(win.x, win.y, win.w, win.h);
             continue;
           }
           const flick = still ? 0.9 : 0.82 + 0.1 * Math.sin(t * 2.1 + win.ph) + 0.06 * Math.sin(t * 7.3 + win.ph * 2);
           const R = (win.far ? 9 : 16) * u;
-          ctx.globalAlpha = (win.far ? 0.25 : 0.38) * flick;
+          ctx.globalAlpha = (win.far ? 0.25 : 0.38) * (dark ? 1 : 1.35) * flick;
           ctx.drawImage(softDisc(warm, 0.1), win.x + win.w / 2 - R, win.y + win.h / 2 - R, R * 2, R * 2);
           ctx.globalAlpha = (win.far ? 0.7 : 0.95) * flick;
           ctx.fillStyle = warmCore;
           ctx.fillRect(win.x, win.y, win.w, win.h);
           if (!win.far && win.w > 5) {
-            ctx.fillStyle = dark ? '#1B1B21' : '#4A4A55';
+            ctx.fillStyle = dark ? '#1B1B21' : pal.near;
             ctx.globalAlpha = 0.7;
             ctx.fillRect(win.x + win.w / 2 - 0.5, win.y, 1, win.h);
             ctx.fillRect(win.x, win.y + win.h / 2 - 0.5, win.w, 1);
@@ -790,7 +810,7 @@ const glassOrnaments: HomeSceneDef = {
     return {
       draw(ctx, t, dt) {
         ctx.clearRect(0, 0, w, h);
-        drawSnow(ctx, flakes, w, h, t, dt, dark ? '244,244,245' : '120,124,140', 0.7);
+        drawSnow(ctx, flakes, w, h, t, dt, dark ? '244,244,245' : LIGHT_SNOW, 0.7);
         for (const b of balls) {
           const ang = Math.sin(t * b.om + b.ph) * b.amp;
           const bx = b.x + Math.sin(ang) * b.len;
