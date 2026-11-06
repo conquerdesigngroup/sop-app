@@ -192,11 +192,14 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editingTask, initialTemplateId]);
 
-  // A fresh form starts with no uploads of its own.
+  // A fresh form starts with no uploads of its own, and not mid-save. The
+  // modal stays mounted between opens, so without this a save from an
+  // earlier open left every later one stuck on "Saving...".
   useEffect(() => {
     if (isOpen) {
       sessionUploads.current.clear();
       setUploadsInFlight(0);
+      setIsSubmitting(false);
     }
   }, [isOpen]);
 
@@ -432,7 +435,11 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         onSuccess();
       }
     } catch (error) {
-      // Reset submitting state on error so user can try again
+      // Nothing to do here beyond letting the person try again.
+    } finally {
+      // Always, not only on a throw: the page's onCreate reports its own
+      // failures and returns normally, leaving this form open, and a button
+      // still saying "Saving..." would then never come back.
       setIsSubmitting(false);
     }
   };
