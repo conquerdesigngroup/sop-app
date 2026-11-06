@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { theme } from '../theme';
 import { useToast } from '../contexts/ToastContext';
 import { useHomeScene } from '../hooks/useHomeScene';
-import { DEFAULT_SCENE_ID, HOLIDAY_SEASONS, HOME_SCENES, HolidaySeason, effectiveSceneId, localDayKey } from '../lib/homeScenes';
+import { DEFAULT_SCENE_ID, HOLIDAY_SEASONS, HOME_SCENES, effectiveSceneId, localDayKey, suggestedEnd } from '../lib/homeScenes';
 import { Badge, Button, Input, Toggle } from './ui';
 import { SceneCanvas } from './HomeScene';
 
@@ -17,26 +17,6 @@ import { SceneCanvas } from './HomeScene';
  * Every preview is a still frame except the one that is selected, which
  * animates: eight live canvases on a phone would cost more than the page.
  */
-
-/**
- * A sensible "until" for each holiday. Christmas: Twelfth Night of the coming
- * season. Thanksgiving: the Sunday after it (the fourth Thursday of November),
- * this year's, or next year's once this year's has gone.
- */
-export const suggestedEnd = (season: HolidaySeason, today = new Date()): string => {
-  if (season === 'thanksgiving') {
-    const sundayAfter = (y: number) => {
-      const first = new Date(y, 10, 1).getDay();
-      const thursday = 1 + ((4 - first + 7) % 7) + 21;
-      return new Date(y, 10, thursday + 3);
-    };
-    let end = sundayAfter(today.getFullYear());
-    if (localDayKey(end) < localDayKey(today)) end = sundayAfter(today.getFullYear() + 1);
-    return localDayKey(end);
-  }
-  const year = today.getMonth() === 0 ? today.getFullYear() : today.getFullYear() + 1;
-  return `${year}-01-06`;
-};
 
 const HomeSceneSettings: React.FC = () => {
   const { setting, save } = useHomeScene();
@@ -72,7 +52,7 @@ const HomeSceneSettings: React.FC = () => {
     setScene(id);
     const season = HOME_SCENES.find(s => s.id === id)?.season;
     if (season && (!endsOn || autoEnd.current)) {
-      setEndsOn(suggestedEnd(season));
+      setEndsOn(suggestedEnd(season) || '');
       autoEnd.current = true;
     }
   };
@@ -243,7 +223,7 @@ const SceneOption: React.FC<{
 };
 
 /** A drawn hint of the contour field; TopoField itself is page-sized and fixed. */
-const EverydayPreview: React.FC = () => (
+export const EverydayPreview: React.FC = () => (
   <svg viewBox="0 0 120 90" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden="true">
     {Array.from({ length: 9 }, (_, i) => (
       <path

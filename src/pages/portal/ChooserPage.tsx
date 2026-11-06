@@ -7,6 +7,7 @@ import { portalRoutes } from '../../lib/portal';
 import InstallAppGuide from '../../components/InstallAppGuide';
 import ThemeToggle from '../../components/ThemeToggle';
 import { ChooserScene } from '../../components/HomeScene';
+import { burstConfetti } from '../../lib/confetti';
 
 /**
  * The front door.
@@ -78,6 +79,14 @@ const ChooserTile: React.FC<TileProps> = ({ to, label, icon, accent = false }) =
   return (
     <Link
       to={to}
+      // A confetti send-off from where the tap landed (the middle of the tile
+      // for a keyboard press). It runs on its own overlay, so navigation is
+      // not held up and the burst finishes over the next screen.
+      onClick={e => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const fromKeyboard = e.clientX === 0 && e.clientY === 0;
+        burstConfetti(fromKeyboard ? r.left + r.width / 2 : e.clientX, fromKeyboard ? r.top + r.height / 2 : e.clientY);
+      }}
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => setActive(false)}
       onFocus={() => setActive(true)}
