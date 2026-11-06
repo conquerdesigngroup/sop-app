@@ -1,732 +1,555 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTask, TASK_COMPLETE_MARKER } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSOPs } from '../contexts/SOPContext';
 import { useToast } from '../contexts/ToastContext';
-import { JobTask, TaskStep } from '../types';
+import { JobTask } from '../types';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { studioToday, shiftIsoDays } from '../lib/studioDate';
-import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
+import { Badge, Button, Card, Modal, Select } from '../components/ui';
+
+/**
+ * My Tasks — a team member's own checklist.
+ *
+ * The list is deliberately just titles with a checkbox: tick it and the task is
+ * done. Everything else an admin may have filled in (description, steps, due
+ * time, priority, SOPs) lives one tap away in the task's detail modal, and the
+ * modal only shows the fields that were actually filled in, so a task that is
+ * nothing but a title reads as nothing but a title.
+ */
+
+const isTaskDone = (task: JobTask) => task.status === 'completed';
+
+/** The patch that marks a task finished, steps and all. */
+const completePatch = (task: JobTask): Partial<JobTask> => {
+  const now = new Date().toISOString();
+  if (task.steps.length === 0) {
+    return {
+      completedSteps: [TASK_COMPLETE_MARKER],
+      status: 'completed',
+      progressPercentage: 100,
+      completedAt: now,
+    };
+  }
+  return {
+    steps: task.steps.map(s => ({ ...s, isCompleted: true, completedAt: s.completedAt || now })),
+    completedSteps: task.steps.map(s => s.id),
+    status: 'completed',
+    progressPercentage: 100,
+    startedAt: task.startedAt || now,
+    completedAt: now,
+  };
+};
+
+/** The patch that puts a finished task back on the to-do list. */
+const reopenPatch = (task: JobTask): Partial<JobTask> => ({
+  ...(task.steps.length > 0
+    ? { steps: task.steps.map(s => ({ ...s, isCompleted: false, completedAt: undefined })) }
+    : {}),
+  completedSteps: [],
+  status: 'pending',
+  progressPercentage: 0,
+  completedAt: undefined,
+});
+
+/** The patch for ticking or unticking one step. */
+const stepTogglePatch = (task: JobTask, stepId: string): Partial<JobTask> | null => {
+  if (!task.steps.some(s => s.id === stepId)) return null;
+  const wasDone = task.completedSteps.includes(stepId);
+  const now = new Date().toISOString();
+  const steps = task.steps.map(s =>
+    s.id === stepId ? { ...s, isCompleted: !wasDone, completedAt: wasDone ? undefined : now } : s
+  );
+  const completedSteps = wasDone
+    ? task.completedSteps.filter(id => id !== stepId)
+    : [...task.completedSteps.filter(id => id !== TASK_COMPLETE_MARKER), stepId];
+  const doneCount = completedSteps.filter(id => task.steps.some(s => s.id === id)).length;
+  const status: JobTask['status'] =
+    doneCount === 0 ? 'pending' : doneCount === task.steps.length ? 'completed' : 'in-progress';
+  return {
+    steps,
+    completedSteps,
+    status,
+    progressPercentage: Math.round((doneCount / task.steps.length) * 100),
+    startedAt: task.startedAt || now,
+    ...(status === 'completed' ? { completedAt: now } : {}),
+  };
+};
+
+const formatDay = (iso: string, long = false) => {
+  const todayStr = studioToday();
+  if (iso === todayStr) return 'Today';
+  if (iso === shiftIsoDays(todayStr, 1)) return 'Tomorrow';
+  if (iso === shiftIsoDays(todayStr, -1)) return 'Yesterday';
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', {
+    weekday: long ? 'long' : undefined,
+    month: long ? 'long' : 'short',
+    day: 'numeric',
+  });
+};
+
+const formatTime = (hhmm?: string) => {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  if (Number.isNaN(h)) return hhmm;
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')} ${suffix}`;
+};
 
 const MyTasksPage: React.FC = () => {
   const { jobTasks, updateJobTask } = useTask();
   const { currentUser } = useAuth();
   const { sops } = useSOPs();
-  const { success: showSuccess, error: showError } = useToast();
+  const { error: showError } = useToast();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
-  const [selectedTask, setSelectedTask] = useState<JobTask | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
-  // Quick complete task (mark all steps as done)
-  const handleQuickComplete = useCallback(async (task: JobTask) => {
-    try {
-      if (task.steps.length === 0) {
-        // Task without steps - use the special marker
-        await updateJobTask(task.id, {
-          completedSteps: [TASK_COMPLETE_MARKER],
-          status: 'completed',
-          progressPercentage: 100,
-          completedAt: new Date().toISOString(),
-        });
-      } else {
-        // Task with steps - mark all steps complete
-        const allStepIds = task.steps.map(s => s.id);
-        const updatedSteps = task.steps.map(s => ({
-          ...s,
-          isCompleted: true,
-          completedAt: new Date().toISOString(),
-        }));
 
-        await updateJobTask(task.id, {
-          steps: updatedSteps,
-          completedSteps: allStepIds,
-          status: 'completed',
-          progressPercentage: 100,
-          completedAt: new Date().toISOString(),
+  /**
+   * Saves land in TaskContext only once the server has answered, so a tick
+   * would otherwise sit unticked for the length of a round trip — exactly
+   * long enough for someone to tick it again. Each save is shown here
+   * straight away and dropped once the context has caught up (or failed).
+   */
+  const [patches, setPatches] = useState<Record<string, Partial<JobTask>>>({});
+  const patchVersion = useRef<Record<string, number>>({});
+  const savingIds = useRef<Set<string>>(new Set());
+  const [saving, setSaving] = useState<string[]>([]);
+
+  const withPatch = useCallback(
+    (task: JobTask): JobTask => (patches[task.id] ? { ...task, ...patches[task.id] } : task),
+    [patches]
+  );
+
+  const saveTask = useCallback(async (task: JobTask, patch: Partial<JobTask>) => {
+    const version = (patchVersion.current[task.id] || 0) + 1;
+    patchVersion.current[task.id] = version;
+    setPatches(prev => ({ ...prev, [task.id]: { ...prev[task.id], ...patch } }));
+    try {
+      await updateJobTask(task.id, patch);
+    } catch (error) {
+      console.error('Failed to save task change:', error);
+      showError('Could not save the change. Check your connection and try again.');
+    } finally {
+      if (patchVersion.current[task.id] === version) {
+        setPatches(prev => {
+          const next = { ...prev };
+          delete next[task.id];
+          return next;
         });
       }
-
-      showSuccess(`"${task.title}" marked as complete!`);
-    } catch (error) {
-      console.error('Failed to complete task:', error);
-      showError('Could not save the change. Check your connection and try again.');
     }
-  }, [updateJobTask, showSuccess, showError]);
+  }, [updateJobTask, showError]);
 
-  // Check if we should apply filters based on navigation state
+  /** The checkbox on a row: finish the task, or put it back on the list. */
+  const toggleDone = useCallback(async (task: JobTask) => {
+    // A second tap can land before the re-render that disables the box.
+    if (savingIds.current.has(task.id)) return;
+    savingIds.current.add(task.id);
+    setSaving(prev => [...prev, task.id]);
+    try {
+      await saveTask(task, isTaskDone(task) ? reopenPatch(task) : completePatch(task));
+    } finally {
+      savingIds.current.delete(task.id);
+      setSaving(prev => prev.filter(id => id !== task.id));
+    }
+  }, [saveTask]);
+
+  const toggleStep = useCallback((task: JobTask, stepId: string) => {
+    const patch = stepTogglePatch(task, stepId);
+    if (patch) saveTask(task, patch);
+  }, [saveTask]);
+
+  // Dashboard links arrive with a filter in navigation state.
   useEffect(() => {
     if (location.state) {
       const state = location.state as any;
-      if (state.filterStatus) {
-        setFilterStatus(state.filterStatus);
-      }
-      if (state.filterDate) {
-        setFilterDate(state.filterDate);
-      }
-      // Clear the state so it doesn't reapply on refresh
+      if (state.filterStatus) setFilterStatus(state.filterStatus);
+      if (state.filterDate) setFilterDate(state.filterDate);
       window.history.replaceState({}, document.title);
     }
   }, [location]);
 
-  // Get tasks assigned to current user (excluding archived and draft tasks)
-  const myTasks = jobTasks.filter(task =>
-    currentUser &&
-    task.assignedTo.includes(currentUser.id) &&
-    task.status !== 'archived' &&
-    task.status !== 'draft'
-  );
-
-  // A task is overdue if its date has passed and it isn't completed —
-  // computed here so the filter works even before the server-side sweep runs
   const today = studioToday();
-  const isTaskOverdue = (task: JobTask) => {
-    return task.scheduledDate < today && task.status !== 'completed';
-  };
+  const isTaskOverdue = (task: JobTask) =>
+    task.status === 'overdue' || (task.scheduledDate < today && !isTaskDone(task));
 
-  // Filter tasks
+  // Tasks assigned to me (never archived or draft), with any unsaved tick applied.
+  const myTasks = jobTasks
+    .filter(task =>
+      currentUser &&
+      task.assignedTo.includes(currentUser.id) &&
+      task.status !== 'archived' &&
+      task.status !== 'draft'
+    )
+    .map(withPatch);
+
   const filteredTasks = myTasks.filter(task => {
     const matchesStatus =
       filterStatus === 'all' ||
-      (filterStatus === 'overdue'
-        ? task.status === 'overdue' || isTaskOverdue(task)
-        : task.status === filterStatus);
-
-    if (filterDate === 'today') {
-      return matchesStatus && task.scheduledDate === today;
-    } else if (filterDate === 'upcoming') {
-      return matchesStatus && task.scheduledDate > today;
-    } else if (filterDate === 'past') {
-      return matchesStatus && task.scheduledDate < today;
-    }
-
-    return matchesStatus;
+      (filterStatus === 'overdue' ? isTaskOverdue(task) : task.status === filterStatus);
+    if (!matchesStatus) return false;
+    if (filterDate === 'today') return task.scheduledDate === today;
+    if (filterDate === 'upcoming') return task.scheduledDate > today;
+    if (filterDate === 'past') return task.scheduledDate < today;
+    return true;
   });
 
-  // Sort by scheduled date
-  const sortedTasks = [...filteredTasks].sort((a, b) => {
-    return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
-  });
+  const byDate = (a: JobTask, b: JobTask) =>
+    a.scheduledDate.localeCompare(b.scheduledDate) || (a.dueTime || '').localeCompare(b.dueTime || '');
+  const toDo = filteredTasks.filter(t => !isTaskDone(t)).sort(byDate);
+  // Most recently finished first, so the one you just ticked is right there.
+  const done = filteredTasks.filter(isTaskDone).sort((a, b) => byDate(b, a));
 
-  const handleTaskClick = (task: JobTask) => {
-    setSelectedTask(task);
-  };
+  const todayTasksCount = myTasks.filter(t => t.scheduledDate === today && !isTaskDone(t)).length;
 
-  const handleCloseDetail = () => {
-    setSelectedTask(null);
-  };
+  const selectedTask = selectedTaskId ? myTasks.find(t => t.id === selectedTaskId) || null : null;
+  const closeDetail = useCallback(() => setSelectedTaskId(null), []);
 
-  const handleStepToggle = (task: JobTask, stepId: string) => {
-    const step = task.steps.find(s => s.id === stepId);
-    if (!step) return;
-
-    // Check current completion state from completedSteps array (source of truth)
-    const isCurrentlyCompleted = task.completedSteps.includes(stepId);
-
-    let newCompletedSteps: string[];
-    let updatedSteps = task.steps.map(s => {
-      if (s.id === stepId) {
-        return { ...s, isCompleted: !isCurrentlyCompleted, completedAt: !isCurrentlyCompleted ? new Date().toISOString() : undefined };
-      }
-      return s;
-    });
-
-    if (isCurrentlyCompleted) {
-      // Unchecking - remove from completed
-      newCompletedSteps = task.completedSteps.filter(id => id !== stepId);
-    } else {
-      // Checking - add to completed
-      newCompletedSteps = [...task.completedSteps, stepId];
-    }
-
-    // Calculate new progress percentage
-    const newProgressPercentage = task.steps.length > 0
-      ? Math.round((newCompletedSteps.length / task.steps.length) * 100)
-      : 0;
-
-    // Update status based on progress
-    let newStatus = task.status;
-    if (newCompletedSteps.length === 0) {
-      newStatus = 'pending';
-    } else if (newCompletedSteps.length === task.steps.length) {
-      newStatus = 'completed';
-    } else {
-      newStatus = 'in-progress';
-    }
-
-    updateJobTask(task.id, {
-      steps: updatedSteps,
-      completedSteps: newCompletedSteps,
-      status: newStatus,
-      progressPercentage: newProgressPercentage,
-      startedAt: task.startedAt || new Date().toISOString(),
-    }).catch((error) => {
-      console.error('Failed to save step change:', error);
-      showError('Could not save the change. Check your connection and try again.');
-    });
-
-    // Update selected task if it's open
-    if (selectedTask?.id === task.id) {
-      const updatedTask = {
-        ...task,
-        steps: updatedSteps,
-        completedSteps: newCompletedSteps,
-        status: newStatus,
-        progressPercentage: newProgressPercentage,
-      };
-      setSelectedTask(updatedTask);
-    }
-  };
-
-  // Toggle completion for tasks without steps
-  const handleNoStepsToggle = (task: JobTask) => {
-    const isCurrentlyComplete = task.completedSteps.includes(TASK_COMPLETE_MARKER);
-
-    const reportSaveError = (error: unknown) => {
-      console.error('Failed to save task change:', error);
-      showError('Could not save the change. Check your connection and try again.');
-    };
-
-    if (isCurrentlyComplete) {
-      // Unmark as complete
-      updateJobTask(task.id, {
-        completedSteps: [],
-        status: 'pending',
-        progressPercentage: 0,
-        completedAt: undefined,
-      }).catch(reportSaveError);
-    } else {
-      // Mark as complete
-      updateJobTask(task.id, {
-        completedSteps: [TASK_COMPLETE_MARKER],
-        status: 'completed',
-        progressPercentage: 100,
-        completedAt: new Date().toISOString(),
-      }).catch(reportSaveError);
-    }
-
-    // Update selected task if open
-    if (selectedTask?.id === task.id) {
-      setSelectedTask({
-        ...task,
-        completedSteps: isCurrentlyComplete ? [] : [TASK_COMPLETE_MARKER],
-        status: isCurrentlyComplete ? 'pending' : 'completed',
-        progressPercentage: isCurrentlyComplete ? 0 : 100,
-      });
-    }
-  };
-
-  // Get today's tasks count
-  const todayTasksCount = myTasks.filter(
-    task => task.scheduledDate === today && task.status !== 'completed'
-  ).length;
+  const renderRows = (tasks: JobTask[]) => (
+    <Card padding="none" style={{ overflow: 'hidden' }}>
+      {tasks.map((task, i) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          first={i === 0}
+          overdue={isTaskOverdue(task)}
+          saving={saving.includes(task.id)}
+          onToggle={() => toggleDone(task)}
+          onOpen={() => setSelectedTaskId(task.id)}
+        />
+      ))}
+    </Card>
+  );
 
   return (
     <div style={isMobileOrTablet ? styles.containerMobile : styles.container}>
       <div style={isMobileOrTablet ? styles.headerMobile : styles.header}>
-        <div>
-          <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>
-            <svg
-              width={isMobileOrTablet ? "24" : "32"}
-              height={isMobileOrTablet ? "24" : "32"}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={theme.colors.primary}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ marginRight: isMobileOrTablet ? '8px' : '12px' }}
-            >
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            My Tasks
-          </h1>
-          <p style={styles.subtitle}>
-            {todayTasksCount > 0 ? `You have ${todayTasksCount} task${todayTasksCount !== 1 ? 's' : ''} due today` : 'All caught up!'}
-          </p>
+        <h1 style={isMobileOrTablet ? styles.titleMobile : styles.title}>
+          <svg
+            width={isMobileOrTablet ? 24 : 32}
+            height={isMobileOrTablet ? 24 : 32}
+            viewBox="0 0 24 24"
+            fill="none"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ stroke: theme.colors.primary, marginRight: isMobileOrTablet ? 8 : 12, flexShrink: 0 }}
+            aria-hidden="true"
+          >
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          My Tasks
+        </h1>
+        <p style={styles.subtitle}>
+          {todayTasksCount > 0
+            ? `You have ${todayTasksCount} task${todayTasksCount !== 1 ? 's' : ''} due today`
+            : 'All caught up!'}
+        </p>
+      </div>
+
+      <div style={styles.filters}>
+        <div style={styles.filterItem}>
+          <Select
+            aria-label="Filter by date"
+            size="sm"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            options={[
+              { value: 'all', label: 'All dates' },
+              { value: 'today', label: 'Today' },
+              { value: 'upcoming', label: 'Upcoming' },
+              { value: 'past', label: 'Past' },
+            ]}
+          />
+        </div>
+        <div style={styles.filterItem}>
+          <Select
+            aria-label="Filter by status"
+            size="sm"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            options={[
+              { value: 'all', label: 'All statuses' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'in-progress', label: 'In progress' },
+              { value: 'completed', label: 'Completed' },
+              { value: 'overdue', label: 'Overdue' },
+            ]}
+          />
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={isMobileOrTablet ? styles.filtersContainerMobile : styles.filtersContainer}>
-        <select
-          value={filterDate}
-          onChange={(e) => setFilterDate(e.target.value)}
-          style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
-        >
-          <option value="all">All Dates</option>
-          <option value="today">Today</option>
-          <option value="upcoming">Upcoming</option>
-          <option value="past">Past</option>
-        </select>
+      {toDo.length === 0 && done.length === 0 ? (
+        <div style={styles.emptyState}>
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5" aria-hidden="true">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          <p style={styles.emptyText}>No tasks found</p>
+          <p style={styles.emptySubtext}>You're all set!</p>
+        </div>
+      ) : (
+        <>
+          {toDo.length > 0 && (
+            <section style={styles.group} aria-label="To do">
+              <p style={styles.groupTitle}>To do · {toDo.length}</p>
+              {renderRows(toDo)}
+            </section>
+          )}
+          {done.length > 0 && (
+            <section style={styles.group} aria-label="Done">
+              <p style={styles.groupTitle}>Done · {done.length}</p>
+              {renderRows(done)}
+            </section>
+          )}
+        </>
+      )}
 
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={isMobileOrTablet ? styles.filterSelectMobile : styles.filterSelect}
-        >
-          <option value="all">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="in-progress">In Progress</option>
-          <option value="completed">Completed</option>
-          <option value="overdue">Overdue</option>
-        </select>
-      </div>
-
-      {/* Tasks list. Pull-to-refresh used to be wrapped around this one list
-          and nowhere else; it is now app-wide (PullToRefreshLayer). */}
-      <div style={styles.tasksList}>
-        {isMobileOrTablet && (
-          <p style={styles.swipeHint}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-            Swipe right to complete
-          </p>
-        )}
-        {sortedTasks.length === 0 ? (
-          <div style={styles.emptyState}>
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            <p style={styles.emptyText}>No tasks found</p>
-            <p style={styles.emptySubtext}>You're all set!</p>
-          </div>
-        ) : (
-          sortedTasks.map(task => (
-            isMobileOrTablet && task.status !== 'completed' ? (
-              <SwipeableListItem
-                key={task.id}
-                leftAction={createSwipeAction.complete(() => handleQuickComplete(task))}
-              >
-                <MyTaskCard
-                  task={task}
-                  onClick={() => handleTaskClick(task)}
-                  onStepToggle={(stepId) => handleStepToggle(task, stepId)}
-                  onNoStepsToggle={() => handleNoStepsToggle(task)}
-                  isMobileOrTablet={isMobileOrTablet}
-                />
-              </SwipeableListItem>
-            ) : (
-              <MyTaskCard
-                key={task.id}
-                task={task}
-                onClick={() => handleTaskClick(task)}
-                onStepToggle={(stepId) => handleStepToggle(task, stepId)}
-                onNoStepsToggle={() => handleNoStepsToggle(task)}
-                isMobileOrTablet={isMobileOrTablet}
-              />
-            )
-          ))
-        )}
-      </div>
-
-      {/* Task Detail Modal */}
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}
           sops={sops}
-          onClose={handleCloseDetail}
-          onStepToggle={(stepId) => handleStepToggle(selectedTask, stepId)}
-          onNoStepsToggle={() => handleNoStepsToggle(selectedTask)}
-          isMobileOrTablet={isMobileOrTablet}
+          overdue={isTaskOverdue(selectedTask)}
+          saving={saving.includes(selectedTask.id)}
+          onClose={closeDetail}
+          onStepToggle={(stepId) => toggleStep(selectedTask, stepId)}
+          onToggleDone={() => toggleDone(selectedTask)}
         />
       )}
     </div>
   );
 };
 
-// My Task Card Component
-interface MyTaskCardProps {
+// ─── One line of the checklist ────────────────────────────────────────────
+
+interface TaskRowProps {
   task: JobTask;
-  onClick: () => void;
-  onStepToggle: (stepId: string) => void;
-  onNoStepsToggle: () => void;
-  isMobileOrTablet: boolean;
+  first: boolean;
+  overdue: boolean;
+  saving: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
 }
 
-const MyTaskCard: React.FC<MyTaskCardProps> = ({ task, onClick, onStepToggle, onNoStepsToggle, isMobileOrTablet }) => {
-  const [expanded, setExpanded] = useState(false);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return theme.colors.status.success;
-      case 'in-progress': return theme.colors.status.info;
-      case 'overdue': return theme.colors.status.error;
-      case 'pending': return theme.colors.status.warning;
-      default: return theme.colors.txt.tertiary;
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return theme.colors.status.error;
-      case 'high': return theme.colors.status.warning;
-      case 'medium': return theme.colors.status.info;
-      default: return theme.colors.txt.tertiary;
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const todayStr = studioToday();
-    if (dateString === todayStr) return 'Today';
-    if (dateString === shiftIsoDays(todayStr, 1)) return 'Tomorrow';
-    return new Date(`${dateString}T00:00:00`)
-      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+const TaskRow: React.FC<TaskRowProps> = ({ task, first, overdue, saving, onToggle, onOpen }) => {
+  const isDone = isTaskDone(task);
+  const stepTotal = task.steps.length;
+  const stepDone = task.completedSteps.filter(id => task.steps.some(s => s.id === id)).length;
 
   return (
-    <div style={isMobileOrTablet ? styles.taskCardMobile : styles.taskCard}>
-      <div style={styles.taskCardHeader} onClick={onClick}>
-        <div style={styles.taskCardHeaderLeft}>
-          <h3 style={isMobileOrTablet ? styles.taskCardTitleMobile : styles.taskCardTitle}>{task.title}</h3>
-          <p style={styles.taskCardDescription}>{task.description}</p>
-        </div>
-        <button
-          style={isMobileOrTablet ? styles.expandButtonMobile : styles.expandButton}
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpanded(!expanded);
-          }}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+    <div
+      style={{
+        ...styles.row,
+        borderTop: first ? 'none' : `1px solid ${theme.colors.bdr.primary}`,
+      }}
+    >
+      <label style={styles.checkWrap}>
+        <input
+          type="checkbox"
+          checked={isDone}
+          disabled={saving}
+          onChange={onToggle}
+          aria-label={isDone ? `Mark "${task.title}" not done` : `Mark "${task.title}" done`}
+          style={styles.check}
+        />
+      </label>
+      <button type="button" onClick={onOpen} style={styles.rowButton} aria-label={`Open ${task.title}`}>
+        <span style={styles.rowText}>
+          <span
+            style={{
+              ...styles.rowTitle,
+              color: isDone ? theme.colors.txt.tertiary : theme.colors.txt.primary,
+              textDecoration: isDone ? 'line-through' : 'none',
+            }}
           >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-      </div>
-
-      <div style={styles.taskCardMeta}>
-        <div style={styles.taskCardBadges}>
-          <span style={{...styles.statusBadge, backgroundColor: getStatusColor(task.status) + '20', color: getStatusColor(task.status)}}>
-            {task.status.replace('-', ' ').toUpperCase()}
+            {task.title}
           </span>
-          <span style={{...styles.priorityBadge, color: getPriorityColor(task.priority)}}>
-            {task.priority.toUpperCase()}
-          </span>
-        </div>
-
-        <div style={styles.taskCardDate}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          {formatDate(task.scheduledDate)}
-          {task.dueTime && ` at ${task.dueTime}`}
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
-        <div style={styles.progressHeader}>
-          <span style={styles.progressText}>Progress: {task.progressPercentage}%</span>
-          <span style={styles.progressSteps}>
-            {task.steps.length === 0
-              ? (task.progressPercentage === 100 ? 'Complete' : 'Not started')
-              : `${task.completedSteps.filter(id => id !== '__task_complete__').length} / ${task.steps.length} steps`
-            }
-          </span>
-        </div>
-        <div style={isMobileOrTablet ? styles.progressBarMobile : styles.progressBar}>
-          <div style={{...styles.progressFill, width: `${task.progressPercentage}%`}} />
-        </div>
-      </div>
-
-      {/* Expandable Steps Section */}
-      {expanded && (
-        <div style={styles.stepsSection}>
-          {task.steps.length === 0 ? (
-            /* No steps - show single completion checkbox */
-            <label style={isMobileOrTablet ? styles.stepCheckboxMobile : styles.stepCheckbox}>
-              <input
-                type="checkbox"
-                checked={task.progressPercentage === 100}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  onNoStepsToggle();
-                }}
-                style={isMobileOrTablet ? styles.checkboxMobile : styles.checkbox}
-              />
-              <div style={styles.stepContent}>
-                <span style={{
-                  ...styles.stepTitle,
-                  textDecoration: task.progressPercentage === 100 ? 'line-through' : 'none',
-                  fontWeight: 600,
-                }}>
-                  Mark Task Complete
-                </span>
-                <span style={styles.stepDescription}>
-                  This task has no individual steps. Check this box to mark the entire task as complete.
-                </span>
-              </div>
-            </label>
-          ) : (
-            /* Has steps - show step list */
-            <>
-              <h4 style={styles.stepsSectionTitle}>Task Steps</h4>
-              {task.steps.map((step, index) => (
-                <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxMobile : styles.stepCheckbox}>
-                  <input
-                    type="checkbox"
-                    checked={step.isCompleted}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      onStepToggle(step.id);
-                    }}
-                    style={isMobileOrTablet ? styles.checkboxMobile : styles.checkbox}
-                  />
-                  <div style={styles.stepContent}>
-                    <span style={{...styles.stepTitle, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
-                      {index + 1}. {step.title}
-                    </span>
-                    {step.description && (
-                      <span style={styles.stepDescription}>{step.description}</span>
-                    )}
-                    {step.requiresPhoto && (
-                      <span style={styles.photoRequiredBadge}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                          <circle cx="8.5" cy="8.5" r="1.5" />
-                          <polyline points="21 15 16 10 5 21" />
-                        </svg>
-                        Photo Required
-                      </span>
-                    )}
-                  </div>
-                </label>
-              ))}
-            </>
+          {!isDone && (overdue || (stepTotal > 0 && stepDone > 0)) && (
+            <span style={styles.rowHints}>
+              {overdue && <Badge variant="danger" size="sm">Overdue</Badge>}
+              {stepTotal > 0 && stepDone > 0 && (
+                <span style={styles.rowHint}>{stepDone} of {stepTotal} steps</span>
+              )}
+            </span>
           )}
-        </div>
-      )}
-
-      {/* Task Stats */}
-      <div style={styles.taskCardStats}>
-        <div style={styles.stat}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          <span>{task.estimatedDuration} min</span>
-        </div>
-        {task.sopIds.length > 0 && (
-          <div style={styles.stat}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-            <span>{task.sopIds.length} SOPs</span>
-          </div>
-        )}
-        <div style={styles.stat}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M20 7h-9M14 17H5M17 12H3" />
-          </svg>
-          <span>{task.category}</span>
-        </div>
-      </div>
+        </span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" style={{ stroke: theme.colors.txt.tertiary, flexShrink: 0 }} aria-hidden="true">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
     </div>
   );
 };
 
-// Task Detail Modal Component
+// ─── Detail modal ─────────────────────────────────────────────────────────
+
 interface TaskDetailModalProps {
   task: JobTask;
   sops: any[];
+  overdue: boolean;
+  saving: boolean;
   onClose: () => void;
   onStepToggle: (stepId: string) => void;
-  onNoStepsToggle: () => void;
-  isMobileOrTablet: boolean;
+  onToggleDone: () => void;
 }
 
-const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, onStepToggle, onNoStepsToggle, isMobileOrTablet }) => {
+const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
+  task, sops, overdue, saving, onClose, onStepToggle, onToggleDone,
+}) => {
   const attachedSOPs = sops.filter(sop => task.sopIds.includes(sop.id));
-
-  // Calculate progress - handle tasks without steps
+  const isDone = isTaskDone(task);
   const totalSteps = task.steps.length;
-  const hasNoSteps = totalSteps === 0;
-  const isNoStepsComplete = hasNoSteps && task.completedSteps.includes('__task_complete__');
-  const completedCount = hasNoSteps
-    ? (isNoStepsComplete ? 1 : 0)
-    : task.completedSteps.filter(id => task.steps.some(step => step.id === id)).length;
-  const progressPercent = hasNoSteps
-    ? (isNoStepsComplete ? 100 : 0)
-    : (totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0);
+  const completedCount = task.completedSteps.filter(id => task.steps.some(s => s.id === id)).length;
+  const progressPercent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
+  const description = task.description?.trim();
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(`${dateString}T00:00:00`);
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  };
+  // Only what the admin actually filled in.
+  const details: { label: string; value: string }[] = [];
+  if (task.scheduledDate) {
+    details.push({
+      label: 'Due',
+      value: `${formatDay(task.scheduledDate, true)}${task.dueTime ? ` at ${formatTime(task.dueTime)}` : ''}`,
+    });
+  }
+  if (task.priority && task.priority !== 'medium') {
+    details.push({ label: 'Priority', value: task.priority[0].toUpperCase() + task.priority.slice(1) });
+  }
+  if (task.category && task.category !== 'General') {
+    details.push({ label: 'Category', value: task.category });
+  }
+  if (task.estimatedDuration > 0) {
+    details.push({ label: 'Takes about', value: `${task.estimatedDuration} min` });
+  }
 
   return (
-    <div style={isMobileOrTablet ? styles.modalOverlayMobile : styles.modalOverlay} onClick={onClose}>
-      <div style={isMobileOrTablet ? styles.modalMobile : styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={isMobileOrTablet ? styles.modalHeaderMobile : styles.modalHeader}>
-          <h2 style={isMobileOrTablet ? styles.modalTitleMobile : styles.modalTitle}>{task.title}</h2>
-          <button style={styles.closeButton} onClick={onClose}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={task.title}
+      size="lg"
+      footer={
+        <div style={styles.footer}>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button
+            variant={isDone ? 'outline' : 'primary'}
+            onClick={onToggleDone}
+            disabled={saving}
+            loading={saving}
+          >
+            {isDone ? 'Mark not done' : 'Mark done'}
+          </Button>
         </div>
+      }
+    >
+      {(isDone || overdue) && (
+        <div style={{ marginBottom: theme.spacing.md }}>
+          {isDone ? <Badge variant="success">Done</Badge> : <Badge variant="danger">Overdue</Badge>}
+        </div>
+      )}
 
-        <div style={isMobileOrTablet ? styles.modalContentMobile : styles.modalContent}>
-          {/* Task Description */}
-          <div style={styles.modalSection}>
-            <p style={styles.taskDetailDescription}>{task.description}</p>
-          </div>
+      {description && <p style={styles.description}>{description}</p>}
 
-          {/* Task Meta */}
-          <div style={styles.modalSection}>
-            <div style={styles.metaGrid}>
-              <div style={styles.metaItem}>
-                <span style={styles.metaLabel}>Scheduled:</span>
-                <span style={styles.metaValue}>
-                  {formatDate(task.scheduledDate)}
-                  {task.dueTime && ` at ${task.dueTime}`}
-                </span>
-              </div>
-              <div style={styles.metaItem}>
-                <span style={styles.metaLabel}>Duration:</span>
-                <span style={styles.metaValue}>{task.estimatedDuration} minutes</span>
-              </div>
-              <div style={styles.metaItem}>
-                <span style={styles.metaLabel}>Priority:</span>
-                <span style={styles.metaValue}>{task.priority}</span>
-              </div>
-              <div style={styles.metaItem}>
-                <span style={styles.metaLabel}>Category:</span>
-                <span style={styles.metaValue}>{task.category}</span>
-              </div>
+      {details.length > 0 && (
+        <dl style={styles.details}>
+          {details.map(d => (
+            <div key={d.label} style={styles.detail}>
+              <dt style={styles.detailLabel}>{d.label}</dt>
+              <dd style={styles.detailValue}>{d.value}</dd>
             </div>
-          </div>
+          ))}
+        </dl>
+      )}
 
-          {/* Progress */}
-          <div style={styles.modalSection}>
-            <h3 style={styles.sectionTitle}>Progress</h3>
-            <div style={isMobileOrTablet ? styles.progressSectionMobile : styles.progressSection}>
-              <div style={styles.progressHeader}>
-                <span style={styles.progressText}>{progressPercent}%</span>
-                <span style={styles.progressSteps}>
-                  {hasNoSteps
-                    ? (isNoStepsComplete ? 'Complete' : 'Not started')
-                    : `${completedCount} / ${totalSteps} steps completed`
-                  }
-                </span>
-              </div>
-              <div style={isMobileOrTablet ? styles.progressBarMobile : styles.progressBar}>
-                <div style={{...styles.progressFill, width: `${progressPercent}%`}} />
-              </div>
-            </div>
+      {totalSteps > 0 && (
+        <div style={styles.section}>
+          <div style={styles.progressHeader}>
+            <h3 style={styles.sectionTitle}>Steps</h3>
+            <span style={styles.progressText}>{completedCount} of {totalSteps} done</span>
           </div>
-
-          {/* Steps / Completion */}
-          <div style={styles.modalSection}>
-            <h3 style={styles.sectionTitle}>{hasNoSteps ? 'Completion' : 'Steps'}</h3>
-            <div style={styles.stepsList}>
-              {hasNoSteps ? (
-                /* No steps - show single completion checkbox */
-                <label style={isMobileOrTablet ? styles.stepCheckboxLargeMobile : styles.stepCheckboxLarge}>
+          <div
+            style={styles.progressBar}
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Steps done"
+          >
+            <div style={{ ...styles.progressFill, width: `${progressPercent}%` }} />
+          </div>
+          <div style={styles.stepsList}>
+            {task.steps.map((step, index) => {
+              const stepDone = task.completedSteps.includes(step.id);
+              return (
+                <label key={step.id} style={styles.step}>
                   <input
                     type="checkbox"
-                    checked={isNoStepsComplete}
-                    onChange={onNoStepsToggle}
-                    style={isMobileOrTablet ? styles.checkboxLargeMobile : styles.checkboxLarge}
+                    checked={stepDone}
+                    onChange={() => onStepToggle(step.id)}
+                    style={styles.check}
                   />
-                  <div style={styles.stepContentLarge}>
-                    <span style={{
-                      ...styles.stepTitleLarge,
-                      textDecoration: isNoStepsComplete ? 'line-through' : 'none'
-                    }}>
-                      Mark Task Complete
+                  <span style={styles.stepContent}>
+                    <span
+                      style={{
+                        ...styles.stepTitle,
+                        textDecoration: stepDone ? 'line-through' : 'none',
+                        color: stepDone ? theme.colors.txt.tertiary : theme.colors.txt.primary,
+                      }}
+                    >
+                      {index + 1}. {step.title}
                     </span>
-                    <span style={styles.stepDescriptionLarge}>
-                      This task has no individual steps. Check this box to mark it as complete.
-                    </span>
-                  </div>
-                </label>
-              ) : (
-                /* Has steps - show step list */
-                task.steps.map((step, index) => (
-                  <label key={step.id} style={isMobileOrTablet ? styles.stepCheckboxLargeMobile : styles.stepCheckboxLarge}>
-                    <input
-                      type="checkbox"
-                      checked={step.isCompleted}
-                      onChange={() => onStepToggle(step.id)}
-                      style={isMobileOrTablet ? styles.checkboxLargeMobile : styles.checkboxLarge}
-                    />
-                    <div style={styles.stepContentLarge}>
-                      <span style={{...styles.stepTitleLarge, textDecoration: step.isCompleted ? 'line-through' : 'none'}}>
-                        {index + 1}. {step.title}
+                    {step.description && <span style={styles.stepDescription}>{step.description}</span>}
+                    {step.requiresPhoto && (
+                      <span style={styles.photoRequired}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <polyline points="21 15 16 10 5 21" />
+                        </svg>
+                        Photo required
                       </span>
-                      {step.description && (
-                        <span style={styles.stepDescriptionLarge}>{step.description}</span>
-                      )}
-                      {step.requiresPhoto && (
-                        <span style={styles.photoRequiredBadge}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                            <circle cx="8.5" cy="8.5" r="1.5" />
-                            <polyline points="21 15 16 10 5 21" />
-                          </svg>
-                          Photo Required
-                        </span>
-                      )}
-                      {step.isCompleted && step.completedAt && (
-                        <span style={styles.completedTime}>
-                          Completed {new Date(step.completedAt).toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </label>
-                ))
-              )}
-            </div>
+                    )}
+                  </span>
+                </label>
+              );
+            })}
           </div>
-
-          {/* Attached SOPs */}
-          {attachedSOPs.length > 0 && (
-            <div style={styles.modalSection}>
-              <h3 style={styles.sectionTitle}>Reference SOPs</h3>
-              <div style={styles.sopsList}>
-                {attachedSOPs.map(sop => (
-                  <div key={sop.id} style={styles.sopItem}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                    <span style={styles.sopTitle}>{sop.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
-    </div>
+      )}
+
+      {attachedSOPs.length > 0 && (
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>Reference SOPs</h3>
+          <div style={styles.stepsList}>
+            {attachedSOPs.map(sop => (
+              <div key={sop.id} style={styles.sopItem}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }} aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span style={styles.sopTitle}>{sop.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!description && details.length <= 1 && totalSteps === 0 && attachedSOPs.length === 0 && (
+        <p style={styles.noDetails}>No extra details for this one. Tap Mark done when it's finished.</p>
+      )}
+    </Modal>
   );
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: theme.pageLayout.containerPadding.desktop,
-    maxWidth: theme.pageLayout.maxWidth,
+    maxWidth: '800px',
     margin: '0 auto',
   },
   containerMobile: {
@@ -735,76 +558,112 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 auto',
   },
   header: {
-    marginBottom: theme.pageLayout.headerMargin.desktop,
+    marginBottom: theme.spacing.lg,
   },
   headerMobile: {
-    marginBottom: theme.pageLayout.headerMargin.mobile,
+    marginBottom: theme.spacing.md,
   },
   title: {
     ...theme.typography.h1,
-    color: theme.colors.textPrimary,
+    color: theme.colors.txt.primary,
     marginBottom: theme.spacing.sm,
     display: 'flex',
     alignItems: 'center',
   },
   titleMobile: {
     ...theme.typography.h1Mobile,
-    color: theme.colors.textPrimary,
+    color: theme.colors.txt.primary,
     marginBottom: theme.spacing.sm,
     display: 'flex',
     alignItems: 'center',
   },
   subtitle: {
     ...theme.typography.subtitle,
-    color: theme.colors.textSecondary,
+    color: theme.colors.txt.secondary,
     marginTop: theme.spacing.sm,
   },
-  filtersContainer: {
+  filters: {
     display: 'flex',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xl,
-  },
-  filtersContainerMobile: {
-    display: 'flex',
-    flexDirection: 'column',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
   },
-  filterSelect: {
-    padding: `${theme.spacing.md} ${theme.spacing.lg}`,
-    backgroundColor: theme.colors.bg.secondary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.primary,
-    fontSize: '15px',
-    cursor: 'pointer',
-    outline: 'none',
+  filterItem: {
+    flex: '1 1 140px',
+    minWidth: 0,
   },
-  filterSelectMobile: {
-    padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-    backgroundColor: theme.colors.bg.secondary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.txt.primary,
-    fontSize: '15px',
-    cursor: 'pointer',
-    outline: 'none',
-    width: '100%',
+  group: {
+    marginBottom: theme.spacing.lg,
   },
-  tasksList: {
+  // A <p>, not a heading: index.css forces every h2 on a phone to 22px
+  // display type, and this is a quiet group label.
+  groupTitle: {
+    fontFamily: theme.fonts.mono,
+    fontWeight: 600,
+    fontSize: '12px',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: theme.colors.txt.tertiary,
+    margin: `0 0 ${theme.spacing.sm} ${theme.spacing.xs}`,
+  },
+  row: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing.lg,
+    alignItems: 'stretch',
+    minHeight: '56px',
   },
-  swipeHint: {
+  checkWrap: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: theme.spacing.xs,
+    width: '52px',
+    flexShrink: 0,
+    cursor: 'pointer',
+  },
+  check: {
+    width: '22px',
+    height: '22px',
+    minWidth: '22px',
+    margin: 0,
+    cursor: 'pointer',
+    accentColor: theme.colors.primary,
+    flexShrink: 0,
+  },
+  rowButton: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: `${theme.spacing.sm} ${theme.spacing.md} ${theme.spacing.sm} 0`,
+    background: 'transparent',
+    border: 'none',
+    textAlign: 'left',
+    cursor: 'pointer',
+    color: 'inherit',
+    font: 'inherit',
+  },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  rowTitle: {
+    fontSize: '16px',
+    fontWeight: 500,
+    lineHeight: 1.35,
+    overflowWrap: 'anywhere',
+  },
+  rowHints: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  rowHint: {
     fontSize: '12px',
     color: theme.colors.txt.tertiary,
-    marginBottom: theme.spacing.sm,
-    padding: theme.spacing.xs,
   },
   emptyState: {
     display: 'flex',
@@ -825,120 +684,67 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     color: theme.colors.txt.tertiary,
   },
-  taskCard: {
-    ...theme.components.card.base,
-    transition: 'all 0.2s',
-    cursor: 'pointer',
-  },
-  taskCardMobile: {
-    ...theme.components.card.base,
-    ...theme.components.card.mobile,
-    transition: 'all 0.2s',
-    cursor: 'pointer',
+  footer: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
     width: '100%',
   },
-  taskCardHeader: {
+  description: {
+    fontSize: '15px',
+    color: theme.colors.txt.secondary,
+    lineHeight: 1.6,
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    margin: `0 0 ${theme.spacing.lg}`,
+  },
+  details: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(140px, 100%), 1fr))',
+    gap: theme.spacing.md,
+    margin: `0 0 ${theme.spacing.lg}`,
+  },
+  detail: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: theme.spacing.md,
+    flexDirection: 'column',
+    gap: '2px',
+    minWidth: 0,
   },
-  taskCardHeaderLeft: {
-    flex: 1,
-  },
-  taskCardTitle: {
-    fontSize: '18px',
+  detailLabel: {
+    fontFamily: theme.fonts.mono,
+    fontSize: '11px',
     fontWeight: 600,
-    color: theme.colors.txt.primary,
-    marginBottom: theme.spacing.xs,
+    color: theme.colors.txt.tertiary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
   },
-  taskCardTitleMobile: {
+  detailValue: {
+    margin: 0,
+    fontSize: '14px',
+    color: theme.colors.txt.primary,
+    overflowWrap: 'anywhere',
+  },
+  section: {
+    marginBottom: theme.spacing.lg,
+  },
+  sectionTitle: {
+    fontFamily: theme.fonts.primary,
+    fontStyle: 'normal',
+    textTransform: 'none',
     fontSize: '16px',
     fontWeight: 600,
     color: theme.colors.txt.primary,
-    marginBottom: theme.spacing.xs,
-  },
-  taskCardDescription: {
-    fontSize: '14px',
-    color: theme.colors.txt.secondary,
-    lineHeight: '1.5',
-  },
-  expandButton: {
-    padding: theme.spacing.xs,
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.sm,
-    color: theme.colors.txt.primary,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: '44px',
-    minHeight: '44px',
-  },
-  expandButtonMobile: {
-    padding: theme.spacing.xs,
-    backgroundColor: theme.colors.bg.tertiary,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    borderRadius: theme.borderRadius.sm,
-    color: theme.colors.txt.primary,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: '44px',
-    minHeight: '44px',
-  },
-  taskCardMeta: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-  },
-  taskCardBadges: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-  },
-  statusBadge: {
-    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-    borderRadius: theme.borderRadius.sm,
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '0.5px',
-  },
-  priorityBadge: {
-    padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '0.5px',
-  },
-  taskCardDate: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    fontSize: '13px',
-    color: theme.colors.txt.tertiary,
-  },
-  progressSection: {
-    marginBottom: theme.spacing.lg,
-  },
-  progressSectionMobile: {
-    marginBottom: theme.spacing.md,
+    margin: 0,
   },
   progressHeader: {
     display: 'flex',
     justifyContent: 'space-between',
-    marginBottom: theme.spacing.xs,
+    alignItems: 'baseline',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   progressText: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-  },
-  progressSteps: {
     fontSize: '13px',
     color: theme.colors.txt.secondary,
   },
@@ -948,299 +754,53 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.full,
     overflow: 'hidden',
-  },
-  progressBarMobile: {
-    width: '100%',
-    height: '10px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.full,
-    overflow: 'hidden',
+    marginBottom: theme.spacing.md,
   },
   progressFill: {
     height: '100%',
     backgroundColor: theme.colors.primary,
     transition: 'width 0.3s ease',
   },
-  stepsSection: {
-    marginBottom: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    borderTop: `1px solid ${theme.colors.bdr.primary}`,
+  stepsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing.sm,
   },
-  stepsSectionTitle: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-    marginBottom: theme.spacing.md,
-  },
-  stepCheckbox: {
+  step: {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-    cursor: 'pointer',
-    borderRadius: theme.borderRadius.md,
-    transition: 'background-color 0.2s',
-  },
-  stepCheckboxMobile: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
     padding: theme.spacing.md,
-    marginBottom: theme.spacing.xs,
-    cursor: 'pointer',
+    backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.md,
-    transition: 'background-color 0.2s',
-  },
-  checkbox: {
-    width: '18px',
-    height: '18px',
-    marginTop: '2px',
+    border: `1px solid ${theme.colors.bdr.primary}`,
     cursor: 'pointer',
-    flexShrink: 0,
-  },
-  checkboxMobile: {
-    width: '22px',
-    height: '22px',
-    marginTop: '2px',
-    cursor: 'pointer',
-    flexShrink: 0,
-    minWidth: '22px',
-    minHeight: '22px',
   },
   stepContent: {
     display: 'flex',
     flexDirection: 'column',
-    gap: theme.spacing.xs,
+    gap: '4px',
     flex: 1,
+    minWidth: 0,
   },
   stepTitle: {
-    fontSize: '14px',
+    fontSize: '15px',
     fontWeight: 500,
-    color: theme.colors.txt.primary,
+    overflowWrap: 'anywhere',
   },
   stepDescription: {
-    fontSize: '13px',
+    fontSize: '14px',
     color: theme.colors.txt.secondary,
+    lineHeight: 1.5,
+    overflowWrap: 'anywhere',
   },
-  photoRequiredBadge: {
+  photoRequired: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    fontSize: '11px',
+    fontSize: '12px',
     color: theme.colors.status.info,
     fontWeight: 500,
-  },
-  taskCardStats: {
-    display: 'flex',
-    gap: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    borderTop: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  stat: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    fontSize: '13px',
-    color: theme.colors.txt.tertiary,
-  },
-  modalOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.overlay,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: theme.spacing.lg,
-  },
-  modalOverlayMobile: {
-    position: 'fixed',
-    top: '60px', // Add space for the navigation header
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.overlay,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: theme.spacing.sm,
-  },
-  modal: {
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    width: '100%',
-    maxWidth: '800px',
-    maxHeight: '90dvh',
-    overflow: 'auto',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  modalMobile: {
-    backgroundColor: theme.colors.bg.secondary,
-    borderRadius: theme.borderRadius.lg,
-    width: '100%',
-    maxWidth: '100%',
-    maxHeight: 'calc(100dvh - 60px)', // Adjust height to account for nav header
-    overflow: 'auto',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: theme.spacing.xl,
-    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-    position: 'sticky',
-    top: 0,
-    backgroundColor: theme.colors.bg.secondary,
-    zIndex: 10,
-  },
-  modalHeaderMobile: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-    borderBottom: `1px solid ${theme.colors.bdr.primary}`,
-    position: 'sticky',
-    top: 0,
-    backgroundColor: theme.colors.bg.secondary,
-    zIndex: 10,
-  },
-  modalTitle: {
-    fontSize: '24px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-  },
-  modalTitleMobile: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-  },
-  closeButton: {
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: theme.colors.txt.tertiary,
-    cursor: 'pointer',
-    padding: theme.spacing.xs,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: '44px',
-    minHeight: '44px',
-  },
-  modalContent: {
-    padding: theme.spacing.xl,
-  },
-  modalContentMobile: {
-    padding: theme.spacing.md,
-  },
-  modalSection: {
-    marginBottom: theme.spacing.xl,
-  },
-  taskDetailDescription: {
-    fontSize: '15px',
-    color: theme.colors.txt.secondary,
-    lineHeight: '1.6',
-  },
-  sectionTitle: {
-    fontSize: '16px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-    marginBottom: theme.spacing.md,
-  },
-  metaGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
-    gap: theme.spacing.lg,
-  },
-  metaItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing.xs,
-  },
-  metaLabel: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.colors.txt.tertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  metaValue: {
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-  },
-  stepsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing.md,
-  },
-  stepCheckboxLarge: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  stepCheckboxLargeMobile: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    border: `1px solid ${theme.colors.bdr.primary}`,
-  },
-  checkboxLarge: {
-    width: '20px',
-    height: '20px',
-    marginTop: '2px',
-    cursor: 'pointer',
-    flexShrink: 0,
-  },
-  checkboxLargeMobile: {
-    width: '24px',
-    height: '24px',
-    marginTop: '2px',
-    cursor: 'pointer',
-    flexShrink: 0,
-    minWidth: '24px',
-    minHeight: '24px',
-  },
-  stepContentLarge: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing.sm,
-    flex: 1,
-  },
-  stepTitleLarge: {
-    fontSize: '15px',
-    fontWeight: 500,
-    color: theme.colors.txt.primary,
-  },
-  stepDescriptionLarge: {
-    fontSize: '14px',
-    color: theme.colors.txt.secondary,
-    lineHeight: '1.5',
-  },
-  completedTime: {
-    fontSize: '12px',
-    color: theme.colors.status.success,
-    fontStyle: 'italic',
-  },
-  sopsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing.sm,
   },
   sopItem: {
     display: 'flex',
@@ -1250,11 +810,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: theme.colors.bg.tertiary,
     borderRadius: theme.borderRadius.md,
     border: `1px solid ${theme.colors.bdr.primary}`,
+    color: theme.colors.txt.secondary,
   },
   sopTitle: {
     fontSize: '14px',
     color: theme.colors.txt.primary,
     fontWeight: 500,
+    minWidth: 0,
+    overflowWrap: 'anywhere',
+  },
+  noDetails: {
+    fontSize: '14px',
+    color: theme.colors.txt.tertiary,
+    margin: 0,
   },
 };
 
