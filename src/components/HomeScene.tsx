@@ -3,6 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useHomeScene } from '../hooks/useHomeScene';
 import { createSeeded, DEFAULT_SCENE_ID, findScene, HomeSceneDef, SETTLE_SECONDS } from '../lib/homeScenes';
 import TopoField from './TopoField';
+import RefractedGlassField from './RefractedGlassField';
 
 /**
  * Runs one seasonal scene from src/lib/homeScenes.ts on a canvas.
@@ -194,4 +195,15 @@ export const PortalScene: React.FC = () => {
   const { activeSceneId, setting } = useHomeScene('portal');
   const scene = setting?.showOnPortal && activeSceneId !== DEFAULT_SCENE_ID ? findScene(activeSceneId) : undefined;
   return scene ? <SceneCanvas key={scene.id} scene={scene} /> : null;
+};
+
+/**
+ * The background behind the front door (the Staff / Parent page at "/"): the
+ * seasonal scene when the super admin has ticked "Also show on the front
+ * door", otherwise the page's everyday refracted glass.
+ */
+export const ChooserScene: React.FC = () => {
+  const { activeSceneId, setting } = useHomeScene('portal');
+  const scene = setting?.showOnChooser && activeSceneId !== DEFAULT_SCENE_ID ? findScene(activeSceneId) : undefined;
+  return scene ? <SceneCanvas key={scene.id} scene={scene} /> : <RefractedGlassField />;
 };

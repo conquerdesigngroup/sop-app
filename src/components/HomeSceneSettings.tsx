@@ -30,6 +30,7 @@ const HomeSceneSettings: React.FC = () => {
   const [scene, setScene] = useState<string>(setting?.scene || DEFAULT_SCENE_ID);
   const [endsOn, setEndsOn] = useState<string>(setting?.endsOn || '');
   const [onPortal, setOnPortal] = useState<boolean>(!!setting?.showOnPortal);
+  const [onChooser, setOnChooser] = useState<boolean>(!!setting?.showOnChooser);
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
 
@@ -38,13 +39,16 @@ const HomeSceneSettings: React.FC = () => {
     setScene(setting?.scene || DEFAULT_SCENE_ID);
     setEndsOn(setting?.endsOn || '');
     setOnPortal(!!setting?.showOnPortal);
-  }, [setting?.scene, setting?.endsOn, setting?.showOnPortal]);
+    setOnChooser(!!setting?.showOnChooser);
+  }, [setting?.scene, setting?.endsOn, setting?.showOnPortal, setting?.showOnChooser]);
 
   const live = effectiveSceneId(setting);
   const savedScene = setting?.scene || DEFAULT_SCENE_ID;
   const dirty =
     scene !== savedScene ||
-    (scene !== DEFAULT_SCENE_ID && (endsOn !== (setting?.endsOn || '') || onPortal !== !!setting?.showOnPortal));
+    (scene !== DEFAULT_SCENE_ID && (endsOn !== (setting?.endsOn || '') ||
+      onPortal !== !!setting?.showOnPortal ||
+      onChooser !== !!setting?.showOnChooser));
   const endInPast = !!endsOn && endsOn < localDayKey();
 
   const choose = (id: string) => {
@@ -60,14 +64,16 @@ const HomeSceneSettings: React.FC = () => {
       const next = {
         scene,
         endsOn: scene === DEFAULT_SCENE_ID ? null : endsOn || null,
-        // Only sent when it changes, so a database without v79 can still save.
+        // Only sent when they change, so a database without v79/v80 can still save.
         ...(onPortal !== !!setting?.showOnPortal ? { showOnPortal: onPortal } : {}),
+        ...(onChooser !== !!setting?.showOnChooser ? { showOnChooser: onChooser } : {}),
       };
       await save(next);
       const name = HOME_SCENES.find(s => s.id === scene)?.name;
+      const extra = [onChooser && 'the front door', onPortal && 'the parent portal'].filter(Boolean).join(' and ');
       showToast(
         name
-          ? `${name} is now on everyone's Home${onPortal ? ' and the parent portal' : ''}.`
+          ? `${name} is now on everyone's Home${extra ? ` and ${extra}` : ''}.`
           : 'Home is back to the everyday background.',
         'success',
       );
@@ -75,7 +81,7 @@ const HomeSceneSettings: React.FC = () => {
       const message = (e as { message?: string })?.message || '';
       showToast(
         /home_scene_setting/.test(message)
-          ? 'Holiday backgrounds are not fully set up on the server yet (migrations v78 and v79).'
+          ? 'Holiday backgrounds are not fully set up on the server yet (migrations v78 to v80).'
           : "Couldn't save the Home background. Check your connection and try again.",
         'error',
       );
@@ -96,7 +102,9 @@ const HomeSceneSettings: React.FC = () => {
       <p style={styles.now} role="status" aria-live="polite">
         Showing now: <strong style={{ color: theme.colors.txt.primary }}>{liveName}</strong>
         {live !== DEFAULT_SCENE_ID && setting?.endsOn && <> until {formatDay(setting.endsOn)}</>}
-        {live !== DEFAULT_SCENE_ID && setting?.showOnPortal && <>, on Home and the parent portal</>}
+        {live !== DEFAULT_SCENE_ID && (setting?.showOnPortal || setting?.showOnChooser) && (
+          <>, also on {[setting?.showOnChooser && 'the front door', setting?.showOnPortal && 'the parent portal'].filter(Boolean).join(' and ')}</>
+        )}
       </p>
 
       <div style={styles.grid} role="radiogroup" aria-label="Home background">
@@ -143,6 +151,16 @@ const HomeSceneSettings: React.FC = () => {
             <div style={styles.portalHint}>Families see the same scene behind their portal pages.</div>
           </div>
           <Toggle checked={onPortal} onChange={setOnPortal} labelledBy="home-scene-portal-label" />
+        </div>
+      )}
+
+      {scene !== DEFAULT_SCENE_ID && (
+        <div style={styles.portalRow}>
+          <div style={{ minWidth: 0 }}>
+            <div id="home-scene-chooser-label" style={styles.portalLabel}>Also show on the front door</div>
+            <div style={styles.portalHint}>The first screen of the app, where people choose Staff or Parent.</div>
+          </div>
+          <Toggle checked={onChooser} onChange={setOnChooser} labelledBy="home-scene-chooser-label" />
         </div>
       )}
 
