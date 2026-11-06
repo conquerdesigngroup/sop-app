@@ -69,6 +69,23 @@ export interface NotificationPreferences {
 
 // Task Template Types (Task Library)
 
+/**
+ * A photo or file attached to a task, a template, or one step of either.
+ *
+ * `path` is a key in the private `task-files` bucket, never a URL: a signed
+ * URL expires, so the app signs on read. See src/lib/taskFiles.ts and the v76
+ * migration.
+ */
+export interface TaskFile {
+  id: string;
+  path: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  uploadedBy?: string;
+  uploadedAt: string;
+}
+
 export interface TaskTemplateStep {
   id: string;
   order: number;
@@ -76,6 +93,7 @@ export interface TaskTemplateStep {
   description: string;
   requiresPhoto?: boolean;
   sopId?: string; // Link to specific SOP for this step
+  images?: TaskFile[]; // Screenshots / reference photos shown with the step
 }
 
 export interface RecurrencePattern {
@@ -100,6 +118,7 @@ export interface TaskTemplate {
   updatedAt?: string;
   isRecurring: boolean;
   recurrencePattern?: RecurrencePattern;
+  files?: TaskFile[];
 }
 
 // Task Types (Individual Tasks)
@@ -117,6 +136,7 @@ export interface TaskStep {
   requiresPhoto?: boolean;
   photoUrl?: string;
   sopId?: string;
+  images?: TaskFile[]; // Screenshots / reference photos shown with the step
 }
 
 export interface TaskComment {
@@ -158,6 +178,9 @@ export interface JobTask {
 
   // SOPs attached to this job task
   sopIds: string[];
+
+  // Photos and files attached to the task itself
+  files?: TaskFile[];
 
   // Completion
   startedAt?: string;

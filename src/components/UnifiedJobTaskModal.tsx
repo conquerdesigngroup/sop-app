@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useToast } from '../contexts/ToastContext';
-import { JobTask, TaskTemplate, TaskPriority, RecurrencePattern } from '../types';
+import { JobTask, TaskTemplate, TaskPriority, RecurrencePattern, TaskFile } from '../types';
 import { theme } from '../theme';
 import { isManagementRole, roleLabel } from '../lib/roles';
 import { useResponsive } from '../hooks/useResponsive';
@@ -8,12 +8,15 @@ import TemplateSelector from './TemplateSelector';
 import { CustomCheckbox } from './CustomCheckbox';
 import { studioToday } from '../lib/studioDate';
 import StaffAvatar from './StaffAvatar';
+import TaskFilesEditor from './tasks/TaskFilesEditor';
+import { discardUnsaved } from '../lib/taskFiles';
 
 interface ChecklistItem {
   id: string;
   title: string;
   description: string;
   requiresPhoto: boolean;
+  images: TaskFile[];
 }
 
 interface UnifiedJobTaskModalProps {
@@ -31,6 +34,7 @@ interface UnifiedJobTaskModalProps {
       title: string;
       description?: string;
       requiresPhoto: boolean;
+      images?: TaskFile[];
     }[];
     assignedTo: string[];
     scheduledDate: string;
@@ -39,6 +43,7 @@ interface UnifiedJobTaskModalProps {
     recurrencePattern?: RecurrencePattern;
     templateId?: string;
     sopId?: string;
+    files?: TaskFile[];
   }, saveAsTemplate: boolean) => void | Promise<void>;
   taskTemplates: TaskTemplate[];
   users: any[];
@@ -99,6 +104,45 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   // Submission state to prevent duplicates
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Photos and files on the task itself; step pictures live on each item.
+  const [files, setFiles] = useState<TaskFile[]>([]);
+  // How many editors (task + each step) are mid-upload. Saving waits for 0.
+  const [uploadsInFlight, setUploadsInFlight] = useState(0);
+  // Everything uploaded since this form opened. Whatever is not in the saved
+  // task when it closes is deleted from storage — nothing else can point at
+  // it yet. See "REMOVING IS NOT DELETING" in lib/taskFiles.
+  const sessionUploads = useRef<Map<string, TaskFile>>(new Map());
+  const openRef = useRef(isOpen);
+  openRef.current = isOpen;
+
+  const handleUploaded = useCallback((file: TaskFile) => {
+    if (!openRef.current) {
+      // Landed after the form was closed: nothing will ever save it.
+      void discardUnsaved([file]);
+      return;
+    }
+    sessionUploads.current.set(file.path, file);
+  }, []);
+
+  const handleRemoved = useCallback((file: TaskFile) => {
+    if (sessionUploads.current.has(file.path)) {
+      sessionUploads.current.delete(file.path);
+      void discardUnsaved([file]);
+    }
+  }, []);
+
+  const handleBusyChange = useCallback((busy: boolean) => {
+    setUploadsInFlight(n => Math.max(0, n + (busy ? 1 : -1)));
+  }, []);
+
+  /** Close without saving: drop anything this form uploaded. */
+  const handleClose = () => {
+    const unsaved = Array.from(sessionUploads.current.values());
+    sessionUploads.current.clear();
+    if (unsaved.length) void discardUnsaved(unsaved);
+    onClose();
+  };
+
   // Existing categories from the library, plus whatever is currently selected
   const categoryOptions = Array.from(new Set([
     'General',
@@ -138,8 +182,17 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       setIsAddingCategory(false);
       setNewCategoryName('');
       setIsSubmitting(false);
+      setFiles([]);
     }
   }, [isOpen, editingTask, initialTemplateId]);
+
+  // A fresh form starts with no uploads of its own.
+  useEffect(() => {
+    if (isOpen) {
+      sessionUploads.current.clear();
+      setUploadsInFlight(0);
+    }
+  }, [isOpen]);
 
   // Initialize with editing task or initial template
   useEffect(() => {
@@ -159,12 +212,15 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         setRecurrenceDays(editingTask.recurrencePattern.daysOfWeek || []);
       }
 
+      setFiles(editingTask.files || []);
+
       // Convert task steps to checklist items
       const items: ChecklistItem[] = editingTask.steps.map(step => ({
         id: step.id,
         title: step.title,
         description: step.description || '',
         requiresPhoto: step.requiresPhoto || false,
+        images: step.images || [],
       }));
       setChecklistItems(items);
     } else if (initialTemplateId) {
@@ -203,12 +259,15 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
         setRecurrenceDays(template.recurrencePattern.daysOfWeek || []);
       }
 
+      setFiles(template.files || []);
+
       // Convert template steps to checklist items
       const items: ChecklistItem[] = template.steps.map(step => ({
         id: step.id,
         title: step.title,
         description: step.description || '',
         requiresPhoto: step.requiresPhoto || false,
+        images: step.images || [],
       }));
       setChecklistItems(items);
 
@@ -246,6 +305,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
       title: '',
       description: '',
       requiresPhoto: false,
+      images: [],
     };
     setChecklistItems([...checklistItems, newItem]);
   };
@@ -257,6 +317,14 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   const handleUpdateChecklistItem = (id: string, field: keyof ChecklistItem, value: any) => {
     setChecklistItems(checklistItems.map(item =>
       item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  // Functional, because a step's pictures finish uploading one at a time and
+  // the person may be typing in another step while they do.
+  const updateStepImages = (id: string, update: (prev: TaskFile[]) => TaskFile[]) => {
+    setChecklistItems(prev => prev.map(item =>
+      item.id === id ? { ...item, images: update(item.images || []) } : item
     ));
   };
 
@@ -273,6 +341,11 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
 
     // Prevent double submission
     if (isSubmitting) {
+      return;
+    }
+
+    if (uploadsInFlight > 0) {
+      showError('Wait for the photos and files to finish uploading, then save.');
       return;
     }
 
@@ -325,6 +398,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
             title: item.title,
             description: item.description,
             requiresPhoto: item.requiresPhoto,
+            ...(item.images?.length ? { images: item.images } : {}),
           })),
           assignedTo,
           scheduledDate,
@@ -333,9 +407,20 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
           recurrencePattern,
           templateId: selectedTemplate?.id,
           sopId: linkedSopId || undefined,
+          files,
         },
         saveAsTemplate
       );
+
+      // Saved. Anything uploaded here and then removed (or left on a step
+      // that was deleted) is in nobody's list, so it goes now.
+      const kept = new Set<string>([
+        ...files.map(f => f.path),
+        ...checklistItems.flatMap(item => (item.images || []).map(f => f.path)),
+      ]);
+      const orphans = Array.from(sessionUploads.current.values()).filter(f => !kept.has(f.path));
+      sessionUploads.current.clear();
+      if (orphans.length) void discardUnsaved(orphans);
 
       if (onSuccess) {
         onSuccess();
@@ -349,13 +434,13 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div style={{...styles.modalOverlay, ...(isMobile && styles.modalOverlayMobile)}} onClick={onClose}>
+    <div style={{...styles.modalOverlay, ...(isMobile && styles.modalOverlayMobile)}} onClick={handleClose}>
       <div style={{...styles.modal, ...(isMobile && styles.modalMobile)}} onClick={(e) => e.stopPropagation()}>
         <div style={{...styles.modalHeader, ...(isMobile && styles.modalHeaderMobile)}}>
           <h2 style={{...styles.modalTitle, ...(isMobile && styles.modalTitleMobile)}}>
             {editingTask ? 'Edit Job Task' : 'Create Job Task'}
           </h2>
-          <button style={{...styles.closeButton, ...(isMobile && styles.closeButtonMobile)}} onClick={onClose}>
+          <button type="button" style={{...styles.closeButton, ...(isMobile && styles.closeButtonMobile)}} onClick={handleClose}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -399,6 +484,21 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                 placeholder="Brief description of the task..."
                 rows={3}
                 style={{...styles.textarea, ...(isMobile && styles.textareaMobile)}}
+              />
+            </div>
+
+            {/* Photos & files */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Photos &amp; Files</label>
+              <TaskFilesEditor
+                files={files}
+                onChange={setFiles}
+                uid={currentUserId}
+                variant="task"
+                onUploaded={handleUploaded}
+                onRemoved={handleRemoved}
+                onBusyChange={handleBusyChange}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -676,6 +776,19 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
                         label="Requires Photo"
                       />
                     </div>
+
+                    <div style={{ marginTop: '12px' }}>
+                      <TaskFilesEditor
+                        files={item.images || []}
+                        onChange={(update) => updateStepImages(item.id, update)}
+                        uid={currentUserId}
+                        variant="step"
+                        onUploaded={handleUploaded}
+                        onRemoved={handleRemoved}
+                        onBusyChange={handleBusyChange}
+                        disabled={isSubmitting}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -770,7 +883,7 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
           <div style={{...styles.modalActions, ...(isMobile && styles.modalActionsMobile)}}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               style={{...styles.cancelButton, ...(isMobile && styles.buttonMobile)}}
               disabled={isSubmitting}
             >
@@ -781,11 +894,15 @@ export const UnifiedJobTaskModal: React.FC<UnifiedJobTaskModalProps> = ({
               style={{
                 ...styles.saveButton,
                 ...(isMobile && styles.buttonMobile),
-                ...(isSubmitting && { opacity: 0.6, cursor: 'not-allowed' })
+                ...((isSubmitting || uploadsInFlight > 0) && { opacity: 0.6, cursor: 'not-allowed' })
               }}
-              disabled={isSubmitting}
+              disabled={isSubmitting || uploadsInFlight > 0}
             >
-              {isSubmitting ? 'Creating...' : (editingTask ? 'Update Task' : 'Create Job Task')}
+              {isSubmitting
+                ? 'Saving...'
+                : uploadsInFlight > 0
+                  ? 'Uploading...'
+                  : (editingTask ? 'Update Task' : 'Create Job Task')}
             </button>
           </div>
         </form>

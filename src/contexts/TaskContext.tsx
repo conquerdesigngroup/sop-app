@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { TaskTemplate, JobTask, TaskTemplateStep, TaskStep, TaskStatus, TaskPriority } from '../types';
+import { TaskTemplate, JobTask, TaskTemplateStep, TaskStep, TaskStatus, TaskPriority, TaskFile } from '../types';
+import { normalizeTaskFiles } from '../lib/taskFiles';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logActivity } from '../utils/activityLogger';
@@ -37,6 +38,7 @@ interface TaskContextType {
       title: string;
       description?: string;
       requiresPhoto: boolean;
+      images?: TaskFile[];
     }[];
     scheduledDate: string;
     dueTime?: string;
@@ -45,10 +47,28 @@ interface TaskContextType {
     recurrencePattern?: any;
     templateId?: string;
     sopId?: string;
+    files?: TaskFile[];
   }, saveAsTemplate: boolean) => Promise<void>;
   refreshTasks: () => Promise<void>;
   loading: boolean;
 }
+
+// The `files` column arrives with migration v76. Until it is applied, writing
+// the key at all fails the whole insert, so it is only sent when there is
+// something in it — a task with no files saves the same either side of v76.
+const filesColumn = (files: TaskFile[] | undefined) =>
+  files && files.length ? { files } : {};
+
+// Steps are jsonb, so an old row may carry no images array, or a malformed one.
+// Normalised here once so every view can trust step.images is an array.
+const normalizeSteps = <T extends { images?: TaskFile[] }>(raw: unknown): T[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((step: any) => {
+    if (!step || typeof step !== 'object') return step;
+    const images = normalizeTaskFiles(step.images);
+    return images.length ? { ...step, images } : (({ images: _drop, ...rest }) => rest)(step);
+  });
+};
 
 // Helper function to map Supabase task template to app TaskTemplate type
 const mapSupabaseTaskTemplate = (dbTemplate: any): TaskTemplate => {
@@ -61,12 +81,13 @@ const mapSupabaseTaskTemplate = (dbTemplate: any): TaskTemplate => {
     estimatedDuration: dbTemplate.estimated_duration,
     priority: dbTemplate.priority as TaskPriority,
     sopIds: dbTemplate.sop_ids || [],
-    steps: dbTemplate.steps || [],
+    steps: normalizeSteps(dbTemplate.steps),
     createdBy: dbTemplate.created_by,
     createdAt: dbTemplate.created_at,
     updatedAt: dbTemplate.updated_at,
     isRecurring: dbTemplate.is_recurring || false,
     recurrencePattern: dbTemplate.recurrence_pattern,
+    files: normalizeTaskFiles(dbTemplate.files),
   };
 };
 
@@ -86,7 +107,7 @@ const mapSupabaseJobTask = (dbTask: any): JobTask => {
     estimatedDuration: dbTask.estimated_duration,
     status: dbTask.status as TaskStatus,
     priority: dbTask.priority as TaskPriority,
-    steps: dbTask.steps || [],
+    steps: normalizeSteps(dbTask.steps),
     completedSteps: dbTask.completed_steps || [],
     progressPercentage: dbTask.progress_percentage || 0,
     sopIds: dbTask.sop_ids || [],
@@ -100,6 +121,7 @@ const mapSupabaseJobTask = (dbTask: any): JobTask => {
     updatedAt: dbTask.updated_at,
     isRecurring: dbTask.is_recurring || false,
     recurrencePattern: dbTask.recurrence_pattern,
+    files: normalizeTaskFiles(dbTask.files),
   };
 };
 
@@ -480,6 +502,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         priority: templateData.priority,
         sop_ids: templateData.sopIds,
         steps: templateData.steps,
+        ...filesColumn(templateData.files),
         created_by: currentUser?.id || 'system',
         is_recurring: templateData.isRecurring,
         recurrence_pattern: templateData.recurrencePattern,
@@ -555,6 +578,9 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (templateData.priority) updateData.priority = templateData.priority;
       if (templateData.sopIds) updateData.sop_ids = templateData.sopIds;
       if (templateData.steps) updateData.steps = templateData.steps;
+      if (templateData.files !== undefined && (templateData.files.length || existingTemplate?.files?.length)) {
+        updateData.files = templateData.files;
+      }
       if (templateData.isRecurring !== undefined) updateData.is_recurring = templateData.isRecurring;
       if (templateData.recurrencePattern) updateData.recurrence_pattern = templateData.recurrencePattern;
 
@@ -715,6 +741,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         completed_steps: taskData.completedSteps,
         progress_percentage: progressPercentage,
         sop_ids: taskData.sopIds,
+        ...filesColumn(taskData.files),
         comments: taskData.comments,
         is_recurring: taskData.isRecurring || false,
         recurrence_pattern: taskData.recurrencePattern,
@@ -822,6 +849,9 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       if (taskData.steps !== undefined) updateData.steps = taskData.steps;
       if (taskData.completedSteps !== undefined) updateData.completed_steps = taskData.completedSteps;
       if (taskData.sopIds !== undefined) updateData.sop_ids = taskData.sopIds;
+      if (taskData.files !== undefined && (taskData.files.length || existingTask?.files?.length)) {
+        updateData.files = taskData.files;
+      }
       if (taskData.startedAt !== undefined) updateData.started_at = taskData.startedAt;
       if (taskData.completedAt !== undefined) updateData.completed_at = taskData.completedAt;
       if (taskData.completedBy !== undefined) updateData.completed_by = taskData.completedBy;
@@ -1048,6 +1078,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       steps: taskSteps,
       completedSteps: [],
       sopIds: template.sopIds,
+      files: template.files || [],
       comments: [],
     };
 
@@ -1066,6 +1097,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         title: string;
         description?: string;
         requiresPhoto: boolean;
+        images?: TaskFile[];
       }[];
       scheduledDate: string;
       dueTime?: string;
@@ -1074,6 +1106,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
       recurrencePattern?: any;
       templateId?: string;
       sopId?: string;
+      files?: TaskFile[];
     },
     saveAsTemplate: boolean = false
   ): Promise<void> => {
@@ -1090,6 +1123,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           title: step.title,
           description: step.description || '',
           requiresPhoto: step.requiresPhoto,
+          ...(step.images?.length ? { images: step.images } : {}),
         }));
 
         const template: Omit<TaskTemplate, 'id' | 'createdAt'> = {
@@ -1104,6 +1138,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
           createdBy: currentUser.id,
           isRecurring: taskData.isRecurring || false,
           recurrencePattern: taskData.recurrencePattern,
+          files: taskData.files || [],
         };
 
         await addTaskTemplate(template);
@@ -1117,6 +1152,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         description: step.description || '',
         isCompleted: false,
         requiresPhoto: step.requiresPhoto,
+        ...(step.images?.length ? { images: step.images } : {}),
       }));
 
       const jobTask: Omit<JobTask, 'id' | 'createdAt' | 'progressPercentage'> = {
@@ -1135,6 +1171,7 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
         steps: taskSteps,
         completedSteps: [],
         sopIds: taskData.sopId ? [taskData.sopId] : [],
+        files: taskData.files || [],
         comments: [],
         isRecurring: taskData.isRecurring,
         recurrencePattern: taskData.recurrencePattern,

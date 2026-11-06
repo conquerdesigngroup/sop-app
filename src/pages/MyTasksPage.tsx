@@ -9,6 +9,7 @@ import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { studioToday, shiftIsoDays } from '../lib/studioDate';
 import { SwipeableListItem, createSwipeAction } from '../components/SwipeableList';
+import { TaskFilesSection, StepImages } from '../components/tasks/TaskFileTiles';
 
 const MyTasksPage: React.FC = () => {
   const { jobTasks, updateJobTask } = useTask();
@@ -676,6 +677,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
                       {step.description && (
                         <span style={styles.stepDescriptionLarge}>{step.description}</span>
                       )}
+                      <StepImages images={step.images} />
                       {step.requiresPhoto && (
                         <span style={styles.photoRequiredBadge}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -697,6 +699,9 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ task, sops, onClose, 
               )}
             </div>
           </div>
+
+          {/* Photos & files */}
+          <TaskFilesSection files={task.files} sectionStyle={styles.modalSection} titleStyle={styles.sectionTitle} />
 
           {/* Attached SOPs */}
           {attachedSOPs.length > 0 && (
