@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { isManagementRole } from '../lib/roles';
 import { studioToday, shiftIsoDays, daysBetweenIso } from '../lib/studioDate';
@@ -360,7 +360,7 @@ const AlertsPage: React.FC = () => {
   const getAlertBgColor = (type: TaskAlert['type']) => {
     switch (type) {
       case 'overdue':
-        return 'rgba(226, 20, 79, 0.1)';
+        return accentAlpha(0.1);
       case 'due_today':
         return 'rgba(245, 158, 11, 0.1)';
       case 'due_tomorrow':
@@ -510,7 +510,7 @@ const AlertsPage: React.FC = () => {
             <span style={{
               ...styles.priorityBadge,
               backgroundColor: alert.priority === 'high' || alert.priority === 'urgent'
-                ? 'rgba(226, 20, 79, 0.1)'
+                ? accentAlpha(0.1)
                 : 'rgba(107, 114, 128, 0.1)',
               color: alert.priority === 'high' || alert.priority === 'urgent'
                 ? theme.colors.status.error
@@ -824,7 +824,7 @@ const AlertsPage: React.FC = () => {
         <div style={styles.adminTabContent}>
           <div style={styles.sectionHeader}>
             <h2 style={styles.sectionTitle}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.primary }} strokeWidth="2">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -960,7 +960,7 @@ const AlertsPage: React.FC = () => {
     <div style={styles.teamContainer}>
       <div style={styles.sectionHeader}>
         <h2 style={styles.sectionTitle}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.primary }} strokeWidth="2">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
@@ -1007,7 +1007,7 @@ const AlertsPage: React.FC = () => {
                     <span style={{
                       ...styles.priorityBadge,
                       backgroundColor: alert.priority === 'high' || alert.priority === 'urgent'
-                        ? 'rgba(226, 20, 79, 0.1)'
+                        ? accentAlpha(0.1)
                         : 'rgba(245, 158, 11, 0.1)',
                       color: alert.priority === 'high' || alert.priority === 'urgent'
                         ? theme.colors.status.error
@@ -1114,7 +1114,7 @@ const styles: Record<string, React.CSSProperties> = {
   alertCount: {
     fontSize: '14px',
     color: theme.colors.status.error,
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
     padding: `${theme.spacing.xs} ${theme.spacing.md}`,
     borderRadius: theme.borderRadius.md,
     fontWeight: 600,

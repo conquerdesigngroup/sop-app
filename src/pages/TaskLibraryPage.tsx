@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useTask } from '../contexts/TaskContext';
 import { TaskTemplate } from '../types';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import TaskLibraryImport from '../components/TaskLibraryImport';
 import { useToast } from '../contexts/ToastContext';
@@ -91,11 +91,10 @@ const TaskLibraryPage: React.FC = () => {
               height="32"
               viewBox="0 0 24 24"
               fill="none"
-              stroke={theme.colors.primary}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginRight: '12px' }}
+              style={{ stroke: theme.colors.primary, marginRight: '12px' }}
             >
               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
               <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
@@ -286,7 +285,7 @@ const TaskTemplateCard: React.FC<TaskTemplateCardProps> = ({ template, onDelete,
     <div style={{...styles.card, ...(isMobile ? styles.cardMobile : {})}}>
       <div style={{...styles.cardHeader, ...(isMobile ? styles.cardHeaderMobile : {})}}>
         <div style={{...styles.cardBadges, ...(isMobile ? styles.cardBadgesMobile : {})}}>
-          <span style={{...styles.badge, backgroundColor: 'rgba(226, 20, 79, 0.15)', color: theme.colors.primary}}>
+          <span style={{...styles.badge, backgroundColor: accentAlpha(0.15), color: theme.colors.primary}}>
             {template.department}
           </span>
           <span style={{...styles.badge, backgroundColor: 'rgba(33, 150, 243, 0.15)', color: theme.colors.status.info}}>
@@ -424,7 +423,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
     transform: 'translateY(-2px)',
-    boxShadow: '0 4px 12px rgba(226, 20, 79, 0.4)',
+    boxShadow: `0 4px 12px ${accentAlpha(0.4)}`,
   },
   controls: {
     display: 'flex',
@@ -542,7 +541,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     fontWeight: '600',
     color: theme.colors.textMuted,
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
     padding: '4px 12px',
     borderRadius: theme.borderRadius.full,
   },
@@ -695,8 +694,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     gap: theme.spacing.xs,
     padding: theme.spacing.sm,
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
-    border: `1px solid rgba(226, 20, 79, 0.3)`,
+    backgroundColor: accentAlpha(0.1),
+    border: `1px solid ${accentAlpha(0.3)}`,
     borderRadius: theme.borderRadius.md,
     color: theme.colors.status.error,
     fontSize: '14px',
@@ -926,8 +925,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   stepActionButtonDelete: {
     width: '28px',
     height: '28px',
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
-    border: `1px solid rgba(226, 20, 79, 0.3)`,
+    backgroundColor: accentAlpha(0.1),
+    border: `1px solid ${accentAlpha(0.3)}`,
     borderRadius: theme.borderRadius.sm,
     color: theme.colors.status.error,
     fontSize: '20px',

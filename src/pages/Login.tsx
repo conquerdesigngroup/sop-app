@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useResponsive } from '../hooks/useResponsive';
-import { theme, BRAND_MARK } from '../theme';
+import { theme, BRAND_MARK, accentAlpha } from '../theme';
 import { CustomCheckbox } from '../components/CustomCheckbox';
 
 const Login: React.FC = () => {
@@ -326,7 +326,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: theme.spacing.lg,
   },
   errorBox: {
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
     border: `1px solid ${theme.colors.status.error}`,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,

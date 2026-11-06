@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSOPs } from '../contexts/SOPContext';
 import { useTask } from '../contexts/TaskContext';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { SOP, JobTask } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -553,7 +553,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     color: theme.colors.primary,
     padding: '4px 10px',
-    backgroundColor: `${theme.colors.primary}15`,
+    backgroundColor: accentAlpha(0.08),
     borderRadius: theme.borderRadius.sm,
   },
   priorityBadge: {

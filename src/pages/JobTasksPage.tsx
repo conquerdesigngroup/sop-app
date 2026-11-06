@@ -7,7 +7,7 @@ import { isManagementRole } from '../lib/roles';
 import { studioToday, daysBetweenIso } from '../lib/studioDate';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { JobTask, TaskTemplate } from '../types';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { UnifiedJobTaskModal } from '../components/UnifiedJobTaskModal';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../hooks/useConfirm';
@@ -485,11 +485,10 @@ const JobTasksPage: React.FC = () => {
               height={isMobile ? "24" : "32"}
               viewBox="0 0 24 24"
               fill="none"
-              stroke={theme.colors.primary}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginRight: isMobile ? '8px' : '12px' }}
+              style={{ stroke: theme.colors.primary, marginRight: isMobile ? '8px' : '12px' }}
             >
               <path d="M9 11l3 3L22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
@@ -2119,7 +2118,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   statDanger: {
     borderColor: theme.colors.status.error,
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
   },
   statUrgent: {
     borderColor: theme.colors.status.warning,
@@ -2193,7 +2192,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   // Task Card Selection
   taskCardSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: 'rgba(226, 20, 79, 0.05)',
+    backgroundColor: accentAlpha(0.05),
   },
   taskCardUrgent: {
     borderColor: theme.colors.status.error,
@@ -2417,8 +2416,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   deleteButton: {
     padding: theme.spacing.xs,
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
-    border: `1px solid rgba(226, 20, 79, 0.3)`,
+    backgroundColor: accentAlpha(0.1),
+    border: `1px solid ${accentAlpha(0.3)}`,
     borderRadius: theme.borderRadius.sm,
     color: theme.colors.status.error,
     cursor: 'pointer',
@@ -2478,7 +2477,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   departmentBadge: {
     padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-    backgroundColor: 'rgba(226, 20, 79, 0.15)',
+    backgroundColor: accentAlpha(0.15),
     color: theme.colors.primary,
     borderRadius: theme.borderRadius.sm,
     fontSize: '11px',
@@ -2840,7 +2839,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     color: theme.colors.primary,
     padding: theme.spacing.sm,
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
     borderRadius: theme.borderRadius.md,
     textAlign: 'center',
   },
@@ -3038,7 +3037,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginLeft: '34px',
     marginTop: theme.spacing.xs,
     padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
     borderRadius: theme.borderRadius.sm,
     width: 'fit-content',
   },

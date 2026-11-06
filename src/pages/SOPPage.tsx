@@ -2,7 +2,7 @@ import React, { useState, useEffect, memo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { SOP, SOPStatus } from '../types';
 import SOPForm from '../components/SOPForm';
 import SOPViewer from '../components/SOPViewer';
@@ -274,11 +274,10 @@ const SOPPage: React.FC = () => {
               height={isMobileOrTablet ? "24" : "32"}
               viewBox="0 0 24 24"
               fill="none"
-              stroke={theme.colors.primary}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginRight: isMobileOrTablet ? '8px' : '12px' }}
+              style={{ stroke: theme.colors.primary, marginRight: isMobileOrTablet ? '8px' : '12px' }}
             >
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
@@ -1385,7 +1384,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#FFFFFF',
     border: `2px solid ${theme.colors.primary}`,
     transform: 'translateY(-2px)',
-    boxShadow: '0 4px 12px rgba(226, 20, 79, 0.4)',
+    boxShadow: `0 4px 12px ${accentAlpha(0.4)}`,
   },
 };
 

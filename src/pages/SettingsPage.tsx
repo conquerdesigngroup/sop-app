@@ -4,13 +4,14 @@ import { useSOPs } from '../contexts/SOPContext';
 import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../contexts/ToastContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { APP_VERSION } from '../version';
 import { useResponsive } from '../hooks/useResponsive';
 import { Button, Toggle } from '../components/ui';
 import DataIntegrityPanel from '../components/DataIntegrityPanel';
 import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import HomeSceneSettings from '../components/HomeSceneSettings';
+import AppPaletteSettings from '../components/AppPaletteSettings';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription } from '../lib/push';
@@ -682,7 +683,7 @@ const SettingsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =>
           <div style={styles.adminSection}>
             <div style={styles.adminSectionHeader}>
               <h2 style={styles.adminSectionTitle}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.primary }} strokeWidth="2">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
                 Admin Tools
@@ -702,6 +703,25 @@ const SettingsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =>
                   </h3>
                 </div>
                 <HomeSceneSettings />
+              </div>
+            )}
+
+            {/* App colors: the holiday palettes. Super admin only. */}
+            {isSuperAdmin && (
+              <div className="card-hover-subtle" style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="13.5" cy="6.5" r="1.5" />
+                      <circle cx="17.5" cy="10.5" r="1.5" />
+                      <circle cx="8.5" cy="7.5" r="1.5" />
+                      <circle cx="6.5" cy="12.5" r="1.5" />
+                      <path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0 0 22 9.8C22 5.5 17.5 2 12 2z" />
+                    </svg>
+                    App colors
+                  </h3>
+                </div>
+                <AppPaletteSettings />
               </div>
             )}
 
@@ -1025,7 +1045,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '11px',
     fontWeight: 700,
     padding: '4px 10px',
-    backgroundColor: `${theme.colors.primary}20`,
+    backgroundColor: accentAlpha(0.125),
     color: theme.colors.primary,
     borderRadius: theme.borderRadius.sm,
     textTransform: 'uppercase' as const,

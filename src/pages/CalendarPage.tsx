@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import {
   dayKey,
   addDays,
@@ -1110,7 +1110,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     border: `1px solid ${theme.colors.status.error}`,
-    backgroundColor: 'rgba(226, 20, 79, 0.08)',
+    backgroundColor: accentAlpha(0.08),
     color: theme.colors.txt.primary,
     fontFamily: theme.fonts.primary,
     fontSize: '14px',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 
 export const equipmentIcons = {
   camera: (
@@ -295,7 +295,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   iconButtonActive: {
     borderColor: theme.colors.primary,
-    backgroundColor: `${theme.colors.primary}26`,
+    backgroundColor: accentAlpha(0.15),
     color: theme.colors.primary,
   },
   icon: {
