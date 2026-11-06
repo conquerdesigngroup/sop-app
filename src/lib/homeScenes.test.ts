@@ -30,6 +30,6 @@ describe('HOME_SCENES', () => {
   });
 
   it('keeps the shipped ids stable (they are stored in the database)', () => {
-    expect(HOME_SCENES.map(s => s.id)).toEqual(['snow', 'village', 'lights', 'ornaments', 'aurora', 'frost', 'star', 'leaves', 'harvest', 'boughs']);
+    expect(HOME_SCENES.map(s => s.id)).toEqual(['snow', 'village', 'lights', 'ornaments', 'aurora', 'frost', 'star', 'leaves', 'harvest', 'boughs', 'moon', 'champagne', 'hearts', 'stage']);
   });
 });
