@@ -1,18 +1,23 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTask, TASK_COMPLETE_MARKER } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useSOPs } from '../contexts/SOPContext';
 import { useToast } from '../contexts/ToastContext';
 import { JobTask } from '../types';
 import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { studioToday, shiftIsoDays } from '../lib/studioDate';
-import { Badge, Button, Card, Modal, Select } from '../components/ui';
-import { TaskFilesSection, StepImages } from '../components/tasks/TaskFileTiles';
+import { Badge, Button, Card } from '../components/ui';
+import CalendarTaskModal from '../components/CalendarTaskModal';
+import { WEEKDAY_SHORT, weekdayOf, occurrenceDates, occurrenceId, seriesState } from '../lib/recurrence';
 
 /**
- * My Tasks — a team member's own checklist.
+ * My Tasks — a team member's own checklist, one day at a time.
+ *
+ * It opens on today: the tasks scheduled for today in time order, each with
+ * a line saying what it is for, plus anything overdue from earlier days. A
+ * week strip moves to other days to see what is coming. Repeating tasks show
+ * on every day their rule lands on.
  *
  * The list is deliberately just titles with a checkbox: tick it and the task is
  * done. Everything else an admin may have filled in (description, steps, due
@@ -55,29 +60,7 @@ const reopenPatch = (task: JobTask): Partial<JobTask> => ({
   completedAt: undefined,
 });
 
-/** The patch for ticking or unticking one step. */
-const stepTogglePatch = (task: JobTask, stepId: string): Partial<JobTask> | null => {
-  if (!task.steps.some(s => s.id === stepId)) return null;
-  const wasDone = task.completedSteps.includes(stepId);
-  const now = new Date().toISOString();
-  const steps = task.steps.map(s =>
-    s.id === stepId ? { ...s, isCompleted: !wasDone, completedAt: wasDone ? undefined : now } : s
-  );
-  const completedSteps = wasDone
-    ? task.completedSteps.filter(id => id !== stepId)
-    : [...task.completedSteps.filter(id => id !== TASK_COMPLETE_MARKER), stepId];
-  const doneCount = completedSteps.filter(id => task.steps.some(s => s.id === id)).length;
-  const status: JobTask['status'] =
-    doneCount === 0 ? 'pending' : doneCount === task.steps.length ? 'completed' : 'in-progress';
-  return {
-    steps,
-    completedSteps,
-    status,
-    progressPercentage: Math.round((doneCount / task.steps.length) * 100),
-    startedAt: task.startedAt || now,
-    ...(status === 'completed' ? { completedAt: now } : {}),
-  };
-};
+const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const formatDay = (iso: string, long = false) => {
   const todayStr = studioToday();
@@ -99,16 +82,25 @@ const formatTime = (hhmm?: string) => {
   return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')} ${suffix}`;
 };
 
+/** Monday of the week `iso` falls in. */
+const mondayOf = (iso: string) => shiftIsoDays(iso, -((weekdayOf(iso) + 6) % 7));
+
+/** "HH:MM" sorts as text; untimed tasks go after the timed ones. */
+const byTime = (a: JobTask, b: JobTask) =>
+  (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99') || a.title.localeCompare(b.title);
+
+/** First line of the description, for the row's "what it's for" line. */
+const purposeOf = (task: JobTask) => (task.description || '').trim().split('\n')[0];
+
 const MyTasksPage: React.FC = () => {
-  const { jobTasks, updateJobTask } = useTask();
-  const { currentUser } = useAuth();
-  const { sops } = useSOPs();
+  const { jobTasks, recurringSeries = [], updateJobTask } = useTask();
+  const { currentUser, users = [] } = useAuth();
   const { error: showError } = useToast();
   const location = useLocation();
   const { isMobileOrTablet } = useResponsive();
+  const today = studioToday();
+  const [selectedDay, setSelectedDay] = useState<string>(today);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterDate, setFilterDate] = useState<string>('all');
 
   /**
    * Saves land in TaskContext only once the server has answered, so a tick
@@ -160,58 +152,104 @@ const MyTasksPage: React.FC = () => {
     }
   }, [saveTask]);
 
-  const toggleStep = useCallback((task: JobTask, stepId: string) => {
-    const patch = stepTogglePatch(task, stepId);
-    if (patch) saveTask(task, patch);
-  }, [saveTask]);
 
-  // Dashboard links arrive with a filter in navigation state.
+  // Dashboard links arrive with a date in navigation state.
   useEffect(() => {
     if (location.state) {
       const state = location.state as any;
-      if (state.filterStatus) setFilterStatus(state.filterStatus);
-      if (state.filterDate) setFilterDate(state.filterDate);
+      if (state.filterDate === 'upcoming') setSelectedDay(shiftIsoDays(today, 1));
       window.history.replaceState({}, document.title);
     }
-  }, [location]);
+  }, [location, today]);
 
-  const today = studioToday();
   const isTaskOverdue = (task: JobTask) =>
-    task.status === 'overdue' || (task.scheduledDate < today && !isTaskDone(task));
+    !isTaskDone(task) && (task.status === 'overdue' || task.scheduledDate < today);
 
   // Tasks assigned to me (never archived or draft), with any unsaved tick applied.
-  const myTasks = jobTasks
+  const myTasks = useMemo(() => jobTasks
     .filter(task =>
       currentUser &&
       task.assignedTo.includes(currentUser.id) &&
       task.status !== 'archived' &&
       task.status !== 'draft'
     )
-    .map(withPatch);
+    .map(withPatch), [jobTasks, currentUser, withPatch]);
 
-  const filteredTasks = myTasks.filter(task => {
-    const matchesStatus =
-      filterStatus === 'all' ||
-      (filterStatus === 'overdue' ? isTaskOverdue(task) : task.status === filterStatus);
-    if (!matchesStatus) return false;
-    if (filterDate === 'today') return task.scheduledDate === today;
-    if (filterDate === 'upcoming') return task.scheduledDate > today;
-    if (filterDate === 'past') return task.scheduledDate < today;
-    return true;
-  });
+  /**
+   * Repeating tasks on days that have no task yet.
+   *
+   * A manager's device creates each day's copy of a repeating task a week
+   * ahead (src/lib/recurrence.ts). Further out than that — or before anyone
+   * has opened the app — the day would look empty, so the days the rule
+   * lands on are filled in here, read-only, until the real task exists.
+   * A day that was generated and then deleted on purpose stays empty.
+   */
+  const myTaskIds = useMemo(() => new Set(jobTasks.map(t => t.id)), [jobTasks]);
+  const projectedFor = useCallback((day: string): JobTask[] => {
+    if (!currentUser || day < today) return [];
+    return recurringSeries
+      .filter(series => series.assignedTo.includes(currentUser.id) && series.recurrencePattern)
+      .filter(series => {
+        const p = series.recurrencePattern!;
+        const state = seriesState(p, series.status, series.scheduledDate, today);
+        if (state !== 'active' && state !== 'upcoming') return false;
+        if (p.generatedThrough && day <= p.generatedThrough) return false;
+        if (myTaskIds.has(occurrenceId(series.id, day))) return false;
+        return occurrenceDates(p, series.scheduledDate, day, day).length > 0;
+      })
+      .map(series => ({
+        ...series,
+        id: occurrenceId(series.id, day),
+        isRecurring: false,
+        recurrencePattern: undefined,
+        seriesId: series.id,
+        scheduledDate: day,
+        status: 'pending' as const,
+        steps: (series.steps || []).map(s => ({ ...s, isCompleted: false, completedAt: undefined })),
+        completedSteps: [],
+        progressPercentage: 0,
+        startedAt: undefined,
+        completedAt: undefined,
+        files: [],
+      }));
+  }, [recurringSeries, currentUser, today, myTaskIds]);
 
-  const byDate = (a: JobTask, b: JobTask) =>
-    a.scheduledDate.localeCompare(b.scheduledDate) || (a.dueTime || '').localeCompare(b.dueTime || '');
-  const toDo = filteredTasks.filter(t => !isTaskDone(t)).sort(byDate);
-  // Most recently finished first, so the one you just ticked is right there.
-  const done = filteredTasks.filter(isTaskDone).sort((a, b) => byDate(b, a));
+  const tasksOn = useCallback(
+    (day: string) => [...myTasks.filter(t => t.scheduledDate === day), ...projectedFor(day)],
+    [myTasks, projectedFor]
+  );
 
-  const todayTasksCount = myTasks.filter(t => t.scheduledDate === today && !isTaskDone(t)).length;
+  const dayTasks = tasksOn(selectedDay);
+  const toDo = dayTasks.filter(t => !isTaskDone(t)).sort(byTime);
+  const done = dayTasks.filter(isTaskDone).sort(byTime);
+  // Left over from earlier days: shown on today so nothing quietly disappears.
+  const overdue = selectedDay === today
+    ? myTasks.filter(t => t.scheduledDate < today && !isTaskDone(t))
+        .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || byTime(a, b))
+    : [];
 
-  const selectedTask = selectedTaskId ? myTasks.find(t => t.id === selectedTaskId) || null : null;
+  const projectedIds = new Set(projectedFor(selectedDay).map(t => t.id));
+  const allShown = [...overdue, ...dayTasks];
+  const selectedTask = selectedTaskId ? allShown.find(t => t.id === selectedTaskId) || null : null;
   const closeDetail = useCallback(() => setSelectedTaskId(null), []);
 
-  const renderRows = (tasks: JobTask[]) => (
+  const weekStart = mondayOf(selectedDay);
+  const week = Array.from({ length: 7 }, (_, i) => shiftIsoDays(weekStart, i));
+  const isToday = selectedDay === today;
+
+  const dayHeading = isToday
+    ? 'Today'
+    : selectedDay === shiftIsoDays(today, 1)
+      ? 'Tomorrow'
+      : selectedDay === shiftIsoDays(today, -1) ? 'Yesterday' : WEEKDAY_LONG[weekdayOf(selectedDay)];
+  const dayDate = new Date(`${selectedDay}T00:00:00`)
+    .toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
+  const summary = toDo.length === 0
+    ? (dayTasks.length === 0 ? 'Nothing scheduled.' : 'All done for this day.')
+    : `${toDo.length} to do${done.length ? `, ${done.length} done` : ''}`;
+
+  const renderRows = (tasks: JobTask[], showDate = false) => (
     <Card padding="none" style={{ overflow: 'hidden' }}>
       {tasks.map((task, i) => (
         <TaskRow
@@ -219,6 +257,8 @@ const MyTasksPage: React.FC = () => {
           task={task}
           first={i === 0}
           overdue={isTaskOverdue(task)}
+          showDate={showDate}
+          projected={projectedIds.has(task.id)}
           saving={saving.includes(task.id)}
           onToggle={() => toggleDone(task)}
           onOpen={() => setSelectedTaskId(task.id)}
@@ -247,53 +287,88 @@ const MyTasksPage: React.FC = () => {
           </svg>
           My Tasks
         </h1>
-        <p style={styles.subtitle}>
-          {todayTasksCount > 0
-            ? `You have ${todayTasksCount} task${todayTasksCount !== 1 ? 's' : ''} due today`
-            : 'All caught up!'}
-        </p>
       </div>
 
-      <div style={styles.filters}>
-        <div style={styles.filterItem}>
-          <Select
-            aria-label="Filter by date"
-            size="sm"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            options={[
-              { value: 'all', label: 'All dates' },
-              { value: 'today', label: 'Today' },
-              { value: 'upcoming', label: 'Upcoming' },
-              { value: 'past', label: 'Past' },
-            ]}
-          />
-        </div>
-        <div style={styles.filterItem}>
-          <Select
-            aria-label="Filter by status"
-            size="sm"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            options={[
-              { value: 'all', label: 'All statuses' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'in-progress', label: 'In progress' },
-              { value: 'completed', label: 'Completed' },
-              { value: 'overdue', label: 'Overdue' },
-            ]}
-          />
+      {/* Day picker: a week at a time, today by default. A group, not a <nav>:
+          index.css strips the background off every button inside a nav. */}
+      <div style={styles.dayNav} role="group" aria-label="Choose a day">
+        <div style={styles.weekRow}>
+          <button
+            type="button"
+            style={styles.weekArrow}
+            onClick={() => setSelectedDay(shiftIsoDays(selectedDay, -7))}
+            aria-label="Previous week"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+          <div style={styles.weekDays}>
+            {week.map(day => {
+              const count = tasksOn(day).filter(t => !isTaskDone(t)).length;
+              const selected = day === selectedDay;
+              const label = new Date(`${day}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setSelectedDay(day)}
+                  aria-pressed={selected}
+                  aria-label={`${label}${day === today ? ' (today)' : ''}, ${count} to do`}
+                  style={{
+                    ...styles.dayPill,
+                    ...(selected ? styles.dayPillSelected : {}),
+                    ...(day === today && !selected ? styles.dayPillToday : {}),
+                  }}
+                >
+                  <span style={styles.dayPillWeekday}>{WEEKDAY_SHORT[weekdayOf(day)].slice(0, 1)}</span>
+                  <span style={styles.dayPillNumber}>{Number(day.slice(8, 10))}</span>
+                  <span
+                    style={{
+                      ...styles.dayPillDot,
+                      visibility: count > 0 ? 'visible' : 'hidden',
+                      backgroundColor: selected ? '#FFFFFF' : theme.colors.primary,
+                    }}
+                    aria-hidden="true"
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            style={styles.weekArrow}
+            onClick={() => setSelectedDay(shiftIsoDays(selectedDay, 7))}
+            aria-label="Next week"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
         </div>
       </div>
 
-      {toDo.length === 0 && done.length === 0 ? (
+      <div style={styles.dayHeader}>
+        <div style={{ minWidth: 0 }}>
+          <p style={styles.dayTitle}>{dayHeading} <span style={styles.dayDate}>· {dayDate}</span></p>
+          <p style={styles.subtitle} role="status" aria-live="polite">{summary}</p>
+        </div>
+        {!isToday && (
+          <Button variant="outline" size="sm" onClick={() => setSelectedDay(today)}>Back to today</Button>
+        )}
+      </div>
+
+      {overdue.length > 0 && (
+        <section style={styles.group} aria-label="Overdue">
+          <p style={{ ...styles.groupTitle, color: theme.colors.status.error }}>Overdue · {overdue.length}</p>
+          {renderRows(overdue, true)}
+        </section>
+      )}
+
+      {dayTasks.length === 0 ? (
         <div style={styles.emptyState}>
-          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.txt.tertiary }} strokeWidth="1.5" aria-hidden="true">
             <path d="M9 11l3 3L22 4" />
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
           </svg>
-          <p style={styles.emptyText}>No tasks found</p>
-          <p style={styles.emptySubtext}>You're all set!</p>
+          <p style={styles.emptyText}>No tasks {isToday ? 'today' : 'on this day'}</p>
+          <p style={styles.emptySubtext}>Use the days above to see what's coming up.</p>
         </div>
       ) : (
         <>
@@ -312,15 +387,21 @@ const MyTasksPage: React.FC = () => {
         </>
       )}
 
+      {/* The same full view managers get on Job Tasks: every field that was
+          filled in (and none that weren't), steps, files, team discussion,
+          add to calendar — plus Mark done. */}
       {selectedTask && (
-        <TaskDetailModal
+        <CalendarTaskModal
+          isOpen
           task={selectedTask}
-          sops={sops}
-          overdue={isTaskOverdue(selectedTask)}
-          saving={saving.includes(selectedTask.id)}
+          users={users}
           onClose={closeDetail}
-          onStepToggle={(stepId) => toggleStep(selectedTask, stepId)}
           onToggleDone={() => toggleDone(selectedTask)}
+          doneSaving={saving.includes(selectedTask.id)}
+          readOnly={projectedIds.has(selectedTask.id)}
+          notice={projectedIds.has(selectedTask.id)
+            ? 'This repeating task gets added to your list closer to the day. You can tick it off then.'
+            : undefined}
         />
       )}
     </div>
@@ -333,15 +414,23 @@ interface TaskRowProps {
   task: JobTask;
   first: boolean;
   overdue: boolean;
+  /** Overdue rows come from other days, so they say which. */
+  showDate: boolean;
+  /** A repeating task's day that has not been created yet: read-only. */
+  projected: boolean;
   saving: boolean;
   onToggle: () => void;
   onOpen: () => void;
 }
 
-const TaskRow: React.FC<TaskRowProps> = ({ task, first, overdue, saving, onToggle, onOpen }) => {
+const TaskRow: React.FC<TaskRowProps> = ({ task, first, overdue, showDate, projected, saving, onToggle, onOpen }) => {
   const isDone = isTaskDone(task);
   const stepTotal = task.steps.length;
   const stepDone = task.completedSteps.filter(id => task.steps.some(s => s.id === id)).length;
+  const purpose = purposeOf(task);
+  const when = [showDate ? formatDay(task.scheduledDate) : '', task.dueTime ? formatTime(task.dueTime) : '']
+    .filter(Boolean).join(' · ');
+  const repeats = Boolean(task.seriesId);
 
   return (
     <div
@@ -350,14 +439,14 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, first, overdue, saving, onToggl
         borderTop: first ? 'none' : `1px solid ${theme.colors.bdr.primary}`,
       }}
     >
-      <label style={styles.checkWrap}>
+      <label style={{ ...styles.checkWrap, cursor: projected ? 'default' : 'pointer' }}>
         <input
           type="checkbox"
           checked={isDone}
-          disabled={saving}
+          disabled={saving || projected}
           onChange={onToggle}
           aria-label={isDone ? `Mark "${task.title}" not done` : `Mark "${task.title}" done`}
-          style={styles.check}
+          style={{ ...styles.check, opacity: projected ? 0.4 : 1 }}
         />
       </label>
       <button type="button" onClick={onOpen} style={styles.rowButton} aria-label={`Open ${task.title}`}>
@@ -371,10 +460,21 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, first, overdue, saving, onToggl
           >
             {task.title}
           </span>
-          {!isDone && (overdue || (stepTotal > 0 && stepDone > 0)) && (
+          {purpose && !isDone && <span style={styles.rowPurpose}>{purpose}</span>}
+          {(when || repeats || (!isDone && (overdue || (stepTotal > 0 && stepDone > 0)))) && (
             <span style={styles.rowHints}>
-              {overdue && <Badge variant="danger" size="sm">Overdue</Badge>}
-              {stepTotal > 0 && stepDone > 0 && (
+              {when && <span style={styles.rowTime}>{when}</span>}
+              {repeats && (
+                <span style={styles.rowHint}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ marginRight: 3, verticalAlign: '-1px' }}>
+                    <polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                    <polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                  </svg>
+                  Repeats
+                </span>
+              )}
+              {!isDone && overdue && <Badge variant="danger" size="sm">Overdue</Badge>}
+              {!isDone && stepTotal > 0 && stepDone > 0 && (
                 <span style={styles.rowHint}>{stepDone} of {stepTotal} steps</span>
               )}
             </span>
@@ -385,168 +485,6 @@ const TaskRow: React.FC<TaskRowProps> = ({ task, first, overdue, saving, onToggl
         </svg>
       </button>
     </div>
-  );
-};
-
-// ─── Detail modal ─────────────────────────────────────────────────────────
-
-interface TaskDetailModalProps {
-  task: JobTask;
-  sops: any[];
-  overdue: boolean;
-  saving: boolean;
-  onClose: () => void;
-  onStepToggle: (stepId: string) => void;
-  onToggleDone: () => void;
-}
-
-const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
-  task, sops, overdue, saving, onClose, onStepToggle, onToggleDone,
-}) => {
-  const attachedSOPs = sops.filter(sop => task.sopIds.includes(sop.id));
-  const isDone = isTaskDone(task);
-  const totalSteps = task.steps.length;
-  const completedCount = task.completedSteps.filter(id => task.steps.some(s => s.id === id)).length;
-  const progressPercent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
-  const description = task.description?.trim();
-
-  // Only what the admin actually filled in.
-  const details: { label: string; value: string }[] = [];
-  if (task.scheduledDate) {
-    details.push({
-      label: 'Due',
-      value: `${formatDay(task.scheduledDate, true)}${task.dueTime ? ` at ${formatTime(task.dueTime)}` : ''}`,
-    });
-  }
-  if (task.priority && task.priority !== 'medium') {
-    details.push({ label: 'Priority', value: task.priority[0].toUpperCase() + task.priority.slice(1) });
-  }
-  if (task.category && task.category !== 'General') {
-    details.push({ label: 'Category', value: task.category });
-  }
-  if (task.estimatedDuration > 0) {
-    details.push({ label: 'Takes about', value: `${task.estimatedDuration} min` });
-  }
-
-  return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      title={task.title}
-      size="lg"
-      footer={
-        <div style={styles.footer}>
-          <Button variant="secondary" onClick={onClose}>Close</Button>
-          <Button
-            variant={isDone ? 'outline' : 'primary'}
-            onClick={onToggleDone}
-            disabled={saving}
-            loading={saving}
-          >
-            {isDone ? 'Mark not done' : 'Mark done'}
-          </Button>
-        </div>
-      }
-    >
-      {(isDone || overdue) && (
-        <div style={{ marginBottom: theme.spacing.md }}>
-          {isDone ? <Badge variant="success">Done</Badge> : <Badge variant="danger">Overdue</Badge>}
-        </div>
-      )}
-
-      {description && <p style={styles.description}>{description}</p>}
-
-      {details.length > 0 && (
-        <dl style={styles.details}>
-          {details.map(d => (
-            <div key={d.label} style={styles.detail}>
-              <dt style={styles.detailLabel}>{d.label}</dt>
-              <dd style={styles.detailValue}>{d.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-
-      {totalSteps > 0 && (
-        <div style={styles.section}>
-          <div style={styles.progressHeader}>
-            <h3 style={styles.sectionTitle}>Steps</h3>
-            <span style={styles.progressText}>{completedCount} of {totalSteps} done</span>
-          </div>
-          <div
-            style={styles.progressBar}
-            role="progressbar"
-            aria-valuenow={progressPercent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Steps done"
-          >
-            <div style={{ ...styles.progressFill, width: `${progressPercent}%` }} />
-          </div>
-          <div style={styles.stepsList}>
-            {task.steps.map((step, index) => {
-              const stepDone = task.completedSteps.includes(step.id);
-              return (
-                <label key={step.id} style={styles.step}>
-                  <input
-                    type="checkbox"
-                    checked={stepDone}
-                    onChange={() => onStepToggle(step.id)}
-                    style={styles.check}
-                  />
-                  <span style={styles.stepContent}>
-                    <span
-                      style={{
-                        ...styles.stepTitle,
-                        textDecoration: stepDone ? 'line-through' : 'none',
-                        color: stepDone ? theme.colors.txt.tertiary : theme.colors.txt.primary,
-                      }}
-                    >
-                      {index + 1}. {step.title}
-                    </span>
-                    {step.description && <span style={styles.stepDescription}>{step.description}</span>}
-                    <StepImages images={step.images} />
-                    {step.requiresPhoto && (
-                      <span style={styles.photoRequired}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                          <circle cx="8.5" cy="8.5" r="1.5" />
-                          <polyline points="21 15 16 10 5 21" />
-                        </svg>
-                        Photo required
-                      </span>
-                    )}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <TaskFilesSection files={task.files} sectionStyle={styles.section} titleStyle={styles.sectionTitle} />
-
-      {attachedSOPs.length > 0 && (
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Reference SOPs</h3>
-          <div style={styles.stepsList}>
-            {attachedSOPs.map(sop => (
-              <div key={sop.id} style={styles.sopItem}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }} aria-hidden="true">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
-                <span style={styles.sopTitle}>{sop.title}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!description && details.length <= 1 && totalSteps === 0 && attachedSOPs.length === 0 && !task.files?.length && (
-        <p style={styles.noDetails}>No extra details for this one. Tap Mark done when it's finished.</p>
-      )}
-    </Modal>
   );
 };
 
@@ -582,19 +520,96 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
   },
   subtitle: {
-    ...theme.typography.subtitle,
+    fontSize: '14px',
     color: theme.colors.txt.secondary,
-    marginTop: theme.spacing.sm,
+    margin: `${theme.spacing.xs} 0 0`,
   },
-  filters: {
+  dayNav: {
+    marginBottom: theme.spacing.md,
+  },
+  weekRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  weekArrow: {
+    flexShrink: 0,
+    width: '32px',
+    height: '56px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'transparent',
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.secondary,
+    cursor: 'pointer',
+    padding: 0,
+  },
+  weekDays: {
+    flex: 1,
+    minWidth: 0,
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+    gap: '4px',
+  },
+  dayPill: {
+    minWidth: 0,
+    height: '56px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '2px',
+    padding: 0,
+    background: theme.colors.bg.secondary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.primary,
+    cursor: 'pointer',
+    fontFamily: theme.fonts.primary,
+  },
+  dayPillSelected: {
+    background: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: '#FFFFFF',
+  },
+  dayPillToday: {
+    borderColor: theme.colors.primary,
+  },
+  dayPillWeekday: {
+    fontSize: '11px',
+    fontWeight: 600,
+    opacity: 0.75,
+    lineHeight: 1,
+  },
+  dayPillNumber: {
+    fontSize: '16px',
+    fontWeight: 700,
+    lineHeight: 1.1,
+  },
+  dayPillDot: {
+    width: '5px',
+    height: '5px',
+    borderRadius: theme.borderRadius.full,
+  },
+  dayHeader: {
     display: 'flex',
     flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
-  filterItem: {
-    flex: '1 1 140px',
-    minWidth: 0,
+  dayTitle: {
+    fontSize: '20px',
+    fontWeight: 700,
+    color: theme.colors.txt.primary,
+    margin: 0,
+  },
+  dayDate: {
+    fontWeight: 400,
+    color: theme.colors.txt.secondary,
   },
   group: {
     marginBottom: theme.spacing.lg,
@@ -665,6 +680,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
+  rowPurpose: {
+    fontSize: '13px',
+    color: theme.colors.txt.secondary,
+    lineHeight: 1.4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  rowTime: {
+    fontFamily: theme.fonts.mono,
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.txt.primary,
+  },
   rowHint: {
     fontSize: '12px',
     color: theme.colors.txt.tertiary,
@@ -687,146 +716,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   emptySubtext: {
     fontSize: '14px',
     color: theme.colors.txt.tertiary,
-  },
-  footer: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-    gap: theme.spacing.sm,
-    width: '100%',
-  },
-  description: {
-    fontSize: '15px',
-    color: theme.colors.txt.secondary,
-    lineHeight: 1.6,
-    whiteSpace: 'pre-wrap',
-    overflowWrap: 'anywhere',
-    margin: `0 0 ${theme.spacing.lg}`,
-  },
-  details: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(min(140px, 100%), 1fr))',
-    gap: theme.spacing.md,
-    margin: `0 0 ${theme.spacing.lg}`,
-  },
-  detail: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    minWidth: 0,
-  },
-  detailLabel: {
-    fontFamily: theme.fonts.mono,
-    fontSize: '11px',
-    fontWeight: 600,
-    color: theme.colors.txt.tertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-  },
-  detailValue: {
-    margin: 0,
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-    overflowWrap: 'anywhere',
-  },
-  section: {
-    marginBottom: theme.spacing.lg,
-  },
-  sectionTitle: {
-    fontFamily: theme.fonts.primary,
-    fontStyle: 'normal',
-    textTransform: 'none',
-    fontSize: '16px',
-    fontWeight: 600,
-    color: theme.colors.txt.primary,
-    margin: 0,
-  },
-  progressHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  progressText: {
-    fontSize: '13px',
-    color: theme.colors.txt.secondary,
-  },
-  progressBar: {
-    width: '100%',
-    height: '8px',
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.full,
-    overflow: 'hidden',
-    marginBottom: theme.spacing.md,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    transition: 'width 0.3s ease',
-  },
-  stepsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing.sm,
-  },
-  step: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    cursor: 'pointer',
-  },
-  stepContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    flex: 1,
-    minWidth: 0,
-  },
-  stepTitle: {
-    fontSize: '15px',
-    fontWeight: 500,
-    overflowWrap: 'anywhere',
-  },
-  stepDescription: {
-    fontSize: '14px',
-    color: theme.colors.txt.secondary,
-    lineHeight: 1.5,
-    overflowWrap: 'anywhere',
-  },
-  photoRequired: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    fontSize: '12px',
-    color: theme.colors.status.info,
-    fontWeight: 500,
-  },
-  sopItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
-    backgroundColor: theme.colors.bg.tertiary,
-    borderRadius: theme.borderRadius.md,
-    border: `1px solid ${theme.colors.bdr.primary}`,
-    color: theme.colors.txt.secondary,
-  },
-  sopTitle: {
-    fontSize: '14px',
-    color: theme.colors.txt.primary,
-    fontWeight: 500,
-    minWidth: 0,
-    overflowWrap: 'anywhere',
-  },
-  noDetails: {
-    fontSize: '14px',
-    color: theme.colors.txt.tertiary,
-    margin: 0,
   },
 };
 

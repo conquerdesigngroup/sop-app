@@ -54,23 +54,44 @@ const mockTasks = [
   },
   { ...base, id: 't3', title: 'Water the plants', description: '', status: 'completed', completedSteps: ['__task_complete__'], progressPercentage: 100 },
   { ...base, id: 't4', title: 'Someone else’s task', description: '', status: 'pending', assignedTo: ['other'] },
+  { ...base, id: 't5', title: 'Open the front doors', description: 'Unlock and turn the sign on.', status: 'pending', dueTime: '08:00' },
+  { ...base, id: 't6', title: 'Order tap shoes', description: '', status: 'pending', scheduledDate: '2026-11-04' },
+  { ...base, id: 't7', title: 'Recital walkthrough', description: 'With the stage manager.', status: 'pending', scheduledDate: '2026-11-07', dueTime: '10:00' },
+];
+// 2026-11-06 is a Friday. Every Monday, generated through Sunday the 8th.
+const mockSeries = [
+  {
+    ...base,
+    id: 'series-1',
+    title: 'Mop Studio A',
+    description: 'Before the first class.',
+    status: 'pending',
+    scheduledDate: '2026-10-01',
+    isRecurring: true,
+    recurrencePattern: { frequency: 'weekly', daysOfWeek: [1], generatedThrough: '2026-11-08' },
+  },
 ];
 
 jest.mock('react-router-dom', () => ({ useLocation: () => ({ state: null }) }), { virtual: true });
-jest.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ currentUser: { id: 'me' } }) }));
-jest.mock('../contexts/SOPContext', () => ({ useSOPs: () => ({ sops: [] }) }));
-jest.mock('../contexts/ToastContext', () => ({ useToast: () => ({ success: () => {}, error: () => {} }) }));
+jest.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    currentUser: { id: 'me', firstName: 'Sam', lastName: 'M' },
+    users: [{ id: 'me', firstName: 'Sam', lastName: 'M' }, { id: 'other', firstName: 'Amy', lastName: 'K' }],
+  }),
+}));
+jest.mock('../contexts/ToastContext', () => ({
+  useToast: () => ({ success: () => {}, error: () => {}, showToast: () => {} }),
+}));
+jest.mock('../hooks/useGoogleCalendar', () => ({
+  useGoogleCalendar: () => ({ isConnected: false, syncTaskToGoogle: () => Promise.resolve(false) }),
+}));
 jest.mock('../contexts/TaskContext', () => ({
   TASK_COMPLETE_MARKER: '__task_complete__',
-  useTask: () => ({ jobTasks: mockTasks, updateJobTask: mockUpdateJobTask }),
+  useTask: () => ({ jobTasks: mockTasks, recurringSeries: mockSeries, updateJobTask: mockUpdateJobTask }),
 }));
 jest.mock('../lib/studioDate', () => ({
+  ...jest.requireActual('../lib/studioDate'),
   studioToday: () => '2026-11-06',
-  shiftIsoDays: (iso: string, n: number) => {
-    const d = new Date(`${iso}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + n);
-    return d.toISOString().slice(0, 10);
-  },
 }));
 
 beforeEach(() => {
@@ -78,15 +99,16 @@ beforeEach(() => {
   resolveUpdate = null;
 });
 
-test('the list is my task titles and nothing else', () => {
+test('the list is my task titles and what each is for, nothing else', () => {
   render(<MyTasksPage />);
   expect(screen.getByText('Restock the front desk')).toBeInTheDocument();
   expect(screen.getByText('Close the studio')).toBeInTheDocument();
   expect(screen.getByText('Water the plants')).toBeInTheDocument();
   expect(screen.queryByText(/Someone else/)).not.toBeInTheDocument();
-  // Details stay in the modal until asked for.
-  expect(screen.queryByText('Lights, AC, alarm.')).not.toBeInTheDocument();
+  // One line of what it's for; the rest stays in the modal until asked for.
+  expect(screen.getByText('Lights, AC, alarm.')).toBeInTheDocument();
   expect(screen.queryByText('Set the alarm')).not.toBeInTheDocument();
+  expect(screen.queryByText('High')).not.toBeInTheDocument();
   // Finished work sinks to its own group.
   const done = screen.getByRole('region', { name: 'Done' });
   expect(within(done).getByText('Water the plants')).toBeInTheDocument();
@@ -122,11 +144,16 @@ test('tapping the title opens the details that were filled in', () => {
   render(<MyTasksPage />);
   fireEvent.click(screen.getByRole('button', { name: 'Open Close the studio' }));
   const dialog = screen.getByRole('dialog', { name: 'Close the studio' });
+  // The same full view a manager gets.
   expect(within(dialog).getByText('Lights, AC, alarm.')).toBeInTheDocument();
-  expect(within(dialog).getByText('Today at 9:30 PM')).toBeInTheDocument();
-  expect(within(dialog).getByText('High')).toBeInTheDocument();
-  expect(within(dialog).getByText('1 of 2 done')).toBeInTheDocument();
-  fireEvent.click(within(dialog).getByLabelText(/Set the alarm/));
+  expect(within(dialog).getByText('Friday, November 6, 2026')).toBeInTheDocument();
+  expect(within(dialog).getByText('9:30 PM')).toBeInTheDocument();
+  expect(within(dialog).getByText('high')).toBeInTheDocument();
+  expect(within(dialog).getByText('Sam M')).toBeInTheDocument();
+  expect(within(dialog).getByText('1 / 2 steps completed')).toBeInTheDocument();
+  expect(within(dialog).getByText('Team Discussion')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: /Calendar/ })).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByText(/Set the alarm/));
   expect(mockUpdates[0].patch).toMatchObject({ completedSteps: ['s1', 's2'], status: 'completed' });
 });
 
@@ -134,9 +161,60 @@ test('a title-only task opens as just a title', () => {
   render(<MyTasksPage />);
   fireEvent.click(screen.getByRole('button', { name: 'Open Restock the front desk' }));
   const dialog = screen.getByRole('dialog', { name: 'Restock the front desk' });
+  // Nothing filled in, so nothing shown blank.
   expect(within(dialog).queryByText('Steps')).not.toBeInTheDocument();
-  expect(within(dialog).queryByText('Priority')).not.toBeInTheDocument();
-  expect(within(dialog).queryByText('Takes about')).not.toBeInTheDocument();
+  expect(within(dialog).queryByText('Progress')).not.toBeInTheDocument();
+  expect(within(dialog).queryByText(/min estimated/)).not.toBeInTheDocument();
+  expect(within(dialog).queryByText('No time set')).not.toBeInTheDocument();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Mark done' }));
   expect(mockUpdates[0]).toMatchObject({ id: 't1', patch: { status: 'completed' } });
+});
+
+test('it opens on today, in time order, saying what each task is for', () => {
+  render(<MyTasksPage />);
+  const toDo = screen.getByRole('region', { name: 'To do' });
+  const titles = within(toDo).getAllByRole('button', { name: /^Open / }).map(b => b.getAttribute('aria-label'));
+  // 8:00 AM, then 9:30 PM, then the untimed one.
+  expect(titles).toEqual(['Open Open the front doors', 'Open Close the studio', 'Open Restock the front desk']);
+  expect(within(toDo).getByText('Unlock and turn the sign on.')).toBeInTheDocument();
+  expect(within(toDo).getByText('8:00 AM')).toBeInTheDocument();
+  // Another day's task stays on its own day.
+  expect(screen.queryByText('Recital walkthrough')).not.toBeInTheDocument();
+});
+
+test('overdue work from earlier days shows on today', () => {
+  render(<MyTasksPage />);
+  const overdue = screen.getByRole('region', { name: 'Overdue' });
+  expect(within(overdue).getByText('Order tap shoes')).toBeInTheDocument();
+});
+
+test('the day strip moves to upcoming days', () => {
+  render(<MyTasksPage />);
+  fireEvent.click(screen.getByRole('button', { name: /^Saturday, November 7/ }));
+  expect(screen.getByText('Recital walkthrough')).toBeInTheDocument();
+  expect(screen.queryByText('Open the front doors')).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Overdue' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Back to today' }));
+  expect(screen.getByText('Open the front doors')).toBeInTheDocument();
+});
+
+test('a repeating task shows on every day it lands on, even before it is created', () => {
+  render(<MyTasksPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
+  // Friday the 13th: not a Monday, so no mop.
+  expect(screen.queryByText('Mop Studio A')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /^Monday, November 9/ }));
+  expect(screen.getByText('Mop Studio A')).toBeInTheDocument();
+  expect(screen.getByText('Repeats')).toBeInTheDocument();
+  // Not created yet, so it cannot be ticked off from here.
+  expect(screen.getByRole('checkbox', { name: 'Mark "Mop Studio A" done' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Open Mop Studio A' }));
+  const dialog = screen.getByRole('dialog', { name: 'Mop Studio A' });
+  expect(within(dialog).queryByRole('button', { name: 'Mark done' })).not.toBeInTheDocument();
+  // A day already generated (and so deliberately empty) is not filled in.
+  expect(within(dialog).queryByPlaceholderText('Add a comment...')).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Previous week' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Monday, November 2/ }));
+  expect(screen.queryByText('Mop Studio A')).not.toBeInTheDocument();
 });
