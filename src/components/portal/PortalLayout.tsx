@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { theme, BRAND_MARK } from '../../theme';
-import HolidayLights from '../HolidayLights';
+import HolidayGarland from '../HolidayGarland';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { ProgramSlug, portalRoutes } from '../../lib/portal';
@@ -247,7 +247,7 @@ const PortalLayout: React.FC<PortalLayoutProps> = ({ title, subtitle, backTo, sl
             )}
           </div>
         </div>
-        <HolidayLights />
+        <HolidayGarland />
       </header>
 
       <main

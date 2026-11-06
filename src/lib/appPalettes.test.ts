@@ -45,7 +45,7 @@ describe('app palettes', () => {
       expect(contrast(a, lightColors.bg.primary)).toBeGreaterThanOrEqual(4);
       expect(contrast(a, lightColors.bg.secondary)).toBeGreaterThanOrEqual(4.5);
     });
-    [p.accent, p.hover, p.dark, ...(p.accent2 ? [p.accent2] : []), ...(p.lights || [])]
+    [p.accent, p.hover, p.dark, ...(p.accent2 ? [p.accent2] : []), ...(p.garland || []).map(i => i.color)]
       .forEach(c => expect(c).toMatch(/^#[0-9A-F]{6}$/));
   });
 

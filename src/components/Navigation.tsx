@@ -5,7 +5,7 @@ import { usePortalAdmin } from '../contexts/PortalAdminContext';
 import { useTheme, useThemeColors } from '../contexts/ThemeContext';
 import { useMobileMenu } from '../contexts/MobileMenuContext';
 import { theme, BRAND_MARK } from '../theme';
-import HolidayLights from './HolidayLights';
+import HolidayGarland from './HolidayGarland';
 import RefreshButton from './RefreshButton';
 import StaffAvatar from './StaffAvatar';
 import GlobalSearch from './GlobalSearch';
@@ -995,8 +995,8 @@ const Navigation: React.FC = () => {
           </>
         )}
       </div>
-      {/* Only drawn for a palette with lights (Christmas Red & Green, Christmas Lights). */}
-      <HolidayLights />
+      {/* Only drawn for a palette with a garland (lights, fall leaves, hearts...). */}
+      <HolidayGarland />
     </nav>
     {/* Outside the <nav>: index.css forces every `nav button` transparent,
         which turned the highlighted result row white-on-white. */}
