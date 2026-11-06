@@ -798,7 +798,7 @@ export const Modal: React.FC<ModalProps> = ({
           <div style={modalHeaderStyle}>
             {title && <h2 style={modalTitleStyle}>{title}</h2>}
             {showCloseButton && (
-              <IconButton variant="ghost" size="sm" onClick={onClose} aria-label="Close dialog">
+              <IconButton variant="ghost" size="sm" onClick={onClose} aria-label="Close dialog" style={{ flexShrink: 0 }}>
                 <CloseIcon size={20} />
               </IconButton>
             )}
@@ -1369,6 +1369,7 @@ const modalHeaderStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
+  gap: '12px',
   padding: '20px 24px',
   borderBottom: `1px solid ${theme.colors.bdr.primary}`,
 };
@@ -1377,6 +1378,9 @@ const modalTitleStyle: React.CSSProperties = {
   ...theme.typography.h3,
   color: theme.colors.txt.primary,
   margin: 0,
+  // A long title must wrap rather than squeeze the close button to nothing.
+  minWidth: 0,
+  overflowWrap: 'anywhere',
 };
 
 const modalContentStyle: React.CSSProperties = {

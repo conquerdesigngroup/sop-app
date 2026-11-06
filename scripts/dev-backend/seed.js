@@ -302,14 +302,27 @@ const TASK_SPECS = [
   ['Order replacement tap boards', 'Operations', 'pending', 'medium', 3],
   ['Chase outstanding costume payments', 'Management', 'in_progress', 'high', 0],
   ['Check the first-aid kit', 'Operations', 'pending', 'low', 7],
+  ['Call back the Hendersons-about-the-competition-team-trial-and-the-costume-deposit', 'Front desk', 'pending', 'medium', -2],
 ];
+
+/**
+ * A few steps for one task, so /my-tasks has a task whose detail modal shows
+ * a checklist and a progress bar. The rest stay title-only, the way admins
+ * often write them.
+ */
+const TASK_STEPS = {
+  1: [['Spray and wipe the mirrors', true], ['Polish the barre', false], ['Mop the floor', false]],
+};
 
 const job_tasks = TASK_SPECS.map(([title, department, status, priority, dayOffset], i) => ({
   id: `00000000-0000-4000-3000-${String(i + 1).padStart(12, '0')}`,
   title,
   description: `${title} before the end of the day.`,
   template_id: null,
-  assigned_to: [i % 2 === 0 ? STAFF.teacherJess : STAFF.frontDesk],
+  // The owner shares most tasks: dev@localhost is the only account an audit
+  // can sign in as, and /my-tasks only lists the signed-in person's tasks, so
+  // without this the audit measured an empty list and called it clean.
+  assigned_to: [i % 2 === 0 ? STAFF.teacherJess : STAFF.frontDesk, ...(i % 3 === 2 ? [] : [STAFF.owner])],
   assigned_by: STAFF.admin,
   department,
   category: 'Routine',
@@ -318,8 +331,10 @@ const job_tasks = TASK_SPECS.map(([title, department, status, priority, dayOffse
   estimated_duration: 30,
   status,
   priority,
-  steps: [],
-  completed_steps: [],
+  steps: (TASK_STEPS[i] || []).map(([stepTitle, done], n) => ({
+    id: `t${i}s${n}`, order: n, title: stepTitle, isCompleted: done,
+  })),
+  completed_steps: (TASK_STEPS[i] || []).flatMap(([, done], n) => (done ? [`t${i}s${n}`] : [])),
   progress_percentage: status === 'completed' ? 100 : status === 'in_progress' ? 45 : 0,
   sop_ids: [],
   started_at: status === 'pending' ? null : iso(dayOffset, 9),
