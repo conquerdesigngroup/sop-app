@@ -9,6 +9,7 @@ import { theme } from '../theme';
 import { useResponsive } from '../hooks/useResponsive';
 import { studioToday, shiftIsoDays } from '../lib/studioDate';
 import { Badge, Button, Card, Modal, Select } from '../components/ui';
+import { TaskFilesSection, StepImages } from '../components/tasks/TaskFileTiles';
 
 /**
  * My Tasks — a team member's own checklist.
@@ -504,6 +505,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       {index + 1}. {step.title}
                     </span>
                     {step.description && <span style={styles.stepDescription}>{step.description}</span>}
+                    <StepImages images={step.images} />
                     {step.requiresPhoto && (
                       <span style={styles.photoRequired}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -522,6 +524,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
       )}
 
+      <TaskFilesSection files={task.files} sectionStyle={styles.section} titleStyle={styles.sectionTitle} />
+
       {attachedSOPs.length > 0 && (
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Reference SOPs</h3>
@@ -539,7 +543,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
       )}
 
-      {!description && details.length <= 1 && totalSteps === 0 && attachedSOPs.length === 0 && (
+      {!description && details.length <= 1 && totalSteps === 0 && attachedSOPs.length === 0 && !task.files?.length && (
         <p style={styles.noDetails}>No extra details for this one. Tap Mark done when it's finished.</p>
       )}
     </Modal>

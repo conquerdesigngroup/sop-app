@@ -313,6 +313,18 @@ const TASK_SPECS = [
 const TASK_STEPS = {
   1: [['Spray and wipe the mirrors', true], ['Polish the barre', false], ['Mop the floor', false]],
 };
+const TASK_FILES = [
+  { id: 'tf-1', path: `${STAFF.admin}/venue-front.jpg`, name: 'venue-front.jpg', mimeType: 'image/jpeg', size: 412_000, uploadedBy: STAFF.admin, uploadedAt: iso(-2) },
+  { id: 'tf-2', path: `${STAFF.admin}/stage-plan.png`, name: 'stage-plan.png', mimeType: 'image/png', size: 220_000, uploadedBy: STAFF.admin, uploadedAt: iso(-2) },
+  { id: 'tf-3', path: `${STAFF.admin}/insurance-certificate-2026-recital-venue-final-signed.pdf`, name: 'insurance-certificate-2026-recital-venue-final-signed.pdf', mimeType: 'application/pdf', size: 1_300_000, uploadedBy: STAFF.admin, uploadedAt: iso(-2) },
+];
+
+// Task 0's steps carry a picture, so the step-image view is seen too.
+const TASK_ZERO_STEPS = [
+  { id: 'ts-1', order: 1, title: 'Check the bottles in the lobby fridge', description: 'Bottom two shelves, labels facing out.', isCompleted: false, requiresPhoto: false,
+    images: [{ id: 'tsi-1', path: `${STAFF.admin}/fridge-shelves.jpg`, name: 'fridge-shelves.jpg', mimeType: 'image/jpeg', size: 300_000, uploadedBy: STAFF.admin, uploadedAt: iso(-2) }] },
+  { id: 'ts-2', order: 2, title: 'Log the restock on the sheet', description: '', isCompleted: false, requiresPhoto: false },
+];
 
 const job_tasks = TASK_SPECS.map(([title, department, status, priority, dayOffset], i) => ({
   id: `00000000-0000-4000-3000-${String(i + 1).padStart(12, '0')}`,
@@ -331,7 +343,7 @@ const job_tasks = TASK_SPECS.map(([title, department, status, priority, dayOffse
   estimated_duration: 30,
   status,
   priority,
-  steps: (TASK_STEPS[i] || []).map(([stepTitle, done], n) => ({
+  steps: i === 0 ? TASK_ZERO_STEPS : (TASK_STEPS[i] || []).map(([stepTitle, done], n) => ({
     id: `t${i}s${n}`, order: n, title: stepTitle, isCompleted: done,
   })),
   completed_steps: (TASK_STEPS[i] || []).flatMap(([, done], n) => (done ? [`t${i}s${n}`] : [])),
@@ -344,6 +356,9 @@ const job_tasks = TASK_SPECS.map(([title, department, status, priority, dayOffse
   completion_photos: [],
   comments: [],
   attachments: [],
+  // The first task carries photos and a file, so the task views are seen with
+  // something in them. Keys are invented; the dev backend draws a placeholder.
+  files: i === 0 ? TASK_FILES : [],
   is_recurring: false,
   recurrence_pattern: null,
   created_at: iso(-7),

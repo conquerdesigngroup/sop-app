@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import StaffAvatar from './StaffAvatar';
+import { TaskFilesSection, StepImages } from './tasks/TaskFileTiles';
 import {
   generateGoogleCalendarUrlForTask,
   generateICSForTask,
@@ -453,6 +454,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                         {step.description && (
                           <span style={styles.stepDescription}>{step.description}</span>
                         )}
+                        <StepImages images={step.images} />
                       </div>
                     </div>
                   );
@@ -460,6 +462,9 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Photos & files */}
+          <TaskFilesSection files={task.files} sectionStyle={styles.section} titleStyle={styles.sectionTitle} />
 
           {/* Team Discussion / Comments */}
           <div style={styles.section}>
