@@ -3,7 +3,7 @@ import { theme } from '../theme';
 import { useToast } from '../contexts/ToastContext';
 import { useHomeScene } from '../hooks/useHomeScene';
 import { DEFAULT_SCENE_ID, HOME_SCENES, effectiveSceneId, localDayKey } from '../lib/homeScenes';
-import { Badge, Button, Input } from './ui';
+import { Badge, Button, Input, Toggle } from './ui';
 import { SceneCanvas } from './HomeScene';
 
 /**
@@ -29,6 +29,7 @@ const HomeSceneSettings: React.FC = () => {
   const { showToast } = useToast();
   const [scene, setScene] = useState<string>(setting?.scene || DEFAULT_SCENE_ID);
   const [endsOn, setEndsOn] = useState<string>(setting?.endsOn || '');
+  const [onPortal, setOnPortal] = useState<boolean>(!!setting?.showOnPortal);
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
 
@@ -36,11 +37,14 @@ const HomeSceneSettings: React.FC = () => {
   useEffect(() => {
     setScene(setting?.scene || DEFAULT_SCENE_ID);
     setEndsOn(setting?.endsOn || '');
-  }, [setting?.scene, setting?.endsOn]);
+    setOnPortal(!!setting?.showOnPortal);
+  }, [setting?.scene, setting?.endsOn, setting?.showOnPortal]);
 
   const live = effectiveSceneId(setting);
   const savedScene = setting?.scene || DEFAULT_SCENE_ID;
-  const dirty = scene !== savedScene || (scene !== DEFAULT_SCENE_ID && endsOn !== (setting?.endsOn || ''));
+  const dirty =
+    scene !== savedScene ||
+    (scene !== DEFAULT_SCENE_ID && (endsOn !== (setting?.endsOn || '') || onPortal !== !!setting?.showOnPortal));
   const endInPast = !!endsOn && endsOn < localDayKey();
 
   const choose = (id: string) => {
@@ -53,15 +57,25 @@ const HomeSceneSettings: React.FC = () => {
     busy.current = true;
     setSaving(true);
     try {
-      const next = { scene, endsOn: scene === DEFAULT_SCENE_ID ? null : endsOn || null };
+      const next = {
+        scene,
+        endsOn: scene === DEFAULT_SCENE_ID ? null : endsOn || null,
+        // Only sent when it changes, so a database without v79 can still save.
+        ...(onPortal !== !!setting?.showOnPortal ? { showOnPortal: onPortal } : {}),
+      };
       await save(next);
       const name = HOME_SCENES.find(s => s.id === scene)?.name;
-      showToast(name ? `${name} is now on everyone's Home.` : 'Home is back to the everyday background.', 'success');
+      showToast(
+        name
+          ? `${name} is now on everyone's Home${onPortal ? ' and the parent portal' : ''}.`
+          : 'Home is back to the everyday background.',
+        'success',
+      );
     } catch (e) {
       const message = (e as { message?: string })?.message || '';
       showToast(
         /home_scene_setting/.test(message)
-          ? 'Holiday backgrounds are not set up on the server yet (migration v78).'
+          ? 'Holiday backgrounds are not fully set up on the server yet (migrations v78 and v79).'
           : "Couldn't save the Home background. Check your connection and try again.",
         'error',
       );
@@ -82,6 +96,7 @@ const HomeSceneSettings: React.FC = () => {
       <p style={styles.now} role="status" aria-live="polite">
         Showing now: <strong style={{ color: theme.colors.txt.primary }}>{liveName}</strong>
         {live !== DEFAULT_SCENE_ID && setting?.endsOn && <> until {formatDay(setting.endsOn)}</>}
+        {live !== DEFAULT_SCENE_ID && setting?.showOnPortal && <>, on Home and the parent portal</>}
       </p>
 
       <div style={styles.grid} role="radiogroup" aria-label="Home background">
@@ -118,6 +133,16 @@ const HomeSceneSettings: React.FC = () => {
             helperText={endsOn ? undefined : 'Leave empty to keep it on until you switch it off.'}
             error={endInPast ? 'That day has passed, so Home would go straight back to everyday.' : undefined}
           />
+        </div>
+      )}
+
+      {scene !== DEFAULT_SCENE_ID && (
+        <div style={styles.portalRow}>
+          <div style={{ minWidth: 0 }}>
+            <div id="home-scene-portal-label" style={styles.portalLabel}>Also show on the parent portal</div>
+            <div style={styles.portalHint}>Families see the same scene behind their portal pages.</div>
+          </div>
+          <Toggle checked={onPortal} onChange={setOnPortal} labelledBy="home-scene-portal-label" />
         </div>
       )}
 
@@ -216,6 +241,15 @@ const styles: Record<string, React.CSSProperties> = {
   optionName: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', fontWeight: 600, fontSize: '14px' },
   optionBlurb: { fontSize: '12px', lineHeight: 1.4, color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' },
   until: { marginTop: theme.spacing.md, maxWidth: '260px' },
+  portalRow: {
+    marginTop: theme.spacing.md,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  portalLabel: { fontWeight: 600, fontSize: '14px', color: theme.colors.txt.primary },
+  portalHint: { fontSize: '12px', color: theme.colors.txt.tertiary, overflowWrap: 'anywhere' },
   footer: { marginTop: theme.spacing.lg, display: 'flex', justifyContent: 'flex-end' },
 };
 

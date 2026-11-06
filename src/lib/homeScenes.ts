@@ -48,7 +48,38 @@ export interface HomeSceneDef {
 
 const TAU = Math.PI * 2;
 const PINK = '226,20,79';
-const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+/**
+ * Scenes draw their randomness from here rather than Math.random, so the
+ * runner can rebuild a scene from the same seed. A resize (a phone rotating,
+ * a desktop window dragged) then redraws the SAME village at the new size
+ * instead of a different one, which reads as the scene glitching.
+ */
+let rng: () => number = Math.random;
+const rand = () => rng();
+const rnd = (a: number, b: number) => a + rand() * (b - a);
+
+/** mulberry32: small, fast, and good enough for where a snowflake goes. */
+const seeded = (seed: number) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+/**
+ * Build a scene with a fixed seed. Only set-up is seeded; anything a scene
+ * draws at random later (a flake respawning at the top) uses the live
+ * generator, which is fine because it is moving anyway.
+ */
+export const createSeeded = (scene: HomeSceneDef, seed: number, w: number, h: number, mode: SceneMode): SceneFrame => {
+  const previous = rng;
+  rng = seeded(seed);
+  try {
+    return scene.create(w, h, mode);
+  } finally {
+    rng = previous;
+  }
+};
 
 /**
  * Scenes are designed on a phone (about 390 x 844). Particle counts scale with
@@ -121,7 +152,7 @@ const makeSnow = (w: number, h: number, scale = 1, pinkChance = 1 / 30): Flake[]
     for (let i = 0; i < Math.round(L.n * d); i++) {
       flakes.push({
         li, x: rnd(0, w), y: rnd(0, h), r: rnd(L.r[0], L.r[1]), v: rnd(L.v[0], L.v[1]),
-        a: L.a * rnd(0.6, 1), blur: L.blur, ph: rnd(0, TAU), pink: Math.random() < pinkChance,
+        a: L.a * rnd(0.6, 1), blur: L.blur, ph: rnd(0, TAU), pink: rand() < pinkChance,
       });
     }
   });
@@ -236,8 +267,8 @@ const holidayVillage: HomeSceneDef = {
       if (!far) { c.strokeStyle = pal.edge; c.lineWidth = 1; c.stroke(); }
 
       // Chimney, before the roof snow so the snow sits over its foot.
-      if (!opts.steeple && Math.random() < 0.6) {
-        const cx = x + bw * (Math.random() < 0.5 ? 0.25 : 0.68);
+      if (!opts.steeple && rand() < 0.6) {
+        const cx = x + bw * (rand() < 0.5 ? 0.25 : 0.68);
         const slope = Math.abs(cx - (x + bw / 2)) / (bw / 2);
         const roofY = top - roof * (1 - slope);
         c.fillStyle = far ? pal.far : pal.near;
@@ -286,7 +317,7 @@ const holidayVillage: HomeSceneDef = {
           const wy = top + gy + r * (wh + gy);
           // Leave room for a door on the ground floor middle.
           if (opts.door && r === rows - 1 && cols % 2 === 1 && k === Math.floor(cols / 2)) continue;
-          windows.push({ x: wx, y: wy, w: ww, h: wh, ph: rnd(0, TAU), lit: Math.random() < (far ? 0.6 : 0.8), far });
+          windows.push({ x: wx, y: wy, w: ww, h: wh, ph: rnd(0, TAU), lit: rand() < (far ? 0.6 : 0.8), far });
         }
       }
       if (opts.door && !far) {
@@ -294,7 +325,7 @@ const holidayVillage: HomeSceneDef = {
         const dx = x + bw / 2 - dw / 2;
         c.fillStyle = dark ? '#0E0E12' : '#2A2A32';
         c.fillRect(dx, base - dh, dw, dh);
-        if (!wreath && Math.random() < 0.5) wreath = { x: x + bw / 2, y: base - dh - 6 * u };
+        if (!wreath && rand() < 0.5) wreath = { x: x + bw / 2, y: base - dh - 6 * u };
         else windows.push({ x: dx + 1.5 * u, y: base - dh + 1.5 * u, w: dw - 3 * u, h: 3 * u, ph: rnd(0, TAU), lit: true, far: false });
       }
     };
@@ -336,14 +367,14 @@ const holidayVillage: HomeSceneDef = {
       // Far row, then near row.
       for (let x = -10; x < w + 10;) {
         const bw = rnd(20, 34) * u;
-        if (Math.random() < 0.25) pine(g, x + bw / 2, bw * 0.9, true);
+        if (rand() < 0.25) pine(g, x + bw / 2, bw * 0.9, true);
         else house(g, x, bw, rnd(14, 24) * u, true, {});
         x += bw + rnd(2, 8) * u;
       }
       const steepleAt = w * rnd(0.55, 0.7);
       let steepleDone = false;
       for (let x = -14; x < w + 14;) {
-        if (Math.random() < 0.22) {
+        if (rand() < 0.22) {
           const s = rnd(26, 40) * u;
           pine(g, x + s / 2, s, false);
           x += s + rnd(2, 6) * u;
@@ -452,7 +483,7 @@ const stringLights: HomeSceneDef = {
   create(w, h, { dark, ceiling = 0 }) {
     const d = density(w, h);
     const bokeh = Array.from({ length: Math.round(16 * d) }, () => ({
-      x: rnd(0, w), y: rnd(0, h), r: rnd(16, 46), v: rnd(4, 10), a: rnd(0.08, 0.2), pink: Math.random() < 0.25, ph: rnd(0, TAU),
+      x: rnd(0, w), y: rnd(0, h), r: rnd(16, 46), v: rnd(4, 10), a: rnd(0.08, 0.2), pink: rand() < 0.25, ph: rnd(0, TAU),
     }));
     // Drapes of roughly a phone's width each, overlapping, along the top.
     const strands: { x0: number; y0: number; x1: number; y1: number; sag: number }[] = [];
@@ -588,7 +619,7 @@ const frostedContours: HomeSceneDef = {
       return base + Math.sin((x / w) * 3.2 + i * 0.45 + t * 0.12) * 16 + Math.sin((x / w) * 7.1 - i * 0.3 - t * 0.08) * 6 + Math.sin(i * 0.9 + t * 0.05) * 8;
     };
     const glints = Array.from({ length: Math.round(14 * density(w, h)) }, () => ({
-      line: Math.floor(rnd(0, n)), x: rnd(0, w), v: rnd(18, 40) * (Math.random() < 0.5 ? -1 : 1), ph: rnd(0, TAU),
+      line: Math.floor(rnd(0, n)), x: rnd(0, w), v: rnd(18, 40) * (rand() < 0.5 ? -1 : 1), ph: rnd(0, TAU),
     }));
     const ink = dark ? '244,244,245' : '17,17,17';
     const ribbon = Math.round(n * 0.27);
@@ -645,7 +676,7 @@ const northStar: HomeSceneDef = {
     let age = 0;
     const spawn = (anywhere: boolean) => {
       const a = rnd(0, TAU), d = rnd(0, R * 0.6);
-      return { x: cx + Math.cos(a) * d, y: anywhere ? rnd(cy, h) : cy + Math.sin(a) * d, v: rnd(10, 26), dx: rnd(-6, 6), s: rnd(0.6, 1.6), ph: rnd(0, TAU), pink: Math.random() < 0.08 };
+      return { x: cx + Math.cos(a) * d, y: anywhere ? rnd(cy, h) : cy + Math.sin(a) * d, v: rnd(10, 26), dx: rnd(-6, 6), s: rnd(0.6, 1.6), ph: rnd(0, TAU), pink: rand() < 0.08 };
     };
     const dust = Array.from({ length: Math.round(40 * density(w, h)) }, () => spawn(true));
     return {

@@ -22,6 +22,8 @@ export interface HomeSceneSetting {
   scene: string;
   /** Last day the scene shows, YYYY-MM-DD; null = until someone turns it off. */
   endsOn: string | null;
+  /** Also draw it behind the parent portal (v79). */
+  showOnPortal?: boolean;
 }
 
 const CACHE_KEY = 'didc_home_scene';
@@ -53,11 +55,15 @@ const publish = (s: HomeSceneSetting | null) => {
 const isMissingTable = (message: string) =>
   /home_scene_setting/.test(message) && /does not exist|schema cache|not find/i.test(message);
 
-export const useHomeScene = () => {
+/**
+ * `portal` reads the setting with no staff session: parents, and anyone who
+ * is not signed in, can read it since v79 (it is only the name of a scene).
+ */
+export const useHomeScene = (audience: 'staff' | 'portal' = 'staff') => {
   const { isAuthenticated } = useAuth();
   const [setting, setSetting] = useState<HomeSceneSetting | null>(memory);
   const requestRef = useRef(0);
-  const enabled = !!(isAuthenticated && isSupabaseConfigured());
+  const enabled = !!((audience === 'portal' || isAuthenticated) && isSupabaseConfigured());
 
   useEffect(() => {
     listeners.add(setSetting);
@@ -66,13 +72,13 @@ export const useHomeScene = () => {
 
   const load = useCallback(async () => {
     const request = ++requestRef.current;
-    const { data, error } = await supabase.from(TABLE).select('scene, ends_on').eq('id', 1).maybeSingle();
+    const { data, error } = await supabase.from(TABLE).select('*').eq('id', 1).maybeSingle();
     if (request !== requestRef.current) return;
     if (error) {
       if (isMissingTable(error.message || '')) { publish(null); return; }
       throw error;
     }
-    publish(data ? { scene: data.scene || DEFAULT_SCENE_ID, endsOn: data.ends_on || null } : null);
+    publish(data ? { scene: data.scene || DEFAULT_SCENE_ID, endsOn: data.ends_on || null, showOnPortal: !!data.show_on_portal } : null);
   }, []);
 
   useEffect(() => {
@@ -83,9 +89,10 @@ export const useHomeScene = () => {
 
   /** Super admin only; the database refuses anyone else (v78). */
   const save = useCallback(async (next: HomeSceneSetting) => {
-    const { error } = await supabase
-      .from(TABLE)
-      .upsert({ id: 1, scene: next.scene, ends_on: next.endsOn, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    const row: Record<string, unknown> = { id: 1, scene: next.scene, ends_on: next.endsOn, updated_at: new Date().toISOString() };
+    // Only sent when set, so a save still works on a database without v79.
+    if (next.showOnPortal !== undefined) row.show_on_portal = next.showOnPortal;
+    const { error } = await supabase.from(TABLE).upsert(row, { onConflict: 'id' });
     if (error) throw error;
     publish(next);
   }, []);

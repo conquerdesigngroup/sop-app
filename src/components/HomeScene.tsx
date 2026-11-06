@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useHomeScene } from '../hooks/useHomeScene';
-import { DEFAULT_SCENE_ID, findScene, HomeSceneDef, SETTLE_SECONDS } from '../lib/homeScenes';
+import { createSeeded, DEFAULT_SCENE_ID, findScene, HomeSceneDef, SETTLE_SECONDS } from '../lib/homeScenes';
 import TopoField from './TopoField';
 
 /**
@@ -21,6 +21,10 @@ import TopoField from './TopoField';
  * fixed behind the whole page; `still` paints the composed frame only, so a
  * grid of previews costs one animation, not eight.
  */
+/** The large viewport where supported, so the address bar never resizes the scene. */
+const FIXED_HEIGHT =
+  typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('height', '100lvh') ? '100lvh' : '100%';
+
 export const SceneCanvas: React.FC<{ scene: HomeSceneDef; contained?: boolean; still?: boolean }> = ({
   scene,
   contained = false,
@@ -28,6 +32,8 @@ export const SceneCanvas: React.FC<{ scene: HomeSceneDef; contained?: boolean; s
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { isDark } = useTheme();
+  // One seed for the life of this canvas: every rebuild draws the same scene.
+  const seedRef = useRef(Math.floor(Math.random() * 2 ** 31));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -48,24 +54,34 @@ export const SceneCanvas: React.FC<{ scene: HomeSceneDef; contained?: boolean; s
     const build = () => {
       const box = canvas.getBoundingClientRect();
       if (!box.width || !box.height) return false;
+      // A phone's address bar sliding in and out while you scroll changes the
+      // viewport's height and nothing else. Rebuilding for that redrew the
+      // whole scene every few pixels of scroll, which is the glitch. The fixed
+      // canvas is sized to the LARGE viewport (100lvh, below) so this mostly
+      // cannot happen; where lvh is unsupported, ignore height-only changes
+      // smaller than a quarter of the screen and let the bitmap stretch.
+      if (frame && Math.abs(box.width - w) < 1 && Math.abs(box.height - h) < h * 0.25) return false;
       const dpr = Math.min(1.5, window.devicePixelRatio || 1);
       w = box.width;
       h = box.height;
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // On a phone the tab bar is fixed over the foot of the screen; a scene
-      // that stands on the ground (the village) stands on top of it instead.
-      const nav = contained ? null : document.querySelector('[data-bottom-nav]');
-      const navTop = nav ? nav.getBoundingClientRect().top : h;
-      const floor = navTop > 0 && navTop < h ? h - navTop : 0;
-      // Likewise the sticky header over the top: lights and ornaments hang
-      // from its lower edge rather than from behind it.
-      const head = contained ? null : document.querySelector('nav');
-      const headBox = head ? head.getBoundingClientRect() : null;
-      const ceiling = headBox && headBox.top <= 1 && headBox.bottom > 0 && headBox.bottom < h / 3 ? headBox.bottom : 0;
-      frame = scene.create(w, h, { dark: isDark, floor, ceiling });
-      clock = 0;
+      // Bars fixed over the screen: the phone tab bar at the foot, the sticky
+      // header at the top (staff Navigation, or the portal's header and tab
+      // bar). A grounded scene (the village) stands on top of the foot bar;
+      // a hanging one (lights, ornaments) hangs below the header.
+      let floor = 0;
+      let ceiling = 0;
+      if (!contained) {
+        document.querySelectorAll('nav, header, [data-bottom-nav]').forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (!r.height) return;
+          if (r.top <= 1 && r.bottom > 0 && r.bottom < h / 3) ceiling = Math.max(ceiling, r.bottom);
+          else if (r.top > (h * 2) / 3 && r.top < h) floor = Math.max(floor, h - r.top);
+        });
+      }
+      frame = createSeeded(scene, seedRef.current, w, h, { dark: isDark, floor, ceiling });
       return true;
     };
 
@@ -104,11 +120,10 @@ export const SceneCanvas: React.FC<{ scene: HomeSceneDef; contained?: boolean; s
     };
 
     const onResize = () => {
+      if (!build()) return;
       stop();
-      if (build()) {
-        if (still || motionQuery.matches) paintStill();
-        else frame?.draw(ctx, 0, 0, false);
-      }
+      if (still || motionQuery.matches) paintStill();
+      else frame?.draw(ctx, clock, 0, false);
       sync();
     };
 
@@ -143,11 +158,15 @@ export const SceneCanvas: React.FC<{ scene: HomeSceneDef; contained?: boolean; s
         position: contained ? 'absolute' : 'fixed',
         inset: 0,
         width: '100%',
-        height: '100%',
+        height: contained ? '100%' : FIXED_HEIGHT,
         // Same layering as TopoField: the Dashboard root isolates, so -1 sits
         // above the App background and below every panel.
         zIndex: contained ? 0 : -1,
         pointerEvents: 'none',
+        // Its own compositor layer, so scrolling the page over it moves
+        // layers instead of repainting the scene under every panel.
+        transform: contained ? undefined : 'translateZ(0)',
+        willChange: contained ? undefined : 'transform',
       }}
     />
   );
@@ -159,9 +178,20 @@ export const SceneCanvas: React.FC<{ scene: HomeSceneDef; contained?: boolean; s
  * has passed).
  */
 const HomeScene: React.FC = () => {
-  const { activeSceneId } = useHomeScene();
+  const { activeSceneId } = useHomeScene('staff');
   const scene = activeSceneId === DEFAULT_SCENE_ID ? undefined : findScene(activeSceneId);
   return scene ? <SceneCanvas key={scene.id} scene={scene} /> : <TopoField />;
 };
 
 export default HomeScene;
+
+/**
+ * The same scene behind the parent portal, when the super admin has ticked
+ * "Also show on the parent portal". Draws nothing otherwise: the portal's
+ * everyday look is its plain background, not the staff contour field.
+ */
+export const PortalScene: React.FC = () => {
+  const { activeSceneId, setting } = useHomeScene('portal');
+  const scene = setting?.showOnPortal && activeSceneId !== DEFAULT_SCENE_ID ? findScene(activeSceneId) : undefined;
+  return scene ? <SceneCanvas key={scene.id} scene={scene} /> : null;
+};
