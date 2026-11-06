@@ -2,8 +2,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
+import { applyCachedPalette } from './hooks/useAppPalette';
 import reportWebVitals from './reportWebVitals';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+
+// Before the first paint, so a holiday palette does not flash the default.
+applyCachedPalette();
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -130,7 +134,7 @@ function showUpdateBanner(onUpdate: () => void) {
   const updateBtn = document.createElement('button');
   updateBtn.textContent = 'Update';
   updateBtn.style.cssText =
-    'background:#E2144F;color:#FFF;border:none;border-radius:8px;padding:8px 16px;' +
+    'background:var(--c-accent,#E2144F);color:#FFF;border:none;border-radius:8px;padding:8px 16px;' +
     'font-weight:600;font-size:14px;cursor:pointer;' +
     // Without these the label clipped to "Updat" at 375px, and worse once it
     // became the longer "Updating…".

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import { JobTask, TaskTemplate, TaskPriority, RecurrencePattern, TaskFile } from '../types';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { isManagementRole, roleLabel } from '../lib/roles';
 import { useResponsive } from '../hooks/useResponsive';
 import TemplateSelector from './TemplateSelector';
@@ -1234,7 +1234,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   userCardSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: `${theme.colors.primary}15`,
+    backgroundColor: accentAlpha(0.08),
   },
   userCardCheckbox: {
     flexShrink: 0,

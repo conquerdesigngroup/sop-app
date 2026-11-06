@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getThemeColors, theme } from '../theme';
+import { getThemeColors } from '../theme';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAccentHex } from '../hooks/useAppPalette';
 
 /**
  * The ambient background on the staff dashboard: a faint contour map of a
@@ -153,6 +154,8 @@ const compile = (gl: WebGLRenderingContext, type: number, source: string) => {
 const TopoField: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { isDark } = useTheme();
+  // WebGL needs a literal colour, not the --c-accent variable.
+  const accent = useAccentHex();
   // Bumped when the browser hands back a lost GPU context, which re-runs the
   // effect and rebuilds everything on the new one.
   const [contextEpoch, setContextEpoch] = useState(0);
@@ -199,7 +202,7 @@ const TopoField: React.FC = () => {
     const palette = getThemeColors(isDark ? 'dark' : 'light');
     gl.uniform3fv(gl.getUniformLocation(program, 'u_bg'), toRgb(palette.bg.primary));
     gl.uniform3fv(gl.getUniformLocation(program, 'u_line'), toRgb(palette.txt.primary));
-    gl.uniform3fv(gl.getUniformLocation(program, 'u_accent'), toRgb(theme.colors.primary));
+    gl.uniform3fv(gl.getUniformLocation(program, 'u_accent'), toRgb(accent));
     gl.uniform1f(gl.getUniformLocation(program, 'u_strength'), isDark ? 1 : 0.75);
     const uRes = gl.getUniformLocation(program, 'u_res');
     const uTime = gl.getUniformLocation(program, 'u_time');
@@ -291,7 +294,7 @@ const TopoField: React.FC = () => {
       gl.deleteShader(vs);
       gl.deleteShader(fs);
     };
-  }, [isDark, contextEpoch]);
+  }, [isDark, accent, contextEpoch]);
 
   return (
     <canvas

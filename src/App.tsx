@@ -16,6 +16,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import SessionExpiryModal from './components/SessionExpiryModal';
 import PullToRefreshLayer from './components/PullToRefreshLayer';
 import { RefreshProvider } from './contexts/RefreshContext';
+import { AppPaletteSync } from './hooks/useAppPalette';
 import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
@@ -507,6 +508,9 @@ function App() {
           {/* Above every data context, because every data context registers
               its loader with it. See RefreshContext for what that buys. */}
           <RefreshProvider>
+            {/* The holiday palette (Settings → App colors) for everyone,
+                signed in or not. Renders nothing. */}
+            <AppPaletteSync />
             <AuthProvider>
               <ActivityLogProvider>
                 <DataProvider>

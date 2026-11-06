@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { getThemeColors, theme } from '../theme';
+import { getThemeColors } from '../theme';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAccentHex } from '../hooks/useAppPalette';
 
 /**
  * The ambient background on the front door.
@@ -628,6 +629,8 @@ const STILL_AT = 6.2;
 const RefractedGlassField: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { mode } = useTheme();
+  // Canvas needs a literal colour, not the --c-accent variable.
+  const accent = useAccentHex();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -647,7 +650,7 @@ const RefractedGlassField: React.FC = () => {
       txt3: toRgb(c.txt.tertiary),
       bdr: toRgb(c.bdr.primary),
       bdr2: toRgb(c.bdr.secondary),
-      accent: toRgb(theme.colors.primary),
+      accent: toRgb(accent),
       mode,
     };
 
@@ -766,7 +769,7 @@ const RefractedGlassField: React.FC = () => {
       window.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerout', onPointerOut);
     };
-  }, [mode]);
+  }, [mode, accent]);
 
   return (
     <canvas

@@ -397,7 +397,14 @@ Consequences:
 1. **Never concatenate an alpha suffix** onto these tokens (`` `${theme.colors.bdr.primary}50` `` is broken — use `opacity` or rgba).
 2. **Never pass them as SVG presentation attributes** (`stroke={theme.colors.txt.tertiary}` fails — attributes can't resolve var()). Use `style={{ stroke: ... }}` instead.
 3. On crimson/primary surfaces, hardcode `color: '#FFFFFF'` — mode-dependent text tokens flip dark in light mode and break contrast.
-4. `theme.colors.primary` and `theme.colors.status.*` remain literal hex (identical in both modes) and are safe everywhere.
+4. `theme.colors.status.*` remain literal hex (identical in both modes) and are safe everywhere.
+   **`theme.colors.primary / primaryHover / primaryDark` are CSS variables too** (`--c-accent*`), because a
+   super admin can switch the whole app to a holiday palette (Settings → App colors, `src/lib/appPalettes.ts`,
+   migration v81). The same two rules apply: for a tint use `accentAlpha(0.1)` from `src/theme.ts`, never
+   `` `${theme.colors.primary}1A` `` or a hardcoded `rgba(226, 20, 79, …)`; and never `stroke={theme.colors.primary}`.
+   Canvas/WebGL needs a literal: `useAccentHex()` from `src/hooks/useAppPalette.ts`. A colour that is an identity
+   and must not follow the holiday (the All-Stars program) uses `theme.colors.brand`, the literal electric.
+   A new palette goes in `APP_PALETTES`; `appPalettes.test.ts` holds it to the contrast rule.
 5. Use the `useConfirm` hook (`src/hooks/useConfirm.tsx`) instead of `window.confirm`, and toast errors (`useToast`) instead of `alert()`.
 
 ### DIDC brand (source: public/brand/tokens.json)
@@ -428,7 +435,8 @@ theme.colors.status.error    // #E2144F - Electric
 theme.colors.status.info     // #3B82F6 - Blue
 
 // Brand
-theme.colors.primary       // #E2144F "electric" - DIDC brand accent (keep to ~5% of any view)
+theme.colors.primary       // var(--c-accent) — #E2144F "electric" unless a holiday palette is on (keep to ~5% of any view)
+theme.colors.brand         // #E2144F literal — identity colours that must not follow a holiday palette
 ```
 
 ### Spacing

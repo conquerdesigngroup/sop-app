@@ -28,13 +28,13 @@ import type { PortalClass, PortalClassCategory } from '../../types';
  * mostly one or two programs, so the badge was repeating itself twenty times;
  * the spine says the same thing without spending a line on it.
  *
- * The colours are literal hex from theme.colors.primary and status.*, which do
+ * The colours are literal hex from theme.colors.brand and status.*, which do
  * not change between light and dark mode. A mode-aware token here would need
  * two different spines to stay legible on two different grounds.
  */
 
 const SPINE: Record<PortalClassCategory, string> = {
-  allstars: theme.colors.primary,
+  allstars: theme.colors.brand,
   academy: theme.colors.status.info,
   tnt: theme.colors.status.warning,
 };

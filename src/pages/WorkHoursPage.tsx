@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkHours } from '../contexts/WorkHoursContext';
 import { useResponsive } from '../hooks/useResponsive';
@@ -1887,7 +1887,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   clearAllScheduledBtn: {
     padding: '6px 12px',
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
     border: `1px solid ${theme.colors.status.error}`,
     borderRadius: theme.borderRadius.md,
     color: theme.colors.status.error,

@@ -203,12 +203,12 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           style={{
+            stroke: color,
             transition: animated ? 'stroke-dashoffset 0.5s ease-out' : 'none',
           }}
         />

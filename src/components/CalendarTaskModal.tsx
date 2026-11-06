@@ -473,7 +473,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
               onClick={() => setShowComments(!showComments)}
             >
               <div style={styles.commentsHeaderLeft}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary} strokeWidth="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.primary }} strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
                 <h3 style={{...styles.sectionTitle, marginBottom: 0}}>Team Discussion</h3>

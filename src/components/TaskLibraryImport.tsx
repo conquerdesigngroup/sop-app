@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { TaskTemplate, TaskPriority, RecurrencePattern } from '../types';
 
 interface TaskLibraryImportProps {
@@ -705,7 +705,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'background-color 0.15s ease',
   },
   previewItemSelected: {
-    backgroundColor: 'rgba(226, 20, 79, 0.1)',
+    backgroundColor: accentAlpha(0.1),
   },
   checkbox: {
     width: '20px',

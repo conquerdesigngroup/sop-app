@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 
 interface CustomCheckboxProps {
   checked: boolean;
@@ -60,7 +60,7 @@ export const CustomCheckbox: React.FC<CustomCheckboxProps> = ({
       flexShrink: 0,
       cursor: disabled ? 'not-allowed' : 'pointer',
       opacity: disabled ? 0.5 : 1,
-      outline: isFocused && !disabled ? `2px solid rgba(226, 20, 79, 0.3)` : 'none',
+      outline: isFocused && !disabled ? `2px solid ${accentAlpha(0.3)}` : 'none',
       outlineOffset: '2px',
     };
   };

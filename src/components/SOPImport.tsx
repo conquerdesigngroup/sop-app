@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useSOPs } from '../contexts/SOPContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { theme } from '../theme';
+import { theme, accentAlpha } from '../theme';
 import { SOP, SOPStep, SOPStatus } from '../types';
 
 interface SOPImportProps {
@@ -543,7 +543,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'background-color 0.15s ease',
   },
   previewItemSelected: {
-    backgroundColor: `${theme.colors.primary}1A`,
+    backgroundColor: accentAlpha(0.1),
   },
   checkbox: {
     width: '20px',

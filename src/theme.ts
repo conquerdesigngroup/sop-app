@@ -158,13 +158,29 @@ export const applyThemeMode = (mode: 'dark' | 'light') => {
   root.style.setProperty('--shadow-xl', `0 12px 24px rgba(0, 0, 0, ${s.xl})`);
 };
 
+/**
+ * The current accent at an alpha, for tints: `accentAlpha(0.1)` instead of
+ * accentAlpha(0.1) or a hardcoded rgba(226, 20, 79, ...).
+ */
+export const accentAlpha = (alpha: number) => `rgba(var(--c-accent-rgb, 226, 20, 79), ${alpha})`;
+
 export const theme = {
   colors: {
-    // Accent colors - DIDC Electric
+    // Accent colors - DIDC Electric by default.
     // Brand rule: keep electric to ~5% of any view — accents, not fills.
-    primary: '#E2144F',           // Electric
-    primaryHover: '#FF2D6B',      // Electric2 — pink hover / tint
-    primaryDark: '#C40E45',       // Pressed state (derived shade)
+    //
+    // CSS variables, because a super admin can switch the whole app to a
+    // holiday palette (src/lib/appPalettes.ts, Settings → App colors). The
+    // fallbacks are the electric, so nothing changes until one is applied.
+    // Like bg/txt/bdr: never append a hex alpha (use accentAlpha) and never
+    // pass them as SVG presentation attributes (use style={{ stroke }}).
+    primary: 'var(--c-accent, #E2144F)',            // Electric
+    primaryHover: 'var(--c-accent-hover, #FF2D6B)', // Electric2 — pink hover / tint
+    primaryDark: 'var(--c-accent-dark, #C40E45)',   // Pressed state (derived shade)
+
+    // The literal DIDC electric, for things whose colour is an identity and
+    // must not follow a holiday palette (the All-Stars program, for one).
+    brand: '#E2144F',
 
     // Background colors — CSS variables set by ThemeProvider (see applyThemeMode).
     // Fallbacks are the dark palette so anything rendered outside the provider still works.
