@@ -35,12 +35,20 @@ export interface SceneFrame {
   draw(ctx: CanvasRenderingContext2D, t: number, dt: number, still: boolean): void;
 }
 
+export type HolidaySeason = 'christmas' | 'thanksgiving';
+
+/** The holidays, in the order the picker groups them, with their headings. */
+export const HOLIDAY_SEASONS: { id: HolidaySeason; name: string }[] = [
+  { id: 'thanksgiving', name: 'Thanksgiving' },
+  { id: 'christmas', name: 'Christmas' },
+];
+
 export interface HomeSceneDef {
   id: string;
   name: string;
   /** One line for the picker in Settings. */
   blurb: string;
-  season: 'christmas';
+  season: HolidaySeason;
   /** Frames per second. Nothing here needs 60; most need far less. */
   fps: number;
   create(w: number, h: number, mode: SceneMode): SceneFrame;
@@ -856,6 +864,516 @@ const glassOrnaments: HomeSceneDef = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Thanksgiving. The same rules, an autumn palette: rust, amber, gold and
+// crimson, matching the Thanksgiving app palette's garland (src/lib/appPalettes.ts).
+// ---------------------------------------------------------------------------
+
+const LEAF_TONES = ['194,65,12', '202,138,4', '185,28,28', '217,119,6', '161,98,7', '146,64,14'];
+type LeafKind = 'maple' | 'oak';
+
+/**
+ * One leaf, pre-rendered once per shape and colour (the same trick as
+ * softDisc): a filled silhouette with a darker vein and a soft highlight, so a
+ * leaf reads as a leaf at 10px and at 40px.
+ */
+const leafSprite = (kind: LeafKind, rgb: string): HTMLCanvasElement => {
+  const key = `leaf|${kind}|${rgb}`;
+  const hit = spriteCache.get(key);
+  if (hit) return hit;
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  if (g) {
+    g.translate(size / 2, size / 2);
+    g.scale(4, 4);
+    g.translate(0, -14);
+    g.beginPath();
+    if (kind === 'maple') {
+      const pts = [[0, 8], [1.4, 11], [4.2, 9.6], [3.6, 12.4], [6.6, 13], [4, 14.8], [5, 17.6], [1.6, 16.6], [0.6, 20], [0, 19.2],
+        [-0.6, 20], [-1.6, 16.6], [-5, 17.6], [-4, 14.8], [-6.6, 13], [-3.6, 12.4], [-4.2, 9.6], [-1.4, 11]];
+      pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    } else {
+      g.moveTo(0, 8);
+      g.bezierCurveTo(2, 8.6, 3.4, 9.6, 2.6, 11);
+      g.bezierCurveTo(4.4, 11, 4.8, 12.6, 3.4, 13.6);
+      g.bezierCurveTo(5, 14, 4.8, 15.8, 3, 16.4);
+      g.bezierCurveTo(3.8, 18, 2.4, 19.6, 0, 20.4);
+      g.bezierCurveTo(-2.4, 19.6, -3.8, 18, -3, 16.4);
+      g.bezierCurveTo(-4.8, 15.8, -5, 14, -3.4, 13.6);
+      g.bezierCurveTo(-4.8, 12.6, -4.4, 11, -2.6, 11);
+      g.bezierCurveTo(-3.4, 9.6, -2, 8.6, 0, 8);
+    }
+    g.closePath();
+    const fill = g.createLinearGradient(-6, 8, 6, 20);
+    fill.addColorStop(0, `rgb(${rgb})`);
+    fill.addColorStop(1, `rgba(${rgb},.82)`);
+    g.fillStyle = fill;
+    g.fill();
+    g.save();
+    g.clip();
+    const hi = g.createRadialGradient(-2, 11, 0, -2, 11, 7);
+    hi.addColorStop(0, 'rgba(255,240,200,.35)');
+    hi.addColorStop(1, 'rgba(255,240,200,0)');
+    g.fillStyle = hi;
+    g.fillRect(-8, 6, 16, 16);
+    g.restore();
+    g.strokeStyle = 'rgba(60,20,0,.35)';
+    g.lineWidth = 0.45;
+    g.beginPath();
+    g.moveTo(0, 7);
+    g.lineTo(0, 19);
+    g.moveTo(0, 14);
+    g.lineTo(3.4, 11.4);
+    g.moveTo(0, 14);
+    g.lineTo(-3.4, 11.4);
+    g.stroke();
+  }
+  spriteCache.set(key, c);
+  return c;
+};
+
+interface Leaf {
+  x: number; y: number; s: number; v: number; a: number; rot: number; spin: number;
+  ph: number; flip: number; sway: number; tone: string; kind: LeafKind;
+}
+
+const makeLeaf = (w: number, h: number, layer: number, anywhere: boolean, pinkChance: number): Leaf => {
+  const L = [
+    { s: [11, 15], v: [16, 24], a: 0.5 },
+    { s: [18, 26], v: [26, 38], a: 0.85 },
+    { s: [32, 42], v: [42, 56], a: 0.95 },
+  ][layer];
+  return {
+    x: rnd(-20, w + 20), y: anywhere ? rnd(-20, h) : rnd(-60, -20),
+    s: rnd(L.s[0], L.s[1]), v: rnd(L.v[0], L.v[1]), a: L.a * rnd(0.75, 1),
+    rot: rnd(0, TAU), spin: rnd(-0.9, 0.9), ph: rnd(0, TAU), flip: rnd(0.6, 1.4), sway: rnd(14, 34),
+    tone: rand() < pinkChance ? PINK : LEAF_TONES[Math.floor(rand() * LEAF_TONES.length)],
+    kind: rand() < 0.65 ? 'maple' : 'oak',
+  };
+};
+
+/** Tumbling: rotating as it falls, and turning over (a squash on one axis) as it swings. */
+const drawLeaf = (ctx: CanvasRenderingContext2D, l: Leaf, t: number, alpha: number) => {
+  ctx.save();
+  ctx.translate(l.x, l.y);
+  ctx.rotate(l.rot);
+  ctx.scale(1, Math.max(0.15, Math.abs(Math.cos(t * l.flip + l.ph))));
+  ctx.globalAlpha = l.a * alpha;
+  ctx.drawImage(leafSprite(l.kind, l.tone), -l.s / 2, -l.s / 2, l.s, l.s);
+  ctx.restore();
+};
+
+const stepLeaf = (l: Leaf, t: number, dt: number, wind: number) => {
+  l.y += l.v * dt;
+  l.x += (wind + Math.sin(t * 0.9 + l.ph) * l.sway) * dt;
+  l.rot += l.spin * dt;
+};
+
+/**
+ * Falling Leaves: maple and oak leaves in rust, amber, gold and crimson,
+ * tumbling down in three depths on a slow gust. The autumn First Snow.
+ */
+const fallingLeaves: HomeSceneDef = {
+  id: 'leaves',
+  name: 'Falling Leaves',
+  blurb: 'Maple and oak leaves in rust, amber and gold, tumbling down on a slow breeze.',
+  season: 'thanksgiving',
+  fps: 30,
+  create(w, h, { dark }) {
+    const d = density(w, h);
+    const leaves: (Leaf & { layer: number })[] = [];
+    [20, 12, 4].forEach((n, layer) => {
+      for (let i = 0; i < Math.round(n * d); i++) leaves.push({ ...makeLeaf(w, h, layer, true, 1 / 45), layer });
+    });
+    return {
+      draw(ctx, t, dt) {
+        ctx.clearRect(0, 0, w, h);
+        // Low autumn light: warm from the top, a little ember along the foot.
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, dark ? 'rgba(217,119,6,.07)' : 'rgba(251,191,36,.16)');
+        g.addColorStop(0.5, 'rgba(0,0,0,0)');
+        g.addColorStop(1, dark ? 'rgba(194,65,12,.09)' : 'rgba(234,88,12,.10)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+        const wind = Math.sin(t * 0.11) * 12 + Math.max(0, Math.sin(t * 0.29)) * 22;
+        for (const l of leaves) {
+          stepLeaf(l, t, dt, wind * (0.5 + l.layer * 0.4));
+          if (l.y > h + 30 || l.x > w + 40 || l.x < -40) Object.assign(l, makeLeaf(w, h, l.layer, false, 1 / 45));
+          drawLeaf(ctx, l, t, dark ? 0.9 : 1);
+        }
+        ctx.globalAlpha = 1;
+      },
+    };
+  },
+};
+
+/**
+ * Harvest Field: golden hour over rolling fields along the foot of the screen.
+ * A low harvest sun (a moon in dark mode), a red barn with a lit window,
+ * pumpkins and hay bales in the foreground, geese crossing now and then, and
+ * a few leaves on the wind. Static parts are drawn once, like the village.
+ */
+const harvestField: HomeSceneDef = {
+  id: 'harvest',
+  name: 'Harvest Field',
+  blurb: 'Golden hour over the fields: a red barn, pumpkins, hay bales and geese heading south.',
+  season: 'thanksgiving',
+  fps: 30,
+  create(w, h, { dark, floor = 0 }) {
+    const ground = h - floor - Math.min(floor ? 20 : 56, h * 0.06);
+    const u = Math.min(1.5, Math.max(0.85, w / 390));
+    const pal = dark
+      ? { far: '#2A1D1C', mid: '#1E1517', near: '#130E10', barn: '#3A1814', trim: 'rgba(255,230,200,.25)', pumpkin: ['#9A3A0A', '#8A4A0A'], hay: '#5C4524', hayLine: 'rgba(0,0,0,.35)', stem: '#2F3D17' }
+      : { far: '#EBCB9C', mid: '#CF9457', near: '#7A4A22', barn: '#9B2C1F', trim: 'rgba(255,255,255,.9)', pumpkin: ['#EA580C', '#D97706'], hay: '#D8AA52', hayLine: 'rgba(120,70,20,.35)', stem: '#3F6212' };
+
+    const hillY = (x: number, base: number, amp: number, f: number, ph: number) =>
+      base - Math.sin(x / w * f + ph) * amp - Math.sin(x / w * f * 2.7 + ph * 2) * amp * 0.35;
+    const farBase = ground - 70 * u, midBase = ground - 30 * u;
+    const farPh = rnd(0, TAU), midPh = rnd(0, TAU);
+    const sun = { x: w * rnd(0.62, 0.8), y: farBase - 40 * u, r: 44 * u };
+    let barnWin: { x: number; y: number; w: number; h: number } | null = null;
+
+    const stat = document.createElement('canvas');
+    const S = Math.min(2, window.devicePixelRatio || 1);
+    stat.width = Math.max(1, Math.round(w * S));
+    stat.height = Math.max(1, Math.round(h * S));
+    const g = stat.getContext('2d');
+
+    const hill = (c: CanvasRenderingContext2D, base: number, amp: number, f: number, ph: number, fill: string) => {
+      c.fillStyle = fill;
+      c.beginPath();
+      c.moveTo(0, h);
+      for (let x = 0; x <= w; x += 6) c.lineTo(x, hillY(x, base, amp, f, ph));
+      c.lineTo(w, h);
+      c.closePath();
+      c.fill();
+    };
+
+    const pumpkin = (c: CanvasRenderingContext2D, x: number, r: number, col: string) => {
+      const y = ground - r * 0.9;
+      c.fillStyle = col;
+      for (const dx of [-0.55, 0.55, 0]) {
+        c.beginPath();
+        c.ellipse(x + dx * r, y, r * (dx ? 0.62 : 0.6), r * 0.9, 0, 0, TAU);
+        c.fill();
+      }
+      c.strokeStyle = 'rgba(0,0,0,.18)';
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.moveTo(x - r * 0.3, y - r * 0.8);
+      c.quadraticCurveTo(x - r * 0.55, y, x - r * 0.3, y + r * 0.8);
+      c.moveTo(x + r * 0.3, y - r * 0.8);
+      c.quadraticCurveTo(x + r * 0.55, y, x + r * 0.3, y + r * 0.8);
+      c.stroke();
+      c.fillStyle = pal.stem;
+      c.fillRect(x - r * 0.08, y - r * 1.15, r * 0.16, r * 0.35);
+    };
+
+    const bale = (c: CanvasRenderingContext2D, x: number, bw: number) => {
+      const bh = bw * 0.62;
+      c.fillStyle = pal.hay;
+      c.beginPath();
+      c.roundRect ? c.roundRect(x, ground - bh, bw, bh, bh * 0.25) : c.rect(x, ground - bh, bw, bh);
+      c.fill();
+      c.strokeStyle = pal.hayLine;
+      c.lineWidth = 1;
+      for (let i = 1; i < 4; i++) {
+        c.beginPath();
+        c.moveTo(x + 3, ground - bh * (i / 4));
+        c.lineTo(x + bw - 3, ground - bh * (i / 4));
+        c.stroke();
+      }
+    };
+
+    const sheaf = (c: CanvasRenderingContext2D, x: number, sh: number) => {
+      c.strokeStyle = dark ? '#4A3820' : '#B98A3A';
+      c.lineWidth = 1.2;
+      for (let i = -4; i <= 4; i++) {
+        c.beginPath();
+        c.moveTo(x + i * 0.6, ground);
+        c.quadraticCurveTo(x + i * 0.4, ground - sh * 0.5, x + i * 2.2, ground - sh);
+        c.stroke();
+      }
+      c.strokeStyle = dark ? '#6B2A12' : '#9B2C1F';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(x - 4, ground - sh * 0.45);
+      c.lineTo(x + 4, ground - sh * 0.45);
+      c.stroke();
+    };
+
+    if (g) {
+      g.setTransform(S, 0, 0, S, 0, 0);
+      hill(g, farBase, 14 * u, 4, farPh, pal.far);
+      hill(g, midBase, 10 * u, 6, midPh, pal.mid);
+
+      // The barn, on the middle hill.
+      const bx = w * rnd(0.12, 0.3);
+      const bw = 46 * u, bh = 28 * u;
+      const by = hillY(bx + bw / 2, midBase, 10 * u, 6, midPh) + 4 * u;
+      g.fillStyle = pal.barn;
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.lineTo(bx, by - bh);
+      g.lineTo(bx + bw * 0.18, by - bh - 12 * u);
+      g.lineTo(bx + bw / 2, by - bh - 20 * u);
+      g.lineTo(bx + bw * 0.82, by - bh - 12 * u);
+      g.lineTo(bx + bw, by - bh);
+      g.lineTo(bx + bw, by);
+      g.closePath();
+      g.fill();
+      // White trim and the X on the doors.
+      g.strokeStyle = pal.trim;
+      g.lineWidth = 1.2 * u;
+      const dw = 16 * u, dh = 16 * u, dx = bx + bw / 2 - dw / 2, dy = by - dh;
+      g.strokeRect(dx, dy, dw, dh);
+      g.beginPath();
+      g.moveTo(dx, dy); g.lineTo(dx + dw, dy + dh);
+      g.moveTo(dx + dw, dy); g.lineTo(dx, dy + dh);
+      g.stroke();
+      barnWin = { x: bx + bw / 2 - 3.5 * u, y: by - bh - 9 * u, w: 7 * u, h: 6 * u };
+
+      // Near field, then the foreground: pumpkins, bales and corn sheaves.
+      hill(g, ground + 4 * u, 3 * u, 3, rnd(0, TAU), pal.near);
+      for (let x = rnd(-10, 20); x < w + 20;) {
+        const k = rand();
+        if (k < 0.5) {
+          const n = 1 + Math.floor(rand() * 3);
+          for (let i = 0; i < n; i++) pumpkin(g, x + i * 15 * u, rnd(6, 10) * u, pal.pumpkin[Math.floor(rand() * 2)]);
+          x += n * 15 * u + rnd(20, 60) * u;
+        } else if (k < 0.8) {
+          const bw2 = rnd(24, 32) * u;
+          bale(g, x, bw2);
+          x += bw2 + rnd(24, 70) * u;
+        } else {
+          sheaf(g, x, rnd(30, 40) * u);
+          x += rnd(30, 70) * u;
+        }
+      }
+    }
+
+    // A V of geese every forty seconds or so, crossing the sky slowly.
+    const geese = Array.from({ length: 7 }, (_, i) => ({ dx: -Math.ceil(i / 2) * 14, dy: (i % 2 ? -1 : 1) * Math.ceil(i / 2) * 7, ph: rnd(0, TAU) }));
+    const geeseY = farBase - rnd(140, 220) * u;
+    const leaves = Array.from({ length: Math.round(8 * density(w, h)) }, () => ({ ...makeLeaf(w, h, 1, true, 0), y: rnd(0, ground) }));
+    const motes = Array.from({ length: Math.round(22 * density(w, h)) }, () => ({ x: rnd(0, w), y: rnd(ground - 200 * u, ground), v: rnd(4, 10), ph: rnd(0, TAU) }));
+    const sunRgb = dark ? '252,211,77' : '253,186,116';
+
+    return {
+      draw(ctx, t, dt, still) {
+        ctx.clearRect(0, 0, w, h);
+        // Golden hour: a warm wash rising from the fields.
+        const sky = ctx.createLinearGradient(0, 0, 0, ground);
+        if (dark) {
+          sky.addColorStop(0, 'rgba(40,20,40,0)');
+          sky.addColorStop(0.6, 'rgba(120,40,40,.08)');
+          sky.addColorStop(1, 'rgba(234,88,12,.22)');
+        } else {
+          sky.addColorStop(0, 'rgba(255,237,213,.10)');
+          sky.addColorStop(0.55, 'rgba(254,215,170,.22)');
+          sky.addColorStop(1, 'rgba(251,146,60,.42)');
+        }
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, w, ground);
+
+        // The low sun (harvest moon in dark mode), sitting behind the far hills.
+        const pulse = still ? 1 : 1 + 0.03 * Math.sin(t * 0.5);
+        ctx.globalAlpha = dark ? 0.4 : 0.55;
+        const R = sun.r * 4 * pulse;
+        ctx.drawImage(softDisc(sunRgb, 0.12), sun.x - R, sun.y - R, R * 2, R * 2);
+        ctx.globalAlpha = dark ? 0.9 : 0.85;
+        ctx.fillStyle = dark ? '#FCD9A0' : '#FDBA74';
+        ctx.beginPath();
+        ctx.arc(sun.x, sun.y, sun.r, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        if (!still) {
+          const span = w + 260;
+          const gx = ((t * 14) % (span * 2.2)) - 130;
+          if (gx < span) {
+            ctx.strokeStyle = dark ? 'rgba(255,236,210,.45)' : 'rgba(91,58,41,.55)';
+            ctx.lineWidth = 1.3;
+            ctx.lineCap = 'round';
+            for (const b of geese) {
+              const x = gx + b.dx * u, y = geeseY + b.dy * u + Math.sin(t * 0.4) * 6;
+              const flap = Math.sin(t * 5 + b.ph) * 3 * u;
+              ctx.beginPath();
+              ctx.moveTo(x - 6 * u, y - flap);
+              ctx.quadraticCurveTo(x - 2 * u, y - 2 * u, x, y);
+              ctx.quadraticCurveTo(x + 2 * u, y - 2 * u, x + 6 * u, y - flap);
+              ctx.stroke();
+            }
+          }
+        }
+
+        ctx.drawImage(stat, 0, 0, w, h);
+
+        // The barn window, lit and flickering.
+        if (barnWin) {
+          const bw = barnWin as { x: number; y: number; w: number; h: number };
+          const flick = still ? 0.9 : 0.85 + 0.1 * Math.sin(t * 2.3) + 0.05 * Math.sin(t * 6.1);
+          ctx.globalAlpha = 0.4 * flick;
+          ctx.drawImage(softDisc('255,190,110', 0.1), bw.x + bw.w / 2 - 14 * u, bw.y + bw.h / 2 - 14 * u, 28 * u, 28 * u);
+          ctx.globalAlpha = flick;
+          ctx.fillStyle = '#FFC266';
+          ctx.fillRect(bw.x, bw.y, bw.w, bw.h);
+        }
+
+        // Dust and chaff catching the light, drifting up.
+        for (const m of motes) {
+          if (!still) { m.y -= m.v * dt; m.x += Math.sin(t * 0.7 + m.ph) * 4 * dt; }
+          if (m.y < ground - 220 * u) { m.y = ground; m.x = rnd(0, w); }
+          const tw = 0.4 + 0.6 * Math.pow(0.5 + 0.5 * Math.sin(t * 1.6 + m.ph), 2);
+          ctx.globalAlpha = (dark ? 0.55 : 0.45) * tw;
+          ctx.drawImage(softDisc(dark ? '253,186,116' : '255,247,230', 0.3, 32), m.x - 3, m.y - 3, 6, 6);
+        }
+
+        const wind = 8 + Math.max(0, Math.sin(t * 0.3)) * 20;
+        for (const l of leaves) {
+          stepLeaf(l, t, dt, wind);
+          if (l.y > ground || l.x > w + 40) Object.assign(l, makeLeaf(w, h, 1, false, 0));
+          drawLeaf(ctx, l, t, 0.85);
+        }
+        ctx.globalAlpha = 1;
+      },
+    };
+  },
+};
+
+/**
+ * Autumn Boughs: maple branches reaching in from the top corners, hung with
+ * leaves that sway, and every few seconds one lets go and tumbles down. A
+ * pink leaf is hidden among them.
+ */
+const autumnBoughs: HomeSceneDef = {
+  id: 'boughs',
+  name: 'Autumn Boughs',
+  blurb: 'Maple branches in from the top corners, leaves swaying and letting go one by one.',
+  season: 'thanksgiving',
+  fps: 30,
+  create(w, h, { dark, ceiling = 0 }) {
+    const u = Math.min(1.4, Math.max(0.8, w / 390));
+    const bark = dark ? '#4A3730' : '#5B3A29';
+    type Spot = { x: number; y: number; s: number; tone: string; kind: LeafKind; ph: number; rot: number; gone: number };
+    const spots: Spot[] = [];
+    const segs: { x1: number; y1: number; cx: number; cy: number; x2: number; y2: number; w1: number; w2: number }[] = [];
+    const leafAt = (x: number, y: number, size: number) => spots.push({
+      x, y, s: size, ph: rnd(0, TAU), rot: rnd(-0.7, 0.7), gone: 0,
+      tone: LEAF_TONES[Math.floor(rand() * LEAF_TONES.length)], kind: rand() < 0.7 ? 'maple' : 'oak',
+    });
+
+    // A bough: each limb bends a little and droops under its own weight,
+    // tapers to a twig, and carries leaves along its outer limbs, not just in
+    // a clump at the tips.
+    const grow = (x: number, y: number, ang: number, len: number, width: number, depth: number) => {
+      const x2 = x + Math.cos(ang) * len, y2 = y + Math.sin(ang) * len + len * 0.08;
+      const bend = rnd(-0.18, 0.18) * len;
+      const cx = (x + x2) / 2 - Math.sin(ang) * bend, cy = (y + y2) / 2 + Math.cos(ang) * bend;
+      const w2 = width * 0.62;
+      segs.push({ x1: x, y1: y, cx, cy, x2, y2, w1: width, w2 });
+      if (depth <= 1) {
+        const n = depth === 0 ? 3 : 1;
+        for (let i = 0; i < n; i++) {
+          const k = depth === 0 ? rnd(0.45, 1) : rnd(0.3, 0.9);
+          leafAt(x + (x2 - x) * k + rnd(-5, 5) * u, y + (y2 - y) * k + rnd(-2, 6) * u, rnd(11, 17) * u);
+        }
+      }
+      if (depth === 0) return;
+      const n = depth > 2 ? 2 : rand() < 0.5 ? 2 : 3;
+      for (let i = 0; i < n; i++) {
+        const spread = (i - (n - 1) / 2) * rnd(0.35, 0.6);
+        grow(x2, y2, ang + spread + rnd(-0.12, 0.12) + 0.06, len * rnd(0.62, 0.78), w2, depth - 1);
+      }
+    };
+    const reach = Math.min(w * 0.42, 260 * u);
+    grow(-12, ceiling + 6 * u, rnd(0.12, 0.25), reach * 0.42, 8 * u, 4);
+    grow(w + 12, ceiling + 22 * u, Math.PI - rnd(0.12, 0.25), reach * 0.4, 7.5 * u, 4);
+    if (spots.length) spots[Math.floor(rand() * spots.length)].tone = PINK;
+
+    const stat = document.createElement('canvas');
+    const S = Math.min(2, window.devicePixelRatio || 1);
+    stat.width = Math.max(1, Math.round(w * S));
+    stat.height = Math.max(1, Math.round(h * S));
+    const g = stat.getContext('2d');
+    if (g) {
+      g.setTransform(S, 0, 0, S, 0, 0);
+      g.strokeStyle = bark;
+      g.lineCap = 'round';
+      g.globalAlpha = dark ? 0.95 : 0.9;
+      // Tapered: each limb drawn in a few strokes that thin toward its end.
+      for (const s of segs) {
+        const steps = 4;
+        for (let i = 0; i < steps; i++) {
+          const a = i / steps, b = (i + 1) / steps;
+          const at = (k: number) => [
+            (1 - k) * (1 - k) * s.x1 + 2 * (1 - k) * k * s.cx + k * k * s.x2,
+            (1 - k) * (1 - k) * s.y1 + 2 * (1 - k) * k * s.cy + k * k * s.y2,
+          ];
+          const [ax, ay] = at(a), [bx, by] = at(b);
+          g.lineWidth = Math.max(0.7, s.w1 + (s.w2 - s.w1) * (a + b) / 2);
+          g.beginPath();
+          g.moveTo(ax, ay);
+          g.lineTo(bx, by);
+          g.stroke();
+        }
+      }
+    }
+
+    const falling: Leaf[] = [];
+    let nextDrop = rnd(2, 5);
+    return {
+      draw(ctx, t, dt, still) {
+        ctx.clearRect(0, 0, w, h);
+        const glow = ctx.createLinearGradient(0, 0, 0, h * 0.5);
+        glow.addColorStop(0, dark ? 'rgba(217,119,6,.08)' : 'rgba(251,191,36,.14)');
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, w, h * 0.5);
+        ctx.drawImage(stat, 0, 0, w, h);
+
+        if (!still) {
+          nextDrop -= dt;
+          if (nextDrop <= 0) {
+            nextDrop = rnd(2.5, 6);
+            const live = spots.filter(s => s.gone <= 0 && s.tone !== PINK);
+            const s = live[Math.floor(rand() * live.length)];
+            if (s) {
+              s.gone = rnd(14, 24);
+              falling.push({ ...makeLeaf(w, h, 2, false, 0), x: s.x, y: s.y, s: s.s, tone: s.tone, kind: s.kind, rot: s.rot, a: 0.95 });
+            }
+          }
+        }
+        // Leaves still on the branch, swaying from the stem; a fallen one grows back slowly.
+        for (const s of spots) {
+          let a = 1;
+          if (s.gone > 0) {
+            if (!still) s.gone -= dt;
+            a = s.gone > 3 ? 0 : 1 - s.gone / 3;
+            if (a <= 0) continue;
+          }
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.rot + (still ? 0 : Math.sin(t * 1.1 + s.ph) * 0.12));
+          ctx.globalAlpha = a * (dark ? 0.9 : 0.95);
+          ctx.drawImage(leafSprite(s.kind, s.tone), -s.s / 2, -s.s * 0.2, s.s, s.s);
+          ctx.restore();
+        }
+        const wind = 6 + Math.sin(t * 0.2) * 10;
+        for (let i = falling.length - 1; i >= 0; i--) {
+          const l = falling[i];
+          stepLeaf(l, t, dt, wind);
+          if (l.y > h + 30) { falling.splice(i, 1); continue; }
+          drawLeaf(ctx, l, t, 1);
+        }
+        ctx.globalAlpha = 1;
+      },
+    };
+  },
+};
+
 /** Every seasonal scene, in the order the picker shows them. */
 export const HOME_SCENES: HomeSceneDef[] = [
   firstSnow,
@@ -865,6 +1383,9 @@ export const HOME_SCENES: HomeSceneDef[] = [
   electricAurora,
   frostedContours,
   northStar,
+  fallingLeaves,
+  harvestField,
+  autumnBoughs,
 ];
 
 /** The everyday background: TopoField, not a canvas scene. */
