@@ -847,3 +847,14 @@ nav button:not([style*="background-color: rgb(226, 20, 79)"]):not([style*="backg
 .holiday-still .holiday-sway {
   animation: none;
 }
+
+/* The Christmas elf's "You found me" bubble (src/components/elf/ElfScout.tsx).
+   Pops in and stays; the component removes it. Ends visible, so the
+   reduced-motion rule above simply shows it. Uses `scale`, not `transform`,
+   because the bubble's inline transform centres it over the elf. */
+@keyframes elf-bubble {
+  0% { opacity: 0; scale: 0.6; }
+  12% { opacity: 1; scale: 1.06; }
+  20% { scale: 1; }
+  100% { opacity: 1; scale: 1; }
+}
