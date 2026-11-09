@@ -17,6 +17,7 @@ import SessionExpiryModal from './components/SessionExpiryModal';
 import PullToRefreshLayer from './components/PullToRefreshLayer';
 import { RefreshProvider } from './contexts/RefreshContext';
 import { AppPaletteSync } from './hooks/useAppPalette';
+import ElfScout from './components/elf/ElfScout';
 import { theme } from './theme';
 import { useResponsive } from './hooks/useResponsive';
 import { isPortalPath } from './lib/portal';
@@ -480,6 +481,9 @@ const AppContent: React.FC = () => {
           staff and parents alike — it listens on the document. */}
       <PullToRefreshLayer />
       <SessionExpiryModal />
+      {/* The Christmas elf scout, when a super admin has him out. Tiny until
+          he is on the page you are looking at; three.js loads only then. */}
+      <ElfScout />
     </div>
   );
 };

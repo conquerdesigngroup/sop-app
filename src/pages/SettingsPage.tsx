@@ -13,6 +13,7 @@ import DashboardSettingsModal from '../components/DashboardSettingsModal';
 import HomeSceneSettings from '../components/HomeSceneSettings';
 import HolidayPackSettings from '../components/HolidayPackSettings';
 import AppPaletteSettings from '../components/AppPaletteSettings';
+import ElfSettings from '../components/elf/ElfSettings';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { enablePush, disablePush, sendTestPush, pushSupport, hasPushSubscription } from '../lib/push';
@@ -738,6 +739,24 @@ const SettingsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) =>
                   </h3>
                 </div>
                 <AppPaletteSettings />
+              </div>
+            )}
+
+            {/* Christmas elf: daily hide and seek. Super admin only. */}
+            {isSuperAdmin && (
+              <div className="card-hover-subtle" style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <h3 style={styles.cardTitle}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M5 20 12 3l7 17" />
+                      <path d="M4 20h16" />
+                      <circle cx="12" cy="3" r="1.5" />
+                      <path d="M8.5 12h7" />
+                    </svg>
+                    Christmas elf
+                  </h3>
+                </div>
+                <ElfSettings />
               </div>
             )}
 
