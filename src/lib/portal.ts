@@ -53,7 +53,7 @@ export const ENROLLIO_URL =
  * Empty means no tile. Set it here and redeploy to switch the tile on; clear
  * it after the season to take it down again.
  */
-export const NUTCRACKER_URL: string = '';
+export const NUTCRACKER_URL: string = 'https://nutcracker.didancecenter.com/';
 
 // ------------------------------------------------------------ class categories
 
