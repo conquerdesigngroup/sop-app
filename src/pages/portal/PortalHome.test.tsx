@@ -20,6 +20,16 @@ const mockPortal: { programs: PortalProgram[]; loading: boolean } = { programs: 
 
 const navigated: string[] = [];
 
+const mockNutcracker = { url: '' };
+
+jest.mock('../../lib/portal', () => {
+  const actual = jest.requireActual('../../lib/portal');
+  return {
+    ...actual,
+    get NUTCRACKER_URL() { return mockNutcracker.url; },
+  };
+});
+
 jest.mock('react-router-dom', () => ({
   Navigate: () => null,
   Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
@@ -91,6 +101,7 @@ const tileRow = (): HTMLElement => {
 beforeEach(() => {
   mockPortal.loading = false;
   navigated.length = 0;
+  mockNutcracker.url = '';
 });
 
 it('gives a family outside All-Stars no All-Star tile, and no gap where it was', () => {
@@ -137,4 +148,28 @@ it('keeps the rules reachable for a family with no dashboard cards at all', () =
   renderHome();
 
   expect(screen.getByRole('button', { name: /studio rules & policies/i })).toBeInTheDocument();
+});
+
+it('links the Nutcracker website straight out, in a new tab, under the sections', () => {
+  // A link out, not a page in the portal: the studio updates that site
+  // itself, and a parent should land on it exactly as it is.
+  mockNutcracker.url = 'https://nutcracker.example.com/';
+  mockPortal.programs = [ALL_STARS, ACADEMY];
+  renderHome();
+
+  const link = screen.getByRole('link', { name: /the nutcracker/i });
+  expect(link).toHaveAttribute('href', 'https://nutcracker.example.com/');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+
+  // A row of its own, not a fourth square squeezing the section tiles.
+  expect(tileRow()).not.toContainElement(link);
+  expect(tileRow().style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
+});
+
+it('shows no Nutcracker tile while there is no website to send anyone to', () => {
+  mockPortal.programs = [ACADEMY];
+  renderHome();
+
+  expect(screen.queryByText('The Nutcracker')).not.toBeInTheDocument();
 });
