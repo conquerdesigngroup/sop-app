@@ -41,6 +41,20 @@ export const isProgramSlug = (slug: string | undefined): slug is ProgramSlug =>
 export const ENROLLIO_URL =
   'https://portal.enrollio.ai/login?studioId=02CXn3sR0U7KkN3DSkwZ';
 
+/**
+ * The Nutcracker production's own website, where the studio posts show news,
+ * dates and tickets.
+ *
+ * Linked from the family dashboard as a full-width tile under the studio
+ * sections, opening in a new tab (in the installed app, the phone's browser)
+ * rather than framed inside the portal: the site is the studio's to update,
+ * and a framed copy would lose its own login, payments and scrolling.
+ *
+ * Empty means no tile. Set it here and redeploy to switch the tile on; clear
+ * it after the season to take it down again.
+ */
+export const NUTCRACKER_URL: string = 'https://nutcracker.didancecenter.com/';
+
 // ------------------------------------------------------------ class categories
 
 /**

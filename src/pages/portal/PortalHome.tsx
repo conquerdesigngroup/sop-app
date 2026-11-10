@@ -12,7 +12,7 @@ import { usePortalAuth } from '../../contexts/PortalAuthContext';
 import { useRefreshable } from '../../contexts/RefreshContext';
 import { FIXTURE_SCENARIOS } from '../../lib/attendanceFixture';
 import { CLIENT_AUTH_ENABLED, CLIENT_AUTH_REQUIRED } from '../../lib/clientAuth';
-import { ENROLLIO_URL, portalRoutes, ProgramSlug } from '../../lib/portal';
+import { ENROLLIO_URL, NUTCRACKER_URL, portalRoutes, ProgramSlug } from '../../lib/portal';
 
 /**
  * The parent portal home — the family's dashboard.
@@ -230,6 +230,25 @@ const PortalHome: React.FC = () => {
               />
             ))}
           </div>
+
+          {/* The Nutcracker, as its own full-width row under the sections.
+
+              Not a fourth square in the grid above: at 320px a fourth column
+              leaves each tile about 65px, which is narrower than "Academy /
+              TNT" can wrap into legibly. A row also has room to say what is on
+              the other end, which an external link owes the reader. Like
+              Billing, it does not wait on the program fetch, and it is
+              rendered only while the studio has a site to point at. */}
+          {NUTCRACKER_URL && (
+            <div style={{ marginTop: theme.spacing.sm }}>
+              <NavTile
+                label="The Nutcracker"
+                description="Show news, dates and tickets."
+                href={NUTCRACKER_URL}
+                icon={icon('M3 9a3 3 0 010 6v3a2 2 0 002 2h14a2 2 0 002-2v-3a3 3 0 010-6V6a2 2 0 00-2-2H5a2 2 0 00-2 2z M14 4v2 M14 11v2 M14 18v2')}
+              />
+            </div>
+          )}
 
           {error && !programsLoading && (
             <div style={{ marginTop: theme.spacing.sm }}>
