@@ -5,6 +5,9 @@
  * pure helpers the page, the dashboard card and the archive tab share.
  */
 
+import type { TaskFile } from '../types';
+import { normalizeTaskFiles } from './taskFiles';
+
 export type ShiftType = 'opening' | 'closing';
 
 export interface ShiftReportTag {
@@ -35,6 +38,8 @@ export interface ShiftReportComment {
   reportId: string;
   authorId: string;
   body: string;
+  /** Photos and files sent with the message, stored in the task-files bucket (v83). */
+  files: TaskFile[];
   createdAt: string;
 }
 
@@ -46,6 +51,8 @@ export const SHIFT_TYPE_LABEL: Record<ShiftType, string> = {
 /** Longest report and chat message the database accepts (v77). */
 export const MAX_REPORT_LENGTH = 20000;
 export const MAX_COMMENT_LENGTH = 4000;
+/** Most files one chat message may carry (v83). */
+export const MAX_COMMENT_FILES = 10;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const mapTag = (row: any): ShiftReportTag => ({
@@ -75,6 +82,7 @@ export const mapComment = (row: any): ShiftReportComment => ({
   reportId: row.report_id,
   authorId: row.author_id,
   body: row.body ?? '',
+  files: normalizeTaskFiles(row.files),
   createdAt: row.created_at,
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
