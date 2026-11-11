@@ -1,5 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider, useTheme, useThemeColors } from './contexts/ThemeContext';
@@ -527,6 +528,11 @@ function App() {
                         <Router>
                           <AppContent />
                         </Router>
+                        {/* Vercel Web Analytics. Renders nothing; on a Vercel
+                            deployment it loads /_vercel/insights/script.js,
+                            which follows client-side route changes itself.
+                            Sends nothing from a local dev server. */}
+                        <Analytics />
                       </MobileMenuProvider>
                     </PortalAdminProvider>
                   </DashboardSettingsProvider>
