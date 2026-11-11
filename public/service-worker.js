@@ -76,6 +76,13 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Vercel Web Analytics: leave its script and beacons to the network. Cache-first
+  // would pin a stale script, and the pageview beacons are POSTs, which the
+  // Cache API cannot store.
+  if (request.method !== 'GET' || url.pathname.startsWith('/_vercel/')) {
+    return;
+  }
+
   // Network-first strategy for HTML documents and API calls
   if (request.headers.get('accept')?.includes('text/html') ||
       url.pathname.includes('/api/') ||
