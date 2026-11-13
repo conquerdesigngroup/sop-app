@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import StaffAvatar from './StaffAvatar';
+import { Button } from './ui';
 import { TaskFilesSection, StepImages } from './tasks/TaskFileTiles';
 import {
   generateGoogleCalendarUrlForTask,
@@ -20,6 +21,20 @@ interface CalendarTaskModalProps {
   onClose: () => void;
   task: JobTask | null;
   users: User[];
+  /**
+   * Show a Mark done / Mark not done button in the footer (My Tasks, where a
+   * team member finishes the task from here).
+   */
+  onToggleDone?: () => void;
+  /** The done toggle is saving: the button is disabled and says so. */
+  doneSaving?: boolean;
+  /**
+   * Look, don't touch: steps can't be ticked and nothing can be posted. For a
+   * repeating task's day that has not been created yet.
+   */
+  readOnly?: boolean;
+  /** A line shown above the task's details. */
+  notice?: React.ReactNode;
 }
 
 const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
@@ -27,6 +42,10 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   onClose,
   task: initialTask,
   users,
+  onToggleDone,
+  doneSaving = false,
+  readOnly = false,
+  notice,
 }) => {
   const { updateJobTask } = useTask();
   const { showToast } = useToast();
@@ -54,10 +73,14 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   }, [initialTask]);
 
   // Scroll to bottom of comments when new comment is added
+  // Only when one is added — not on open, which would land the person at the
+  // bottom of the discussion instead of the top of the task.
+  const sentComment = useRef(false);
   useEffect(() => {
-    if (commentsEndRef.current && showComments) {
-      commentsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (sentComment.current && showComments) {
+      commentsEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }
+    sentComment.current = false;
   }, [comments.length, showComments]);
 
   // Handle adding a new comment
@@ -77,6 +100,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
     const updatedComments = [...comments, comment];
 
     // Update local state immediately
+    sentComment.current = true;
     setComments(updatedComments);
     setNewComment('');
 
@@ -191,6 +215,10 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   };
 
   const assignedUsers = users.filter(u => task.assignedTo.includes(u.id));
+  const departmentAndCategory = [task.department, task.category]
+    .map(v => (v || '').trim())
+    .filter(Boolean)
+    .join(' - ');
 
   // Calculate progress directly from local state - NO MEMOIZATION
   // This recalculates on every render, which is exactly what we want
@@ -262,7 +290,9 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    // A bare YYYY-MM-DD parses as UTC midnight, which is the evening before
+    // anywhere west of Greenwich: read it as a local date instead.
+    const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `${dateStr}T00:00:00` : dateStr);
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -281,7 +311,13 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
 
   return (
     <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+      <div
+        style={styles.modal}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={task.title}
+      >
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.headerContent}>
@@ -295,7 +331,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
               </span>
             </div>
           </div>
-          <button style={styles.closeButton} onClick={onClose}>
+          <button style={styles.closeButton} onClick={onClose} aria-label="Close">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -305,6 +341,8 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
 
         {/* Content */}
         <div style={styles.content}>
+          {notice && <div style={styles.notice} role="status">{notice}</div>}
+
           {/* Description */}
           {task.description && (
             <div style={styles.section}>
@@ -324,32 +362,33 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 </svg>
                 <span style={styles.infoText}>{formatDate(task.scheduledDate)}</span>
               </div>
-              <div style={styles.infoItem}>
+              {/* Only what was filled in: an empty field is left out, not shown blank. */}
+              {task.dueTime && <div style={styles.infoItem}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="12 6 12 12 16 14" />
                 </svg>
                 <span style={styles.infoText}>{formatTime(task.dueTime)}</span>
-              </div>
-              <div style={styles.infoItem}>
+              </div>}
+              {departmentAndCategory && <div style={styles.infoItem}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                   <path d="M12 2L2 7l10 5 10-5-10-5z" />
                   <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
                 </svg>
-                <span style={styles.infoText}>{task.department} - {task.category}</span>
-              </div>
-              <div style={styles.infoItem}>
+                <span style={styles.infoText}>{departmentAndCategory}</span>
+              </div>}
+              {task.estimatedDuration > 0 && <div style={styles.infoItem}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ stroke: theme.colors.textSecondary }} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <polyline points="12 6 12 12 16 14" />
                 </svg>
                 <span style={styles.infoText}>{task.estimatedDuration} min estimated</span>
-              </div>
+              </div>}
             </div>
           </div>
 
           {/* Assigned Users */}
-          <div style={styles.section}>
+          {assignedUsers.length > 0 && <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Assigned To</h3>
             <div style={styles.assignedUsers}>
               {assignedUsers.map(user => (
@@ -365,10 +404,10 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
-          {/* Progress */}
-          <div style={styles.section}>
+          {/* Progress — only a task with steps has any to show */}
+          {totalSteps > 0 && <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Progress</h3>
             <div style={styles.progressContainer}>
               <div style={styles.progressInfo}>
@@ -387,14 +426,14 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 />
               </div>
             </div>
-          </div>
+          </div>}
 
           {/* Steps */}
           {task.steps.length > 0 && (
             <div style={styles.section}>
               <div style={styles.stepsHeader}>
                 <h3 style={{...styles.sectionTitle, marginBottom: 0}}>Steps</h3>
-                {completedCount < totalSteps && (
+                {completedCount < totalSteps && !readOnly && (
                   <button
                     type="button"
                     onClick={async (e) => {
@@ -429,8 +468,9 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                       style={{
                         ...styles.stepItem,
                         backgroundColor: isChecked ? 'rgba(16, 185, 129, 0.1)' : theme.colors.inputBackground,
+                        cursor: readOnly ? 'default' : styles.stepItem.cursor,
                       }}
-                      onClick={() => handleStepToggle(step.id)}
+                      onClick={readOnly ? undefined : () => handleStepToggle(step.id)}
                     >
                       <div style={{
                         ...styles.stepCheckbox,
@@ -466,8 +506,8 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
           {/* Photos & files */}
           <TaskFilesSection files={task.files} sectionStyle={styles.section} titleStyle={styles.sectionTitle} />
 
-          {/* Team Discussion / Comments */}
-          <div style={styles.section}>
+          {/* Team Discussion / Comments — nothing to read or post on a read-only day */}
+          {!(readOnly && comments.length === 0) && <div style={styles.section}>
             <div
               style={styles.commentsHeader}
               onClick={() => setShowComments(!showComments)}
@@ -533,7 +573,7 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 </div>
 
                 {/* Add Comment Input */}
-                {currentUser && (
+                {currentUser && !readOnly && (
                   <div style={styles.addCommentContainer}>
                     <StaffAvatar
                       firstName={currentUser.firstName}
@@ -588,15 +628,30 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 )}
               </div>
             )}
-          </div>
+          </div>}
         </div>
 
         {/* Footer with Calendar Dropdown */}
         <div style={styles.footer}>
+          {onToggleDone && !readOnly && (
+            <Button
+              variant={task.status === 'completed' ? 'outline' : 'primary'}
+              onClick={onToggleDone}
+              disabled={doneSaving}
+              loading={doneSaving}
+              leftIcon={task.status === 'completed' ? undefined : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            >
+              {task.status === 'completed' ? 'Mark not done' : 'Mark done'}
+            </Button>
+          )}
           <div style={styles.calendarDropdownContainer}>
             <button
               onClick={() => setShowCalendarMenu(!showCalendarMenu)}
-              style={styles.calendarButton}
+              style={onToggleDone ? styles.calendarButtonQuiet : styles.calendarButton}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -606,7 +661,8 @@ const CalendarTaskModal: React.FC<CalendarTaskModalProps> = ({
                 <line x1="12" y1="14" x2="12" y2="18" />
                 <line x1="10" y1="16" x2="14" y2="16" />
               </svg>
-              Add to Calendar
+              {/* Shorter beside Mark done, so the two share a row on a phone. */}
+              {onToggleDone ? 'Calendar' : 'Add to Calendar'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px' }}>
                 <polyline points="6 9 12 15 18 9" />
               </svg>
@@ -676,7 +732,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
+    // Above the fixed bottom navigation (1000), as ui/Modal is.
+    zIndex: 1100,
     padding: '20px',
   },
   modal: {
@@ -884,7 +941,33 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '20px 24px',
     borderTop: `2px solid ${theme.colors.border}`,
     display: 'flex',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  calendarButtonQuiet: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 14px',
+    fontSize: '14px',
+    fontWeight: 600,
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.txt.primary,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  notice: {
+    fontSize: '14px',
+    color: theme.colors.txt.secondary,
+    backgroundColor: theme.colors.bg.tertiary,
+    border: `1px solid ${theme.colors.bdr.primary}`,
+    borderRadius: theme.borderRadius.md,
+    padding: '12px 16px',
+    marginBottom: '20px',
   },
   calendarDropdownContainer: {
     position: 'relative',

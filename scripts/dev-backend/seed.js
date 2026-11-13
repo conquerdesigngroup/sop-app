@@ -369,7 +369,8 @@ const job_tasks = TASK_SPECS.map(([title, department, status, priority, dayOffse
 // task lists; a manager's session creates their occurrences on load. One of
 // each state the Recurring tab draws.
 const SERIES_SPECS = [
-  ['Open the studio', { frequency: 'weekly', daysOfWeek: [1, 2, 3, 4, 5] }, 'pending', -30, [STAFF.frontDesk]],
+  // dev@localhost shares this one so /my-tasks shows a repeating task.
+  ['Open the studio', { frequency: 'weekly', daysOfWeek: [1, 2, 3, 4, 5] }, 'pending', -30, [STAFF.frontDesk, STAFF.owner]],
   ['Sanitise the barres', { frequency: 'daily', interval: 2 }, 'pending', -10, [STAFF.teacherJess, STAFF.frontDesk]],
   ['Mop Studio A', { frequency: 'weekly', daysOfWeek: [6], paused: true }, 'pending', -40, [STAFF.frontDesk]],
   ['Monthly fire-extinguisher check', { frequency: 'monthly', dayOfMonth: 1, endDate: dateOnly(200) }, 'pending', -60, [STAFF.admin]],
