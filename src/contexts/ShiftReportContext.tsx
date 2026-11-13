@@ -11,6 +11,8 @@ import {
   mapReport,
   mapTag,
 } from '../lib/shiftReports';
+import { discardUnsaved } from '../lib/taskFiles';
+import type { TaskFile } from '../types';
 
 /**
  * Every shift report, its tags and how many chat messages it has, for the
@@ -45,7 +47,7 @@ interface ShiftReportContextType {
   setArchived: (id: string, archived: boolean) => Promise<void>;
   markSeen: (id: string) => Promise<void>;
   loadComments: (reportId: string) => Promise<ShiftReportComment[]>;
-  addComment: (reportId: string, body: string) => Promise<ShiftReportComment>;
+  addComment: (reportId: string, body: string, files?: TaskFile[]) => Promise<ShiftReportComment>;
   deleteComment: (comment: ShiftReportComment) => Promise<void>;
 }
 
@@ -225,11 +227,15 @@ export const ShiftReportProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return comments;
   }, []);
 
-  const addComment = useCallback(async (reportId: string, body: string) => {
+  const addComment = useCallback(async (reportId: string, body: string, files: TaskFile[] = []) => {
     const me = await sessionUserId();
+    // Only send the column when there are files, so a plain message still
+    // posts on a database that has not had v83 yet.
+    const row: Record<string, unknown> = { report_id: reportId, author_id: me, body: body.trim() };
+    if (files.length) row.files = files;
     const { data, error: e } = await supabase
       .from('shift_report_comments')
-      .insert({ report_id: reportId, author_id: me, body: body.trim() })
+      .insert(row)
       .select('*')
       .single();
     if (e) throw e;
@@ -248,6 +254,10 @@ export const ShiftReportProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setReports(prev => prev.map(r => (r.id === comment.reportId
       ? { ...r, commentCount: Math.max(0, r.commentCount - 1) }
       : r)));
+    // A chat file belongs to that one message and nothing else points at it,
+    // so it goes with the message. Best effort: storage only lets the uploader
+    // or an admin remove it, and a leftover object is untidy, not wrong.
+    if (comment.files.length) await discardUnsaved(comment.files);
   }, []);
 
   const value = useMemo<ShiftReportContextType>(() => ({

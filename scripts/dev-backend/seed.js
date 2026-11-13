@@ -738,7 +738,15 @@ const shift_report_tags = [
   { report_id: SR(1), user_id: STAFF.admin, tagged_by: STAFF.teacherJess, created_at: iso(-1, 21, 48), seen_at: iso(0, 9) },
 ];
 const shift_report_comments = [
-  { id: SR(101), report_id: SR(1), author_id: STAFF.admin, body: 'Thanks Jess — I\'ll call the locksmith tomorrow.', created_at: iso(0, 9, 5) },
+  { id: SR(101), report_id: SR(1), author_id: STAFF.admin, body: 'Thanks Jess — I\'ll call the locksmith tomorrow.', files: [], created_at: iso(0, 9, 5) },
+  // A message with photos and a file (v83), and one that is a photo with no words.
+  { id: SR(102), report_id: SR(1), author_id: STAFF.teacherJess, body: 'Here is the lock and the quote he left.', created_at: iso(0, 9, 20),
+    files: [
+      { id: 'srf-1', path: `${STAFF.teacherJess}/back-door-lock.jpg`, name: 'back-door-lock.jpg', mimeType: 'image/jpeg', size: 380_000, uploadedBy: STAFF.teacherJess, uploadedAt: iso(0, 9, 20) },
+      { id: 'srf-2', path: `${STAFF.teacherJess}/locksmith-quote-back-door-replacement-cylinder.pdf`, name: 'locksmith-quote-back-door-replacement-cylinder.pdf', mimeType: 'application/pdf', size: 96_000, uploadedBy: STAFF.teacherJess, uploadedAt: iso(0, 9, 20) },
+    ] },
+  { id: SR(103), report_id: SR(1), author_id: STAFF.admin, body: '', created_at: iso(0, 9, 31),
+    files: [{ id: 'srf-3', path: `${STAFF.admin}/new-key-tag.png`, name: 'new-key-tag.png', mimeType: 'image/png', size: 150_000, uploadedBy: STAFF.admin, uploadedAt: iso(0, 9, 31) }] },
 ];
 
 const tables = {
